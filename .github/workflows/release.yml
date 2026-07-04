@@ -21,7 +21,7 @@ permissions:
   packages: write
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '22'
   PUPPETEER_SKIP_DOWNLOAD: 'true'
   PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: 'true'
 
@@ -172,9 +172,10 @@ jobs:
           echo "Cleaned up intermediate build files"
       
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           name: Release ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
           draft: false
           prerelease: false
           generate_release_notes: true
