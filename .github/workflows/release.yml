@@ -21,7 +21,7 @@ permissions:
   packages: write
 
 env:
-  NODE_VERSION: '22'
+  NODE_VERSION: '20'
   PUPPETEER_SKIP_DOWNLOAD: 'true'
   PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: 'true'
 
