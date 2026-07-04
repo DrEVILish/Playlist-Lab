@@ -39,6 +39,8 @@ export function EditPlaylistsPage() {
   const [searchResults, setSearchResults] = useState<Track[]>([]);
   const [searching, setSearching] = useState(false);
   const [selectedTracks, setSelectedTracks] = useState<Set<string>>(new Set());
+  const [selectedForRemoval, setSelectedForRemoval] = useState<Set<number>>(new Set());
+  const [removingTracks, setRemovingTracks] = useState(false);
   const [currentlyPlaying, setCurrentlyPlaying] = useState<string | null>(null);
   const [audioElement] = useState(() => new Audio());
   
@@ -120,7 +122,66 @@ export function EditPlaylistsPage() {
 
   const handlePlaylistSelect = (playlist: Playlist) => {
     setSelectedPlaylist(playlist);
+    setSelectedForRemoval(new Set());
     loadTracks(playlist.id);
+  };
+
+  const handleSelectDuplicates = () => {
+    const seen = new Map<string, number>(); // normalized key -> first index
+    const duplicates = new Set<number>();
+    
+    tracks.forEach((track, index) => {
+      // Create a normalized key from title + artist for duplicate detection
+      const normalizedKey = `${track.title.toLowerCase().trim()}|${track.artist.toLowerCase().trim()}`;
+      
+      if (seen.has(normalizedKey)) {
+        // This is a duplicate - select it (keep the first occurrence)
+        if (track.playlistItemID !== undefined) {
+          duplicates.add(track.playlistItemID);
+        }
+      } else {
+        seen.set(normalizedKey, index);
+      }
+    });
+    
+    setSelectedForRemoval(duplicates);
+  };
+
+  const handleToggleForRemoval = (playlistItemID: number) => {
+    const newSelected = new Set(selectedForRemoval);
+    if (newSelected.has(playlistItemID)) {
+      newSelected.delete(playlistItemID);
+    } else {
+      newSelected.add(playlistItemID);
+    }
+    setSelectedForRemoval(newSelected);
+  };
+
+  const handleRemoveSelected = async () => {
+    if (!selectedPlaylist || selectedForRemoval.size === 0) return;
+    
+    const confirmMsg = `Remove ${selectedForRemoval.size} selected track(s) from the playlist?`;
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      setRemovingTracks(true);
+      
+      // Remove tracks one by one
+      for (const playlistItemID of selectedForRemoval) {
+        await apiClient.removeTrackFromPlaylist(selectedPlaylist.id, playlistItemID.toString());
+      }
+      
+      // Refresh tracks
+      await loadTracks(selectedPlaylist.id);
+      setSelectedForRemoval(new Set());
+    } catch (err: any) {
+      console.error('Failed to remove tracks:', err);
+      alert(err.message || 'Failed to remove some tracks');
+      // Refresh to show current state
+      await loadTracks(selectedPlaylist.id);
+    } finally {
+      setRemovingTracks(false);
+    }
   };
 
   const handleRemoveTrack = async (playlistItemId: number) => {
@@ -699,7 +760,21 @@ export function EditPlaylistsPage() {
                     </div>
                   </div>
                   <label className="upload-cover-btn" title="Change cover">
-                    {uploadingCover ? '⏳ Uploading...' : '⬆️ Change Cover'}
+                    {uploadingCover ? (
+                      <>
+                        <span className="upload-icon">⏳</span>
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="upload-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="17 8 12 3 7 8" />
+                          <line x1="12" y1="3" x2="12" y2="15" />
+                        </svg>
+                        Change Cover
+                      </>
+                    )}
                     <input
                       type="file"
                       accept="image/*"
@@ -716,12 +791,31 @@ export function EditPlaylistsPage() {
                     {tracks.length} tracks • {formatDuration(selectedPlaylist.duration || 0)}
                   </div>
 
-                  <button
-                    className="btn-primary add-tracks-btn"
-                    onClick={() => setShowAddTracksModal(true)}
-                  >
-                    + Add Tracks
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <button
+                      className="btn-primary add-tracks-btn"
+                      onClick={() => setShowAddTracksModal(true)}
+                    >
+                      + Add Tracks
+                    </button>
+                    <button
+                      className="btn-secondary"
+                      onClick={handleSelectDuplicates}
+                      title="Select all duplicate tracks (same song appearing multiple times)"
+                    >
+                      Select Duplicates
+                    </button>
+                    {selectedForRemoval.size > 0 && (
+                      <button
+                        className="btn-secondary"
+                        onClick={handleRemoveSelected}
+                        disabled={removingTracks}
+                        style={{ color: '#ef4444' }}
+                      >
+                        {removingTracks ? 'Removing...' : `Remove Selected (${selectedForRemoval.size})`}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -734,6 +828,7 @@ export function EditPlaylistsPage() {
                   <table className="tracks-table">
                     <thead>
                       <tr>
+                        <th className="col-select"></th>
                         <th className="col-play"></th>
                         <th className="col-replace"></th>
                         <th className="col-drag"></th>
@@ -750,13 +845,21 @@ export function EditPlaylistsPage() {
                     <tbody>
                       {tracks.map((track, index) => (
                         <tr
-                          key={track.ratingKey}
+                          key={`${track.ratingKey}-${track.playlistItemID || index}`}
                           draggable
                           onDragStart={() => handleDragStart(index)}
                           onDragOver={(e) => handleDragOver(e, index)}
                           onDragEnd={handleDragEnd}
-                          className={draggedIndex === index ? 'dragging' : ''}
+                          className={`${draggedIndex === index ? 'dragging' : ''} ${track.playlistItemID !== undefined && selectedForRemoval.has(track.playlistItemID) ? 'selected-for-removal' : ''}`}
                         >
+                          <td className="col-select">
+                            <input
+                              type="checkbox"
+                              checked={track.playlistItemID !== undefined && selectedForRemoval.has(track.playlistItemID)}
+                              onChange={() => track.playlistItemID !== undefined && handleToggleForRemoval(track.playlistItemID)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </td>
                           <td className="col-play">
                             <button
                               className={`btn-play ${currentlyPlaying === track.ratingKey ? 'playing' : ''}`}

@@ -133,6 +133,8 @@ The PWA provides an app-like experience with offline support and push notificati
 - Git
 - Plex Media Server with authentication token
 
+### Third-Party Service Requirements
+
 ### Reverse Proxy Support
 
 Playlist Lab works seamlessly behind reverse proxies (Nginx, Apache, Caddy, etc.). 

@@ -177,6 +177,26 @@
   text-align: center;
 }
 
+.col-select {
+  width: 40px;
+  text-align: center;
+}
+
+.col-select input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary-color);
+}
+
+tr.selected-for-removal {
+  background-color: rgba(239, 68, 68, 0.15) !important;
+}
+
+tr.selected-for-removal td {
+  color: var(--text-secondary);
+}
+
 .col-replace {
   width: 50px;
   text-align: center;
@@ -364,7 +384,7 @@
 }
 
 .upload-cover-btn {
-  padding: 0.625rem 1.25rem;
+  padding: 0.5rem 1rem;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--surface);
@@ -372,12 +392,18 @@
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 0.5rem;
   transition: all 0.15s;
-  width: 200px;
   justify-content: center;
+  margin-top: 0.75rem;
+}
+
+.upload-cover-btn .upload-icon {
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.8;
 }
 
 .upload-cover-btn:hover {

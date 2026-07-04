@@ -333,6 +333,18 @@ async function findBestMatch(
         logger.info(`[Matching] Title-only match penalty applied, new score: ${score}`);
       }
       
+      // Penalize re-recorded versions when source track is not a re-recording
+      if (!hasReRecordedIndicator(track.title) && hasReRecordedIndicator(plexTitle)) {
+        score -= 50;
+        logger.info(`[Matching] Re-recorded penalty applied, new score: ${score}`);
+      }
+      
+      // Penalize sped up / slowed down versions when source track is not speed-modified
+      if (!hasSpeedModifiedIndicator(track.title) && hasSpeedModifiedIndicator(plexTitle)) {
+        score -= 50;
+        logger.info(`[Matching] Speed-modified penalty applied, new score: ${score}`);
+      }
+      
       // Penalize remixes when source track is not a remix
       if (!hasRemixIndicator(track.title) && hasRemixIndicator(plexTitle)) {
         score -= 30;
@@ -582,6 +594,8 @@ const REMIX_KEYWORDS = /\b(remix|remixed|edit|mix|version|acoustic|live|instrume
 const REMASTER_KEYWORDS = /\b(remaster(?:ed)?)\b/i;
 const ALTERNATE_VERSION_KEYWORDS = /\b(unplugged|acoustic|live|instrumental|radio edit|session|performance|cover)\b/i;
 const DEMO_KEYWORDS = /\b(demo)\b/i;
+const RERECORDED_KEYWORDS = /\b(re[- ]?recorded|re[- ]?recording|re[- ]?record|taylor'?s? version)\b/i;
+const SPEED_MODIFIED_KEYWORDS = /\b(sped up|speed up|slowed down|slow down|nightcore|slowed \+ reverb|sped \+ reverb|accelerated|decelerated)\b/i;
 
 function hasRemixIndicator(title: string): boolean {
   return REMIX_KEYWORDS.test(title);
@@ -597,6 +611,14 @@ function hasAlternateVersionIndicator(title: string): boolean {
 
 function hasDemoIndicator(title: string): boolean {
   return DEMO_KEYWORDS.test(title);
+}
+
+function hasReRecordedIndicator(title: string): boolean {
+  return RERECORDED_KEYWORDS.test(title);
+}
+
+function hasSpeedModifiedIndicator(title: string): boolean {
+  return SPEED_MODIFIED_KEYWORDS.test(title);
 }
 
 function calculateMatchScore(sourceTitle: string, sourceArtist: string, plexTitle: string, plexArtist: string): number {

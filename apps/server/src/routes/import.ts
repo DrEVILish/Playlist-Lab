@@ -1217,6 +1217,16 @@ router.post('/plex/search', async (req: Request, res: Response, next: NextFuncti
       else if (codec === 'ALAC') score += 4;
       else if (codec === 'AAC') score += 2;
       
+      // Penalize re-recorded versions so originals appear first in search results
+      if (/\b(re[- ]?recorded|re[- ]?recording|re[- ]?record|taylor'?s? version)\b/i.test(titleLower)) {
+        score -= 200;
+      }
+      
+      // Penalize sped up / slowed down versions so originals appear first in search results
+      if (/\b(sped up|speed up|slowed down|slow down|nightcore|slowed \+ reverb|sped \+ reverb|accelerated|decelerated)\b/i.test(titleLower)) {
+        score -= 200;
+      }
+      
       return {
         ratingKey: track.ratingKey,
         title: track.title,

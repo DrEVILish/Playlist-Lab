@@ -187,6 +187,32 @@ function shuffle<T>(array: T[]): T[] {
   return result;
 }
 
+/**
+ * Get the best server URL from Plex connections.
+ * Prefers .plex.direct URI (works with Plex SSL cert) with direct IP as fallback.
+ */
+function getLocalServerUrl(server: any): string | null {
+  const connections: any[] = server.connections || [];
+  
+  // Prefer local non-relay connections - use .plex.direct URI (better SSL cert compatibility)
+  const local = connections.find((c: any) => c.local && !c.relay);
+  if (local) {
+    return local.uri;
+  }
+  
+  // Fall back to remote non-relay
+  const remote = connections.find((c: any) => !c.local && !c.relay);
+  if (remote) {
+    return remote.uri;
+  }
+  
+  // Last resort: relay or first available
+  const relay = connections.find((c: any) => c.relay);
+  if (relay) return relay.uri;
+  
+  return connections[0]?.uri || null;
+}
+
 export default function App() {
   const [auth, setAuth] = useState<{ token: string | null; user: any; server: any }>({ token: null, user: null, server: null });
   const [servers, setServers] = useState<any[]>([]);
@@ -376,7 +402,7 @@ export default function App() {
         }
         
         if (authData.server) {
-          const url = authData.server.connections?.[0]?.uri;
+          const url = getLocalServerUrl(authData.server);
           setServerUrl(url);
           if (url) {
             try {
@@ -472,7 +498,7 @@ export default function App() {
 
   const handleSelectServer = async (server: any) => {
     await window.api.selectServer(server);
-    const url = server.connections?.[0]?.uri;
+    const url = getLocalServerUrl(server);
     setServerUrl(url);
     setAuth(prev => ({ ...prev, server }));
     

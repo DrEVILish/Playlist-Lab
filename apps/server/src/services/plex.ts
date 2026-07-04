@@ -7,6 +7,7 @@
  */
 
 import axios, { AxiosInstance } from 'axios';
+import https from 'https';
 import { logger } from '../utils/logger';
 
 /**
@@ -147,6 +148,41 @@ interface PlexMediaContainer<T = any> {
   } & T;
 }
 
+/**
+ * Extract a direct IP URL from a .plex.direct URL.
+ * e.g., "https://192-168-0-3.abc123.plex.direct:32400" -> "https://192.168.0.3:32400"
+ * Returns null if not a .plex.direct URL.
+ */
+function extractDirectIpUrl(plexDirectUrl: string): string | null {
+  try {
+    const url = new URL(plexDirectUrl);
+    const hostname = url.hostname;
+    
+    // Check if this is a .plex.direct URL
+    if (!hostname.endsWith('.plex.direct')) {
+      return null;
+    }
+    
+    // The IP is encoded in the first subdomain part with dashes instead of dots
+    // e.g., "192-168-0-3.abc123.plex.direct" -> IP is 192.168.0.3
+    const firstPart = hostname.split('.')[0];
+    const ipParts = firstPart.split('-');
+    
+    // Validate: should be exactly 4 parts, each a number 0-255
+    if (ipParts.length !== 4 || !ipParts.every(p => /^\d{1,3}$/.test(p) && parseInt(p) <= 255)) {
+      return null;
+    }
+    
+    const ip = ipParts.join('.');
+    const port = url.port || '443';
+    const protocol = url.protocol; // https:
+    
+    return `${protocol}//${ip}:${port}`;
+  } catch {
+    return null;
+  }
+}
+
 export class PlexClient {
   private serverUrl: string;
   private token: string;
@@ -167,6 +203,15 @@ export class PlexClient {
     this.clientId = clientId;
     this.productName = productName;
 
+    // If using a .plex.direct URL, also prepare a direct IP fallback
+    const directIpUrl = extractDirectIpUrl(this.serverUrl);
+    
+    // Check if URL is a direct IP connection (cert won't match IP, need relaxed TLS)
+    const isDirectIp = /^https:\/\/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(this.serverUrl);
+    
+    // Use relaxed TLS for direct IP connections (cert won't match IP)
+    const httpsAgent = (directIpUrl || isDirectIp) ? new https.Agent({ rejectUnauthorized: false }) : undefined;
+
     this.client = axios.create({
       baseURL: this.serverUrl,
       headers: {
@@ -177,7 +222,8 @@ export class PlexClient {
         'X-Plex-Platform': 'Node.js',
         'X-Plex-Container-Size': '50' // Default page size, prevents future 400 errors
       },
-      timeout: 60000 // 60 second timeout for large libraries
+      timeout: 60000, // 60 second timeout for large libraries
+      ...(httpsAgent ? { httpsAgent } : {})
     });
 
     // Interceptor: log outgoing URL and prevent axios from re-encoding server:// URIs
@@ -189,6 +235,35 @@ export class PlexClient {
       }
       return config;
     });
+
+    // Response interceptor: retry with direct IP if .plex.direct DNS fails or times out
+    if (directIpUrl && httpsAgent) {
+      this.client.interceptors.response.use(undefined, async (error) => {
+        const isDnsError = error.code === 'ENOTFOUND' || 
+                           error.message?.includes('ENOTFOUND') ||
+                           error.message?.includes('getaddrinfo');
+        const isTimeoutError = error.code === 'ETIMEDOUT' || 
+                               error.code === 'ECONNREFUSED' ||
+                               error.message?.includes('ETIMEDOUT') ||
+                               error.message?.includes('ECONNREFUSED') ||
+                               error.message?.includes('timeout');
+        
+        if ((isDnsError || isTimeoutError) && error.config && !error.config._retriedWithDirectIp) {
+          logger.warn('[PlexService] Connection failed, retrying with direct IP', {
+            reason: isDnsError ? 'DNS resolution failed' : 'Connection timeout/refused',
+            originalUrl: error.config.baseURL,
+            directIpUrl
+          });
+          
+          error.config._retriedWithDirectIp = true;
+          error.config.baseURL = directIpUrl;
+          error.config.httpsAgent = httpsAgent;
+          return axios(error.config);
+        }
+        
+        throw error;
+      });
+    }
   }
 
   /**
