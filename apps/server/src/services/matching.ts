@@ -563,11 +563,13 @@ function cleanArtistName(artist: string): string {
 
 function normalizeForComparison(str: string): string {
   return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    // Fix contractions like "comin'", "goin'", "doin'" -> "coming", "going", "doing".
+    // Must run BEFORE apostrophes are stripped below, and requires the apostrophe
+    // to actually be present — so real words like "rain", "twin", "chin" are untouched.
+    .replace(/\b(\w+)in['\u2018\u2019]/g, '$1ing')
     .replace(/[\u2018\u2019\u201A\u201B\u0027\u0060\u00B4'`�]/g, '')
     .replace(/[\u201C\u201D\u201E\u201F"]/g, '')
     .replace(/\$/g, 's').replace(/\//g, '').replace(/\./g, '')
-    // Handle common apostrophe contractions: comin' -> coming, goin' -> going, etc.
-    .replace(/\b(\w+)in\b/g, '$1ing') // Convert "comin", "goin", "doin" to "coming", "going", "doing"
     .replace(/[^a-z0-9\s]/g, '')
     .replace(/(\d)\s+([ap]m)\b/gi, '$1$2') // Normalize "9 PM" to "9pm", "3 AM" to "3am"
     .replace(/\s+/g, ' ').trim();
