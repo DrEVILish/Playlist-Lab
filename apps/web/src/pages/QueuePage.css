@@ -3,13 +3,23 @@
   margin-bottom: 0.5rem;
 }
 
+.page-container:has(.queue-layout) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Two-Panel Layout */
 .queue-layout {
   display: grid;
   grid-template-columns: 400px 1fr;
   gap: 1.5rem;
   margin-top: 0;
-  height: calc(100vh - 200px);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .queue-list-panel,
@@ -20,6 +30,7 @@
   border: 1px solid var(--border);
   overflow-y: auto;
   height: 100%;
+  min-height: 0;
 }
 
 /* Empty State */
