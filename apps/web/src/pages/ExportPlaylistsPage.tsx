@@ -1,295 +1,430 @@
-import type { FC } from 'react';
-import { useState, useEffect } from 'react';
-import { useApp } from '../contexts/AppContext';
-import './ExportPlaylistsPage.css';
+/* Export Playlists Page - Column Layout */
 
-interface Playlist {
-  id: string;
-  name: string;
-  trackCount: number;
-  duration: number;
-  composite?: string;
+/* Reduce h1 bottom margin for tighter layout */
+.page-container:has(.export-layout) > h1 {
+  margin-bottom: 0.5rem;
 }
 
-type ExportFormat = 'm3u' | 'm3u8' | 'pls' | 'xspf' | 'csv';
-
-interface FormatOption {
-  id: ExportFormat;
-  name: string;
-  description: string;
-  extension: string;
-  icon: string;
+.page-container:has(.export-layout) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
-export const ExportPlaylistsPage: FC = () => {
-  const { apiClient, server } = useApp();
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedPlaylist, setSelectedPlaylist] = useState<string>('');
-  const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('m3u8');
-  const [_savePath, _setSavePath] = useState<string>('');
-  const [exporting, setExporting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+/* Error Message */
+.export-error {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+  background: rgba(244, 67, 54, 0.1);
+  border: 1px solid var(--error);
+  border-radius: 8px;
+  color: var(--error);
+  font-size: 0.9375rem;
+  flex-shrink: 0;
+}
 
-  const formats: FormatOption[] = [
-    {
-      id: 'm3u',
-      name: 'M3U',
-      description: 'Standard M3U format - compatible with most players',
-      extension: '.m3u',
-      icon: 'M3U',
-    },
-    {
-      id: 'm3u8',
-      name: 'M3U8',
-      description: 'UTF-8 encoded - best for international characters',
-      extension: '.m3u8',
-      icon: 'M3U8',
-    },
-    {
-      id: 'pls',
-      name: 'PLS',
-      description: 'Winamp format - compatible with portable players',
-      extension: '.pls',
-      icon: 'PLS',
-    },
-    {
-      id: 'xspf',
-      name: 'XSPF',
-      description: 'XML format - includes full metadata',
-      extension: '.xspf',
-      icon: 'XSPF',
-    },
-    {
-      id: 'csv',
-      name: 'CSV',
-      description: 'Spreadsheet format - for databases',
-      extension: '.csv',
-      icon: 'CSV',
-    },
-  ];
+.export-error button {
+  background: none;
+  border: none;
+  color: var(--error);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
 
-  useEffect(() => {
-    loadPlaylists();
-  }, []);
+.export-error button:hover {
+  background: rgba(244, 67, 54, 0.2);
+}
 
-  const loadPlaylists = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await apiClient.getPlaylists();
-      setPlaylists(data.playlists || []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load playlists');
-    } finally {
-      setLoading(false);
-    }
-  };
+/* Main Layout - 3 Columns */
+.export-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1.5rem;
+  margin-top: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
 
-  const handleExport = async () => {
-    if (!selectedPlaylist) {
-      setError('Please select a playlist');
-      return;
-    }
+/* Column Styles */
+.export-column {
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  overflow-y: auto;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 
-    setExporting(true);
-    setError(null);
+.export-column h2 {
+  font-size: 1.125rem;
+  margin: 0 0 1rem 0;
+  color: var(--text-primary);
+  font-weight: 600;
+}
 
-    try {
-      const response = await fetch('/api/playlists/export', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          playlistId: selectedPlaylist,
-          format: selectedFormat,
-          pathType: 'absolute',
-        }),
-      });
+/* Playlists Column (wider) */
+.export-playlists-column {
+  grid-column: span 1;
+}
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Export failed');
-      }
+/* Loading & Empty States */
+.export-loading,
+.export-empty {
+  padding: 3rem 2rem;
+  text-align: center;
+  color: var(--text-secondary);
+  background: rgba(91, 155, 213, 0.05);
+  border-radius: 8px;
+  border: 1px dashed var(--border-color);
+}
 
-      const blob = await response.blob();
-      
-      // If user selected a save location, use it
-      const fileHandle = (window as any).__fileHandle;
-      if (fileHandle) {
-        try {
-          const writable = await fileHandle.createWritable();
-          await writable.write(blob);
-          await writable.close();
-          delete (window as any).__fileHandle;
-          _setSavePath('');
-        } catch (err) {
-          // Fall back to download if write fails
-          downloadBlob(blob, response);
-        }
-      } else {
-        // Fall back to regular download
-        downloadBlob(blob, response);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Export failed');
-    } finally {
-      setExporting(false);
-    }
-  };
+.export-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
 
-  const downloadBlob = (blob: Blob, response: Response) => {
-    const contentDisposition = response.headers.get('Content-Disposition');
-    const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
-    const filename = filenameMatch ? filenameMatch[1] : `playlist${formats.find(f => f.id === selectedFormat)?.extension}`;
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
 
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
-  };
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 
-  const getCoverUrl = (composite?: string) => {
-    if (!composite || !server) {
-      return null;
-    }
-    // Use the API proxy endpoint to avoid CORS issues
-    const fullPlexUrl = `${server.url}${composite}`;
-    return `/api/proxy/image?url=${encodeURIComponent(fullPlexUrl)}`;
-  };
+.export-empty p {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  color: var(--text-primary);
+}
 
-  const selectedPlaylistData = playlists.find(p => p.id === selectedPlaylist);
-  const selectedFormatData = formats.find(f => f.id === selectedFormat);
+.export-empty small {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
 
-  return (
-    <div className="page-container">
-      <h1>Export Playlists</h1>
-      
-      {error && (
-        <div className="export-error">
-          <span>{error}</span>
-          <button onClick={() => setError(null)}>×</button>
-        </div>
-      )}
+/* Playlists List */
+.export-playlists-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
 
-      <div className="export-layout">
-        {/* Column 1: Playlists */}
-        <div className="export-column export-playlists-column">
-          <h2>Select Playlist</h2>
-          {loading ? (
-            <div className="export-loading">
-              <div className="loading-spinner"></div>
-              <span>Loading playlists...</span>
-            </div>
-          ) : playlists.length === 0 ? (
-            <div className="export-empty">
-              <p>No playlists found</p>
-              <small>Create a playlist first to export it</small>
-            </div>
-          ) : (
-            <div className="export-playlists-list">
-              {playlists.map((playlist) => (
-                <div
-                  key={playlist.id}
-                  className={`export-playlist-item ${selectedPlaylist === playlist.id ? 'active' : ''}`}
-                  onClick={() => setSelectedPlaylist(playlist.id)}
-                >
-                  {playlist.composite && (
-                    <div className="playlist-thumb-container">
-                      <img
-                        src={getCoverUrl(playlist.composite) || ''}
-                        alt=""
-                        className="playlist-thumb"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                    </div>
-                  )}
-                  <div className="export-playlist-info">
-                    <div className="export-playlist-title">{playlist.name}</div>
-                    <div className="export-playlist-meta">
-                      {playlist.trackCount} {playlist.trackCount === 1 ? 'track' : 'tracks'} • {Math.floor(playlist.duration / 60000)} min
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+.export-playlist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
 
-        {/* Column 2: Format */}
-        <div className="export-column export-format-column">
-          <h2>Choose Format</h2>
-          <div className="export-formats-list">
-            {formats.map((format) => (
-              <div
-                key={format.id}
-                className={`export-format-item ${selectedFormat === format.id ? 'active' : ''}`}
-                onClick={() => setSelectedFormat(format.id)}
-              >
-                <div className="export-format-badge">{format.icon}</div>
-                <div className="export-format-info">
-                  <div className="export-format-title">{format.name}</div>
-                  <div className="export-format-description">{format.description}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+.export-playlist-item:hover {
+  background-color: var(--surface-hover);
+}
 
-        {/* Column 3: Export */}
-        <div className="export-column export-action-column">
-          <h2>Export</h2>
-          <div className="export-action-content">
-            {selectedPlaylistData && selectedFormatData ? (
-              <>
-                <div className="export-summary">
-                  <div className="export-summary-item">
-                    <span className="export-summary-label">Playlist</span>
-                    <span className="export-summary-value">{selectedPlaylistData.name}</span>
-                  </div>
-                  <div className="export-summary-item">
-                    <span className="export-summary-label">Format</span>
-                    <span className="export-summary-value">{selectedFormatData.name}</span>
-                  </div>
-                  <div className="export-summary-item">
-                    <span className="export-summary-label">Tracks</span>
-                    <span className="export-summary-value">{selectedPlaylistData.trackCount}</span>
-                  </div>
-                  <div className="export-summary-item">
-                    <span className="export-summary-label">Duration</span>
-                    <span className="export-summary-value">{Math.floor(selectedPlaylistData.duration / 60000)} min</span>
-                  </div>
-                </div>
-                
-                <button
-                  className="btn-primary btn-export"
-                  onClick={handleExport}
-                  disabled={!selectedPlaylist || exporting}
-                >
-                  {exporting ? (
-                    <>
-                      <span className="btn-spinner"></span>
-                      Exporting...
-                    </>
-                  ) : (
-                    'Export Playlist'
-                  )}
-                </button>
-              </>
-            ) : (
-              <div className="export-placeholder">
-                <p>Select a playlist and format to export</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
+.export-playlist-item.active {
+  background: linear-gradient(135deg, rgba(91, 155, 213, 0.15) 0%, rgba(74, 158, 168, 0.1) 100%);
+  color: var(--primary-color);
+  border: 1px solid rgba(91, 155, 213, 0.2);
+}
+
+.playlist-thumb-container {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  background: var(--surface-hover);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.playlist-thumb {
+  width: 100%;
+  height: 100%;
+  border-radius: 4px;
+  object-fit: cover;
+  display: block;
+}
+
+.export-playlist-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.export-playlist-title::before,
+.export-playlist-title::after {
+  content: none;
+  display: none;
+}
+
+.export-playlist-title {
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+  display: block;
+}
+
+.export-playlist-item.active .export-playlist-title {
+  color: var(--primary-color);
+}
+
+.export-playlist-meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.export-playlist-meta::before,
+.export-playlist-meta::after {
+  content: none;
+  display: none;
+}
+
+.export-playlist-meta span {
+  display: inline;
+}
+
+.export-playlist-item.active .export-playlist-meta {
+  color: rgba(91, 155, 213, 0.7);
+}
+
+/* Formats List */
+.export-formats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.export-format-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  padding: 0.875rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.export-format-item:hover {
+  background-color: var(--surface-hover);
+}
+
+.export-format-item.active {
+  background: linear-gradient(135deg, rgba(91, 155, 213, 0.15) 0%, rgba(74, 158, 168, 0.1) 100%);
+  border: 1px solid rgba(91, 155, 213, 0.2);
+}
+
+.export-format-badge {
+  flex-shrink: 0;
+  padding: 0.375rem 0.625rem;
+  background: rgba(91, 155, 213, 0.15);
+  border-radius: 4px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--primary-color);
+  letter-spacing: 0.5px;
+  line-height: 1;
+}
+
+.export-format-item.active .export-format-badge {
+  background: rgba(91, 155, 213, 0.25);
+}
+
+.export-format-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.export-format-title {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  margin-bottom: 0.25rem;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.export-format-item.active .export-format-title {
+  color: var(--primary-color);
+}
+
+.export-format-description {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.export-format-item.active .export-format-description {
+  color: rgba(91, 155, 213, 0.7);
+}
+
+/* Export Action Column */
+.export-action-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  flex: 1;
+}
+
+.export-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-secondary);
+  background: rgba(91, 155, 213, 0.05);
+  border-radius: 8px;
+  border: 1px dashed var(--border-color);
+}
+
+.export-placeholder p {
+  margin: 0;
+  font-size: 0.9375rem;
+}
+
+/* Export Summary */
+.export-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  padding: 1.25rem;
+  background: rgba(91, 155, 213, 0.08);
+  border: 1px solid rgba(91, 155, 213, 0.2);
+  border-radius: 8px;
+}
+
+.export-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.export-summary-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.export-summary-value {
+  font-size: 0.9375rem;
+  color: var(--text-primary);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Export Button */
+.btn-export {
+  width: 100%;
+  padding: 1rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  background: var(--primary-color);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: auto;
+}
+
+.btn-export:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.btn-export:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+  .export-layout {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .export-action-column {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 768px) {
+  .page-container:has(.export-layout) {
+    height: auto;
+    overflow: auto;
+  }
+
+  .export-layout {
+    grid-template-columns: 1fr;
+    height: auto;
+    overflow: visible;
+  }
+
+  .export-column {
+    height: auto;
+    min-height: 300px;
+    overflow-y: visible;
+  }
+
+  .export-action-column {
+    grid-column: span 1;
+  }
+}
