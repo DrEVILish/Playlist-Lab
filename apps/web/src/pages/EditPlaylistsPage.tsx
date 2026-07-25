@@ -1,1079 +1,761 @@
-import { useState, useEffect, useRef } from 'react';
-import { useApp } from '../contexts/AppContext';
-import './EditPlaylistsPage.css';
-
-interface Playlist {
-  id: string;
-  name: string;
-  trackCount: number;
-  duration: number;
-  composite?: string;
+/* Reduce h1 bottom margin for tighter layout */
+.page-container:has(.edit-playlists-layout) > h1 {
+  margin-bottom: 0.5rem;
 }
 
-interface Track {
-  id?: string;
-  ratingKey: string;
-  playlistItemID?: number;
-  title: string;
-  artist: string;
-  album: string;
-  duration: number;
-  codec?: string;
-  bitrate?: number;
+.page-container:has(.edit-playlists-layout) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
-export function EditPlaylistsPage() {
-  const { apiClient, server } = useApp();
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
-  const [tracks, setTracks] = useState<Track[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [tracksLoading, setTracksLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [showAddTracksModal, setShowAddTracksModal] = useState(false);
-  const [uploadingCover, setUploadingCover] = useState(false);
-  const [searchArtist, setSearchArtist] = useState('');
-  const [searchTrack, setSearchTrack] = useState('');
-  const [searchAlbum, setSearchAlbum] = useState('');
-  const [searchResults, setSearchResults] = useState<Track[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [selectedTracks, setSelectedTracks] = useState<Set<string>>(new Set());
-  const [selectedForRemoval, setSelectedForRemoval] = useState<Set<number>>(new Set());
-  const [removingTracks, setRemovingTracks] = useState(false);
-  const [currentlyPlaying, setCurrentlyPlaying] = useState<string | null>(null);
-  const [audioElement] = useState(() => new Audio());
+.edit-playlists-layout {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 1.5rem;
+  margin-top: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.playlists-panel,
+.tracks-panel {
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  overflow-y: auto;
+  height: 100%;
+  min-height: 0;
+}
+
+.playlists-panel h2,
+.tracks-panel h2 {
+  font-size: 1.125rem;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+}
+
+.playlists-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.playlist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.playlist-item:hover {
+  background-color: var(--surface-hover);
+}
+
+.playlist-item.active {
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.15) 0%, rgba(56, 178, 172, 0.1) 100%);
+  color: var(--primary-color);
+  border: 1px solid rgba(79, 209, 197, 0.2);
+}
+
+.playlist-thumb-container {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  background: var(--surface-hover);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.playlist-thumb {
+  width: 100%;
+  height: 100%;
+  border-radius: 4px;
+  object-fit: cover;
+  display: block;
+}
+
+.playlist-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.playlist-name {
+  font-weight: 500;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+  display: block;
+  color: var(--text-primary);
+}
+
+.playlist-name::before,
+.playlist-name::after {
+  content: none;
+  display: none;
+}
+
+.playlist-item.active .playlist-name {
+  color: var(--primary-color);
+}
+
+.playlist-meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+  display: block;
+}
+
+.playlist-meta::before,
+.playlist-meta::after {
+  content: none;
+  display: none;
+}
+
+.playlist-meta span {
+  display: inline;
+}
+
+.playlist-item.active .playlist-meta {
+  color: rgba(79, 209, 197, 0.7);
+}
+
+/* Table styles */
+.tracks-table-container {
+  overflow-x: auto;
+}
+
+.tracks-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.tracks-table thead {
+  border-bottom: 1px solid var(--border);
+}
+
+.tracks-table th {
+  text-align: left;
+  padding: 0.75rem 0.5rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tracks-table tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background-color 0.15s;
+}
+
+.tracks-table tbody tr:hover {
+  background-color: var(--surface-hover);
+}
+
+.tracks-table td {
+  padding: 0.75rem 0.5rem;
+  color: var(--text-primary);
+}
+
+.col-number {
+  width: 50px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.col-play {
+  width: 50px;
+  text-align: center;
+}
+
+.col-select {
+  width: 40px;
+  text-align: center;
+}
+
+.col-select input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary-color);
+}
+
+tr.selected-for-removal {
+  background-color: rgba(239, 68, 68, 0.15) !important;
+}
+
+tr.selected-for-removal td {
+  color: var(--text-secondary);
+}
+
+.col-replace {
+  width: 50px;
+  text-align: center;
+}
+
+.btn-play {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--primary-color);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.btn-play:hover {
+  background: transparent;
+  color: var(--primary-color);
+  opacity: 0.7;
+  transform: scale(1.15);
+}
+
+.btn-play.playing {
+  color: var(--primary-color);
+  opacity: 1;
+}
+
+.btn-play svg {
+  display: block;
+}
+
+.btn-replace {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--primary-color);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.btn-replace:hover {
+  background: transparent;
+  color: var(--primary-color);
+  opacity: 0.7;
+  transform: scale(1.15);
+}
+
+.btn-replace svg {
+  display: block;
+}
+
+.col-title {
+  min-width: 200px;
+  font-weight: 500;
+}
+
+.col-artist {
+  min-width: 150px;
+}
+
+.col-album {
+  min-width: 150px;
+}
+
+.col-codec {
+  width: 80px;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.col-bitrate {
+  width: 100px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.col-duration {
+  width: 80px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.col-actions {
+  width: 50px;
+  text-align: center;
+}
+
+.btn-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 1.5rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  margin: 0 2px;
+}
+
+.btn-icon:hover {
+  background-color: var(--surface-hover);
+  color: var(--primary-color);
+}
+
+.btn-icon:last-child:hover {
+  background-color: var(--error-color);
+  color: white;
+}
+
+@media (max-width: 768px) {
+  .edit-playlists-layout {
+    grid-template-columns: 1fr;
+  }
   
-  // Replace track state
-  const [showReplaceModal, setShowReplaceModal] = useState(false);
-  const [trackToReplace, setTrackToReplace] = useState<Track | null>(null);
-  const [replaceSearchQuery, setReplaceSearchQuery] = useState('');
-  const [replaceSearchResults, setReplaceSearchResults] = useState<Track[]>([]);
-  const [searchingReplace, setSearchingReplace] = useState(false);
+  .tracks-table-container {
+    overflow-x: scroll;
+  }
   
-  // Scroll position preservation
-  const scrollPositionRef = useRef<number>(0);
-  const shouldRestoreScroll = useRef<boolean>(false);
-
-  useEffect(() => {
-    loadPlaylists();
-    
-    // Cleanup audio on unmount
-    return () => {
-      audioElement.pause();
-      audioElement.src = '';
-    };
-  }, []);
-
-  // Restore scroll position after tracks update
-  useEffect(() => {
-    if (shouldRestoreScroll.current && tracks.length > 0) {
-      const scrollContainer = document.querySelector('.tracks-panel');
-      if (scrollContainer) {
-        // Use requestAnimationFrame to ensure DOM is fully updated
-        requestAnimationFrame(() => {
-          scrollContainer.scrollTop = scrollPositionRef.current;
-          shouldRestoreScroll.current = false;
-        });
-      }
-    }
-  }, [tracks]);
-
-  const loadPlaylists = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await apiClient.getPlaylists();
-      
-      const playlistMap = new Map<string, Playlist>();
-      response.playlists.forEach((playlist: Playlist) => {
-        if (!playlistMap.has(playlist.id)) {
-          playlistMap.set(playlist.id, playlist);
-        }
-      });
-      
-      const uniquePlaylists = Array.from(playlistMap.values());
-      setPlaylists(uniquePlaylists);
-    } catch (err: any) {
-      console.error('Failed to load playlists:', err);
-      setError(err.message || 'Failed to load playlists');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadTracks = async (playlistId: string) => {
-    try {
-      setTracksLoading(true);
-      setError(null);
-      const response = await apiClient.getPlaylistTracks(playlistId);
-      setTracks((response.tracks || []).map((track: any) => ({
-        ...track,
-        playlistItemID: track.playlistItemID,
-      })));
-    } catch (err: any) {
-      console.error('Failed to load tracks:', err);
-      setError(err.message || 'Failed to load tracks');
-      setTracks([]);
-    } finally {
-      setTracksLoading(false);
-    }
-  };
-
-  const handlePlaylistSelect = (playlist: Playlist) => {
-    setSelectedPlaylist(playlist);
-    setSelectedForRemoval(new Set());
-    loadTracks(playlist.id);
-  };
-
-  const handleSelectDuplicates = () => {
-    const seen = new Map<string, number>(); // normalized key -> first index
-    const duplicates = new Set<number>();
-    
-    tracks.forEach((track, index) => {
-      // Create a normalized key from title + artist for duplicate detection
-      const normalizedKey = `${track.title.toLowerCase().trim()}|${track.artist.toLowerCase().trim()}`;
-      
-      if (seen.has(normalizedKey)) {
-        // This is a duplicate - select it (keep the first occurrence)
-        if (track.playlistItemID !== undefined) {
-          duplicates.add(track.playlistItemID);
-        }
-      } else {
-        seen.set(normalizedKey, index);
-      }
-    });
-    
-    setSelectedForRemoval(duplicates);
-  };
-
-  const handleToggleForRemoval = (playlistItemID: number) => {
-    const newSelected = new Set(selectedForRemoval);
-    if (newSelected.has(playlistItemID)) {
-      newSelected.delete(playlistItemID);
-    } else {
-      newSelected.add(playlistItemID);
-    }
-    setSelectedForRemoval(newSelected);
-  };
-
-  const handleRemoveSelected = async () => {
-    if (!selectedPlaylist || selectedForRemoval.size === 0) return;
-    
-    const confirmMsg = `Remove ${selectedForRemoval.size} selected track(s) from the playlist?`;
-    if (!confirm(confirmMsg)) return;
-
-    try {
-      setRemovingTracks(true);
-      
-      // Remove tracks one by one
-      for (const playlistItemID of selectedForRemoval) {
-        await apiClient.removeTrackFromPlaylist(selectedPlaylist.id, playlistItemID.toString());
-      }
-      
-      // Refresh tracks
-      await loadTracks(selectedPlaylist.id);
-      setSelectedForRemoval(new Set());
-    } catch (err: any) {
-      console.error('Failed to remove tracks:', err);
-      alert(err.message || 'Failed to remove some tracks');
-      // Refresh to show current state
-      await loadTracks(selectedPlaylist.id);
-    } finally {
-      setRemovingTracks(false);
-    }
-  };
-
-  const handleRemoveTrack = async (playlistItemId: number) => {
-    if (!selectedPlaylist) return;
-    
-    try {
-      await apiClient.removeTrackFromPlaylist(selectedPlaylist.id, playlistItemId.toString());
-      setTracks(tracks.filter(t => t.playlistItemID !== playlistItemId));
-    } catch (err: any) {
-      console.error('Failed to remove track:', err);
-      alert(err.message || 'Failed to remove track');
-    }
-  };
-
-  const handleDragStart = (index: number) => {
-    setDraggedIndex(index);
-  };
-
-  const handleDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    
-    if (draggedIndex === null || draggedIndex === index) return;
-
-    const newTracks = [...tracks];
-    const draggedTrack = newTracks[draggedIndex];
-    newTracks.splice(draggedIndex, 1);
-    newTracks.splice(index, 0, draggedTrack);
-    
-    setTracks(newTracks);
-    setDraggedIndex(index);
-  };
-
-  const handleDragEnd = async () => {
-    if (draggedIndex === null || !selectedPlaylist) {
-      setDraggedIndex(null);
-      return;
-    }
-
-    const originalTracks = [...tracks];
-    
-    // Save the reorder to Plex
-    try {
-      const draggedTrack = tracks[draggedIndex];
-      
-      console.log('Drag ended:', {
-        draggedIndex,
-        draggedTrack: {
-          title: draggedTrack.title,
-          playlistItemID: draggedTrack.playlistItemID
-        }
-      });
-      
-      if (!draggedTrack.playlistItemID) {
-        console.error('Dragged track has no playlistItemID');
-        setDraggedIndex(null);
-        return;
-      }
-
-      // Find the track that should come before the dragged track
-      const afterIndex = draggedIndex - 1;
-      
-      // If moving to first position, use '0', otherwise use the previous track's playlistItemID
-      const afterTrackId = afterIndex < 0 ? '0' : tracks[afterIndex].playlistItemID?.toString() || '0';
-      
-      console.log('Moving track:', {
-        playlistId: selectedPlaylist.id,
-        trackId: draggedTrack.playlistItemID,
-        afterTrackId
-      });
-      
-      const response = await fetch(`/api/playlists/${selectedPlaylist.id}/tracks/${draggedTrack.playlistItemID}/move`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ afterId: afterTrackId }),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Failed to reorder tracks - Response:', {
-          status: response.status,
-          statusText: response.statusText,
-          body: errorText
-        });
-        throw new Error(`Failed to reorder tracks: ${response.status} ${response.statusText}`);
-      }
-      
-      console.log('Track moved successfully');
-    } catch (err: any) {
-      console.error('Failed to reorder tracks:', err);
-      alert(`Failed to reorder tracks: ${err.message}`);
-      // Restore original order
-      setTracks(originalTracks);
-    }
-    
-    setDraggedIndex(null);
-  };
-
-  const handlePlayTrack = (track: Track) => {
-    if (!server) return;
-
-    // If clicking the same track that's playing, pause it
-    if (currentlyPlaying === track.ratingKey) {
-      audioElement.pause();
-      setCurrentlyPlaying(null);
-      return;
-    }
-
-    // Stop current track if playing
-    if (currentlyPlaying) {
-      audioElement.pause();
-    }
-
-    // Get the audio stream URL from Plex
-    const streamUrl = `/api/proxy/audio?ratingKey=${track.ratingKey}`;
-    
-    audioElement.src = streamUrl;
-    audioElement.play().catch(err => {
-      console.error('Failed to play track:', err);
-      alert('Failed to play track');
-    });
-    
-    setCurrentlyPlaying(track.ratingKey);
-
-    // Handle when track ends
-    audioElement.onended = () => {
-      setCurrentlyPlaying(null);
-    };
-  };
-
-  // Resize image to Plex-compatible dimensions
-  const resizeImage = (file: File, maxWidth: number, maxHeight: number): Promise<Blob> => {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-
-      img.onload = () => {
-        // Calculate dimensions maintaining aspect ratio
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > maxWidth) {
-            height = (height * maxWidth) / width;
-            width = maxWidth;
-          }
-        } else {
-          if (height > maxHeight) {
-            width = (width * maxHeight) / height;
-            height = maxHeight;
-          }
-        }
-
-        // Set canvas size and draw image
-        canvas.width = width;
-        canvas.height = height;
-        ctx?.drawImage(img, 0, 0, width, height);
-
-        // Convert to blob
-        canvas.toBlob(
-          (blob) => {
-            if (blob) {
-              resolve(blob);
-            } else {
-              reject(new Error('Failed to resize image'));
-            }
-          },
-          'image/jpeg',
-          0.9
-        );
-      };
-
-      img.onerror = () => reject(new Error('Failed to load image'));
-      img.src = URL.createObjectURL(file);
-    });
-  };
-
-  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedPlaylist) return;
-
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
-      return;
-    }
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Image must be less than 5MB');
-      return;
-    }
-
-    try {
-      setUploadingCover(true);
-      
-      // Resize image to Plex-compatible dimensions (1000x1000 max)
-      const resizedBlob = await resizeImage(file, 1000, 1000);
-      
-      // Create FormData with resized image
-      const formData = new FormData();
-      formData.append('cover', resizedBlob, file.name);
-
-      // Upload to server
-      const response = await fetch(`/api/playlists/${selectedPlaylist.id}/cover`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ message: 'Failed to upload cover' }));
-        throw new Error(error.message || 'Failed to upload cover');
-      }
-
-      // Refresh playlists to get updated cover
-      await loadPlaylists();
-      if (selectedPlaylist) {
-        await loadTracks(selectedPlaylist.id);
-      }
-      
-      alert('Cover uploaded successfully!');
-    } catch (err: any) {
-      console.error('Failed to upload cover:', err);
-      alert(err.message || 'Failed to upload cover');
-    } finally {
-      setUploadingCover(false);
-      // Reset file input
-      e.target.value = '';
-    }
-  };
-
-  const handleSearchTracks = async () => {
-    // At least one field must be filled
-    if (!searchArtist.trim() && !searchTrack.trim() && !searchAlbum.trim()) {
-      alert('Please enter at least one search term');
-      return;
-    }
-
-    try {
-      setSearching(true);
-      
-      // Build query params
-      const params = new URLSearchParams();
-      if (searchArtist.trim()) params.append('artist', searchArtist.trim());
-      if (searchTrack.trim()) params.append('track', searchTrack.trim());
-      if (searchAlbum.trim()) params.append('album', searchAlbum.trim());
-      
-      const response = await fetch(`/api/search?${params.toString()}`);
-      
-      if (!response.ok) throw new Error('Search failed');
-      
-      const data = await response.json();
-      const results = data.results || [];
-      
-      setSearchResults(results.map((item: any) => ({
-        id: item.ratingKey,
-        ratingKey: item.ratingKey,
-        title: item.title,
-        artist: item.grandparentTitle || 'Unknown Artist',
-        album: item.parentTitle || 'Unknown Album',
-        duration: item.duration || 0,
-        codec: item.Media?.[0]?.audioCodec || 'N/A',
-        bitrate: item.Media?.[0]?.bitrate || 0,
-      })));
-    } catch (err) {
-      console.error('Search failed:', err);
-      alert('Failed to search tracks');
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  const handleToggleTrack = (trackId: string) => {
-    const newSelected = new Set(selectedTracks);
-    if (newSelected.has(trackId)) {
-      newSelected.delete(trackId);
-    } else {
-      newSelected.add(trackId);
-    }
-    setSelectedTracks(newSelected);
-  };
-
-  const handleAddSelectedTracks = async () => {
-    if (!selectedPlaylist || selectedTracks.size === 0) return;
-
-    try {
-      const trackIds = Array.from(selectedTracks);
-      const trackUris = trackIds.map(id => `server://${server?.clientId}/com.plexapp.plugins.library/library/metadata/${id}`);
-      
-      const response = await fetch(`/api/playlists/${selectedPlaylist.id}/tracks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trackUris }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to add tracks');
-      }
-
-      // Refresh tracks
-      await loadTracks(selectedPlaylist.id);
-      
-      // Reset and close
-      setSelectedTracks(new Set());
-      setSearchArtist('');
-      setSearchTrack('');
-      setSearchAlbum('');
-      setSearchResults([]);
-      setShowAddTracksModal(false);
-      
-      alert(`Added ${trackIds.length} track(s) to playlist`);
-    } catch (err) {
-      console.error('Failed to add tracks:', err);
-      alert('Failed to add tracks to playlist');
-    }
-  };
-
-  const handleOpenReplaceModal = (track: Track) => {
-    // Save scroll position when opening modal
-    const scrollContainer = document.querySelector('.tracks-panel');
-    if (scrollContainer) {
-      scrollPositionRef.current = scrollContainer.scrollTop;
-      shouldRestoreScroll.current = true;
-    }
-    
-    setTrackToReplace(track);
-    setReplaceSearchQuery(`${track.artist} ${track.title}`);
-    setReplaceSearchResults([]);
-    setShowReplaceModal(true);
-  };
-
-  const handleCloseReplaceModal = () => {
-    setShowReplaceModal(false);
-    setTrackToReplace(null);
-    setReplaceSearchQuery('');
-    setReplaceSearchResults([]);
-    
-    // If closing without replacing, restore scroll immediately
-    if (shouldRestoreScroll.current) {
-      const scrollContainer = document.querySelector('.tracks-panel');
-      if (scrollContainer) {
-        requestAnimationFrame(() => {
-          scrollContainer.scrollTop = scrollPositionRef.current;
-          shouldRestoreScroll.current = false;
-        });
-      }
-    }
-  };
-
-  const handleSearchReplace = async () => {
-    if (!replaceSearchQuery.trim()) return;
-
-    setSearchingReplace(true);
-    try {
-      const response = await fetch('/api/import/plex/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ query: replaceSearchQuery }),
-      });
-
-      if (!response.ok) throw new Error('Search failed');
-
-      const data = await response.json();
-      const results = data.tracks || [];
-
-      setReplaceSearchResults(results.map((item: any) => ({
-        id: item.ratingKey,
-        ratingKey: item.ratingKey,
-        title: item.title,
-        artist: item.artist || 'Unknown Artist',
-        album: item.album || 'Unknown Album',
-        duration: item.duration || 0,
-        codec: item.codec || 'N/A',
-        bitrate: item.bitrate || 0,
-      })));
-    } catch (err) {
-      console.error('Search failed:', err);
-      alert('Failed to search tracks');
-    } finally {
-      setSearchingReplace(false);
-    }
-  };
-
-  const handleReplaceTrack = async (newTrack: Track) => {
-    if (!selectedPlaylist || !trackToReplace) return;
-
-    try {
-      // Check if trying to replace with the same track
-      if (newTrack.ratingKey === trackToReplace.ratingKey) {
-        // Same track - just close modal and refresh to show updated metadata
-        handleCloseReplaceModal();
-        await loadTracks(selectedPlaylist.id);
-        return;
-      }
-
-      // Save scroll position before any operations
-      const scrollContainer = document.querySelector('.tracks-panel');
-      if (scrollContainer) {
-        scrollPositionRef.current = scrollContainer.scrollTop;
-        shouldRestoreScroll.current = true;
-      }
-
-      // Step 1: Find the position of the track to replace
-      const oldTrackIndex = tracks.findIndex(t => t.playlistItemID === trackToReplace.playlistItemID);
-      if (oldTrackIndex === -1) {
-        throw new Error('Track not found in playlist');
-      }
-
-      // Remember the old track's ratingKey to find it after the move
-      const oldTrackRatingKey = trackToReplace.ratingKey;
-
-      // Determine the track that should come before the new track (same position as old track)
-      const afterIndex = oldTrackIndex - 1;
-      const afterTrackId = afterIndex < 0 ? '0' : tracks[afterIndex].playlistItemID?.toString() || '0';
-
-      // Step 2: Add new track (it will be added to the end)
-      const trackUri = `server://${server?.clientId}/com.plexapp.plugins.library/library/metadata/${newTrack.ratingKey}`;
-      
-      const addResponse = await fetch(`/api/playlists/${selectedPlaylist.id}/tracks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trackUris: [trackUri] }),
-      });
-
-      if (!addResponse.ok) {
-        throw new Error('Failed to add replacement track');
-      }
-
-      // Step 3: Refresh tracks to get the new track's playlistItemID
-      await loadTracks(selectedPlaylist.id);
-
-      // Step 4: Find the newly added track (it should be at the end)
-      const updatedTracks = await apiClient.getPlaylistTracks(selectedPlaylist.id);
-      const newTrackItem = updatedTracks.tracks[updatedTracks.tracks.length - 1];
-      
-      if (!newTrackItem.playlistItemID) {
-        throw new Error('New track does not have a playlist item ID');
-      }
-
-      // Step 5: Move the new track to the correct position (where the old track was)
-      const moveResponse = await fetch(`/api/playlists/${selectedPlaylist.id}/tracks/${newTrackItem.playlistItemID}/move`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ afterId: afterTrackId }),
-      });
-
-      if (!moveResponse.ok) {
-        throw new Error('Failed to move replacement track to correct position');
-      }
-
-      // Step 6: Refresh to get updated positions after the move
-      const tracksAfterMove = await apiClient.getPlaylistTracks(selectedPlaylist.id);
-      
-      // Step 7: Find the old track by its ratingKey (playlistItemID has changed after move)
-      const oldTrackAfterMove = tracksAfterMove.tracks.find(t => t.ratingKey === oldTrackRatingKey);
-      
-      if (!oldTrackAfterMove || !oldTrackAfterMove.playlistItemID) {
-        throw new Error('Could not find old track after move');
-      }
-      
-      // Step 8: Remove old track using its updated playlistItemID
-      await apiClient.removeTrackFromPlaylist(selectedPlaylist.id, oldTrackAfterMove.playlistItemID.toString());
-
-      // Step 9: Final refresh to show updated list (scroll will be restored by useEffect)
-      await loadTracks(selectedPlaylist.id);
-      handleCloseReplaceModal();
-    } catch (err: any) {
-      console.error('Failed to replace track:', err);
-      alert(`Failed to replace track: ${err.message || 'Unknown error'}`);
-      shouldRestoreScroll.current = false;
-      // Refresh tracks to show current state even if replacement failed
-      await loadTracks(selectedPlaylist.id);
-    }
-  };
-
-  const formatDuration = (ms: number) => {
-    const seconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')} mins`;
-  };
-
-  const formatBitrate = (bitrate?: number) => {
-    if (!bitrate) return 'N/A';
-    return `${Math.round(bitrate)} kbps`;
-  };
-
-  const getCoverUrl = (composite?: string) => {
-    if (!composite || !server) {
-      return null;
-    }
-    // Use the API proxy endpoint to avoid CORS issues
-    const fullPlexUrl = `${server.url}${composite}`;
-    return `/api/proxy/image?url=${encodeURIComponent(fullPlexUrl)}`;
-  };
-
-  if (loading) {
-    return (
-      <div className="page-container">
-        <h1>Edit Playlists</h1>
-        <p>Loading playlists...</p>
-      </div>
-    );
+  .tracks-table {
+    min-width: 800px;
+  }
+}
+
+
+/* Playlist header with cover and info */
+.playlist-header {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.playlist-cover-section {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.playlist-cover-container {
+  position: relative;
+  width: 200px;
+  height: 200px;
+}
+
+.playlist-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.playlist-cover-placeholder {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  background: var(--surface-hover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.upload-cover-btn {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.15s;
+  justify-content: center;
+  margin-top: 0.75rem;
+}
+
+.upload-cover-btn .upload-icon {
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.8;
+}
+
+.upload-cover-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--primary-color);
+  transform: translateY(-1px);
+}
+
+.upload-cover-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.playlist-info-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.playlist-title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem 0;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.playlist-name-display {
+  font-size: 1.75rem;
+  font-weight: 600;
+  margin: 0;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  transition: background-color 0.15s;
+}
+
+.playlist-name-display:hover {
+  background-color: var(--surface-hover);
+}
+
+.playlist-name-edit {
+  margin: 0;
+}
+
+.playlist-name-input {
+  font-size: 1.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  border: 2px solid var(--primary-color);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text-primary);
+  width: 100%;
+  max-width: 500px;
+}
+
+.playlist-stats {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.add-tracks-btn {
+  align-self: flex-start;
+  margin-top: auto;
+}
+
+/* Drag and drop styles */
+.col-drag {
+  width: 30px;
+  text-align: center;
+  cursor: grab;
+}
+
+.drag-handle {
+  color: var(--text-secondary);
+  font-size: 1.25rem;
+  user-select: none;
+}
+
+.tracks-table tbody tr {
+  transition: background-color 0.15s, opacity 0.15s;
+}
+
+.tracks-table tbody tr.dragging {
+  opacity: 0.5;
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.tracks-table tbody tr:active {
+  cursor: grabbing;
+}
+
+/* Modal styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 2rem;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.modal-content h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+}
+
+.modal-content p {
+  margin-bottom: 1.5rem;
+  color: var(--text-secondary);
+}
+
+.btn-primary {
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 0.625rem 1.25rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+@media (max-width: 768px) {
+  .playlist-header {
+    flex-direction: column;
   }
 
-  if (error && playlists.length === 0) {
-    return (
-      <div className="page-container">
-        <h1>Edit Playlists</h1>
-        <div className="error-message">{error}</div>
-      </div>
-    );
+  .playlist-cover-container {
+    width: 150px;
+    height: 150px;
+    margin: 0 auto;
   }
 
-  return (
-    <div className="page-container">
-      <h1>Edit Playlists</h1>
-      <div className="edit-playlists-layout">
-        <div className="playlists-panel">
-          <h2>Your Playlists</h2>
-          <div className="playlists-list">
-            {playlists.map(playlist => (
-              <div
-                key={`playlist-${playlist.id}-${playlist.name}`}
-                className={`playlist-item ${selectedPlaylist?.id === playlist.id ? 'active' : ''}`}
-                onClick={() => handlePlaylistSelect(playlist)}
-              >
-                {playlist.composite && (
-                  <div className="playlist-thumb-container">
-                    <img
-                      src={getCoverUrl(playlist.composite) || ''}
-                      alt=""
-                      className="playlist-thumb"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                  </div>
-                )}
-                <div className="playlist-info">
-                  <div className="playlist-name">{playlist.name}</div>
-                  <div className="playlist-meta">
-                    {playlist.trackCount || 0} tracks • {formatDuration(playlist.duration || 0)}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+  .playlist-name-display,
+  .playlist-name-input {
+    font-size: 1.25rem;
+  }
 
-        <div className="tracks-panel">
-          {!selectedPlaylist ? (
-            <p>Select a playlist to view and edit tracks</p>
-          ) : (
-            <>
-              <div className="playlist-header">
-                <div className="playlist-cover-section">
-                  <div className="playlist-cover-container">
-                    {selectedPlaylist.composite ? (
-                      <img
-                        src={getCoverUrl(selectedPlaylist.composite) || ''}
-                        alt={selectedPlaylist.name}
-                        className="playlist-cover"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                          const placeholder = e.currentTarget.parentElement?.querySelector('.playlist-cover-placeholder');
-                          if (placeholder) {
-                            (placeholder as HTMLElement).style.display = 'flex';
-                          }
-                        }}
-                      />
-                    ) : null}
-                    <div className="playlist-cover-placeholder" style={{ display: selectedPlaylist.composite ? 'none' : 'flex' }}>
-                      No Cover
-                    </div>
-                  </div>
-                  <label className="upload-cover-btn" title="Change cover">
-                    {uploadingCover ? (
-                      <>
-                        <span className="upload-icon">⏳</span>
-                        Uploading...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="upload-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                          <polyline points="17 8 12 3 7 8" />
-                          <line x1="12" y1="3" x2="12" y2="15" />
-                        </svg>
-                        Change Cover
-                      </>
-                    )}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleCoverUpload}
-                      disabled={uploadingCover}
-                      style={{ display: 'none' }}
-                    />
-                  </label>
-                </div>
+  /* Hide drag handle on mobile */
+  .col-drag {
+    display: none;
+  }
+}
 
-                <div className="playlist-info-section">
-                  <h1 className="playlist-title">{selectedPlaylist.name}</h1>
-                  <div className="playlist-stats">
-                    {tracks.length} tracks • {formatDuration(selectedPlaylist.duration || 0)}
-                  </div>
+/* Add Tracks Modal */
+.add-tracks-modal {
+  max-width: 600px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
 
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                    <button
-                      className="btn-primary add-tracks-btn"
-                      onClick={() => setShowAddTracksModal(true)}
-                    >
-                      + Add Tracks
-                    </button>
-                    <button
-                      className="btn-secondary"
-                      onClick={handleSelectDuplicates}
-                      title="Select all duplicate tracks (same song appearing multiple times)"
-                    >
-                      Select Duplicates
-                    </button>
-                    {selectedForRemoval.size > 0 && (
-                      <button
-                        className="btn-secondary"
-                        onClick={handleRemoveSelected}
-                        disabled={removingTracks}
-                        style={{ color: '#ef4444' }}
-                      >
-                        {removingTracks ? 'Removing...' : `Remove Selected (${selectedForRemoval.size})`}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
+.search-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
 
-              {tracksLoading ? (
-                <p>Loading tracks...</p>
-              ) : tracks.length === 0 ? (
-                <p>No tracks in this playlist</p>
-              ) : (
-                <div className="tracks-table-container">
-                  <table className="tracks-table">
-                    <thead>
-                      <tr>
-                        <th className="col-select"></th>
-                        <th className="col-play"></th>
-                        <th className="col-replace"></th>
-                        <th className="col-drag"></th>
-                        <th className="col-number">#</th>
-                        <th className="col-title">Title</th>
-                        <th className="col-artist">Artist</th>
-                        <th className="col-album">Album</th>
-                        <th className="col-codec">Codec</th>
-                        <th className="col-bitrate">Bitrate</th>
-                        <th className="col-duration">Duration</th>
-                        <th className="col-actions"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {tracks.map((track, index) => (
-                        <tr
-                          key={`${track.ratingKey}-${track.playlistItemID || index}`}
-                          draggable
-                          onDragStart={() => handleDragStart(index)}
-                          onDragOver={(e) => handleDragOver(e, index)}
-                          onDragEnd={handleDragEnd}
-                          className={`${draggedIndex === index ? 'dragging' : ''} ${track.playlistItemID !== undefined && selectedForRemoval.has(track.playlistItemID) ? 'selected-for-removal' : ''}`}
-                        >
-                          <td className="col-select">
-                            <input
-                              type="checkbox"
-                              checked={track.playlistItemID !== undefined && selectedForRemoval.has(track.playlistItemID)}
-                              onChange={() => track.playlistItemID !== undefined && handleToggleForRemoval(track.playlistItemID)}
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          </td>
-                          <td className="col-play">
-                            <button
-                              className={`btn-play ${currentlyPlaying === track.ratingKey ? 'playing' : ''}`}
-                              onClick={() => handlePlayTrack(track)}
-                              title={currentlyPlaying === track.ratingKey ? 'Pause' : 'Play track'}
-                            >
-                              {currentlyPlaying === track.ratingKey ? (
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                  <rect x="6" y="4" width="4" height="16" />
-                                  <rect x="14" y="4" width="4" height="16" />
-                                </svg>
-                              ) : (
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                  <polygon points="5 3 19 12 5 21 5 3" />
-                                </svg>
-                              )}
-                            </button>
-                          </td>
-                          <td className="col-replace">
-                            <button
-                              className="btn-replace"
-                              onClick={() => handleOpenReplaceModal(track)}
-                              title="Replace track"
-                            >
-                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16" />
-                              </svg>
-                            </button>
-                          </td>
-                          <td className="col-drag">
-                            <span className="drag-handle">☰</span>
-                          </td>
-                          <td className="col-number">{index + 1}</td>
-                          <td className="col-title">{track.title}</td>
-                          <td className="col-artist">{track.artist}</td>
-                          <td className="col-album">{track.album}</td>
-                          <td className="col-codec">{track.codec || 'N/A'}</td>
-                          <td className="col-bitrate">{formatBitrate(track.bitrate)}</td>
-                          <td className="col-duration">{formatDuration(track.duration)}</td>
-                          <td className="col-actions">
-                            <button
-                              className="btn-icon"
-                              onClick={() => track.playlistItemID && handleRemoveTrack(track.playlistItemID)}
-                              title="Remove track"
-                              disabled={!track.playlistItemID}
-                            >
-                              ×
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
+.search-input {
+  width: 100%;
+  padding: 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
 
-      {showAddTracksModal && (
-        <div className="modal-overlay" onClick={() => setShowAddTracksModal(false)}>
-          <div className="modal-content add-tracks-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Add Tracks to Playlist</h3>
-            
-            <div className="search-section">
-              <input
-                type="text"
-                className="search-input"
-                placeholder="Artist name..."
-                value={searchArtist}
-                onChange={(e) => setSearchArtist(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearchTracks()}
-              />
-              <input
-                type="text"
-                className="search-input"
-                placeholder="Track name..."
-                value={searchTrack}
-                onChange={(e) => setSearchTrack(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearchTracks()}
-              />
-              <input
-                type="text"
-                className="search-input"
-                placeholder="Album name..."
-                value={searchAlbum}
-                onChange={(e) => setSearchAlbum(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearchTracks()}
-              />
-              <button
-                className="btn-primary"
-                onClick={handleSearchTracks}
-                disabled={searching}
-              >
-                {searching ? 'Searching...' : 'Search'}
-              </button>
-            </div>
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
 
-            {searchResults.length > 0 && (
-              <div className="search-results">
-                <p>{searchResults.length} results found. Select tracks to add:</p>
-                <div className="results-list">
-                  {searchResults.map((track) => track.id && (
-                    <div
-                      key={track.id}
-                      className={`result-item ${selectedTracks.has(track.id) ? 'selected' : ''}`}
-                      onClick={() => track.id && handleToggleTrack(track.id)}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={track.id ? selectedTracks.has(track.id) : false}
-                        onChange={() => {}}
-                      />
-                      <div className="result-info">
-                        <div className="result-title">{track.title}</div>
-                        <div className="result-meta">{track.artist} • {track.album}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+.search-results {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
 
-            <div className="modal-actions">
-              {selectedTracks.size > 0 && (
-                <button
-                  className="btn-primary"
-                  onClick={handleAddSelectedTracks}
-                >
-                  Add {selectedTracks.size} Track(s)
-                </button>
-              )}
-              <button
-                className="btn-secondary"
-                onClick={() => {
-                  setShowAddTracksModal(false);
-                  setSearchArtist('');
-                  setSearchTrack('');
-                  setSearchAlbum('');
-                  setSearchResults([]);
-                  setSelectedTracks(new Set());
-                }}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+.search-results > p {
+  margin: 0 0 0.75rem 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
 
-      {/* Replace Track Modal */}
-      {showReplaceModal && trackToReplace && (
-        <div className="modal-overlay" onClick={handleCloseReplaceModal}>
-          <div className="modal-content add-tracks-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Replace Track</h3>
-            
-            <div className="replace-track-info">
-              <p><strong>Current Track:</strong></p>
-              <p>{trackToReplace.artist} - {trackToReplace.title}</p>
-              <p className="track-meta">{trackToReplace.album}</p>
-            </div>
+.results-list {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-height: 400px;
+}
 
-            <div className="search-section">
-              <input
-                type="text"
-                className="search-input"
-                placeholder="Search for replacement track..."
-                value={replaceSearchQuery}
-                onChange={(e) => setReplaceSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearchReplace()}
-              />
-              <button
-                className="btn-primary"
-                onClick={handleSearchReplace}
-                disabled={searchingReplace}
-              >
-                {searchingReplace ? 'Searching...' : 'Search'}
-              </button>
-            </div>
+.result-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
 
-            {replaceSearchResults.length > 0 && (
-              <div className="search-results">
-                <p>{replaceSearchResults.length} results found. Select a track to replace with:</p>
-                <div className="results-list">
-                  {replaceSearchResults.map((track) => track.id && (
-                    <div
-                      key={track.id}
-                      className="result-item"
-                      onClick={() => handleReplaceTrack(track)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <div className="result-info">
-                        <div className="result-title">{track.title}</div>
-                        <div className="result-meta">{track.artist} • {track.album}</div>
-                        <div className="result-meta">{track.codec} • {formatBitrate(track.bitrate)}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+.result-item:last-child {
+  border-bottom: none;
+}
 
-            <div className="modal-actions">
-              <button
-                className="btn-secondary"
-                onClick={handleCloseReplaceModal}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+.result-item:hover {
+  background-color: var(--surface-hover);
+}
+
+.result-item.selected {
+  background-color: rgba(59, 130, 246, 0.1);
+}
+
+.result-item input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.result-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.result-title {
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result-meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  justify-content: flex-end;
+}
+
+.btn-secondary {
+  padding: 0.625rem 1.25rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-secondary:hover {
+  background: var(--surface-hover);
+}
+
+
+/* Replace Track Modal */
+.replace-track-info {
+  padding: 1rem;
+  background-color: rgba(79, 209, 197, 0.08);
+  border: 1px solid rgba(79, 209, 197, 0.2);
+  border-radius: 6px;
+  margin-bottom: 1.5rem;
+}
+
+.replace-track-info p {
+  margin: 0.25rem 0;
+}
+
+.replace-track-info strong {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.track-meta {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+/* Replace button styling - matches play button */
+.col-replace {
+  width: 50px;
+  text-align: center;
+}
+
+.btn-replace {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--primary-color);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.btn-replace:hover {
+  background: transparent;
+  color: var(--primary-color);
+  opacity: 0.7;
+  transform: scale(1.15);
+}
+
+.btn-replace svg {
+  display: block;
 }
