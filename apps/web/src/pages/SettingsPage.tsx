@@ -947,7 +947,7 @@ const ConnectedServicesTab: FC = () => {
               <div className="settings-service-actions">
                 {target.connected ? (
                   <button
-                    className="btn btn-secondary btn-sm"
+                    className="btn btn-secondary btn-small"
                     onClick={() => handleRevoke(target.id, target.name)}
                     disabled={revoking === target.id}
                   >
@@ -955,7 +955,7 @@ const ConnectedServicesTab: FC = () => {
                   </button>
                 ) : (
                   <button
-                    className="btn btn-primary btn-sm"
+                    className="btn btn-primary btn-small"
                     onClick={() => handleConnect(target.id)}
                     disabled={connecting === target.id}
                   >
