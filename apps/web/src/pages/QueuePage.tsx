@@ -1,812 +1,928 @@
-import type { FC } from 'react';
-import { useState, useEffect, useRef } from 'react';
-import { useApp } from '../contexts/AppContext';
-import type { MatchedTrack } from '@playlist-lab/shared';
-import './QueuePage.css';
-
-interface CompletedImport {
-  id: string;
-  source: string;
-  url?: string;
-  playlistName: string;
-  completedAt: number;
-  matchedCount?: number;
-  unmatchedCount?: number;
-  matched?: MatchedTrack[];
-  unmatched?: MatchedTrack[];
-  coverUrl?: string;
+/* Reduce h1 bottom margin for tighter layout */
+.page-container:has(.queue-layout) > h1 {
+  margin-bottom: 0.5rem;
 }
 
-export const QueuePage: FC = () => {
-  const { apiClient, refreshPlaylists, refreshMissingTracksCount } = useApp();
-  const [completedImports, setCompletedImports] = useState<CompletedImport[]>([]);
-  const [activeQueue, setActiveQueue] = useState<any>(null);
-  const [selectedImport, setSelectedImport] = useState<CompletedImport | null>(null);
-  const [editableTracks, setEditableTracks] = useState<MatchedTrack[]>([]);
-  const [playlistName, setPlaylistName] = useState('');
-  const [showUnmatchedOnly, setShowUnmatchedOnly] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [rematchTrack, setRematchTrack] = useState<{ track: MatchedTrack; index: number } | null>(null);
-  const [rematchQuery, setRematchQuery] = useState('');
-  const [rematchResults, setRematchResults] = useState<any[]>([]);
-  const [isSearchingRematch, setIsSearchingRematch] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [overwriteExisting, setOverwriteExisting] = useState(false);
-  const [overwriteCover, setOverwriteCover] = useState(true);
+.page-container:has(.queue-layout) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
 
-  // Track whether mousedown started on the backdrop
-  const backdropMouseDown = useRef(false);
+/* Two-Panel Layout */
+.queue-layout {
+  display: grid;
+  grid-template-columns: 400px 1fr;
+  gap: 1.5rem;
+  margin-top: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
 
-  // ESC key closes the rematch modal
-  useEffect(() => {
-    if (!rematchTrack) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setRematchTrack(null);
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [rematchTrack]);
+.queue-list-panel,
+.queue-details-panel {
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  overflow-y: auto;
+  height: 100%;
+  min-height: 0;
+}
 
-  // Load completed imports and active queue
-  useEffect(() => {
-    const loadInitialData = async () => {
-      setIsLoading(true);
-      await Promise.all([loadCompletedImports(), loadActiveQueue()]);
-      setIsLoading(false);
-    };
-    
-    loadInitialData();
-    
-    const interval = setInterval(() => {
-      loadCompletedImports();
-      loadActiveQueue();
-    }, 10000);
-    
-    return () => clearInterval(interval);
-  }, []);
+/* Empty State */
+.queue-empty {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: var(--text-secondary);
+}
 
-  const loadActiveQueue = async () => {
-    try {
-      const response = await fetch('/api/import/queue', {
-        credentials: 'include',
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setActiveQueue(data);
-      }
-    } catch (err) {
-      console.error('[QueuePage] Failed to load active queue:', err);
-    }
-  };
+.queue-empty h2 {
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+}
 
-  const loadCompletedImports = async () => {
-    try {
-      const response = await fetch('/api/import/queue/completed', {
-        credentials: 'include',
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        const imports = data.completed || [];
-        setCompletedImports(imports);
-      }
-    } catch (err) {
-      console.error('[QueuePage] Failed to load completed imports:', err);
-    }
-  };
+.queue-empty p {
+  margin-bottom: 0.5rem;
+}
 
-  const handleSelectImport = async (imp: CompletedImport) => {
-    // If this import doesn't have full track data yet, load it
-    if (!imp.matched || !imp.unmatched) {
-      try {
-        const response = await fetch(`/api/import/queue/completed/${imp.id}`, {
-          credentials: 'include',
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          const fullImport = data.import;
-          
-          // Update the import in the list with full data
-          setCompletedImports(prev => prev.map(i => 
-            i.id === imp.id ? { ...i, matched: fullImport.matched, unmatched: fullImport.unmatched } : i
-          ));
-          
-          // Set as selected with full data
-          setSelectedImport(fullImport);
-          setEditableTracks([...fullImport.matched, ...fullImport.unmatched]);
-          setPlaylistName(fullImport.playlistName);
-          setShowUnmatchedOnly(false);
-        }
-      } catch (err) {
-        console.error('[QueuePage] Failed to load import details:', err);
-        setError('Failed to load import details');
-      }
-    } else {
-      // Already has full data
-      setSelectedImport(imp);
-      setEditableTracks([...imp.matched, ...imp.unmatched]);
-      setPlaylistName(imp.playlistName);
-      setShowUnmatchedOnly(false);
-    }
-  };
+.queue-empty a {
+  color: var(--primary-color);
+  text-decoration: none;
+}
 
-  const handleDiscardImport = async (importId: string) => {
-    if (!confirm('Discard this import? This cannot be undone.')) {
-      return;
-    }
+.queue-empty a:hover {
+  text-decoration: underline;
+}
 
-    try {
-      await fetch(`/api/import/queue/completed/${importId}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-      
-      setCompletedImports(prev => prev.filter(i => i.id !== importId));
-      
-      if (selectedImport?.id === importId) {
-        setSelectedImport(null);
-        setEditableTracks([]);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to discard import');
-    }
-  };
+/* Queue Sections */
+.queue-section {
+  margin-bottom: 2rem;
+}
 
-  const handleCancelJob = async (jobId: string) => {
-    if (!confirm('Cancel this import? This cannot be undone.')) {
-      return;
-    }
+.queue-section:last-child {
+  margin-bottom: 0;
+}
 
-    try {
-      const response = await fetch(`/api/import/queue/${jobId}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
+.queue-section h2 {
+  font-size: 1.125rem;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+}
 
-      if (response.ok) {
-        // Reload queue status
-        await loadActiveQueue();
-      } else {
-        setError('Failed to cancel import');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to cancel import');
-    }
-  };
+/* Queue List Items */
+.queue-list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+  margin-bottom: 0.5rem;
+  flex-direction: column;
+  align-items: flex-start;
+}
 
-  const handleSavePlaylist = async () => {
-    if (!selectedImport) return;
+.queue-list-item:hover {
+  background-color: var(--surface-hover);
+}
 
-    setIsSaving(true);
-    setError(null);
+.queue-list-item.active {
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.15) 0%, rgba(56, 178, 172, 0.1) 100%);
+  color: var(--primary-color);
+  border: 1px solid rgba(79, 209, 197, 0.2);
+}
 
-    try {
-      const matchedTracks = editableTracks.filter(t => t.matched && t.plexRatingKey);
-      const unmatchedTracks = editableTracks.filter(t => !t.matched || !t.plexRatingKey);
+.queue-list-item.processing {
+  border: 1px solid var(--primary-color);
+  background: rgba(100, 181, 246, 0.05);
+}
 
-      // Use confirmImport endpoint which properly handles cover art, missing tracks, and overwrite
-      await apiClient.confirmImport({
-        playlistName,
-        source: selectedImport.source,
-        sourceUrl: selectedImport.url || '',
-        tracks: matchedTracks,
-        saveMissingTracks: unmatchedTracks.length > 0,
-        missingTracks: unmatchedTracks.map(t => ({
-          title: t.title,
-          artist: t.artist,
-          album: t.album,
-        })),
-        overwriteExisting,
-        keepExistingCover: false,
-        coverUrl: overwriteCover ? selectedImport.coverUrl : undefined,
-      });
+.queue-list-item.queued {
+  opacity: 0.8;
+}
 
-      await fetch(`/api/import/queue/completed/${selectedImport.id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
+.queue-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  gap: 0.5rem;
+}
 
-      setCompletedImports(prev => prev.filter(i => i.id !== selectedImport.id));
-      setSelectedImport(null);
-      setEditableTracks([]);
-      
-      await refreshPlaylists();
-      await refreshMissingTracksCount();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save playlist');
-    } finally {
-      setIsSaving(false);
-    }
-  };
+.btn-cancel-small {
+  background: rgba(239, 83, 80, 0.1);
+  color: var(--error);
+  border: 1px solid rgba(239, 83, 80, 0.3);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
 
-  const handleAddToMissingTracks = async () => {
-    if (!selectedImport) return;
+.btn-cancel-small:hover {
+  background: rgba(239, 83, 80, 0.2);
+  border-color: var(--error);
+  transform: scale(1.1);
+}
 
-    const matchedTracks = editableTracks.filter(t => t.matched && t.plexRatingKey);
-    const unmatchedTracks = editableTracks.filter(t => !t.matched || !t.plexRatingKey);
+.queue-item-thumb-container {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  background: var(--surface-hover);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
 
-    if (unmatchedTracks.length === 0) {
-      setError('No unmatched tracks to add');
-      return;
-    }
+.queue-item-thumb {
+  width: 100%;
+  height: 100%;
+  border-radius: 4px;
+  object-fit: cover;
+  display: block;
+}
 
-    setIsSaving(true);
-    setError(null);
+.queue-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
+}
 
-    try {
-      // Save unmatched tracks to missing tracks with their original positions
-      // The backend will create a Plex playlist with matched tracks if provided
-      if (unmatchedTracks.length > 0) {
-        const unmatchedWithPositions = unmatchedTracks.map(t => {
-          const originalIndex = editableTracks.findIndex(track => track === t);
-          return {
-            title: t.title,
-            artist: t.artist,
-            album: t.album,
-            position: originalIndex + 1, // 1-based position
-          };
-        });
+.queue-item-status {
+  margin-bottom: 0.25rem;
+}
 
-        // Pass matched tracks so the backend can create a playlist with them
-        const matchedTracksData = matchedTracks.length > 0 ? matchedTracks.map(t => ({
-          plexRatingKey: t.plexRatingKey,
-          title: t.title,
-          artist: t.artist,
-        })) : undefined;
+.queue-item-name {
+  font-weight: 500;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
 
-        await apiClient.saveMissingTracks({
-          playlistName: playlistName,
-          source: selectedImport.source,
-          sourceUrl: selectedImport.url || '',
-          tracks: unmatchedWithPositions,
-          matchedTracks: matchedTracksData,
-          coverUrl: overwriteCover ? selectedImport.coverUrl : undefined,
-          overwriteExisting,
-        });
-      } else if (matchedTracks.length > 0) {
-        // Only matched tracks, create playlist normally
-        const trackUris = matchedTracks
-          .filter(t => t.plexRatingKey)
-          .map(t => `server://playlist-lab-server/com.plexapp.plugins.library/library/metadata/${t.plexRatingKey}`);
+.queue-item-meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  display: flex;
+  gap: 0.5rem;
+}
 
-        if (trackUris.length > 0) {
-          await apiClient.createPlaylist({
-            name: playlistName,
-            tracks: trackUris,
-          });
-        }
-      }
+.queue-item-source {
+  text-transform: capitalize;
+}
 
-      await fetch(`/api/import/queue/completed/${selectedImport.id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
+.queue-item-stats {
+  color: var(--text-tertiary);
+}
 
-      setCompletedImports(prev => prev.filter(i => i.id !== selectedImport.id));
-      setSelectedImport(null);
-      setEditableTracks([]);
-      
-      await refreshPlaylists();
-      await refreshMissingTracksCount();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add to missing tracks');
-    } finally {
-      setIsSaving(false);
-    }
-  };
+/* Status Badges */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
 
-  const handleRetryTrack = async (index: number) => {
-    const track = editableTracks[index];
-    
-    setIsSaving(true);
-    setError(null);
+.status-processing {
+  background: rgba(100, 181, 246, 0.1);
+  color: var(--primary-color);
+  border: 1px solid rgba(100, 181, 246, 0.3);
+  animation: pulse 2s ease-in-out infinite;
+}
 
-    try {
-      const response = await fetch('/api/import/plex/retry-match', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          track: {
-            title: track.title,
-            artist: track.artist,
-            album: track.album,
-          }
-        }),
-      });
+.status-queued {
+  background: rgba(158, 158, 158, 0.1);
+  color: var(--text-secondary);
+  border: 1px solid rgba(158, 158, 158, 0.3);
+}
 
-      if (!response.ok) {
-        throw new Error('Retry failed');
-      }
+.status-matched {
+  background: rgba(76, 175, 80, 0.1);
+  color: var(--success);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+}
 
-      const data = await response.json();
-      
-      if (data.matched && data.plexRatingKey) {
-        const updatedTracks = [...editableTracks];
-        updatedTracks[index] = {
-          ...updatedTracks[index],
-          matched: true,
-          plexRatingKey: data.plexRatingKey,
-          plexTitle: data.plexTitle,
-          plexArtist: data.plexArtist,
-          plexAlbum: data.plexAlbum,
-        };
-        setEditableTracks(updatedTracks);
-      } else {
-        setError('Track still not found in your Plex library');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to retry track');
-    } finally {
-      setIsSaving(false);
-    }
-  };
+.status-unmatched {
+  background: rgba(255, 152, 0, 0.1);
+  color: var(--warning);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+}
 
-  const handleOpenRematch = (track: MatchedTrack, index: number) => {
-    setRematchTrack({ track, index });
-    // Use only the first artist when multiple are listed (comma/& separated)
-    const firstArtist = track.artist.split(/\s*[,&\/]\s*/)[0].trim();
-    setRematchQuery(`${firstArtist} ${track.title}`);
-    setRematchResults([]);
-  };
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
 
-  const handleSearchRematch = async () => {
-    if (!rematchQuery.trim()) return;
+/* Import Header */
+.queue-import-header {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
 
-    setIsSearchingRematch(true);
-    setRematchResults([]); // Clear previous results
-    try {
-      console.log('[QueuePage] Searching for:', rematchQuery);
-      const response = await fetch('/api/import/plex/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ query: rematchQuery }),
-      });
+.queue-header-cover-section {
+  flex-shrink: 0;
+}
 
-      console.log('[QueuePage] Search response status:', response.status);
+.queue-header-cover {
+  width: 150px;
+  height: 150px;
+  border-radius: 8px;
+  object-fit: cover;
+}
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: { message: 'Search failed' } }));
-        console.error('[QueuePage] Search error:', errorData);
-        throw new Error(errorData.error?.message || 'Search failed');
-      }
+.queue-header-info-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
 
-      const data = await response.json();
-      console.log('[QueuePage] Search results:', data.tracks?.length || 0, 'tracks');
-      setRematchResults(data.tracks || []);
-    } catch (err) {
-      console.error('[QueuePage] Search exception:', err);
-      setError(err instanceof Error ? err.message : 'Search failed');
-      setRematchResults([]);
-    } finally {
-      setIsSearchingRematch(false);
-    }
-  };
+.queue-playlist-name-input {
+  font-size: 1.5rem;
+  font-weight: 600;
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--background);
+  color: var(--text-primary);
+}
 
-  const handleSelectRematch = (result: any) => {
-    if (!rematchTrack) return;
+.queue-header-meta {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  display: flex;
+  gap: 1rem;
+}
 
-    const { index } = rematchTrack;
-    const updatedTracks = [...editableTracks];
-    updatedTracks[index] = {
-      ...updatedTracks[index],
-      matched: true,
-      plexRatingKey: result.ratingKey,
-      plexTitle: result.title,
-      plexArtist: result.artist,
-      plexAlbum: result.album,
-    };
+.queue-header-stats {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.875rem;
+}
 
-    setEditableTracks(updatedTracks);
-    setRematchTrack(null);
-    setRematchResults([]);
-  };
+.stat-matched {
+  color: var(--success);
+  font-weight: 500;
+}
 
-  const handleToggleTrack = (index: number) => {
-    const updatedTracks = [...editableTracks];
-    updatedTracks[index] = {
-      ...updatedTracks[index],
-      matched: !updatedTracks[index].matched,
-    };
-    setEditableTracks(updatedTracks);
-  };
+.stat-unmatched {
+  color: var(--warning);
+  font-weight: 500;
+}
 
-  const getMatchStats = () => {
-    const matched = editableTracks.filter(t => t.matched && t.plexRatingKey).length;
-    const unmatched = editableTracks.filter(t => !t.matched || !t.plexRatingKey).length;
-    return { matched, unmatched, total: editableTracks.length };
-  };
+.stat-total {
+  color: var(--text-secondary);
+}
 
-  const getDisplayTracks = () => {
-    return showUnmatchedOnly
-      ? editableTracks.filter(t => !t.matched || !t.plexRatingKey)
-      : editableTracks;
-  };
+.queue-header-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
 
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleString();
-  };
+.queue-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
 
-  if (isLoading) {
-    return (
-      <div className="page-container">
-        <h1>Import Queue</h1>
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
-          <div style={{ textAlign: 'center' }}>
-            <div className="spinner" style={{ margin: '0 auto 1rem' }}></div>
-            <p style={{ color: 'var(--text-secondary)' }}>Loading queue...</p>
-          </div>
-        </div>
-      </div>
-    );
+.queue-checkbox-label input[type="checkbox"] {
+  cursor: pointer;
+}
+
+/* Error Banner */
+.queue-error-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background: rgba(244, 67, 54, 0.1);
+  border: 1px solid var(--error);
+  border-radius: 4px;
+  color: var(--error);
+}
+
+.queue-error-banner button {
+  background: none;
+  border: none;
+  color: var(--error);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.queue-error-banner button:hover {
+  background: rgba(244, 67, 54, 0.2);
+}
+
+/* Tracks Table */
+.queue-tracks-table-container {
+  overflow-x: auto;
+}
+
+.queue-tracks-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.queue-tracks-table thead {
+  background: var(--surface-hover);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.queue-tracks-table th {
+  padding: 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.queue-tracks-table th.col-check,
+.queue-tracks-table th.col-number,
+.queue-tracks-table th.col-codec,
+.queue-tracks-table th.col-status,
+.queue-tracks-table th.col-actions {
+  text-align: center;
+}
+
+.queue-tracks-table th.col-bitrate {
+  text-align: right;
+  padding-right: 1rem;
+}
+
+.queue-tracks-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.queue-tracks-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.queue-tracks-table tbody tr.matched {
+  opacity: 1;
+}
+
+.queue-tracks-table tbody tr.unmatched {
+  opacity: 0.7;
+}
+
+.col-check {
+  width: 40px;
+  text-align: center;
+}
+
+.col-number {
+  width: 50px;
+  text-align: center;
+}
+
+.col-original,
+.col-matched {
+  width: 22%;
+}
+
+.col-codec {
+  width: 90px;
+  text-align: center;
+}
+
+.col-bitrate {
+  width: 110px;
+  text-align: right;
+  padding-right: 1rem !important;
+}
+
+.col-status {
+  width: 120px;
+  text-align: center;
+}
+
+.col-actions {
+  width: 150px;
+  text-align: center;
+}
+
+.col-actions button {
+  margin: 0 0.25rem;
+}
+
+.track-info-title {
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.track-info-meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.3;
+}
+
+.track-info-empty {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.codec-badge {
+  padding: 0.25rem 0.625rem;
+  background: linear-gradient(135deg, rgba(91, 155, 213, 0.2) 0%, rgba(74, 158, 168, 0.2) 100%);
+  border: 1px solid rgba(91, 155, 213, 0.4);
+  border-radius: 6px;
+  color: var(--primary-color);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: inline-block;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.bitrate-value {
+  color: var(--text-primary);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.875rem;
+}
+
+/* Rematch Modal - Large Size */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: var(--surface);
+  border-radius: 8px;
+  width: 95%;
+  max-width: 1400px !important;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.modal-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 1rem;
+  overflow-y: auto;
+}
+
+.rematch-original {
+  padding: 0.75rem;
+  background: rgba(100, 181, 246, 0.1);
+  border: 1px solid rgba(100, 181, 246, 0.3);
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+.rematch-search {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.rematch-input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--background);
+  color: var(--text-primary);
+}
+
+.rematch-results {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-height: 600px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--background);
+}
+
+.rematch-results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.rematch-results-table thead {
+  background: linear-gradient(135deg, rgba(91, 155, 213, 0.15) 0%, rgba(74, 158, 168, 0.15) 100%);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.rematch-results-table th {
+  padding: 0.875rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 2px solid rgba(91, 155, 213, 0.3);
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.rematch-results-table th:first-child {
+  border-top-left-radius: 6px;
+}
+
+.rematch-results-table th:last-child {
+  border-top-right-radius: 6px;
+}
+
+.rematch-results-table td {
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.rematch-results-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.rematch-result-row {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.rematch-result-row:hover {
+  background: linear-gradient(135deg, rgba(91, 155, 213, 0.08) 0%, rgba(74, 158, 168, 0.08) 100%);
+}
+
+.rematch-result-row:active {
+  background: linear-gradient(135deg, rgba(91, 155, 213, 0.15) 0%, rgba(74, 158, 168, 0.15) 100%);
+}
+
+.rematch-result-title {
+  font-weight: 500;
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+}
+
+.rematch-result-artist {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.rematch-result-album {
+  color: var(--text-tertiary);
+  font-size: 0.8125rem;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rematch-result-codec {
+  text-align: center;
+  width: 80px;
+}
+
+.rematch-result-bitrate {
+  text-align: right;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  width: 100px;
+  font-weight: 500;
+}
+
+.rematch-result-item {
+  padding: 1rem;
+  background: var(--background);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.rematch-result-item:hover {
+  border-color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.rematch-result-meta {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.rematch-codec {
+  padding: 0.25rem 0.625rem;
+  background: linear-gradient(135deg, rgba(91, 155, 213, 0.2) 0%, rgba(74, 158, 168, 0.2) 100%);
+  border: 1px solid rgba(91, 155, 213, 0.4);
+  border-radius: 6px;
+  color: var(--primary-color);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: inline-block;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.rematch-bitrate {
+  padding: 0.125rem 0.5rem;
+  background: rgba(76, 175, 80, 0.15);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  border-radius: 4px;
+  color: var(--success);
+  font-weight: 500;
+}
+
+.rematch-no-results {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-secondary);
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .queue-layout {
+    grid-template-columns: 1fr;
+    height: auto;
   }
 
-  if (!activeQueue && completedImports.length === 0) {
-    return (
-      <div className="page-container">
-        <h1>Import Queue</h1>
-        <div className="queue-empty">
-          <h2>No Imports in Queue</h2>
-          <p>Imports will appear here when they are processing or completed.</p>
-          <p>Go to the <a href="/import">Import page</a> to start importing playlists.</p>
-        </div>
-      </div>
-    );
+  .queue-list-panel {
+    height: auto;
+    max-height: 300px;
   }
 
-  return (
-    <div className="page-container">
-      <h1>Import Queue</h1>
-      
-      <div className="queue-layout">
-        {/* Left Panel - Import List */}
-        <div className="queue-list-panel">
-          {/* Active Queue Section */}
-          {activeQueue && (activeQueue.processing || activeQueue.queued.length > 0) && (
-            <div className="queue-section">
-              <h2>Active</h2>
-              
-              {activeQueue.processing && (
-                <div className="queue-list-item processing">
-                  <div className="queue-item-header">
-                    <div className="queue-item-status">
-                      <span className="status-badge status-processing">⟳ Processing</span>
-                    </div>
-                    <button
-                      className="btn-cancel-small"
-                      onClick={() => handleCancelJob(activeQueue.processing.id)}
-                      title="Cancel import"
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <div className="queue-item-name">{activeQueue.processing.playlistName || 'Importing...'}</div>
-                  <div className="queue-item-source">{activeQueue.processing.source}</div>
-                </div>
-              )}
+  .queue-details-panel {
+    height: auto;
+  }
 
-              {activeQueue.queued.map((job: any, index: number) => (
-                <div key={job.id} className="queue-list-item queued">
-                  <div className="queue-item-header">
-                    <div className="queue-item-status">
-                      <span className="status-badge status-queued">#{index + 1} Queued</span>
-                    </div>
-                    <button
-                      className="btn-cancel-small"
-                      onClick={() => handleCancelJob(job.id)}
-                      title="Cancel import"
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <div className="queue-item-name">{job.playlistName || 'Waiting...'}</div>
-                  <div className="queue-item-source">{job.source}</div>
-                </div>
-              ))}
-            </div>
-          )}
+  .queue-import-header {
+    flex-direction: column;
+  }
 
-          {/* Completed Imports Section */}
-          {completedImports.length > 0 && (
-            <div className="queue-section">
-              <h2>Completed</h2>
-              {completedImports.map((imp) => {
-                // Use counts if available (fast), otherwise calculate from arrays (slower)
-                const matched = imp.matchedCount ?? imp.matched?.length ?? 0;
-                const unmatched = imp.unmatchedCount ?? imp.unmatched?.length ?? 0;
-                const total = matched + unmatched;
+  .queue-header-cover {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+  }
 
-                return (
-                  <div
-                    key={imp.id}
-                    className={`queue-list-item ${selectedImport?.id === imp.id ? 'active' : ''}`}
-                    onClick={() => handleSelectImport(imp)}
-                  >
-                    {imp.coverUrl && (
-                      <div className="queue-item-thumb-container">
-                        <img src={imp.coverUrl} alt="" className="queue-item-thumb" />
-                      </div>
-                    )}
-                    <div className="queue-item-info">
-                      <div className="queue-item-name">{imp.playlistName}</div>
-                      <div className="queue-item-meta">
-                        <span className="queue-item-source">{imp.source}</span>
-                        <span className="queue-item-stats">{matched}/{total} matched</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+  .queue-header-actions {
+    flex-direction: column;
+  }
 
-        {/* Right Panel - Import Details */}
-        <div className="queue-details-panel">
-          {!selectedImport ? (
-            <p>Select a completed import to review and save</p>
-          ) : (
-            <>
-              {/* Import Header */}
-              <div className="queue-import-header">
-                <div className="queue-header-cover-section">
-                  {selectedImport.coverUrl && (
-                    <img src={selectedImport.coverUrl} alt="" className="queue-header-cover" />
-                  )}
-                </div>
+  .queue-header-actions button {
+    width: 100%;
+  }
 
-                <div className="queue-header-info-section">
-                  <input
-                    type="text"
-                    value={playlistName}
-                    onChange={(e) => setPlaylistName(e.target.value)}
-                    className="queue-playlist-name-input"
-                    placeholder="Playlist name"
-                  />
-                  <div className="queue-header-meta">
-                    <span>{selectedImport.source}</span>
-                    <span>{formatDate(selectedImport.completedAt)}</span>
-                  </div>
-                  <div className="queue-header-stats">
-                    <span className="stat-matched">{getMatchStats().matched} matched</span>
-                    <span className="stat-unmatched">{getMatchStats().unmatched} unmatched</span>
-                    <span className="stat-total">{getMatchStats().total} total</span>
-                  </div>
+  .queue-tracks-table {
+    font-size: 0.75rem;
+  }
 
-                  <div className="queue-overwrite-options" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                      <input
-                        type="checkbox"
-                        checked={overwriteExisting}
-                        onChange={(e) => setOverwriteExisting(e.target.checked)}
-                      />
-                      Overwrite existing playlist
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                      <input
-                        type="checkbox"
-                        checked={overwriteCover}
-                        onChange={(e) => setOverwriteCover(e.target.checked)}
-                      />
-                      Overwrite cover art
-                    </label>
-                  </div>
+  .col-matched,
+  .col-status {
+    display: none;
+  }
+}
 
-                  <div className="queue-header-actions">
-                    <button
-                      className="btn btn-success"
-                      onClick={handleSavePlaylist}
-                      disabled={isSaving || getMatchStats().matched === 0}
-                    >
-                      {isSaving ? 'Saving...' : `Save Playlist (${getMatchStats().matched})`}
-                    </button>
-                    <button
-                      className="btn btn-warning"
-                      onClick={handleAddToMissingTracks}
-                      disabled={isSaving || getMatchStats().unmatched === 0}
-                    >
-                      Add to Missing ({getMatchStats().unmatched})
-                    </button>
-                    <button
-                      className="btn btn-danger"
-                      onClick={() => handleDiscardImport(selectedImport.id)}
-                      disabled={isSaving}
-                    >
-                      Discard
-                    </button>
-                  </div>
+/* Button Styling - Match Global App Styles */
+.btn-success {
+  background: linear-gradient(135deg, rgba(91, 155, 213, 0.8) 0%, rgba(74, 158, 168, 0.8) 100%);
+  color: #ffffff;
+  border: 1px solid rgba(91, 155, 213, 0.3);
+  box-shadow: 0 2px 8px rgba(91, 155, 213, 0.2);
+  padding: 0.625rem 1.25rem;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
 
-                  <label className="queue-checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={showUnmatchedOnly}
-                      onChange={(e) => setShowUnmatchedOnly(e.target.checked)}
-                    />
-                    Show unmatched only
-                  </label>
-                </div>
-              </div>
+.btn-success:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(91, 155, 213, 0.9) 0%, rgba(74, 158, 168, 0.9) 100%);
+  box-shadow: 0 4px 16px rgba(91, 155, 213, 0.3);
+  transform: translateY(-1px);
+}
 
-              {error && (
-                <div className="queue-error-banner">
-                  {error}
-                  <button onClick={() => setError(null)}>×</button>
-                </div>
-              )}
+.btn-success:active:not(:disabled) {
+  transform: translateY(0);
+}
 
-              {/* Tracks Table */}
-              <div className="queue-tracks-table-container">
-                <table className="queue-tracks-table">
-                  <thead>
-                    <tr>
-                      <th className="col-check"></th>
-                      <th className="col-number">#</th>
-                      <th className="col-original">Original Track</th>
-                      <th className="col-matched">Matched Track</th>
-                      <th className="col-codec">Codec</th>
-                      <th className="col-bitrate">Bitrate</th>
-                      <th className="col-status">Status</th>
-                      <th className="col-actions">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {getDisplayTracks().map((track, displayIndex) => {
-                      const actualIndex = showUnmatchedOnly
-                        ? editableTracks.findIndex(t => t === track)
-                        : displayIndex;
+.btn-success:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
 
-                      return (
-                        <tr key={actualIndex} className={track.matched ? 'matched' : 'unmatched'}>
-                          <td className="col-check">
-                            <input
-                              type="checkbox"
-                              checked={track.matched && !!track.plexRatingKey}
-                              onChange={() => handleToggleTrack(actualIndex)}
-                            />
-                          </td>
-                          <td className="col-number">{actualIndex + 1}</td>
-                          <td className="col-original">
-                            <div className="track-info-title">{track.title}</div>
-                            <div className="track-info-meta">
-                              {track.artist}
-                              {track.album && ` • ${track.album}`}
-                            </div>
-                          </td>
-                          <td className="col-matched">
-                            {track.matched && track.plexRatingKey ? (
-                              <>
-                                <div className="track-info-title">{track.plexTitle || track.title}</div>
-                                <div className="track-info-meta">
-                                  {track.plexArtist || track.artist}
-                                  {(track.plexAlbum || track.album) && ` • ${track.plexAlbum || track.album}`}
-                                </div>
-                              </>
-                            ) : (
-                              <div className="track-info-empty">—</div>
-                            )}
-                          </td>
-                          <td className="col-codec">
-                            {track.matched && track.plexRatingKey && track.plexCodec ? (
-                              <span className="codec-badge">{track.plexCodec}</span>
-                            ) : (
-                              <span className="track-info-empty">—</span>
-                            )}
-                          </td>
-                          <td className="col-bitrate">
-                            {track.matched && track.plexRatingKey && track.plexBitrate ? (
-                              <span className="bitrate-value">{track.plexBitrate} kbps</span>
-                            ) : (
-                              <span className="track-info-empty">—</span>
-                            )}
-                          </td>
-                          <td className="col-status">
-                            {track.matched && track.plexRatingKey ? (
-                              <span className="status-badge status-matched">✓ Matched</span>
-                            ) : (
-                              <span className="status-badge status-unmatched">✗ Unmatched</span>
-                            )}
-                          </td>
-                          <td className="col-actions">
-                            <button
-                              className="btn btn-small btn-secondary"
-                              onClick={() => handleRetryTrack(actualIndex)}
-                              disabled={isSaving}
-                              title="Retry automatic matching"
-                            >
-                              Retry
-                            </button>
-                            <button
-                              className="btn btn-small btn-secondary"
-                              onClick={() => handleOpenRematch(track, actualIndex)}
-                              title="Manual search"
-                            >
-                              Search
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+.btn-warning {
+  background: linear-gradient(135deg, rgba(91, 155, 213, 0.8) 0%, rgba(74, 158, 168, 0.8) 100%);
+  color: #ffffff;
+  border: 1px solid rgba(91, 155, 213, 0.3);
+  box-shadow: 0 2px 8px rgba(91, 155, 213, 0.2);
+  padding: 0.625rem 1.25rem;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
 
-      {/* Rematch Modal */}
-      {rematchTrack && (
-        <div className="modal-overlay"
-          onMouseDown={(e) => { if (e.target === e.currentTarget) backdropMouseDown.current = true; }}
-          onMouseUp={(e) => { if (e.target === e.currentTarget && backdropMouseDown.current) setRematchTrack(null); backdropMouseDown.current = false; }}
-        >
-          <div className="modal-content" onMouseDown={(e) => { backdropMouseDown.current = false; e.stopPropagation(); }}>
-            <div className="modal-header">
-              <h2>Search for Track</h2>
-              <button className="modal-close" onClick={() => setRematchTrack(null)}>×</button>
-            </div>
-            <div className="modal-body">
-              <div className="rematch-original">
-                <strong>Original:</strong> {rematchTrack.track.artist} - {rematchTrack.track.title}
-              </div>
-              <div className="rematch-search">
-                <input
-                  type="text"
-                  value={rematchQuery}
-                  onChange={(e) => setRematchQuery(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSearchRematch()}
-                  placeholder="Search Plex library..."
-                  className="rematch-input"
-                />
-                <button
-                  className="btn btn-primary"
-                  onClick={handleSearchRematch}
-                  disabled={isSearchingRematch}
-                >
-                  {isSearchingRematch ? 'Searching...' : 'Search'}
-                </button>
-              </div>
-              <div className="rematch-results">
-                {rematchResults.length > 0 && (
-                  <table className="rematch-results-table">
-                    <thead>
-                      <tr>
-                        <th>Title</th>
-                        <th>Artist</th>
-                        <th>Album</th>
-                        <th>Codec</th>
-                        <th>Bitrate</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rematchResults.map((result, idx) => (
-                        <tr key={idx} onClick={() => handleSelectRematch(result)} className="rematch-result-row">
-                          <td className="rematch-result-title">{result.title}</td>
-                          <td className="rematch-result-artist">{result.artist}</td>
-                          <td className="rematch-result-album">{result.album || '—'}</td>
-                          <td className="rematch-result-codec">
-                            <span className="rematch-codec">{result.codec || '—'}</span>
-                          </td>
-                          <td className="rematch-result-bitrate">
-                            {result.bitrate > 0 ? `${result.bitrate} kbps` : '—'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-                {rematchResults.length === 0 && !isSearchingRematch && (
-                  <div className="rematch-no-results">No results found</div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
+.btn-warning:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(91, 155, 213, 0.9) 0%, rgba(74, 158, 168, 0.9) 100%);
+  box-shadow: 0 4px 16px rgba(91, 155, 213, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-warning:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-warning:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, rgba(91, 155, 213, 0.8) 0%, rgba(74, 158, 168, 0.8) 100%);
+  color: #ffffff;
+  border: 1px solid rgba(91, 155, 213, 0.3);
+  box-shadow: 0 2px 8px rgba(91, 155, 213, 0.2);
+  padding: 0.625rem 1.25rem;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(91, 155, 213, 0.9) 0%, rgba(74, 158, 168, 0.9) 100%);
+  box-shadow: 0 4px 16px rgba(91, 155, 213, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-danger:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Primary button (Search in modal) */
+.btn-primary {
+  background: linear-gradient(135deg, rgba(91, 155, 213, 0.8) 0%, rgba(74, 158, 168, 0.8) 100%);
+  color: #ffffff;
+  border: 1px solid rgba(91, 155, 213, 0.3);
+  box-shadow: 0 2px 8px rgba(91, 155, 213, 0.2);
+  padding: 0.625rem 1.25rem;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(91, 155, 213, 0.9) 0%, rgba(74, 158, 168, 0.9) 100%);
+  box-shadow: 0 4px 16px rgba(91, 155, 213, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Small buttons in table */
+.btn-small {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  border-radius: 16px;
+}
+
+/* Secondary buttons (Retry/Search in table) */
+.btn-secondary {
+  background: linear-gradient(135deg, rgba(91, 155, 213, 0.6) 0%, rgba(74, 158, 168, 0.6) 100%);
+  color: #ffffff;
+  border: 1px solid rgba(91, 155, 213, 0.3);
+  box-shadow: 0 2px 8px rgba(91, 155, 213, 0.15);
+  padding: 0.375rem 0.75rem;
+  border-radius: 16px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(91, 155, 213, 0.7) 0%, rgba(74, 158, 168, 0.7) 100%);
+  box-shadow: 0 4px 12px rgba(91, 155, 213, 0.25);
+  transform: translateY(-1px);
+}
+
+.btn-secondary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
