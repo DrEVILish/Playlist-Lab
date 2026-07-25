@@ -238,19 +238,19 @@ export const BackupRestorePage: FC = () => {
           
           <div className="backup-actions">
             <button
-              className="btn btn-secondary btn-sm"
+              className="btn btn-secondary btn-small"
               onClick={() => setSelectedRestorePlaylists(new Set(restoreData.playlists.map((_, i) => i)))}
             >
               Select All
             </button>
             <button
-              className="btn btn-secondary btn-sm"
+              className="btn btn-secondary btn-small"
               onClick={() => setSelectedRestorePlaylists(new Set())}
             >
               Select None
             </button>
             <button
-              className="btn btn-secondary btn-sm"
+              className="btn btn-secondary btn-small"
               onClick={() => setRestoreData(null)}
             >
               Cancel
@@ -307,8 +307,8 @@ export const BackupRestorePage: FC = () => {
         </p>
         
         <div className="backup-actions">
-          <button className="btn btn-secondary btn-sm" onClick={selectAll}>Select All</button>
-          <button className="btn btn-secondary btn-sm" onClick={selectNone}>Select None</button>
+          <button className="btn btn-secondary btn-small" onClick={selectAll}>Select All</button>
+          <button className="btn btn-secondary btn-small" onClick={selectNone}>Select None</button>
           <span className="backup-count">{selectedPlaylists.size} selected</span>
         </div>
         
