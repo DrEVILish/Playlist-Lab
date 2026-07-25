@@ -1,1185 +1,856 @@
-import type { FC } from 'react';
-import { useState, useEffect } from 'react';
-import { useApp } from '../contexts/AppContext';
-import './PlexHomePage.css';
-
-interface PlexHomeUser {
-  id: string;
-  title: string;
-  username: string;
-  thumb?: string;
-  admin: boolean;
-  restricted: boolean;
-  guest: boolean;
+/* Reduce h1 bottom margin for tighter layout */
+.page-container:has(.plex-home-layout) > h1 {
+  margin-bottom: 0.5rem;
 }
 
-interface Playlist {
-  id: string;
-  name: string;
-  trackCount: number;
-  duration: number;
-  composite?: string;
+.page-container:has(.plex-home-layout) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
-interface Track {
-  id?: string;
-  ratingKey: string;
-  playlistItemID?: number;
-  title: string;
-  artist: string;
-  album: string;
-  duration: number;
-  codec?: string;
-  bitrate?: number;
+.plex-home-layout {
+  display: grid;
+  grid-template-columns: 250px 300px 1fr;
+  gap: 1.5rem;
+  margin-top: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
-export const PlexHomePage: FC = () => {
-  const { apiClient, server } = useApp();
-  const [homeUsers, setHomeUsers] = useState<PlexHomeUser[]>([]);
-  const [selectedUser, setSelectedUser] = useState<PlexHomeUser | null>(null);
-  const [userPlaylists, setUserPlaylists] = useState<Playlist[]>([]);
-  const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
-  const [tracks, setTracks] = useState<Track[]>([]);
-  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
-  const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false);
-  const [isLoadingTracks, setIsLoadingTracks] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [showCopyModal, setShowCopyModal] = useState(false);
-  const [playlistToCopy, setPlaylistToCopy] = useState<Playlist | null>(null);
-  const [targetUsers, setTargetUsers] = useState<Set<string>>(new Set());
-  const [newPlaylistName, setNewPlaylistName] = useState('');
-  const [isCopying, setIsCopying] = useState(false);
-  
-  // Editing features
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [currentlyPlaying, setCurrentlyPlaying] = useState<string | null>(null);
-  const [audioElement] = useState(() => new Audio());
-  const [uploadingCover, setUploadingCover] = useState(false);
-  const [showAddTracksModal, setShowAddTracksModal] = useState(false);
-  const [searchArtist, setSearchArtist] = useState('');
-  const [searchTrack, setSearchTrack] = useState('');
-  const [searchAlbum, setSearchAlbum] = useState('');
-  const [searchResults, setSearchResults] = useState<Track[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [selectedTracks, setSelectedTracks] = useState<Set<string>>(new Set());
-  const [showReplaceModal, setShowReplaceModal] = useState(false);
-  const [trackToReplace, setTrackToReplace] = useState<Track | null>(null);
-  const [replaceSearchQuery, setReplaceSearchQuery] = useState('');
-  const [replaceSearchResults, setReplaceSearchResults] = useState<Track[]>([]);
-  const [searchingReplace, setSearchingReplace] = useState(false);
-
-  useEffect(() => {
-    loadHomeUsers();
-    
-    // Cleanup audio on unmount
-    return () => {
-      audioElement.pause();
-      audioElement.src = '';
-    };
-  }, []);
-
-  const loadHomeUsers = async () => {
-    setIsLoadingUsers(true);
-    setError(null);
-    try {
-      const response = await fetch('/api/plex-home/users', {
-        credentials: 'include',
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setHomeUsers(data.homeUsers || []);
-      } else {
-        const errorData = await response.json();
-        setError(errorData.error?.message || 'Failed to load Plex Home users');
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to load Plex Home users');
-    } finally {
-      setIsLoadingUsers(false);
-    }
-  };
-
-  const loadUserPlaylists = async (user: PlexHomeUser) => {
-    setSelectedUser(user);
-    setSelectedPlaylist(null);
-    setTracks([]);
-    setIsLoadingPlaylists(true);
-    setError(null);
-    setUserPlaylists([]);
-    
-    try {
-      const response = await fetch(`/api/plex-home/users/${user.id}/playlists`, {
-        credentials: 'include',
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setUserPlaylists(data.playlists || []);
-      } else {
-        const errorData = await response.json();
-        setError(errorData.error?.message || 'Failed to load playlists');
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to load playlists');
-    } finally {
-      setIsLoadingPlaylists(false);
-    }
-  };
-
-  const loadPlaylistTracks = async (playlist: Playlist) => {
-    setSelectedPlaylist(playlist);
-    setIsLoadingTracks(true);
-    setError(null);
-    setTracks([]);
-    
-    try {
-      const response = await apiClient.getPlaylistTracks(playlist.id);
-      setTracks((response.tracks || []).map((track: any) => ({
-        ...track,
-        playlistItemID: track.playlistItemID,
-      })));
-    } catch (err: any) {
-      console.error('Failed to load tracks:', err);
-      setError(err.message || 'Failed to load tracks');
-      setTracks([]);
-    } finally {
-      setIsLoadingTracks(false);
-    }
-  };
-
-  const handleCopyPlaylist = (playlist: Playlist) => {
-    setPlaylistToCopy(playlist);
-    setNewPlaylistName(playlist.name);
-    setTargetUsers(new Set());
-    setShowCopyModal(true);
-    setSuccess(null);
-    setError(null);
-  };
-
-  const handleToggleTargetUser = (userId: string) => {
-    const newTargets = new Set(targetUsers);
-    if (newTargets.has(userId)) {
-      newTargets.delete(userId);
-    } else {
-      newTargets.add(userId);
-    }
-    setTargetUsers(newTargets);
-  };
-
-  const handleSelectAllUsers = () => {
-    if (targetUsers.size === availableTargetUsers.length) {
-      setTargetUsers(new Set());
-    } else {
-      setTargetUsers(new Set(availableTargetUsers.map(u => u.id)));
-    }
-  };
-
-  const handleCopyToSelected = async () => {
-    if (!playlistToCopy || !selectedUser || targetUsers.size === 0) return;
-    
-    setIsCopying(true);
-    setError(null);
-    setSuccess(null);
-    
-    try {
-      const results = await Promise.allSettled(
-        Array.from(targetUsers).map(targetUserId =>
-          fetch('/api/plex-home/playlists/' + playlistToCopy.id + '/copy', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-              sourceHomeUserId: selectedUser.id,
-              targetHomeUserId: targetUserId === 'current' ? 'current' : targetUserId,
-              newName: newPlaylistName || playlistToCopy.name,
-            }),
-          })
-        )
-      );
-
-      const successful = results.filter(r => r.status === 'fulfilled').length;
-      const failed = results.filter(r => r.status === 'rejected').length;
-
-      if (successful > 0) {
-        setSuccess(`Successfully copied "${newPlaylistName || playlistToCopy.name}" to ${successful} user${successful > 1 ? 's' : ''}`);
-      }
-      if (failed > 0) {
-        setError(`Failed to copy to ${failed} user${failed > 1 ? 's' : ''}`);
-      }
-      
-      setShowCopyModal(false);
-      setPlaylistToCopy(null);
-      setTargetUsers(new Set());
-      setNewPlaylistName('');
-    } catch (err: any) {
-      setError(err.message || 'Failed to copy playlist');
-    } finally {
-      setIsCopying(false);
-    }
-  };
-
-  const handleCloseModal = () => {
-    setShowCopyModal(false);
-    setPlaylistToCopy(null);
-    setTargetUsers(new Set());
-    setNewPlaylistName('');
-  };
-
-  const formatDuration = (ms: number) => {
-    const seconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-  };
-
-  const formatBitrate = (bitrate?: number) => {
-    if (!bitrate) return 'N/A';
-    return `${Math.round(bitrate)} kbps`;
-  };
-
-  const getCoverUrl = (composite?: string) => {
-    if (!composite || !server) {
-      return null;
-    }
-    // Use the API proxy endpoint to avoid CORS issues
-    const fullPlexUrl = `${server.url}${composite}`;
-    return `/api/proxy/image?url=${encodeURIComponent(fullPlexUrl)}`;
-  };
-
-  // Editing functions
-  const handleRemoveTrack = async (playlistItemId: number) => {
-    if (!selectedPlaylist) return;
-    
-    try {
-      await apiClient.removeTrackFromPlaylist(selectedPlaylist.id, playlistItemId.toString());
-      setTracks(tracks.filter(t => t.playlistItemID !== playlistItemId));
-      setSuccess('Track removed successfully');
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err: any) {
-      console.error('Failed to remove track:', err);
-      setError(err.message || 'Failed to remove track');
-      setTimeout(() => setError(null), 3000);
-    }
-  };
-
-  const handleDragStart = (index: number) => {
-    setDraggedIndex(index);
-  };
-
-  const handleDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    
-    if (draggedIndex === null || draggedIndex === index) return;
-
-    const newTracks = [...tracks];
-    const draggedTrack = newTracks[draggedIndex];
-    newTracks.splice(draggedIndex, 1);
-    newTracks.splice(index, 0, draggedTrack);
-    
-    setTracks(newTracks);
-    setDraggedIndex(index);
-  };
-
-  const handleDragEnd = async () => {
-    if (draggedIndex === null || !selectedPlaylist) {
-      setDraggedIndex(null);
-      return;
-    }
-
-    const originalTracks = [...tracks];
-    
-    try {
-      const draggedTrack = tracks[draggedIndex];
-      
-      if (!draggedTrack.playlistItemID) {
-        console.error('Dragged track has no playlistItemID');
-        setDraggedIndex(null);
-        return;
-      }
-
-      const afterIndex = draggedIndex - 1;
-      const afterTrackId = afterIndex < 0 ? '0' : tracks[afterIndex].playlistItemID?.toString() || '0';
-      
-      const response = await fetch(`/api/playlists/${selectedPlaylist.id}/tracks/${draggedTrack.playlistItemID}/move`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ afterId: afterTrackId }),
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to reorder tracks: ${response.status}`);
-      }
-      
-      setSuccess('Track moved successfully');
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err: any) {
-      console.error('Failed to reorder tracks:', err);
-      setError(`Failed to reorder tracks: ${err.message}`);
-      setTimeout(() => setError(null), 3000);
-      setTracks(originalTracks);
-    }
-    
-    setDraggedIndex(null);
-  };
-
-  const handlePlayTrack = (track: Track) => {
-    if (!server) return;
-
-    if (currentlyPlaying === track.ratingKey) {
-      audioElement.pause();
-      setCurrentlyPlaying(null);
-      return;
-    }
-
-    if (currentlyPlaying) {
-      audioElement.pause();
-    }
-
-    const streamUrl = `/api/proxy/audio?ratingKey=${track.ratingKey}`;
-    
-    audioElement.src = streamUrl;
-    audioElement.play().catch(err => {
-      console.error('Failed to play track:', err);
-      setError('Failed to play track');
-      setTimeout(() => setError(null), 3000);
-    });
-    
-    setCurrentlyPlaying(track.ratingKey);
-
-    audioElement.onended = () => {
-      setCurrentlyPlaying(null);
-    };
-  };
-
-  const resizeImage = (file: File, maxWidth: number, maxHeight: number): Promise<Blob> => {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-
-      img.onload = () => {
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > maxWidth) {
-            height = (height * maxWidth) / width;
-            width = maxWidth;
-          }
-        } else {
-          if (height > maxHeight) {
-            width = (width * maxHeight) / height;
-            height = maxHeight;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        ctx?.drawImage(img, 0, 0, width, height);
-
-        canvas.toBlob(
-          (blob) => {
-            if (blob) {
-              resolve(blob);
-            } else {
-              reject(new Error('Failed to resize image'));
-            }
-          },
-          'image/jpeg',
-          0.9
-        );
-      };
-
-      img.onerror = () => reject(new Error('Failed to load image'));
-      img.src = URL.createObjectURL(file);
-    });
-  };
-
-  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedPlaylist) return;
-
-    if (!file.type.startsWith('image/')) {
-      setError('Please select an image file');
-      setTimeout(() => setError(null), 3000);
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Image must be less than 5MB');
-      setTimeout(() => setError(null), 3000);
-      return;
-    }
-
-    try {
-      setUploadingCover(true);
-      
-      const resizedBlob = await resizeImage(file, 1000, 1000);
-      
-      const formData = new FormData();
-      formData.append('cover', resizedBlob, file.name);
-
-      const response = await fetch(`/api/playlists/${selectedPlaylist.id}/cover`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ message: 'Failed to upload cover' }));
-        throw new Error(error.message || 'Failed to upload cover');
-      }
-
-      // Refresh playlists and tracks
-      if (selectedUser) {
-        await loadUserPlaylists(selectedUser);
-      }
-      if (selectedPlaylist) {
-        await loadPlaylistTracks(selectedPlaylist);
-      }
-      
-      setSuccess('Cover uploaded successfully!');
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err: any) {
-      console.error('Failed to upload cover:', err);
-      setError(err.message || 'Failed to upload cover');
-      setTimeout(() => setError(null), 3000);
-    } finally {
-      setUploadingCover(false);
-      e.target.value = '';
-    }
-  };
-
-  const handleSearchTracks = async () => {
-    if (!searchArtist.trim() && !searchTrack.trim() && !searchAlbum.trim()) {
-      setError('Please enter at least one search term');
-      setTimeout(() => setError(null), 3000);
-      return;
-    }
-
-    try {
-      setSearching(true);
-      
-      const params = new URLSearchParams();
-      if (searchArtist.trim()) params.append('artist', searchArtist.trim());
-      if (searchTrack.trim()) params.append('track', searchTrack.trim());
-      if (searchAlbum.trim()) params.append('album', searchAlbum.trim());
-      
-      const response = await fetch(`/api/search?${params.toString()}`);
-      
-      if (!response.ok) throw new Error('Search failed');
-      
-      const data = await response.json();
-      const results = data.results || [];
-      
-      setSearchResults(results.map((item: any) => ({
-        id: item.ratingKey,
-        ratingKey: item.ratingKey,
-        title: item.title,
-        artist: item.grandparentTitle || 'Unknown Artist',
-        album: item.parentTitle || 'Unknown Album',
-        duration: item.duration || 0,
-        codec: item.Media?.[0]?.audioCodec || 'N/A',
-        bitrate: item.Media?.[0]?.bitrate || 0,
-      })));
-    } catch (err) {
-      console.error('Search failed:', err);
-      setError('Failed to search tracks');
-      setTimeout(() => setError(null), 3000);
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  const handleToggleTrack = (trackId: string) => {
-    const newSelected = new Set(selectedTracks);
-    if (newSelected.has(trackId)) {
-      newSelected.delete(trackId);
-    } else {
-      newSelected.add(trackId);
-    }
-    setSelectedTracks(newSelected);
-  };
-
-  const handleAddSelectedTracks = async () => {
-    if (!selectedPlaylist || selectedTracks.size === 0) return;
-
-    try {
-      const trackIds = Array.from(selectedTracks);
-      const trackUris = trackIds.map(id => `server://${server?.clientId}/com.plexapp.plugins.library/library/metadata/${id}`);
-      
-      const response = await fetch(`/api/playlists/${selectedPlaylist.id}/tracks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trackUris }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to add tracks');
-      }
-
-      await loadPlaylistTracks(selectedPlaylist);
-      
-      setSelectedTracks(new Set());
-      setSearchArtist('');
-      setSearchTrack('');
-      setSearchAlbum('');
-      setSearchResults([]);
-      setShowAddTracksModal(false);
-      
-      setSuccess(`Added ${trackIds.length} track(s) to playlist`);
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err) {
-      console.error('Failed to add tracks:', err);
-      setError('Failed to add tracks to playlist');
-      setTimeout(() => setError(null), 3000);
-    }
-  };
-
-  const handleOpenReplaceModal = (track: Track) => {
-    setTrackToReplace(track);
-    setReplaceSearchQuery(`${track.artist} ${track.title}`);
-    setReplaceSearchResults([]);
-    setShowReplaceModal(true);
-  };
-
-  const handleCloseReplaceModal = () => {
-    setShowReplaceModal(false);
-    setTrackToReplace(null);
-    setReplaceSearchQuery('');
-    setReplaceSearchResults([]);
-  };
-
-  const handleSearchReplace = async () => {
-    if (!replaceSearchQuery.trim()) return;
-
-    setSearchingReplace(true);
-    try {
-      const response = await fetch('/api/import/plex/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ query: replaceSearchQuery }),
-      });
-
-      if (!response.ok) throw new Error('Search failed');
-
-      const data = await response.json();
-      const results = data.tracks || [];
-
-      setReplaceSearchResults(results.map((item: any) => ({
-        id: item.ratingKey,
-        ratingKey: item.ratingKey,
-        title: item.title,
-        artist: item.artist || 'Unknown Artist',
-        album: item.album || 'Unknown Album',
-        duration: item.duration || 0,
-        codec: item.codec || 'N/A',
-        bitrate: item.bitrate || 0,
-      })));
-    } catch (err) {
-      console.error('Search failed:', err);
-      setError('Failed to search tracks');
-      setTimeout(() => setError(null), 3000);
-    } finally {
-      setSearchingReplace(false);
-    }
-  };
-
-  const handleReplaceTrack = async (newTrack: Track) => {
-    if (!selectedPlaylist || !trackToReplace) return;
-
-    try {
-      if (newTrack.ratingKey === trackToReplace.ratingKey) {
-        handleCloseReplaceModal();
-        await loadPlaylistTracks(selectedPlaylist);
-        return;
-      }
-
-      const oldTrackIndex = tracks.findIndex(t => t.playlistItemID === trackToReplace.playlistItemID);
-      if (oldTrackIndex === -1) {
-        throw new Error('Track not found in playlist');
-      }
-
-      const oldTrackRatingKey = trackToReplace.ratingKey;
-      const afterIndex = oldTrackIndex - 1;
-      const afterTrackId = afterIndex < 0 ? '0' : tracks[afterIndex].playlistItemID?.toString() || '0';
-
-      const trackUri = `server://${server?.clientId}/com.plexapp.plugins.library/library/metadata/${newTrack.ratingKey}`;
-      
-      const addResponse = await fetch(`/api/playlists/${selectedPlaylist.id}/tracks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trackUris: [trackUri] }),
-      });
-
-      if (!addResponse.ok) {
-        throw new Error('Failed to add replacement track');
-      }
-
-      await loadPlaylistTracks(selectedPlaylist);
-
-      const updatedTracks = await apiClient.getPlaylistTracks(selectedPlaylist.id);
-      const newTrackItem = updatedTracks.tracks[updatedTracks.tracks.length - 1];
-      
-      if (!newTrackItem.playlistItemID) {
-        throw new Error('New track does not have a playlist item ID');
-      }
-
-      const moveResponse = await fetch(`/api/playlists/${selectedPlaylist.id}/tracks/${newTrackItem.playlistItemID}/move`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ afterId: afterTrackId }),
-      });
-
-      if (!moveResponse.ok) {
-        throw new Error('Failed to move replacement track to correct position');
-      }
-
-      const tracksAfterMove = await apiClient.getPlaylistTracks(selectedPlaylist.id);
-      const oldTrackAfterMove = tracksAfterMove.tracks.find(t => t.ratingKey === oldTrackRatingKey);
-      
-      if (!oldTrackAfterMove || !oldTrackAfterMove.playlistItemID) {
-        throw new Error('Could not find old track after move');
-      }
-      
-      await apiClient.removeTrackFromPlaylist(selectedPlaylist.id, oldTrackAfterMove.playlistItemID.toString());
-
-      await loadPlaylistTracks(selectedPlaylist);
-      handleCloseReplaceModal();
-      setSuccess('Track replaced successfully');
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err: any) {
-      console.error('Failed to replace track:', err);
-      setError(`Failed to replace track: ${err.message || 'Unknown error'}`);
-      setTimeout(() => setError(null), 3000);
-      await loadPlaylistTracks(selectedPlaylist);
-    }
-  };
-
-  // Get available target users (all users except the selected one)
-  const availableTargetUsers = homeUsers.filter(u => u.id !== selectedUser?.id);
-  // Add "current user" option
-  const targetUserOptions = [
-    { id: 'current', title: 'My Account', username: 'current', admin: true, restricted: false, guest: false },
-    ...availableTargetUsers
-  ];
-
-  if (isLoadingUsers) {
-    return (
-      <div className="page-container">
-        <h1>Plex Home Users</h1>
-        <div className="loading">Loading Plex Home users...</div>
-      </div>
-    );
+.users-panel,
+.playlists-panel,
+.tracks-panel {
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  overflow-y: auto;
+  height: 100%;
+  min-height: 0;
+}
+
+.users-panel h2,
+.playlists-panel h2,
+.tracks-panel h2 {
+  font-size: 1.125rem;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+}
+
+/* Users Panel */
+.user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.user-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.user-item:hover {
+  background-color: var(--surface-hover);
+}
+
+.user-item.active {
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.15) 0%, rgba(56, 178, 172, 0.1) 100%);
+  color: var(--primary-color);
+  border: 1px solid rgba(79, 209, 197, 0.2);
+}
+
+.user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.user-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.user-name {
+  font-weight: 500;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.user-item.active .user-name {
+  color: var(--primary-color);
+}
+
+.user-meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.user-item.active .user-meta {
+  color: rgba(79, 209, 197, 0.7);
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.badge-admin {
+  background: rgba(79, 209, 197, 0.2);
+  color: var(--primary-color);
+}
+
+.badge-restricted {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+/* Playlists Panel */
+.playlists-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.playlist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+  position: relative;
+}
+
+.playlist-item:hover {
+  background-color: var(--surface-hover);
+}
+
+.playlist-item.active {
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.15) 0%, rgba(56, 178, 172, 0.1) 100%);
+  color: var(--primary-color);
+  border: 1px solid rgba(79, 209, 197, 0.2);
+}
+
+.playlist-thumb-container {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  background: var(--surface-hover);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.playlist-thumb {
+  width: 100%;
+  height: 100%;
+  border-radius: 4px;
+  object-fit: cover;
+  display: block;
+}
+
+.playlist-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.playlist-name {
+  font-weight: 500;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.playlist-item.active .playlist-name {
+  color: var(--primary-color);
+}
+
+.playlist-meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.playlist-item.active .playlist-meta {
+  color: rgba(79, 209, 197, 0.7);
+}
+
+.btn-copy-inline {
+  padding: 0.375rem 0.75rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.btn-copy-inline:hover {
+  background: var(--surface-hover);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.btn-copy-inline:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Tracks Panel */
+.playlist-header {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.playlist-cover-section {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.playlist-cover-container {
+  position: relative;
+  width: 150px;
+  height: 150px;
+}
+
+.playlist-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.playlist-cover-placeholder {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  background: var(--surface-hover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.upload-cover-btn {
+  padding: 0.625rem 1.25rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.15s;
+  width: 150px;
+  justify-content: center;
+}
+
+.upload-cover-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--primary-color);
+  transform: translateY(-1px);
+}
+
+.upload-cover-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.playlist-info-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.playlist-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem 0;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.playlist-stats {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.add-tracks-btn {
+  align-self: flex-start;
+  margin-top: auto;
+}
+
+/* Tracks Table */
+.tracks-table-container {
+  overflow-x: auto;
+}
+
+.tracks-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.tracks-table thead {
+  border-bottom: 1px solid var(--border);
+}
+
+.tracks-table th {
+  text-align: left;
+  padding: 0.75rem 0.5rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tracks-table tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background-color 0.15s, opacity 0.15s;
+}
+
+.tracks-table tbody tr:hover {
+  background-color: var(--surface-hover);
+}
+
+.tracks-table tbody tr.dragging {
+  opacity: 0.5;
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.tracks-table td {
+  padding: 0.75rem 0.5rem;
+  color: var(--text-primary);
+}
+
+.col-number {
+  width: 50px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.col-play {
+  width: 50px;
+  text-align: center;
+}
+
+.col-replace {
+  width: 50px;
+  text-align: center;
+}
+
+.col-drag {
+  width: 30px;
+  text-align: center;
+  cursor: grab;
+}
+
+.drag-handle {
+  color: var(--text-secondary);
+  font-size: 1.25rem;
+  user-select: none;
+}
+
+.btn-play {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--primary-color);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.btn-play:hover {
+  background: transparent;
+  color: var(--primary-color);
+  opacity: 0.7;
+  transform: scale(1.15);
+}
+
+.btn-play.playing {
+  color: var(--primary-color);
+  opacity: 1;
+}
+
+.btn-play svg {
+  display: block;
+}
+
+.btn-replace {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--primary-color);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.btn-replace:hover {
+  background: transparent;
+  color: var(--primary-color);
+  opacity: 0.7;
+  transform: scale(1.15);
+}
+
+.btn-replace svg {
+  display: block;
+}
+
+.col-title {
+  min-width: 200px;
+  font-weight: 500;
+}
+
+.col-artist {
+  min-width: 150px;
+}
+
+.col-album {
+  min-width: 150px;
+}
+
+.col-codec {
+  width: 80px;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.col-bitrate {
+  width: 100px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.col-duration {
+  width: 80px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.col-actions {
+  width: 50px;
+  text-align: center;
+}
+
+.btn-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 1.5rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  margin: 0 2px;
+}
+
+.btn-icon:hover {
+  background-color: var(--surface-hover);
+  color: var(--primary-color);
+}
+
+.btn-icon:last-child:hover {
+  background-color: var(--error-color);
+  color: white;
+}
+
+.btn-icon:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 2rem;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+}
+
+.modal-content h2 {
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  color: var(--text-primary);
+  font-size: 1.5rem;
+}
+
+/* Add Tracks Modal */
+.add-tracks-modal {
+  max-width: 600px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.search-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.search-results {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.search-results > p {
+  margin: 0 0 0.75rem 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.results-list {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-height: 400px;
+}
+
+.result-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.result-item:last-child {
+  border-bottom: none;
+}
+
+.result-item:hover {
+  background-color: var(--surface-hover);
+}
+
+.result-item.selected {
+  background-color: rgba(79, 209, 197, 0.1);
+}
+
+.result-item input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.result-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.result-title {
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result-meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Replace Track Modal */
+.replace-track-info {
+  padding: 1rem;
+  background-color: rgba(79, 209, 197, 0.08);
+  border: 1px solid rgba(79, 209, 197, 0.2);
+  border-radius: 6px;
+  margin-bottom: 1.5rem;
+}
+
+.replace-track-info p {
+  margin: 0.25rem 0;
+}
+
+.replace-track-info strong {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.track-meta {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.form-control {
+  width: 100%;
+  padding: 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.select-all-container {
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+.checkbox-label input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.target-user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-hover);
+}
+
+.target-user-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.target-user-item:hover {
+  background-color: var(--surface);
+}
+
+.user-avatar-small {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  justify-content: flex-end;
+}
+
+.btn {
+  padding: 0.625rem 1.25rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: none;
+}
+
+.btn-primary {
+  background: var(--primary-color);
+  color: white;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+}
+
+.btn-secondary:hover {
+  background: var(--surface-hover);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+  .plex-home-layout {
+    grid-template-columns: 200px 250px 1fr;
   }
+}
 
-  return (
-    <div className="page-container">
-      <h1>Plex Home Users</h1>
-
-      {error && <div className="error-message">{error}</div>}
-      {success && <div className="success-message">{success}</div>}
-
-      {homeUsers.length === 0 ? (
-        <div className="info-message" style={{ 
-          padding: '1.5rem', 
-          borderRadius: '8px', 
-          marginTop: '2rem',
-          textAlign: 'center'
-        }}>
-          <h3 style={{ marginTop: 0, color: 'inherit' }}>No Plex Home Users</h3>
-          <p style={{ marginBottom: '1rem' }}>
-            You don't have any Plex Home users set up.
-          </p>
-          <div style={{ 
-            textAlign: 'left', 
-            maxWidth: '600px', 
-            margin: '0 auto',
-            padding: '1rem',
-            background: 'var(--surface-hover)',
-            borderRadius: '6px'
-          }}>
-            <h4 style={{ marginTop: 0 }}>What are Plex Home Users?</h4>
-            <p style={{ fontSize: '0.875rem', lineHeight: '1.6' }}>
-              <strong>Plex Home</strong> allows you to create multiple user profiles under your single Plex account 
-              (like family members). Each managed user has their own playlists, watch history, and preferences.
-            </p>
-            <p style={{ fontSize: '0.875rem', lineHeight: '1.6', marginBottom: 0 }}>
-              <strong>Note:</strong> This is different from Plex Friends (users you've shared your library with). 
-              To share playlists with friends, use the <strong>Share Playlists</strong> page instead.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div className="plex-home-layout">
-          {/* Users Panel */}
-          <div className="users-panel">
-            <h2>Home Users</h2>
-            <div className="user-list">
-              {homeUsers.map(user => (
-                <div
-                  key={user.id}
-                  className={`user-item ${selectedUser?.id === user.id ? 'active' : ''}`}
-                  onClick={() => loadUserPlaylists(user)}
-                >
-                  {user.thumb && (
-                    <img 
-                      src={user.thumb} 
-                      alt={user.title}
-                      className="user-avatar"
-                    />
-                  )}
-                  <div className="user-info">
-                    <div className="user-name">{user.title}</div>
-                    <div className="user-meta">
-                      @{user.username}
-                      {user.admin && <span className="badge badge-admin">Admin</span>}
-                      {user.restricted && <span className="badge badge-restricted">Restricted</span>}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Playlists Panel */}
-          <div className="playlists-panel">
-            {!selectedUser ? (
-              <div className="empty-state">
-                <p>Select a user to view their playlists</p>
-              </div>
-            ) : (
-              <>
-                <h2>{selectedUser.title}'s Playlists</h2>
-                
-                {isLoadingPlaylists ? (
-                  <div className="loading">Loading playlists...</div>
-                ) : userPlaylists.length === 0 ? (
-                  <div className="empty-state">
-                    <p>No playlists found for this user</p>
-                  </div>
-                ) : (
-                  <div className="playlists-list">
-                    {userPlaylists.map(playlist => (
-                      <div
-                        key={playlist.id}
-                        className={`playlist-item ${selectedPlaylist?.id === playlist.id ? 'active' : ''}`}
-                        onClick={() => loadPlaylistTracks(playlist)}
-                      >
-                        {playlist.composite && (
-                          <div className="playlist-thumb-container">
-                            <img
-                              src={getCoverUrl(playlist.composite) || ''}
-                              alt=""
-                              className="playlist-thumb"
-                              onError={(e) => {
-                                e.currentTarget.style.display = 'none';
-                              }}
-                            />
-                          </div>
-                        )}
-                        <div className="playlist-info">
-                          <div className="playlist-name">{playlist.name}</div>
-                          <div className="playlist-meta">
-                            {playlist.trackCount} tracks • {formatDuration(playlist.duration)}
-                          </div>
-                        </div>
-                        <button
-                          className="btn-copy-inline"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleCopyPlaylist(playlist);
-                          }}
-                          disabled={isCopying}
-                          title="Copy playlist to another user"
-                        >
-                          Copy
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* Tracks Panel */}
-          <div className="tracks-panel">
-            {!selectedPlaylist ? (
-              <div className="empty-state">
-                <p>Select a playlist to view tracks</p>
-              </div>
-            ) : (
-              <>
-                <div className="playlist-header">
-                  <div className="playlist-cover-section">
-                    <div className="playlist-cover-container">
-                      {selectedPlaylist.composite ? (
-                        <img
-                          src={getCoverUrl(selectedPlaylist.composite) || ''}
-                          alt={selectedPlaylist.name}
-                          className="playlist-cover"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                            const placeholder = e.currentTarget.parentElement?.querySelector('.playlist-cover-placeholder');
-                            if (placeholder) {
-                              (placeholder as HTMLElement).style.display = 'flex';
-                            }
-                          }}
-                        />
-                      ) : null}
-                      <div className="playlist-cover-placeholder" style={{ display: selectedPlaylist.composite ? 'none' : 'flex' }}>
-                        No Cover
-                      </div>
-                    </div>
-                    <label className="upload-cover-btn" title="Change cover">
-                      {uploadingCover ? '⏳ Uploading...' : '⬆️ Change Cover'}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleCoverUpload}
-                        disabled={uploadingCover}
-                        style={{ display: 'none' }}
-                      />
-                    </label>
-                  </div>
-
-                  <div className="playlist-info-section">
-                    <h1 className="playlist-title">{selectedPlaylist.name}</h1>
-                    <div className="playlist-stats">
-                      {tracks.length} tracks • {formatDuration(selectedPlaylist.duration || 0)}
-                    </div>
-
-                    <button
-                      className="btn-primary add-tracks-btn"
-                      onClick={() => setShowAddTracksModal(true)}
-                    >
-                      + Add Tracks
-                    </button>
-                  </div>
-                </div>
-
-                {isLoadingTracks ? (
-                  <p>Loading tracks...</p>
-                ) : tracks.length === 0 ? (
-                  <p>No tracks in this playlist</p>
-                ) : (
-                  <div className="tracks-table-container">
-                    <table className="tracks-table">
-                      <thead>
-                        <tr>
-                          <th className="col-play"></th>
-                          <th className="col-replace"></th>
-                          <th className="col-drag"></th>
-                          <th className="col-number">#</th>
-                          <th className="col-title">Title</th>
-                          <th className="col-artist">Artist</th>
-                          <th className="col-album">Album</th>
-                          <th className="col-codec">Codec</th>
-                          <th className="col-bitrate">Bitrate</th>
-                          <th className="col-duration">Duration</th>
-                          <th className="col-actions"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {tracks.map((track, index) => (
-                          <tr
-                            key={track.ratingKey}
-                            draggable
-                            onDragStart={() => handleDragStart(index)}
-                            onDragOver={(e) => handleDragOver(e, index)}
-                            onDragEnd={handleDragEnd}
-                            className={draggedIndex === index ? 'dragging' : ''}
-                          >
-                            <td className="col-play">
-                              <button
-                                className={`btn-play ${currentlyPlaying === track.ratingKey ? 'playing' : ''}`}
-                                onClick={() => handlePlayTrack(track)}
-                                title={currentlyPlaying === track.ratingKey ? 'Pause' : 'Play track'}
-                              >
-                                {currentlyPlaying === track.ratingKey ? (
-                                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <rect x="6" y="4" width="4" height="16" />
-                                    <rect x="14" y="4" width="4" height="16" />
-                                  </svg>
-                                ) : (
-                                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <polygon points="5 3 19 12 5 21 5 3" />
-                                  </svg>
-                                )}
-                              </button>
-                            </td>
-                            <td className="col-replace">
-                              <button
-                                className="btn-replace"
-                                onClick={() => handleOpenReplaceModal(track)}
-                                title="Replace track"
-                              >
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                  <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16" />
-                                </svg>
-                              </button>
-                            </td>
-                            <td className="col-drag">
-                              <span className="drag-handle">☰</span>
-                            </td>
-                            <td className="col-number">{index + 1}</td>
-                            <td className="col-title">{track.title}</td>
-                            <td className="col-artist">{track.artist}</td>
-                            <td className="col-album">{track.album}</td>
-                            <td className="col-codec">{track.codec || 'N/A'}</td>
-                            <td className="col-bitrate">{formatBitrate(track.bitrate)}</td>
-                            <td className="col-duration">{formatDuration(track.duration)}</td>
-                            <td className="col-actions">
-                              <button
-                                className="btn-icon"
-                                onClick={() => track.playlistItemID && handleRemoveTrack(track.playlistItemID)}
-                                title="Remove track"
-                                disabled={!track.playlistItemID}
-                              >
-                                ×
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Copy Modal */}
-      {showCopyModal && playlistToCopy && (
-        <div className="modal-overlay" onClick={handleCloseModal}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>Copy Playlist</h2>
-            
-            <div className="form-group">
-              <label htmlFor="playlist-name">Playlist Name</label>
-              <input
-                id="playlist-name"
-                type="text"
-                className="form-control"
-                value={newPlaylistName}
-                onChange={(e) => setNewPlaylistName(e.target.value)}
-                placeholder={playlistToCopy.name}
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Copy to:</label>
-              
-              {targetUserOptions.length > 1 && (
-                <div className="select-all-container">
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={targetUsers.size === targetUserOptions.length}
-                      onChange={handleSelectAllUsers}
-                    />
-                    <span>Select All</span>
-                  </label>
-                </div>
-              )}
-
-              <div className="target-user-list">
-                {targetUserOptions.map(user => (
-                  <label
-                    key={user.id}
-                    className="target-user-item checkbox-item"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={targetUsers.has(user.id)}
-                      onChange={() => handleToggleTargetUser(user.id)}
-                      disabled={isCopying}
-                    />
-                    {user.id !== 'current' && user.thumb && (
-                      <img 
-                        src={user.thumb} 
-                        alt={user.title}
-                        className="user-avatar-small"
-                      />
-                    )}
-                    <span className="user-name">{user.title}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="modal-actions">
-              <button 
-                className="btn btn-secondary" 
-                onClick={handleCloseModal}
-                disabled={isCopying}
-              >
-                Cancel
-              </button>
-              <button 
-                className="btn btn-primary" 
-                onClick={handleCopyToSelected}
-                disabled={isCopying || targetUsers.size === 0}
-              >
-                {isCopying ? 'Copying...' : `Copy to ${targetUsers.size} user${targetUsers.size !== 1 ? 's' : ''}`}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Tracks Modal */}
-      {showAddTracksModal && (
-        <div className="modal-overlay" onClick={() => setShowAddTracksModal(false)}>
-          <div className="modal-content add-tracks-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Add Tracks</h2>
-            
-            <div className="search-section">
-              <input
-                type="text"
-                className="search-input"
-                placeholder="Artist"
-                value={searchArtist}
-                onChange={(e) => setSearchArtist(e.target.value)}
-              />
-              <input
-                type="text"
-                className="search-input"
-                placeholder="Track"
-                value={searchTrack}
-                onChange={(e) => setSearchTrack(e.target.value)}
-              />
-              <input
-                type="text"
-                className="search-input"
-                placeholder="Album"
-                value={searchAlbum}
-                onChange={(e) => setSearchAlbum(e.target.value)}
-              />
-              <button
-                className="btn btn-primary"
-                onClick={handleSearchTracks}
-                disabled={searching}
-              >
-                {searching ? 'Searching...' : 'Search'}
-              </button>
-            </div>
-
-            {searchResults.length > 0 && (
-              <div className="search-results">
-                <p>{searchResults.length} results found</p>
-                <div className="results-list">
-                  {searchResults.map(track => (
-                    <div
-                      key={track.ratingKey}
-                      className={`result-item ${selectedTracks.has(track.ratingKey) ? 'selected' : ''}`}
-                      onClick={() => handleToggleTrack(track.ratingKey)}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedTracks.has(track.ratingKey)}
-                        onChange={() => handleToggleTrack(track.ratingKey)}
-                      />
-                      <div className="result-info">
-                        <div className="result-title">{track.title}</div>
-                        <div className="result-meta">
-                          {track.artist} • {track.album}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="modal-actions">
-              <button
-                className="btn btn-secondary"
-                onClick={() => setShowAddTracksModal(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={handleAddSelectedTracks}
-                disabled={selectedTracks.size === 0}
-              >
-                Add {selectedTracks.size} track{selectedTracks.size !== 1 ? 's' : ''}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Replace Track Modal */}
-      {showReplaceModal && trackToReplace && (
-        <div className="modal-overlay" onClick={handleCloseReplaceModal}>
-          <div className="modal-content add-tracks-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Replace Track</h2>
-            
-            <div className="replace-track-info">
-              <p><strong>Current Track:</strong></p>
-              <p>{trackToReplace.title}</p>
-              <p className="track-meta">{trackToReplace.artist} • {trackToReplace.album}</p>
-            </div>
-
-            <div className="search-section">
-              <input
-                type="text"
-                className="search-input"
-                placeholder="Search for replacement track..."
-                value={replaceSearchQuery}
-                onChange={(e) => setReplaceSearchQuery(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSearchReplace()}
-              />
-              <button
-                className="btn btn-primary"
-                onClick={handleSearchReplace}
-                disabled={searchingReplace}
-              >
-                {searchingReplace ? 'Searching...' : 'Search'}
-              </button>
-            </div>
-
-            {replaceSearchResults.length > 0 && (
-              <div className="search-results">
-                <p>{replaceSearchResults.length} results found</p>
-                <div className="results-list">
-                  {replaceSearchResults.map(track => (
-                    <div
-                      key={track.ratingKey}
-                      className="result-item"
-                      onClick={() => handleReplaceTrack(track)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <div className="result-info">
-                        <div className="result-title">{track.title}</div>
-                        <div className="result-meta">
-                          {track.artist} • {track.album}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="modal-actions">
-              <button
-                className="btn btn-secondary"
-                onClick={handleCloseReplaceModal}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
+@media (max-width: 768px) {
+  .plex-home-layout {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  
+  .users-panel,
+  .playlists-panel,
+  .tracks-panel {
+    height: auto;
+    min-height: 300px;
+  }
+  
+  .tracks-table-container {
+    overflow-x: scroll;
+  }
+  
+  .tracks-table {
+    min-width: 800px;
+  }
+}
