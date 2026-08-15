@@ -667,33 +667,63 @@ export class DatabaseService {
   // ==================== Missing Tracks Operations ====================
 
   /**
-   * Add missing tracks
+   * Add missing tracks for a playlist.
+   *
+   * A playlist's missing-tracks entry is identified by playlist_id, and
+   * each track within it is deduplicated by (title, artist, album). If a
+   * track is still missing on a later run (e.g. a re-run schedule), its
+   * existing row is refreshed (position/source/added_at) rather than a
+   * new duplicate row being inserted. Tracks that are no longer reported
+   * as missing are intentionally left in place - they're still a useful
+   * record that the library was missing them - see issue #33.
    */
   addMissingTracks(userId: number, playlistId: number, tracks: MissingTrackInput[]): void {
-    const stmt = this.db.prepare(`
+    const findStmt = this.db.prepare(`
+      SELECT id FROM missing_tracks
+      WHERE playlist_id = ?
+        AND LOWER(TRIM(title)) = LOWER(TRIM(?))
+        AND LOWER(TRIM(artist)) = LOWER(TRIM(?))
+        AND LOWER(TRIM(COALESCE(album, ''))) = LOWER(TRIM(COALESCE(?, '')))
+    `);
+
+    const updateStmt = this.db.prepare(`
+      UPDATE missing_tracks
+      SET position = ?, after_track_key = ?, added_at = ?, source = ?
+      WHERE id = ?
+    `);
+
+    const insertStmt = this.db.prepare(`
       INSERT INTO missing_tracks (user_id, playlist_id, title, artist, album, position, after_track_key, added_at, source)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    
+
     const now = Math.floor(Date.now() / 1000);
-    
-    const insertMany = this.db.transaction((tracks: MissingTrackInput[]) => {
+
+    const upsertMany = this.db.transaction((tracks: MissingTrackInput[]) => {
       for (const track of tracks) {
-        stmt.run(
-          userId,
-          playlistId,
-          track.title,
-          track.artist,
-          track.album,
-          track.position,
-          track.after_track_key,
-          now,
-          track.source
-        );
+        const existing = findStmt.get(playlistId, track.title, track.artist, track.album ?? '') as
+          | { id: number }
+          | undefined;
+
+        if (existing) {
+          updateStmt.run(track.position, track.after_track_key, now, track.source, existing.id);
+        } else {
+          insertStmt.run(
+            userId,
+            playlistId,
+            track.title,
+            track.artist,
+            track.album,
+            track.position,
+            track.after_track_key,
+            now,
+            track.source
+          );
+        }
       }
     });
-    
-    insertMany(tracks);
+
+    upsertMany(tracks);
   }
 
   /**
@@ -1069,6 +1099,37 @@ export class DatabaseService {
     return stmt.get(plexPlaylistId) as Playlist | null;
   }
 
+  /**
+   * Get a user's playlist record by name (case-insensitive).
+   *
+   * Used to re-associate a scheduled/chart import with its existing
+   * playlist record even when the underlying Plex playlist was deleted
+   * and recreated (which gives it a brand new plex_playlist_id on every
+   * run). Without this, lookups by plex_playlist_id alone would never
+   * match and every scheduled run would create a duplicate playlist
+   * record - see issue #33.
+   */
+  getPlaylistByUserAndName(userId: number, name: string): Playlist | null {
+    const stmt = this.db.prepare(`
+      SELECT * FROM playlists
+      WHERE user_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))
+      ORDER BY created_at ASC
+      LIMIT 1
+    `);
+
+    return (stmt.get(userId, name) as Playlist | undefined) ?? null;
+  }
+
+  /**
+   * Link a schedule to a playlist record so future scheduled runs reuse
+   * the same playlist (and therefore the same missing-tracks entry)
+   * instead of creating a new one each time.
+   */
+  linkSchedulePlaylist(scheduleId: number, playlistId: number): void {
+    const stmt = this.db.prepare(`UPDATE schedules SET playlist_id = ? WHERE id = ?`);
+    stmt.run(playlistId, scheduleId);
+  }
+
 
     /**
      * Create a new mix template
@@ -1258,5 +1319,3 @@ export class DatabaseService {
 
 
 }
-
-
