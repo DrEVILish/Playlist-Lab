@@ -251,7 +251,7 @@ export const SharePlaylistsPage: FC = () => {
                       </div>
                     </div>
                     <button
-                      className="btn btn-primary btn-sm"
+                      className="btn btn-primary btn-small"
                       onClick={() => handleShare(playlist)}
                       disabled={sharingPlaylist === playlist.id || friends.length === 0}
                     >
@@ -300,7 +300,7 @@ export const SharePlaylistsPage: FC = () => {
                   </div>
                   <a
                     href={`/playlists/${shared.plexPlaylistId}`}
-                    className="btn btn-primary btn-sm"
+                    className="btn btn-primary btn-small"
                   >
                     View
                   </a>

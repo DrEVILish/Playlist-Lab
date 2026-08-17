@@ -6,7 +6,8 @@
 }
 
 .page-container:has(.export-layout) {
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;

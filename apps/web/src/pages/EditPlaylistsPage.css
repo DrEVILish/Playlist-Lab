@@ -3,12 +3,22 @@
   margin-bottom: 0.5rem;
 }
 
+.page-container:has(.edit-playlists-layout) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 .edit-playlists-layout {
   display: grid;
   grid-template-columns: 300px 1fr;
   gap: 1.5rem;
   margin-top: 0;
-  height: calc(100vh - 200px);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .playlists-panel,
@@ -19,6 +29,7 @@
   border: 1px solid var(--border);
   overflow-y: auto;
   height: 100%;
+  min-height: 0;
 }
 
 .playlists-panel h2,

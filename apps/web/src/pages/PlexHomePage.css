@@ -3,12 +3,22 @@
   margin-bottom: 0.5rem;
 }
 
+.page-container:has(.plex-home-layout) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 .plex-home-layout {
   display: grid;
   grid-template-columns: 250px 300px 1fr;
   gap: 1.5rem;
   margin-top: 0;
-  height: calc(100vh - 200px);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .users-panel,
@@ -20,6 +30,7 @@
   border: 1px solid var(--border);
   overflow-y: auto;
   height: 100%;
+  min-height: 0;
 }
 
 .users-panel h2,
