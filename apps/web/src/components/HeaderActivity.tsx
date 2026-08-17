@@ -66,7 +66,13 @@ export const HeaderActivity: FC = () => {
 
   return (
     <>
-      <button className="header-activity" onClick={() => setShowQueueModal(true)} title="Import activity">
+      <button
+        className="header-activity"
+        onClick={() => setShowQueueModal(true)}
+        title={reviewCount > 0
+          ? `${reviewCount} import(s) finished matching tracks but were never saved as a playlist - click to review and save or discard them`
+          : 'Import activity'}
+      >
         {processing && (
           <>
             <span className="header-activity-spinner" />
@@ -85,7 +91,7 @@ export const HeaderActivity: FC = () => {
           <span className="header-activity-label">{queuedCount} queued</span>
         )}
         {reviewCount > 0 && (
-          <span className="header-activity-badge">{reviewCount} to review</span>
+          <span className="header-activity-badge">{reviewCount} import{reviewCount === 1 ? '' : 's'} unsaved</span>
         )}
       </button>
 

@@ -37,3 +37,16 @@ export function getNextRunDate(schedule: Schedule): string {
   if (ts === null) return schedule.lastRun ? 'Invalid date' : 'Not scheduled';
   return new Date(ts).toLocaleDateString();
 }
+
+/** Compact "in 2d" / "in 5h" / "due" form of a schedule's next run, for
+ * space-constrained at-a-glance UI (the playlist table's Schedule column). */
+export function getNextRunRelative(schedule: Schedule): string {
+  const ts = getNextRunTimestamp(schedule);
+  if (ts === null) return '';
+  const diffMs = ts - Date.now();
+  if (diffMs <= 0) return 'due';
+  const hours = Math.round(diffMs / 3600000);
+  if (hours < 1) return '<1h';
+  if (hours < 24) return `${hours}h`;
+  return `${Math.round(hours / 24)}d`;
+}

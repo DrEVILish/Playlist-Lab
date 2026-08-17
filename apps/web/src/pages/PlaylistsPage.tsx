@@ -9,8 +9,9 @@ import { ScheduleModal } from '../components/playlist-panel/ScheduleModal';
 import { MissingTracksPanel } from '../components/playlist-panel/MissingTracksPanel';
 import { SharedWithMeModal } from '../components/playlist-panel/SharedWithMeModal';
 import { BackupRestorePage } from './BackupRestorePage';
-import { getNextRunTimestamp } from '../utils/scheduleTime';
+import { getNextRunTimestamp, getNextRunRelative } from '../utils/scheduleTime';
 import { useEscapeKey } from '../hooks/useEscapeKey';
+import { EditIcon, ShareIcon, ExportIcon, ReimportIcon, BackupIcon, DeleteIcon } from '../components/icons';
 import './PlaylistsPage.css';
 
 interface Playlist {
@@ -43,6 +44,9 @@ export const PlaylistsPage: FC = () => {
   const [backingUpId, setBackingUpId] = useState<string | null>(null);
   const [showBackupAll, setShowBackupAll] = useState(false);
   const [showSharedWithMe, setShowSharedWithMe] = useState(false);
+  const [showAttentionOnly, setShowAttentionOnly] = useState(false);
+  const [runningExecutions, setRunningExecutions] = useState<any[]>([]);
+  const [recentExecutions, setRecentExecutions] = useState<any[]>([]);
 
   useEscapeKey(modal?.type === 'edit', () => setModal(null));
   useEscapeKey(showBackupAll, () => setShowBackupAll(false));
@@ -60,9 +64,38 @@ export const PlaylistsPage: FC = () => {
     }
   };
 
+  // Schedule run status (for the colored dot in the Schedule column and the
+  // "Needs Attention" filter) - independently polled here rather than
+  // shared with the Schedules section below, matching how the rest of this
+  // app polls (e.g. the header activity indicator and Queue modal each poll
+  // the import queue on their own too).
+  const loadScheduleStatus = async () => {
+    try {
+      const [running, recent] = await Promise.all([
+        apiClient.getRunningExecutions(),
+        apiClient.getRecentExecutions(100),
+      ]);
+      setRunningExecutions(running.executions || []);
+      setRecentExecutions(recent.executions || []);
+    } catch (err) {
+      console.error('Failed to load schedule status:', err);
+    }
+  };
+
   useEffect(() => {
     loadMissingTracks();
+    loadScheduleStatus();
+    const interval = setInterval(loadScheduleStatus, 15000);
+    return () => clearInterval(interval);
   }, []);
+
+  const getScheduleStatus = (scheduleId: number): 'running' | 'success' | 'failed' | 'never' => {
+    if (runningExecutions.some((e: any) => e.scheduleId === scheduleId)) return 'running';
+    const executions = recentExecutions.filter((e: any) => e.scheduleId === scheduleId);
+    if (executions.length === 0) return 'never';
+    const latest = executions.reduce((a: any, b: any) => (b.startedAt > a.startedAt ? b : a));
+    return latest.status ?? 'never';
+  };
 
   // Deep link from elsewhere in the app (e.g. a schedule's "View missing
   // tracks" link): /playlists?missingFor=<dbId> expands that row's panel.
@@ -184,10 +217,28 @@ export const PlaylistsPage: FC = () => {
     </th>
   );
 
+  const needsAttention = (playlist: Playlist) => {
+    const missingCount = playlist.dbId ? (missingByDbId[playlist.dbId]?.length ?? 0) : 0;
+    if (missingCount > 0) return true;
+    const schedule = playlist.dbId ? scheduleByDbId.get(playlist.dbId) : undefined;
+    return !!schedule && getScheduleStatus(schedule.id) === 'failed';
+  };
+
+  const stats = useMemo(() => {
+    const totalMissing = Object.values(missingByDbId).reduce((sum, tracks) => sum + tracks.length, 0);
+    const activeSchedules = schedules.filter(s => s.scheduleType === 'playlist_refresh' && s.playlistId).length;
+    const attentionCount = playlists.filter(needsAttention).length;
+    return { total: playlists.length, totalMissing, activeSchedules, attentionCount };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playlists, missingByDbId, schedules, scheduleByDbId, runningExecutions, recentExecutions]);
+
   const filteredSorted = useMemo(() => {
-    const filtered = search.trim()
+    let filtered = search.trim()
       ? playlists.filter(p => p.name.toLowerCase().includes(search.trim().toLowerCase()))
       : playlists;
+    if (showAttentionOnly) {
+      filtered = filtered.filter(needsAttention);
+    }
 
     const sorted = [...filtered].sort((a, b) => {
       let cmp = 0;
@@ -220,7 +271,8 @@ export const PlaylistsPage: FC = () => {
     });
 
     return sorted;
-  }, [playlists, search, sortKey, sortDir, missingByDbId, scheduleByDbId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playlists, search, sortKey, sortDir, missingByDbId, scheduleByDbId, showAttentionOnly, runningExecutions, recentExecutions]);
 
   return (
     <div className="page-container">
@@ -237,6 +289,30 @@ export const PlaylistsPage: FC = () => {
           <button className="btn btn-secondary" onClick={() => setShowSharedWithMe(true)}>Shared With Me</button>
           <button className="btn btn-secondary" onClick={() => setShowBackupAll(true)}>Backup / Restore</button>
         </div>
+      </div>
+
+      <div className="playlists-stats">
+        <div className="playlists-stat">
+          <span className="playlists-stat-value">{stats.total}</span>
+          <span className="playlists-stat-label">Playlists</span>
+        </div>
+        <div className="playlists-stat">
+          <span className="playlists-stat-value">{stats.activeSchedules}</span>
+          <span className="playlists-stat-label">Scheduled</span>
+        </div>
+        <div className={`playlists-stat ${stats.totalMissing > 0 ? 'warn' : ''}`}>
+          <span className="playlists-stat-value">{stats.totalMissing}</span>
+          <span className="playlists-stat-label">Missing Tracks</span>
+        </div>
+        <button
+          className={`playlists-stat playlists-stat-button ${stats.attentionCount > 0 ? 'warn' : ''} ${showAttentionOnly ? 'active' : ''}`}
+          onClick={() => setShowAttentionOnly(v => !v)}
+          disabled={stats.attentionCount === 0}
+          title="Playlists with missing tracks or a failed scheduled refresh"
+        >
+          <span className="playlists-stat-value">{stats.attentionCount}</span>
+          <span className="playlists-stat-label">Needs Attention{showAttentionOnly ? ' (shown)' : ''}</span>
+        </button>
       </div>
 
       {error && (
@@ -268,32 +344,34 @@ export const PlaylistsPage: FC = () => {
               {filteredSorted.map(playlist => {
                 const missingTracks = playlist.dbId ? (missingByDbId[playlist.dbId] || []) : [];
                 const schedule = playlist.dbId ? scheduleByDbId.get(playlist.dbId) : undefined;
+                const scheduleStatus = schedule ? getScheduleStatus(schedule.id) : null;
                 const isExpanded = expandedMissingFor === playlist.dbId;
                 const sourceLabel = getSourceLabel(playlist.source);
 
                 return (
                   <Fragment key={playlist.id}>
-                    <tr>
+                    <tr className={needsAttention(playlist) ? 'row-attention' : ''}>
                       <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          {playlist.composite && (
-                            <img
-                              src={getCoverUrl(playlist.composite) || ''}
-                              alt=""
-                              style={{ width: '32px', height: '32px', borderRadius: '4px', objectFit: 'cover' }}
-                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                            />
-                          )}
-                          <span style={{ fontWeight: 500 }}>{playlist.name}</span>
+                        <div className="playlist-name-cell">
+                          <div className="playlist-cover">
+                            {playlist.composite && (
+                              <img
+                                src={getCoverUrl(playlist.composite) || ''}
+                                alt=""
+                                onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }}
+                              />
+                            )}
+                          </div>
+                          <span className="playlist-name" title={playlist.name}>{playlist.name}</span>
                         </div>
                       </td>
                       <td>
                         {sourceLabel && playlist.sourceUrl ? (
-                          <a href={playlist.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-color)', fontSize: '0.8125rem' }}>
+                          <a href={playlist.sourceUrl} target="_blank" rel="noopener noreferrer" className="playlist-source-link">
                             {sourceLabel} ↗
                           </a>
                         ) : sourceLabel ? (
-                          <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>{sourceLabel}</span>
+                          <span className="playlist-source-label">{sourceLabel}</span>
                         ) : '—'}
                       </td>
                       <td>{playlist.trackCount}</td>
@@ -311,35 +389,33 @@ export const PlaylistsPage: FC = () => {
                       </td>
                       <td>
                         {schedule ? (
-                          <button className="badge-button" onClick={() => setModal({ type: 'schedule', playlist })}>
+                          <button className="badge-button schedule-badge" onClick={() => setModal({ type: 'schedule', playlist })} title={`Last run: ${scheduleStatus}`}>
+                            <span className={`status-dot status-dot-${scheduleStatus}`} />
                             {schedule.frequency}
+                            {getNextRunRelative(schedule) && <span className="schedule-next-run">{getNextRunRelative(schedule)}</span>}
                           </button>
                         ) : playlist.dbId ? (
                           <button className="btn btn-secondary btn-small" onClick={() => setModal({ type: 'schedule', playlist })}>
                             + Schedule
                           </button>
                         ) : (
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }} title="This playlist wasn't imported through Playlist Lab, so it can't be scheduled yet">
+                          <span className="playlist-source-label" title="This playlist wasn't imported through Playlist Lab, so it can't be scheduled yet">
                             —
                           </span>
                         )}
                       </td>
                       <td className="col-actions">
-                        <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap' }}>
-                          <button className="btn btn-secondary btn-small" onClick={() => setModal({ type: 'edit', playlist })} title="Edit tracks">Edit</button>
-                          <button className="btn btn-secondary btn-small" onClick={() => setModal({ type: 'share', playlist })} title="Share with Plex friends">Share</button>
-                          <button className="btn btn-secondary btn-small" onClick={() => setModal({ type: 'export', playlist })} title="Export to file">Export</button>
+                        <div className="row-actions">
+                          <button className="icon-btn" onClick={() => setModal({ type: 'edit', playlist })} title="Edit tracks"><EditIcon /></button>
+                          <button className="icon-btn" onClick={() => setModal({ type: 'share', playlist })} title="Share with Plex friends"><ShareIcon /></button>
+                          <button className="icon-btn" onClick={() => setModal({ type: 'export', playlist })} title="Export to file or YouTube"><ExportIcon /></button>
                           {isReimportable(playlist) && (
-                            <button className="btn btn-secondary btn-small" onClick={() => handleReimport(playlist)} disabled={reimportingId === playlist.id} title="Re-fetch this playlist from its original source now">
-                              {reimportingId === playlist.id ? '...' : 'Reimport'}
+                            <button className="icon-btn" onClick={() => handleReimport(playlist)} disabled={reimportingId === playlist.id} title="Re-fetch this playlist from its original source now">
+                              <ReimportIcon />
                             </button>
                           )}
-                          <button className="btn btn-secondary btn-small" onClick={() => handleQuickBackup(playlist)} disabled={backingUpId === playlist.id} title="Download a JSON backup of this playlist">
-                            {backingUpId === playlist.id ? '...' : 'Backup'}
-                          </button>
-                          <button className="btn btn-secondary btn-small" onClick={() => handleDelete(playlist)} disabled={deletingId === playlist.id} style={{ color: 'var(--error)' }} title="Delete from Plex">
-                            {deletingId === playlist.id ? '...' : 'Delete'}
-                          </button>
+                          <button className="icon-btn" onClick={() => handleQuickBackup(playlist)} disabled={backingUpId === playlist.id} title="Download a JSON backup of this playlist"><BackupIcon /></button>
+                          <button className="icon-btn icon-btn-danger" onClick={() => handleDelete(playlist)} disabled={deletingId === playlist.id} title="Delete from Plex"><DeleteIcon /></button>
                         </div>
                       </td>
                     </tr>

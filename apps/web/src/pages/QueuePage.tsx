@@ -431,6 +431,34 @@ export const QueuePage: FC = () => {
     return new Date(timestamp).toLocaleString();
   };
 
+  const formatRelativeTime = (timestamp: number) => {
+    const diffMs = Date.now() - timestamp;
+    const minutes = Math.floor(diffMs / 60000);
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days}d ago`;
+    return new Date(timestamp).toLocaleDateString();
+  };
+
+  const handleDiscardAll = async () => {
+    if (!confirm(`Discard all ${completedImports.length} pending import(s)? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      await Promise.allSettled(
+        completedImports.map(imp => fetch(`/api/import/queue/completed/${imp.id}`, { method: 'DELETE', credentials: 'include' }))
+      );
+      setCompletedImports([]);
+      setSelectedImport(null);
+      setEditableTracks([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to discard imports');
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="page-container">
@@ -513,7 +541,15 @@ export const QueuePage: FC = () => {
           {/* Completed Imports Section */}
           {completedImports.length > 0 && (
             <div className="queue-section">
-              <h2>Completed</h2>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 style={{ margin: 0 }}>Completed</h2>
+                <button className="btn btn-secondary btn-small" onClick={handleDiscardAll} title="Discard every pending import below">
+                  Discard All
+                </button>
+              </div>
+              <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', margin: '0.375rem 0 0.75rem' }}>
+                These finished matching tracks but were never saved as a playlist. Select one to review and save it, or discard it.
+              </p>
               {completedImports.map((imp) => {
                 // Use counts if available (fast), otherwise calculate from arrays (slower)
                 const matched = imp.matchedCount ?? imp.matched?.length ?? 0;
@@ -536,6 +572,7 @@ export const QueuePage: FC = () => {
                       <div className="queue-item-meta">
                         <span className="queue-item-source">{imp.source}</span>
                         <span className="queue-item-stats">{matched}/{total} matched</span>
+                        <span className="queue-item-stats">{formatRelativeTime(imp.completedAt)}</span>
                       </div>
                     </div>
                   </div>
