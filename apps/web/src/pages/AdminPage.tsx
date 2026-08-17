@@ -129,7 +129,7 @@ export const AdminPage: FC = () => {
 
   return (
     <div className="page-container">
-      <h1 className="page-title" style={{ marginBottom: '2rem' }}>Admin Dashboard</h1>
+      <h1 className="page-title">Admin Dashboard</h1>
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', borderBottom: '1px solid var(--border-color)' }}>

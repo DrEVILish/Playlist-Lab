@@ -1,8 +1,3 @@
-/* Reduce h1 bottom margin for tighter layout */
-.page-container:has(.plex-home-layout) > h1 {
-  margin-bottom: 0.5rem;
-}
-
 .page-container:has(.plex-home-layout) {
   flex: 1;
   min-height: 0;

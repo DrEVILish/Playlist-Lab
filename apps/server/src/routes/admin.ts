@@ -226,8 +226,12 @@ router.get('/missing', (req: Request, res: Response, next: NextFunction) => {
  */
 router.get('/jobs', (_req: Request, res: Response, next: NextFunction) => {
   try {
-    // For now, return a simple status
-    // In a full implementation, this would query the job scheduler
+    // NOTE: this is still a static/hard-coded summary, not live job-scheduler
+    // state (e.g. actual lastRun times or whether a run is currently in
+    // progress). Wiring in real-time status from JobScheduler.getStatus()
+    // (src/services/jobs.ts) would require the JobScheduler instance
+    // constructed in src/index.ts to be reachable from this route (e.g. via
+    // app.locals or req), which it currently isn't - see index.ts.
     const jobs = [
       {
         name: 'daily-scraper',
@@ -238,7 +242,9 @@ router.get('/jobs', (_req: Request, res: Response, next: NextFunction) => {
       },
       {
         name: 'schedule-checker',
-        schedule: '0 * * * *',
+        // Matches the cron registered in src/index.ts: runs at :00, :10,
+        // :20, :30, :40, :50 of every hour (every 10 minutes), not hourly.
+        schedule: '0,10,20,30,40,50 * * * *',
         enabled: process.env.ENABLE_SCHEDULE_CHECKER !== 'false',
         lastRun: null,
         status: 'scheduled',
@@ -251,7 +257,7 @@ router.get('/jobs', (_req: Request, res: Response, next: NextFunction) => {
         status: 'scheduled',
       },
     ];
-    
+
     res.json({ jobs });
   } catch (error) {
     logger.error('Failed to get job status', { error });

@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS schedules (
   start_date TEXT NOT NULL,
   last_run INTEGER,
   config TEXT,  -- JSON: additional configuration (mix types, etc.)
+  created_at INTEGER,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON DELETE CASCADE
 );

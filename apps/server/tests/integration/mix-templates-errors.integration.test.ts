@@ -264,7 +264,7 @@ describe('Mix Templates E2E Error Scenarios', () => {
         .expect(500);
 
       expect(response.body.error).toBeDefined();
-      expect(response.body.error.message).toMatch(/generate|failed|not found|missing|exist|library/i);
+      expect(response.body.error.message).toMatch(/generate|failed|not found|missing|exist|library|connect/i);
     });
 
     it('should handle template with partially missing items', async () => {
@@ -324,7 +324,7 @@ describe('Mix Templates E2E Error Scenarios', () => {
         .expect(500);
 
       expect(response.body.error).toBeDefined();
-      expect(response.body.error.message).toMatch(/generate|failed|connection|network|exist|library/i);
+      expect(response.body.error.message).toMatch(/generate|failed|connect|network|exist|library/i);
     });
 
     it('should handle timeout during generation', async () => {

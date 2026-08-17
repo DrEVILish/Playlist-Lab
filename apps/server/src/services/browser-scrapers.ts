@@ -34,6 +34,13 @@ async function getBrowser() {
         '--disable-gpu',
       ],
     });
+    // If the underlying Chromium process crashes or is closed unexpectedly
+    // (common under memory pressure with headless Chrome), clear the cached
+    // instance so the next getBrowser() call relaunches a fresh browser
+    // instead of returning a dead reference forever.
+    browserInstance.on('disconnected', () => {
+      browserInstance = null;
+    });
   }
   return browserInstance;
 }

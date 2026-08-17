@@ -3,9 +3,16 @@ import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { TemplateList, type MixTemplate } from './TemplateList';
+import { useApp } from '../contexts/AppContext';
 
-// Mock fetch
-global.fetch = jest.fn() as jest.Mock;
+// TemplateList reads its API client from AppContext (useApp), not from global fetch.
+// Mock the context hook so the component can be rendered in isolation, without needing
+// a real AppProvider/AuthProvider tree (which would make real network calls on mount).
+jest.mock('../contexts/AppContext', () => ({
+  useApp: jest.fn(),
+}));
+
+const mockUseApp = useApp as jest.Mock;
 
 const mockTemplates: MixTemplate[] = [
   {
@@ -52,13 +59,19 @@ const mockTemplates: MixTemplate[] = [
   },
 ];
 
-describe('TemplateList - Search and Filter', () => {
+const createMockApiClient = () => ({
+  getMixTemplates: jest.fn(),
+  deleteMixTemplate: jest.fn(),
+});
+
+describe('TemplateList - Rendering', () => {
+  let mockApiClient: ReturnType<typeof createMockApiClient>;
+
   beforeEach(() => {
     jest.clearAllMocks();
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ templates: mockTemplates }),
-    });
+    mockApiClient = createMockApiClient();
+    mockApiClient.getMixTemplates.mockResolvedValue({ templates: mockTemplates });
+    mockUseApp.mockReturnValue({ apiClient: mockApiClient });
   });
 
   it('should display all templates initially', async () => {
@@ -71,522 +84,221 @@ describe('TemplateList - Search and Filter', () => {
     });
   });
 
-  it('should filter templates by search query (case-insensitive)', async () => {
+  it('should show template descriptions and metadata', async () => {
     render(<TemplateList />);
 
     await waitFor(() => {
-      expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
-    });
-
-    const searchInput = screen.getByPlaceholderText('Search templates...');
-    fireEvent.change(searchInput, { target: { value: 'chill' } });
-
-    await waitFor(() => {
-      expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
-      expect(screen.queryByText('Rock Classics')).not.toBeInTheDocument();
-      expect(screen.queryByText('Beatles Collection')).not.toBeInTheDocument();
+      expect(screen.getByText('Relaxing tracks for evening')).toBeInTheDocument();
+      expect(screen.getByText('50 tracks')).toBeInTheDocument();
+      expect(screen.getByText('100 tracks • 1 genres')).toBeInTheDocument();
+      expect(screen.getByText('200 tracks • 1 artists')).toBeInTheDocument();
     });
   });
 
-  it('should filter templates by mix type', async () => {
+  it('should show use count for each template', async () => {
     render(<TemplateList />);
 
     await waitFor(() => {
-      expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
-    });
-
-    const filterSelect = screen.getByDisplayValue('All Types');
-    fireEvent.change(filterSelect, { target: { value: 'artist' } });
-
-    await waitFor(() => {
-      expect(screen.queryByText('Chill Evening Mix')).not.toBeInTheDocument();
-      expect(screen.queryByText('Rock Classics')).not.toBeInTheDocument();
-      expect(screen.getByText('Beatles Collection')).toBeInTheDocument();
+      expect(screen.getByText('Used 5 times')).toBeInTheDocument();
+      expect(screen.getByText('Used 10 times')).toBeInTheDocument();
+      expect(screen.getByText('Used 3 times')).toBeInTheDocument();
     });
   });
 
-  it('should combine search and type filter', async () => {
+  it('should show the total template count in the header', async () => {
     render(<TemplateList />);
 
     await waitFor(() => {
-      expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
-    });
-
-    // Set type filter to genre
-    const filterSelect = screen.getByDisplayValue('All Types');
-    fireEvent.change(filterSelect, { target: { value: 'genre' } });
-
-    // Search for "rock"
-    const searchInput = screen.getByPlaceholderText('Search templates...');
-    fireEvent.change(searchInput, { target: { value: 'rock' } });
-
-    await waitFor(() => {
-      expect(screen.queryByText('Chill Evening Mix')).not.toBeInTheDocument();
-      expect(screen.getByText('Rock Classics')).toBeInTheDocument();
-      expect(screen.queryByText('Beatles Collection')).not.toBeInTheDocument();
+      expect(screen.getByLabelText('3 mixes')).toBeInTheDocument();
     });
   });
 
-  it('should show filtered count when filters are active', async () => {
+  it('should sort templates by most recently used/updated', async () => {
     render(<TemplateList />);
 
     await waitFor(() => {
-      expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
-    });
-
-    const searchInput = screen.getByPlaceholderText('Search templates...');
-    fireEvent.change(searchInput, { target: { value: 'rock' } });
-
-    await waitFor(() => {
-      expect(screen.getByText('Showing 1 of 3 templates')).toBeInTheDocument();
-    });
-  });
-
-  it('should show clear buttons when filters are active', async () => {
-    render(<TemplateList />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
-    });
-
-    const searchInput = screen.getByPlaceholderText('Search templates...');
-    fireEvent.change(searchInput, { target: { value: 'nonexistent' } });
-
-    await waitFor(() => {
-      expect(screen.getByText('No templates match your filters')).toBeInTheDocument();
-      expect(screen.getByText('Clear Search')).toBeInTheDocument();
-    });
-  });
-
-  it('should clear search when clear button is clicked', async () => {
-    render(<TemplateList />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
-    });
-
-    const searchInput = screen.getByPlaceholderText('Search templates...');
-    fireEvent.change(searchInput, { target: { value: 'nonexistent' } });
-
-    await waitFor(() => {
-      expect(screen.getByText('Clear Search')).toBeInTheDocument();
-    });
-
-    const clearButton = screen.getByText('Clear Search');
-    fireEvent.click(clearButton);
-
-    await waitFor(() => {
-      expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
-      expect(screen.getByText('Rock Classics')).toBeInTheDocument();
-      expect(screen.getByText('Beatles Collection')).toBeInTheDocument();
-    });
-  });
-
-  it('should clear type filter when clear button is clicked', async () => {
-    render(<TemplateList />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
-    });
-
-    const filterSelect = screen.getByDisplayValue('All Types');
-    fireEvent.change(filterSelect, { target: { value: 'custom' } });
-
-    await waitFor(() => {
-      expect(screen.getByText('No templates match your filters')).toBeInTheDocument();
-      expect(screen.getByText('Clear Filter')).toBeInTheDocument();
-    });
-
-    const clearButton = screen.getByText('Clear Filter');
-    fireEvent.click(clearButton);
-
-    await waitFor(() => {
-      expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
-      expect(screen.getByText('Rock Classics')).toBeInTheDocument();
-      expect(screen.getByText('Beatles Collection')).toBeInTheDocument();
-    });
-  });
-
-  it('should search in template description', async () => {
-    render(<TemplateList />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
-    });
-
-    const searchInput = screen.getByPlaceholderText('Search templates...');
-    fireEvent.change(searchInput, { target: { value: 'relaxing' } });
-
-    await waitFor(() => {
-      expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
-      expect(screen.queryByText('Rock Classics')).not.toBeInTheDocument();
-    });
-  });
-
-  it('should search in mix type', async () => {
-    render(<TemplateList />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
-    });
-
-    const searchInput = screen.getByPlaceholderText('Search templates...');
-    fireEvent.change(searchInput, { target: { value: 'mood' } });
-
-    await waitFor(() => {
-      expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
-      expect(screen.queryByText('Rock Classics')).not.toBeInTheDocument();
-      expect(screen.queryByText('Beatles Collection')).not.toBeInTheDocument();
+      const cards = screen.getAllByRole('heading', { level: 3 });
+      // mockTemplates are ordered from most-recent to least-recent updatedAt
+      expect(cards[0]).toHaveTextContent('Chill Evening Mix');
+      expect(cards[1]).toHaveTextContent('Rock Classics');
+      expect(cards[2]).toHaveTextContent('Beatles Collection');
     });
   });
 });
 
 describe('TemplateList - Loading State', () => {
+  let mockApiClient: ReturnType<typeof createMockApiClient>;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    mockApiClient = createMockApiClient();
+    mockUseApp.mockReturnValue({ apiClient: mockApiClient });
   });
 
   it('should show loading spinner and message while fetching templates', async () => {
-    // Create a promise that we can control
     let resolvePromise: (value: any) => void;
     const fetchPromise = new Promise((resolve) => {
       resolvePromise = resolve;
     });
 
-    (global.fetch as jest.Mock).mockReturnValue(fetchPromise);
+    mockApiClient.getMixTemplates.mockReturnValue(fetchPromise);
 
     render(<TemplateList />);
 
-    // Loading state should be visible
     expect(screen.getByText('Loading templates...')).toBeInTheDocument();
     expect(document.querySelector('.loading-spinner')).toBeInTheDocument();
 
-    // Resolve the promise
-    resolvePromise!({
-      ok: true,
-      json: async () => ({ templates: mockTemplates }),
-    });
+    resolvePromise!({ templates: mockTemplates });
 
-    // Wait for loading to complete
     await waitFor(() => {
       expect(screen.queryByText('Loading templates...')).not.toBeInTheDocument();
       expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
     });
   });
-
-  it('should not show controls during loading', async () => {
-    let resolvePromise: (value: any) => void;
-    const fetchPromise = new Promise((resolve) => {
-      resolvePromise = resolve;
-    });
-
-    (global.fetch as jest.Mock).mockReturnValue(fetchPromise);
-
-    render(<TemplateList />);
-
-    // Controls should not be visible during loading
-    expect(screen.queryByPlaceholderText('Search templates...')).not.toBeInTheDocument();
-    expect(screen.queryByDisplayValue('All Types')).not.toBeInTheDocument();
-
-    // Resolve the promise
-    resolvePromise!({
-      ok: true,
-      json: async () => ({ templates: mockTemplates }),
-    });
-
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('Search templates...')).toBeInTheDocument();
-    });
-  });
 });
 
 describe('TemplateList - Empty State', () => {
+  let mockApiClient: ReturnType<typeof createMockApiClient>;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    mockApiClient = createMockApiClient();
+    mockUseApp.mockReturnValue({ apiClient: mockApiClient });
   });
 
   it('should show empty state when no templates exist', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ templates: [] }),
-    });
+    mockApiClient.getMixTemplates.mockResolvedValue({ templates: [] });
 
     render(<TemplateList />);
 
     await waitFor(() => {
-      expect(screen.getByText('No saved templates yet')).toBeInTheDocument();
-      expect(screen.getByText('Create a mix and save it as a template to get started')).toBeInTheDocument();
+      expect(screen.getByText('No saved mixes yet')).toBeInTheDocument();
+      expect(screen.getByText('Create a custom mix and save it to get started')).toBeInTheDocument();
     });
-
-    // Should not show clear buttons when no templates exist
-    expect(screen.queryByText('Clear Search')).not.toBeInTheDocument();
-    expect(screen.queryByText('Clear Filter')).not.toBeInTheDocument();
-  });
-
-  it('should show filtered empty state with clear buttons', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ templates: mockTemplates }),
-    });
-
-    render(<TemplateList />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
-    });
-
-    // Apply filter that returns no results
-    const searchInput = screen.getByPlaceholderText('Search templates...');
-    fireEvent.change(searchInput, { target: { value: 'nonexistent' } });
-
-    await waitFor(() => {
-      expect(screen.getByText('No templates match your filters')).toBeInTheDocument();
-      expect(screen.getByText('Clear Search')).toBeInTheDocument();
-    });
-  });
-
-  it('should show both clear buttons when both filters are active', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ templates: mockTemplates }),
-    });
-
-    render(<TemplateList />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
-    });
-
-    // Apply both search and type filter
-    const searchInput = screen.getByPlaceholderText('Search templates...');
-    fireEvent.change(searchInput, { target: { value: 'test' } });
-
-    const filterSelect = screen.getByDisplayValue('All Types');
-    fireEvent.change(filterSelect, { target: { value: 'custom' } });
-
-    await waitFor(() => {
-      expect(screen.getByText('No templates match your filters')).toBeInTheDocument();
-      expect(screen.getByText('Clear Search')).toBeInTheDocument();
-      expect(screen.getByText('Clear Filter')).toBeInTheDocument();
-    });
-  });
-
-  it('should not show controls when no templates exist', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ templates: [] }),
-    });
-
-    render(<TemplateList />);
-
-    await waitFor(() => {
-      expect(screen.getByText('No saved templates yet')).toBeInTheDocument();
-    });
-
-    // Controls should not be visible
-    expect(screen.queryByPlaceholderText('Search templates...')).not.toBeInTheDocument();
-    expect(screen.queryByDisplayValue('All Types')).not.toBeInTheDocument();
-    expect(screen.queryByDisplayValue('Recently Used')).not.toBeInTheDocument();
   });
 });
 
-describe('TemplateList - Sorting', () => {
+describe('TemplateList - Error State', () => {
+  let mockApiClient: ReturnType<typeof createMockApiClient>;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    mockApiClient = createMockApiClient();
+    mockUseApp.mockReturnValue({ apiClient: mockApiClient });
   });
 
-  it('should sort by recently used by default', async () => {
-    const templatesWithUsage = [
-      {
-        ...mockTemplates[0],
-        lastUsedAt: Date.now() / 1000 - 86400, // 1 day ago
-      },
-      {
-        ...mockTemplates[1],
-        lastUsedAt: Date.now() / 1000 - 172800, // 2 days ago
-      },
-      {
-        ...mockTemplates[2],
-        lastUsedAt: Date.now() / 1000, // Just now
-      },
-    ];
-
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ templates: templatesWithUsage }),
-    });
+  it('should show an error message and retry button when loading fails', async () => {
+    mockApiClient.getMixTemplates.mockRejectedValue(new Error('Failed to load templates'));
 
     render(<TemplateList />);
 
     await waitFor(() => {
-      expect(screen.getByText('Beatles Collection')).toBeInTheDocument();
+      expect(screen.getByText('Failed to load templates')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /retry loading templates/i })).toBeInTheDocument();
     });
-
-    const cards = screen.getAllByRole('heading', { level: 3 });
-    expect(cards[0]).toHaveTextContent('Beatles Collection'); // Most recent
-    expect(cards[1]).toHaveTextContent('Chill Evening Mix');
-    expect(cards[2]).toHaveTextContent('Rock Classics'); // Least recent
   });
 
-  it('should sort by name alphabetically', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ templates: mockTemplates }),
+  it('should retry loading templates when retry button is clicked', async () => {
+    mockApiClient.getMixTemplates
+      .mockRejectedValueOnce(new Error('Failed to load templates'))
+      .mockResolvedValueOnce({ templates: mockTemplates });
+
+    render(<TemplateList />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load templates')).toBeInTheDocument();
     });
 
+    fireEvent.click(screen.getByRole('button', { name: /retry loading templates/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
+    });
+
+    expect(mockApiClient.getMixTemplates).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('TemplateList - Actions', () => {
+  let mockApiClient: ReturnType<typeof createMockApiClient>;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockApiClient = createMockApiClient();
+    mockApiClient.getMixTemplates.mockResolvedValue({ templates: mockTemplates });
+    mockUseApp.mockReturnValue({ apiClient: mockApiClient });
+  });
+
+  it('should not show Generate/Schedule/Edit buttons when their callbacks are not provided', async () => {
     render(<TemplateList />);
 
     await waitFor(() => {
       expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
     });
 
-    const sortSelect = screen.getByDisplayValue('Recently Used');
-    fireEvent.change(sortSelect, { target: { value: 'name' } });
-
-    await waitFor(() => {
-      const cards = screen.getAllByRole('heading', { level: 3 });
-      expect(cards[0]).toHaveTextContent('Beatles Collection'); // A-Z
-      expect(cards[1]).toHaveTextContent('Chill Evening Mix');
-      expect(cards[2]).toHaveTextContent('Rock Classics');
-    });
+    expect(screen.queryByRole('button', { name: /generate mix/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /schedule.*mix/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /edit.*template/i })).not.toBeInTheDocument();
   });
 
-  it('should sort by most used', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ templates: mockTemplates }),
-    });
-
-    render(<TemplateList />);
+  it('should call onGenerate with the template when Generate is clicked', async () => {
+    const onGenerate = jest.fn();
+    render(<TemplateList onGenerate={onGenerate} />);
 
     await waitFor(() => {
       expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
     });
 
-    const sortSelect = screen.getByDisplayValue('Recently Used');
-    fireEvent.change(sortSelect, { target: { value: 'mostUsed' } });
+    fireEvent.click(screen.getByRole('button', { name: /generate mix from chill evening mix template/i }));
 
     await waitFor(() => {
-      const cards = screen.getAllByRole('heading', { level: 3 });
-      expect(cards[0]).toHaveTextContent('Rock Classics'); // useCount: 10
-      expect(cards[1]).toHaveTextContent('Chill Evening Mix'); // useCount: 5
-      expect(cards[2]).toHaveTextContent('Beatles Collection'); // useCount: 3
+      expect(onGenerate).toHaveBeenCalledWith(mockTemplates[0]);
     });
   });
 
-  it('should maintain sort order when filtering', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ templates: mockTemplates }),
-    });
-
-    render(<TemplateList />);
+  it('should call onSchedule with the template when Schedule is clicked', async () => {
+    const onSchedule = jest.fn();
+    render(<TemplateList onSchedule={onSchedule} />);
 
     await waitFor(() => {
       expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
     });
 
-    // Set sort to name
-    const sortSelect = screen.getByDisplayValue('Recently Used');
-    fireEvent.change(sortSelect, { target: { value: 'name' } });
-
-    // Apply filter
-    const filterSelect = screen.getByDisplayValue('All Types');
-    fireEvent.change(filterSelect, { target: { value: 'genre' } });
+    fireEvent.click(screen.getByRole('button', { name: /schedule chill evening mix mix/i }));
 
     await waitFor(() => {
-      // Only Rock Classics should be visible (genre type)
-      expect(screen.getByText('Rock Classics')).toBeInTheDocument();
-      expect(screen.queryByText('Chill Evening Mix')).not.toBeInTheDocument();
-      expect(screen.queryByText('Beatles Collection')).not.toBeInTheDocument();
+      expect(onSchedule).toHaveBeenCalledWith(mockTemplates[0]);
     });
   });
 
-  it('should maintain sort order when searching', async () => {
-    const templatesForSearch = [
-      {
-        ...mockTemplates[0],
-        name: 'Rock Mix A',
-        mixType: 'genre',
-        useCount: 3,
-      },
-      {
-        ...mockTemplates[1],
-        name: 'Rock Mix B',
-        mixType: 'genre',
-        useCount: 10,
-      },
-    ];
-
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ templates: templatesForSearch }),
-    });
-
-    render(<TemplateList />);
+  it('should call onEdit with the template when Edit is clicked', async () => {
+    const onEdit = jest.fn();
+    render(<TemplateList onEdit={onEdit} />);
 
     await waitFor(() => {
-      expect(screen.getByText('Rock Mix A')).toBeInTheDocument();
+      expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
     });
 
-    // Set sort to most used
-    const sortSelect = screen.getByDisplayValue('Recently Used');
-    fireEvent.change(sortSelect, { target: { value: 'mostUsed' } });
-
-    // Search for "rock"
-    const searchInput = screen.getByPlaceholderText('Search templates...');
-    fireEvent.change(searchInput, { target: { value: 'rock' } });
+    fireEvent.click(screen.getByRole('button', { name: /edit chill evening mix template/i }));
 
     await waitFor(() => {
-      const cards = screen.getAllByRole('heading', { level: 3 });
-      expect(cards[0]).toHaveTextContent('Rock Mix B'); // Higher use count
-      expect(cards[1]).toHaveTextContent('Rock Mix A');
+      expect(onEdit).toHaveBeenCalledWith(mockTemplates[0]);
     });
-  });
-
-  it('should use updatedAt when lastUsedAt is not available', async () => {
-    const templatesWithoutUsage = [
-      {
-        ...mockTemplates[0],
-        lastUsedAt: undefined,
-        updatedAt: Date.now() / 1000 - 86400, // 1 day ago
-      },
-      {
-        ...mockTemplates[1],
-        lastUsedAt: undefined,
-        updatedAt: Date.now() / 1000, // Just now
-      },
-    ];
-
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ templates: templatesWithoutUsage }),
-    });
-
-    render(<TemplateList />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Rock Classics')).toBeInTheDocument();
-    });
-
-    const cards = screen.getAllByRole('heading', { level: 3 });
-    expect(cards[0]).toHaveTextContent('Rock Classics'); // Most recent updatedAt
-    expect(cards[1]).toHaveTextContent('Chill Evening Mix');
   });
 });
 
 describe('TemplateList - Delete Functionality', () => {
+  let mockApiClient: ReturnType<typeof createMockApiClient>;
+
   beforeEach(() => {
     jest.clearAllMocks();
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ templates: mockTemplates }),
-    });
+    mockApiClient = createMockApiClient();
+    mockApiClient.getMixTemplates.mockResolvedValue({ templates: mockTemplates });
+    mockUseApp.mockReturnValue({ apiClient: mockApiClient });
   });
 
   it('should open delete dialog when delete button is clicked', async () => {
-    const onDelete = jest.fn();
-    render(<TemplateList onDelete={onDelete} />);
+    render(<TemplateList />);
 
     await waitFor(() => {
       expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
@@ -602,14 +314,13 @@ describe('TemplateList - Delete Functionality', () => {
   });
 
   it('should close delete dialog when cancel is clicked', async () => {
-    const onDelete = jest.fn();
-    render(<TemplateList onDelete={onDelete} />);
+    render(<TemplateList />);
 
     await waitFor(() => {
       expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
     });
 
-    const deleteButtons = screen.getAllByRole('button', { name: /delete/i });
+    const deleteButtons = screen.getAllByRole('button', { name: /^delete/i });
     fireEvent.click(deleteButtons[0]);
 
     await waitFor(() => {
@@ -625,26 +336,14 @@ describe('TemplateList - Delete Functionality', () => {
   });
 
   it('should delete template when confirmed', async () => {
-    const onDelete = jest.fn();
-    
-    // Mock successful delete
-    (global.fetch as jest.Mock)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ templates: mockTemplates }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ message: 'Template deleted successfully' }),
-      });
+    mockApiClient.deleteMixTemplate.mockResolvedValue({ message: 'Template deleted successfully' });
 
-    render(<TemplateList onDelete={onDelete} />);
+    render(<TemplateList />);
 
     await waitFor(() => {
       expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
     });
 
-    // Click the first delete button (from template card)
     const deleteButton = screen.getByRole('button', { name: /delete chill evening mix template/i });
     fireEvent.click(deleteButton);
 
@@ -652,79 +351,49 @@ describe('TemplateList - Delete Functionality', () => {
       expect(screen.getByText('Delete Template?')).toBeInTheDocument();
     });
 
-    // Get the confirm button from the dialog
     const confirmButton = screen.getByRole('button', { name: /confirm delete/i });
     fireEvent.click(confirmButton);
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
-        '/api/mix-templates/1',
-        expect.objectContaining({
-          method: 'DELETE',
-        })
-      );
+      expect(mockApiClient.deleteMixTemplate).toHaveBeenCalledWith(1);
     });
 
     await waitFor(() => {
-      expect(onDelete).toHaveBeenCalledWith(1);
       expect(screen.queryByText('Chill Evening Mix')).not.toBeInTheDocument();
     });
   });
 
   it('should show success message after deletion', async () => {
-    const onDelete = jest.fn();
-    
-    (global.fetch as jest.Mock)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ templates: mockTemplates }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ message: 'Template deleted successfully' }),
-      });
+    mockApiClient.deleteMixTemplate.mockResolvedValue({ message: 'Template deleted successfully' });
 
-    render(<TemplateList onDelete={onDelete} />);
+    render(<TemplateList />);
 
     await waitFor(() => {
       expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
     });
 
-    const deleteButton = screen.getByRole('button', { name: /delete chill evening mix template/i });
-    fireEvent.click(deleteButton);
+    fireEvent.click(screen.getByRole('button', { name: /delete chill evening mix template/i }));
 
     await waitFor(() => {
       expect(screen.getByText('Delete Template?')).toBeInTheDocument();
     });
 
-    const confirmButton = screen.getByRole('button', { name: /confirm delete/i });
-    fireEvent.click(confirmButton);
+    fireEvent.click(screen.getByRole('button', { name: /confirm delete/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Template "Chill Evening Mix" deleted successfully/)).toBeInTheDocument();
+      expect(screen.getByText(/Saved mix "Chill Evening Mix" deleted successfully/)).toBeInTheDocument();
     });
   });
 
   it('should handle delete error gracefully', async () => {
-    const onDelete = jest.fn();
-    
-    (global.fetch as jest.Mock)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ templates: mockTemplates }),
-      })
-      .mockResolvedValueOnce({
-        ok: false,
-        json: async () => ({ error: 'Failed to delete' }),
-      });
+    mockApiClient.deleteMixTemplate.mockRejectedValue(new Error('Failed to delete template. Please try again.'));
 
-    render(<TemplateList onDelete={onDelete} />);
+    render(<TemplateList />);
 
     await waitFor(() => {
       expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
     });
 
-    // Click the first delete button (from template card)
     const deleteButton = screen.getByRole('button', { name: /delete chill evening mix template/i });
     fireEvent.click(deleteButton);
 
@@ -732,34 +401,22 @@ describe('TemplateList - Delete Functionality', () => {
       expect(screen.getByText('Delete Template?')).toBeInTheDocument();
     });
 
-    // Get the confirm button from the dialog
     const confirmButton = screen.getByRole('button', { name: /confirm delete/i });
     fireEvent.click(confirmButton);
 
     await waitFor(() => {
       expect(screen.getByText(/failed to delete template/i)).toBeInTheDocument();
     });
-
-    // Error should be shown, but templates list should be cleared due to error state
-    // This is expected behavior - when there's an error, the component shows error state
   });
 
   it('should disable buttons during deletion', async () => {
-    const onDelete = jest.fn();
-    
     let resolveDelete: (value: any) => void;
     const deletePromise = new Promise((resolve) => {
       resolveDelete = resolve;
     });
+    mockApiClient.deleteMixTemplate.mockReturnValue(deletePromise);
 
-    (global.fetch as jest.Mock)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ templates: mockTemplates }),
-      })
-      .mockReturnValueOnce(deletePromise);
-
-    render(<TemplateList onDelete={onDelete} />);
+    render(<TemplateList />);
 
     await waitFor(() => {
       expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
@@ -780,22 +437,20 @@ describe('TemplateList - Delete Functionality', () => {
       expect(screen.getByRole('button', { name: /cancel/i })).toBeDisabled();
     });
 
-    // Resolve the delete
-    resolveDelete!({
-      ok: true,
-      json: async () => ({ message: 'Template deleted successfully' }),
-    });
+    resolveDelete!({ message: 'Template deleted successfully' });
 
     await waitFor(() => {
       expect(screen.queryByText('Delete Template?')).not.toBeInTheDocument();
     });
   });
 
-  it('should not show delete button when onDelete prop is not provided', async () => {
+  it('should not show delete button when there are no templates', async () => {
+    mockApiClient.getMixTemplates.mockResolvedValue({ templates: [] });
+
     render(<TemplateList />);
 
     await waitFor(() => {
-      expect(screen.getByText('Chill Evening Mix')).toBeInTheDocument();
+      expect(screen.getByText('No saved mixes yet')).toBeInTheDocument();
     });
 
     const deleteButtons = screen.queryAllByRole('button', { name: /delete/i });

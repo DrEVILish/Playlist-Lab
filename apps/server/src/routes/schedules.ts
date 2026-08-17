@@ -13,6 +13,7 @@ import { requireAuth } from '../middleware/auth';
 import { createValidationError, createInternalError } from '../middleware/error-handler';
 import { logger } from '../utils/logger';
 import { ScheduleInput } from '../database/types';
+import { DatabaseService } from '../database/database';
 
 const router = Router();
 
@@ -20,9 +21,22 @@ const router = Router();
 router.use(requireAuth);
 
 /**
- * Transform database schedule to API format (snake_case to camelCase)
+ * Transform database schedule to API format (snake_case to camelCase).
+ * Resolves the original source playlist/chart URL so the UI can link back to
+ * it: chart-import schedules carry it directly in config.chartUrl, while
+ * regular playlist-refresh schedules look it up from the linked playlist row.
  */
-function transformSchedule(dbSchedule: any): any {
+function transformSchedule(dbSchedule: any, db: DatabaseService): any {
+  const config = dbSchedule.config ? (typeof dbSchedule.config === 'string' ? JSON.parse(dbSchedule.config) : dbSchedule.config) : undefined;
+
+  let source: string | undefined = config?.chartSource;
+  let sourceUrl: string | undefined = config?.chartUrl;
+  if (!sourceUrl && dbSchedule.playlist_id) {
+    const playlist = db.getPlaylistById(dbSchedule.playlist_id);
+    source = playlist?.source;
+    sourceUrl = playlist?.source_url ?? undefined;
+  }
+
   return {
     id: dbSchedule.id,
     userId: dbSchedule.user_id,
@@ -31,7 +45,10 @@ function transformSchedule(dbSchedule: any): any {
     frequency: dbSchedule.frequency,
     startDate: dbSchedule.start_date,
     lastRun: dbSchedule.last_run,
-    config: dbSchedule.config ? (typeof dbSchedule.config === 'string' ? JSON.parse(dbSchedule.config) : dbSchedule.config) : undefined
+    createdAt: dbSchedule.created_at,
+    config,
+    source,
+    sourceUrl,
   };
 }
 
@@ -47,7 +64,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     logger.info('Getting user schedules', { userId });
 
     const dbSchedules = db.getUserSchedules(userId);
-    const schedules = dbSchedules.map(transformSchedule);
+    const schedules = dbSchedules.map(s => transformSchedule(s, db));
 
     res.json({
       success: true,
@@ -136,7 +153,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     };
 
     const dbSchedule = db.createSchedule(userId, scheduleInput);
-    const schedule = transformSchedule(dbSchedule);
+    const schedule = transformSchedule(dbSchedule, db);
 
     logger.info('Schedule created', { scheduleId: schedule.id });
 
@@ -216,7 +233,7 @@ router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
     db.updateSchedule(scheduleId, updates);
 
     const dbSchedule = db.getScheduleById(scheduleId);
-    const updatedSchedule = dbSchedule ? transformSchedule(dbSchedule) : null;
+    const updatedSchedule = dbSchedule ? transformSchedule(dbSchedule, db) : null;
 
     console.log('Updated schedule:', updatedSchedule);
 

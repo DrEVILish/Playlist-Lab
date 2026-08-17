@@ -195,7 +195,6 @@ export const ImportPage: FC = () => {
 
   // Load saved country preference
   useEffect(() => {
-    console.log('[ImportPage] Component mounted - BUILD_TIMESTAMP: 2025-01-XX-FORCE-REFRESH');
     const savedCountry = localStorage.getItem('selectedCountry');
     if (savedCountry) {
       setSelectedCountry(savedCountry);
@@ -526,7 +525,7 @@ export const ImportPage: FC = () => {
     { id: 'tidal' as const, name: 'Tidal', placeholder: 'https://tidal.com/browse/playlist/...' },
     { id: 'qobuz' as const, name: 'Qobuz', placeholder: 'https://www.qobuz.com/...' },
     { id: 'listenbrainz' as const, name: 'ListenBrainz', placeholder: 'Username' },
-    { id: 'file' as const, name: 'File (M3U)', placeholder: 'Upload M3U/M3U8 file' },
+    { id: 'file' as const, name: 'File (M3U/PLS/XSPF/CSV)', placeholder: 'Upload an M3U, M3U8, PLS, XSPF, or CSV playlist file' },
     { id: 'ai' as const, name: 'AI Generated', placeholder: 'Describe the playlist you want...' },
   ];
 
@@ -660,8 +659,6 @@ export const ImportPage: FC = () => {
   };
 
   const handleImport = async (importUrl?: string) => {
-    console.log('[ImportPage] ===== HANDLE IMPORT CALLED - BUILD v2026-02-11-15:00 =====');
-    
     setError(null);
     setImportResult(null);
     setPlaylistCreated(false);
@@ -1439,6 +1436,9 @@ export const ImportPage: FC = () => {
 
   return (
     <div className="page-container">
+      <div className="page-header">
+        <h1 className="page-title">Import</h1>
+      </div>
       <div style={{ marginBottom: '2rem' }}>
           {/* Country Selector */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -1707,7 +1707,7 @@ export const ImportPage: FC = () => {
                 </label>
                 <input
                   type="file"
-                  accept=".m3u,.m3u8"
+                  accept=".m3u,.m3u8,.pls,.xspf,.csv,.txt"
                   onChange={(e) => setFile(e.target.files?.[0] || null)}
                   disabled={isImporting}
                   style={{

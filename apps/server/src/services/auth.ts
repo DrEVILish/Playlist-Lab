@@ -7,6 +7,7 @@
  */
 
 import axios from 'axios';
+import { logger } from '../utils/logger';
 
 const PLEX_API_BASE = 'https://plex.tv/api/v2';
 const PLEX_HEADERS = {
@@ -302,23 +303,22 @@ export class AuthService {
         try {
           return resource && resource.provides && 
                  (typeof resource.provides === 'string' ? resource.provides.includes('server') : false);
-        } catch (e) {
-          console.error('Error filtering resource:', e, resource);
+        } catch (e: any) {
+          logger.error('[Auth] Error filtering resource', { error: e?.message || e, resource });
           return false;
         }
       });
 
-      // Log what we're returning
-      console.log('getServers returning:', servers.length, 'servers');
-      
+      logger.info('[Auth] getServers returning', { count: servers.length });
+
       return servers;
-    } catch (error) {
-      // Log the raw error for debugging
-      console.error('getServers error:', error);
-      console.error('Error type:', typeof error);
-      console.error('Error constructor:', error?.constructor?.name);
-      console.error('Error keys:', error ? Object.keys(error) : 'null');
-      
+    } catch (error: any) {
+      logger.error('[Auth] getServers error', {
+        error: error?.message || error,
+        type: typeof error,
+        constructor: error?.constructor?.name,
+      });
+
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 401) {
           throw new Error('Invalid or expired Plex token');

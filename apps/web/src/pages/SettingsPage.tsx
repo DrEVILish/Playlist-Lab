@@ -247,9 +247,9 @@ export const SettingsPage: FC = () => {
   ];
 
   return (
-    <div className="settings-page">
-      <div className="settings-header">
-        <h1>Settings</h1>
+    <div className="page-container">
+      <div className="page-header">
+        <h1 className="page-title">Settings</h1>
         {isFirstTimeSetup && (
           <div className="settings-welcome">
             <p>

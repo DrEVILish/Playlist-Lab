@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, type FC, type ReactNode } from 'react';
 import { useAuth } from './AuthContext';
-import { APIClient } from '@playlist-lab/shared';
+import { APIClient, type Schedule } from '@playlist-lab/shared';
 
 interface PlexServer {
   name: string;
@@ -78,27 +78,19 @@ interface UserSettings {
 }
 
 interface Playlist {
-  id: number;
-  userId: number;
+  /** Plex ratingKey - this list comes from GET /api/playlists, a live read of Plex's own playlists, not our DB's playlists table. */
+  id: string;
+  /** Our internal numeric playlists.id, present only if this Plex playlist was imported through this app (so it has a schedule/missing-tracks/source to look up). */
+  dbId?: number;
   plexPlaylistId: string;
   name: string;
   source: string;
   sourceUrl?: string;
   trackCount?: number;
   duration?: number;
+  composite?: string;
   createdAt: number;
   updatedAt: number;
-}
-
-interface Schedule {
-  id: number;
-  userId: number;
-  playlistId?: number;
-  scheduleType: 'playlist_refresh' | 'mix_generation';
-  frequency: 'daily' | 'weekly' | 'fortnightly' | 'monthly';
-  startDate: string;
-  lastRun?: number;
-  config?: any;
 }
 
 interface AppState {

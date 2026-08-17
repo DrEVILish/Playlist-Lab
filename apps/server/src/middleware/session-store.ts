@@ -7,6 +7,7 @@
 
 import { Store } from 'express-session';
 import { getDatabase } from '../database';
+import { logger } from '../utils/logger';
 
 export class SQLiteStore extends Store {
   private db: ReturnType<typeof getDatabase>;
@@ -42,8 +43,8 @@ export class SQLiteStore extends Store {
 
       const session = JSON.parse(row.sess);
       callback(null, session);
-    } catch (error) {
-      console.error('[Session Store] Error loading session:', error);
+    } catch (error: any) {
+      logger.error('[Session Store] Error loading session', { error: error?.message || error });
       callback(error);
     }
   }
@@ -72,14 +73,14 @@ export class SQLiteStore extends Store {
       const row = verify.get(sid) as { sess: string } | undefined;
       
       if (!row) {
-        console.error(`[Session Store] Failed to verify session write for sid: ${sid}`);
+        logger.error(`[Session Store] Failed to verify session write for sid: ${sid}`);
         if (callback) callback(new Error('Session write verification failed'));
         return;
       }
 
       if (callback) callback();
-    } catch (error) {
-      console.error('[Session Store] Error saving session:', error);
+    } catch (error: any) {
+      logger.error('[Session Store] Error saving session', { error: error?.message || error });
       if (callback) callback(error);
     }
   }
@@ -171,10 +172,10 @@ export class SQLiteStore extends Store {
         const result = stmt.run(now);
 
         if (result.changes > 0) {
-          console.log(`Cleaned up ${result.changes} expired sessions`);
+          logger.info(`[Session Store] Cleaned up ${result.changes} expired sessions`);
         }
-      } catch (error) {
-        console.error('Error cleaning up expired sessions:', error);
+      } catch (error: any) {
+        logger.error('[Session Store] Error cleaning up expired sessions', { error: error?.message || error });
       }
     }, intervalMs);
 

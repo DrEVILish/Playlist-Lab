@@ -49,8 +49,12 @@ async function handleUserLogin(
     logger.info('First user auto-promoted to admin', { userId: user.id, username });
   }
 
-  // If this is a new non-admin user, check Plex Home membership
-  if (isNewUser && !db.isAdmin(user.id)) {
+  // Re-verify Plex Home membership for every non-admin login, not just the
+  // first one. If an admin later removes a managed user from Plex Home,
+  // this ensures that user is disabled on their next login rather than
+  // retaining access indefinitely (membership was previously only checked
+  // once, at account creation).
+  if (!db.isAdmin(user.id)) {
     const admin = db.getFirstAdmin();
     if (admin) {
       try {
@@ -60,23 +64,38 @@ async function handleUserLogin(
         );
 
         if (isHomeUser) {
-          // Auto-assign admin's server config to this managed user
-          db.copyServerConfig(admin.id, user.id);
-          logger.info('Plex Home user auto-assigned server config', {
-            userId: user.id,
-            username,
-            adminId: admin.id,
-          });
+          if (isNewUser) {
+            // Auto-assign admin's server config to this managed user
+            db.copyServerConfig(admin.id, user.id);
+            logger.info('Plex Home user auto-assigned server config', {
+              userId: user.id,
+              username,
+              adminId: admin.id,
+            });
+          }
+          // Re-enable in case they were previously disabled and have since
+          // been (re-)added to Plex Home.
+          if (!db.isUserEnabled(user.id)) {
+            db.enableUser(user.id);
+            logger.info('Plex Home user re-enabled after membership re-verification', {
+              userId: user.id,
+              username,
+            });
+          }
         } else {
-          // Not a Plex Home member — disable by default
-          db.disableUser(user.id);
-          logger.info('Non-home user disabled by default', {
-            userId: user.id,
-            username,
-          });
+          // Not a Plex Home member — disable (whether newly created or
+          // previously enabled and since removed from Plex Home).
+          if (db.isUserEnabled(user.id)) {
+            db.disableUser(user.id);
+            logger.info('Non-home user disabled', {
+              userId: user.id,
+              username,
+              isNewUser,
+            });
+          }
         }
       } catch (err) {
-        logger.warn('Failed to check Plex Home membership, allowing user', {
+        logger.warn('Failed to check Plex Home membership, allowing existing access state', {
           error: err instanceof Error ? err.message : err,
           userId: user.id,
         });

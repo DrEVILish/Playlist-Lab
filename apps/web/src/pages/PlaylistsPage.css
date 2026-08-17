@@ -1,0 +1,70 @@
+.playlists-table-container {
+  overflow-x: auto;
+}
+
+.playlists-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.playlists-table thead {
+  background: var(--surface-hover);
+}
+
+.playlists-table th {
+  padding: 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.playlists-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.playlists-table th.sortable:hover {
+  color: var(--primary-color);
+}
+
+.playlists-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.playlists-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.playlists-table .sort-arrow {
+  margin-left: 0.25rem;
+  opacity: 0.6;
+}
+
+.playlists-table .col-actions {
+  white-space: nowrap;
+}
+
+.badge-button {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.badge-button:hover {
+  border-color: var(--primary-color);
+}
+
+.badge-button.warn {
+  border-color: var(--warning);
+  color: var(--warning);
+  background: rgba(255, 167, 38, 0.1);
+}

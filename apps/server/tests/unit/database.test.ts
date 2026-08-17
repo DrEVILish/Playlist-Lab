@@ -135,6 +135,27 @@ describe('DatabaseService', () => {
       const server = dbService.getUserServer(userId);
       expect(server).toBeNull();
     });
+
+    test('saveUserServer should leave the previous server intact if the insert fails', () => {
+      dbService.saveUserServer(userId, 'Server 1', 'client1', 'http://server1');
+
+      // Simulate the INSERT throwing (e.g. a constraint violation) after the
+      // DELETE has already run, by inserting a NOT NULL violation via a
+      // missing required field. server_name/server_client_id/server_url are
+      // all NOT NULL, so passing null for server_name forces the INSERT to
+      // fail while still going through the real saveUserServer/transaction
+      // code path.
+      expect(() => {
+        dbService.saveUserServer(userId, null as any, 'client2', 'http://server2');
+      }).toThrow();
+
+      // Because DELETE + INSERT are wrapped in a transaction, the failed
+      // INSERT must not have committed the DELETE either - the original
+      // server should still be there.
+      const server = dbService.getUserServer(userId);
+      expect(server).not.toBeNull();
+      expect(server?.server_name).toBe('Server 1');
+    });
   });
 
   // ==================== Settings Operations ====================
@@ -241,11 +262,38 @@ describe('DatabaseService', () => {
 
     test('deletePlaylist should remove playlist', () => {
       const playlist = dbService.createPlaylist(userId, 'pl1', 'Playlist 1', 'spotify');
-      
+
       dbService.deletePlaylist(playlist.id);
-      
+
       const deleted = dbService.getPlaylistById(playlist.id);
       expect(deleted).toBeNull();
+    });
+
+    test('getPlaylistByPlexId should not return another user\'s playlist with a colliding plex_playlist_id', () => {
+      // Each user has their own independent Plex server, so Plex ratingKeys
+      // (small sequential integers) can collide across users. A lookup that
+      // isn't scoped by user could return - and then a caller could mutate -
+      // the wrong user's playlist row.
+      const user2 = dbService.createUser('plex456', 'user2', 'token456');
+
+      const ownPlaylist = dbService.createPlaylist(userId, '100', 'My Playlist', 'spotify');
+      const otherUsersPlaylist = dbService.createPlaylist(user2.id, '100', 'Other User Playlist', 'spotify');
+
+      const found = dbService.getPlaylistByPlexId(userId, '100');
+      expect(found?.id).toBe(ownPlaylist.id);
+      expect(found?.user_id).toBe(userId);
+
+      const foundForOther = dbService.getPlaylistByPlexId(user2.id, '100');
+      expect(foundForOther?.id).toBe(otherUsersPlaylist.id);
+      expect(foundForOther?.user_id).toBe(user2.id);
+    });
+
+    test('getPlaylistByPlexId should return null when the plex_playlist_id does not belong to that user', () => {
+      const user2 = dbService.createUser('plex456', 'user2', 'token456');
+      dbService.createPlaylist(userId, '100', 'My Playlist', 'spotify');
+
+      const found = dbService.getPlaylistByPlexId(user2.id, '100');
+      expect(found).toBeNull();
     });
   });
 
@@ -300,6 +348,28 @@ describe('DatabaseService', () => {
       expect(dueSchedules.length).toBeGreaterThan(0);
     });
 
+    test('getDueSchedules should not return schedules belonging to a disabled user', () => {
+      const schedule = dbService.createSchedule(userId, {
+        schedule_type: 'mix_generation',
+        frequency: 'daily',
+        start_date: '2024-01-01'
+      });
+
+      // Sanity check: due while the user is enabled.
+      expect(dbService.getDueSchedules().map(s => s.id)).toContain(schedule.id);
+
+      dbService.disableUser(userId);
+
+      // An admin disabling a user must stop that user's background
+      // schedules from continuing to fire.
+      expect(dbService.getDueSchedules().map(s => s.id)).not.toContain(schedule.id);
+
+      dbService.enableUser(userId);
+
+      // Re-enabling the user restores it to the due set.
+      expect(dbService.getDueSchedules().map(s => s.id)).toContain(schedule.id);
+    });
+
     test('updateScheduleLastRun should update timestamp', () => {
       const schedule = dbService.createSchedule(userId, {
         schedule_type: 'mix_generation',
@@ -322,9 +392,57 @@ describe('DatabaseService', () => {
       });
       
       dbService.deleteSchedule(schedule.id);
-      
+
       const deleted = dbService.getScheduleById(schedule.id);
       expect(deleted).toBeNull();
+    });
+  });
+
+  // ==================== Schedule Execution Operations ====================
+
+  describe('Schedule Execution Operations', () => {
+    let userId: number;
+    let scheduleId: number;
+
+    beforeEach(() => {
+      const user = dbService.createUser('plex123', 'testuser', 'token123');
+      userId = user.id;
+      const schedule = dbService.createSchedule(userId, {
+        schedule_type: 'mix_generation',
+        frequency: 'daily',
+        start_date: '2024-01-01'
+      });
+      scheduleId = schedule.id;
+    });
+
+    test('reconcileStuckExecutions should mark running executions as failed', () => {
+      const executionId = dbService.createScheduleExecution(scheduleId, userId, 'My Playlist');
+
+      const before = dbService.getExecutionById(executionId);
+      expect(before.status).toBe('running');
+
+      const reconciledCount = dbService.reconcileStuckExecutions();
+      expect(reconciledCount).toBe(1);
+
+      const after = dbService.getExecutionById(executionId);
+      expect(after.status).toBe('failed');
+      expect(after.error_message).toBe('Execution interrupted by server restart');
+      expect(after.completed_at).not.toBeNull();
+    });
+
+    test('reconcileStuckExecutions should not touch already-completed executions', () => {
+      const successId = dbService.createScheduleExecution(scheduleId, userId, 'Done Playlist');
+      dbService.updateScheduleExecution(successId, 'success', 5, 0);
+
+      const failedId = dbService.createScheduleExecution(scheduleId, userId, 'Failed Playlist');
+      dbService.updateScheduleExecution(failedId, 'failed', 0, 0, 'Some real error');
+
+      const reconciledCount = dbService.reconcileStuckExecutions();
+      expect(reconciledCount).toBe(0);
+
+      expect(dbService.getExecutionById(successId).status).toBe('success');
+      expect(dbService.getExecutionById(failedId).status).toBe('failed');
+      expect(dbService.getExecutionById(failedId).error_message).toBe('Some real error');
     });
   });
 
@@ -512,6 +630,29 @@ describe('DatabaseService', () => {
       const stats = dbService.getMissingTrackStats();
       expect(stats.length).toBeGreaterThan(0);
       expect(stats[0].count).toBe(2);
+    });
+
+    test('getMissingTrackStats should aggregate case/whitespace variants of the same track together', () => {
+      const user1 = dbService.createUser('plex1', 'user1', 'token1');
+      const user2 = dbService.createUser('plex2', 'user2', 'token2');
+      const pl1 = dbService.createPlaylist(user1.id, 'pl1', 'Playlist 1', 'spotify');
+      const pl2 = dbService.createPlaylist(user2.id, 'pl2', 'Playlist 2', 'spotify');
+
+      // Same underlying track, but different case/whitespace - matches how
+      // addMissingTracks itself dedupes via LOWER(TRIM(...)).
+      dbService.addMissingTracks(user1.id, pl1.id, [
+        { title: 'Popular Song', artist: 'Popular Artist', position: 0, source: 'spotify' }
+      ]);
+      dbService.addMissingTracks(user2.id, pl2.id, [
+        { title: '  popular song  ', artist: 'POPULAR ARTIST', position: 0, source: 'spotify' }
+      ]);
+
+      const stats = dbService.getMissingTrackStats();
+
+      // Should collapse into a single aggregated stat, not two separate ones.
+      const matching = stats.filter(s => s.track.toLowerCase().includes('popular song'));
+      expect(matching).toHaveLength(1);
+      expect(matching[0].count).toBe(2);
     });
 
     test('isAdmin should return false for non-admin', () => {

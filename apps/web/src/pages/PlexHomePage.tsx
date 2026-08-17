@@ -669,7 +669,7 @@ export const PlexHomePage: FC = () => {
   if (isLoadingUsers) {
     return (
       <div className="page-container">
-        <h1>Plex Home Users</h1>
+        <h1 className="page-title">Plex Home Users</h1>
         <div className="loading">Loading Plex Home users...</div>
       </div>
     );
@@ -677,7 +677,7 @@ export const PlexHomePage: FC = () => {
 
   return (
     <div className="page-container">
-      <h1>Plex Home Users</h1>
+      <h1 className="page-title">Plex Home Users</h1>
 
       {error && <div className="error-message">{error}</div>}
       {success && <div className="success-message">{success}</div>}

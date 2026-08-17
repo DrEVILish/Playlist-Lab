@@ -9,6 +9,7 @@
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
+import { DatabaseService } from './database';
 
 /**
  * Initialize the SQLite database with the schema
@@ -62,6 +63,18 @@ export function initializeDatabase(dbPath: string): Database.Database {
     console.log('Running database migrations...');
     runMigrations(db);
     console.log('Database migrations completed');
+
+    // Reconcile any schedule executions left stuck in 'running' state by an
+    // unclean shutdown/restart, so their schedules' "Run Now" button isn't
+    // permanently disabled and the executions don't stay "running" forever.
+    try {
+      const reconciled = new DatabaseService(db).reconcileStuckExecutions();
+      if (reconciled > 0) {
+        console.log(`Reconciled ${reconciled} schedule execution(s) stuck in 'running' state from a previous run`);
+      }
+    } catch (error) {
+      console.error('Failed to reconcile stuck schedule executions:', error);
+    }
   } catch (error) {
     console.error('Error executing schema:', error);
     throw error;
@@ -310,6 +323,22 @@ export function runMigrations(db: Database.Database): void {
       console.log('Migration completed: oauth_connections table created');
     }
 
+    // Check if expires_at column exists in oauth_connections table.
+    // schema.sql's CREATE TABLE IF NOT EXISTS includes it for fresh installs,
+    // but installs that already had an oauth_connections table (e.g. created
+    // by the migration block above before this column existed) never get it
+    // added. youtube-oauth.ts reads/writes expires_at on every YouTube OAuth
+    // login/refresh, so without this migration those installs throw
+    // "SQLITE_ERROR: no such column: expires_at" and YouTube OAuth breaks.
+    const oauthColumns = db.prepare("PRAGMA table_info(oauth_connections)").all() as Array<{ name: string }>;
+    const hasExpiresAt = oauthColumns.some(col => col.name === 'expires_at');
+
+    if (!hasExpiresAt) {
+      console.log('Adding expires_at column to oauth_connections table...');
+      db.exec('ALTER TABLE oauth_connections ADD COLUMN expires_at INTEGER');
+      console.log('Migration completed: expires_at column added');
+    }
+
     // Create mix_templates table if it doesn't exist
     const hasMixTemplates = db.prepare(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='mix_templates'"
@@ -362,6 +391,24 @@ export function runMigrations(db: Database.Database): void {
         CREATE INDEX IF NOT EXISTS idx_schedule_executions_started_at ON schedule_executions(started_at DESC);
       `);
       console.log('Migration completed: schedule_executions table created');
+    }
+
+    // Check if created_at column exists in schedules table (needed to sort
+    // schedules by "date added" in the schedules UI). Existing rows have no
+    // real creation timestamp, so backfill them in id order (id is
+    // AUTOINCREMENT, so it already reflects creation order) spaced one
+    // second apart to keep them distinctly sortable.
+    const scheduleColumns = db.prepare("PRAGMA table_info(schedules)").all() as Array<{ name: string }>;
+    const hasCreatedAt = scheduleColumns.some(col => col.name === 'created_at');
+
+    if (!hasCreatedAt) {
+      console.log('Adding created_at column to schedules table...');
+      db.exec('ALTER TABLE schedules ADD COLUMN created_at INTEGER');
+      const now = Math.floor(Date.now() / 1000);
+      const existingIds = db.prepare('SELECT id FROM schedules ORDER BY id ASC').all() as Array<{ id: number }>;
+      const backfillStmt = db.prepare('UPDATE schedules SET created_at = ? WHERE id = ?');
+      existingIds.forEach((row, index) => backfillStmt.run(now - (existingIds.length - index), row.id));
+      console.log('Migration completed: created_at column added to schedules');
     }
   } catch (error) {
     console.error('Migration failed:', error);

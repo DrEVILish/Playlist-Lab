@@ -21,6 +21,9 @@ import {
   scrapeQobuzPlaylist,
   getListenBrainzPlaylists,
   parseM3UFile,
+  parseCSVFile,
+  parsePLSFile,
+  parseXSPFFile,
   scrapeAriaPlaylist,
   scrapeBillboardPlaylist,
   scrapeLastfmPlaylist,
@@ -259,6 +262,77 @@ export async function importPlaylist(
 }
 
 /**
+ * Re-scrape and re-match a playlist that was originally imported from an
+ * online source, then replace its Plex playlist with the refreshed tracks.
+ * Used by the manual "Reimport" row action (as opposed to the scheduled
+ * refresh job in schedule-checker-job.ts, which is driven by a schedule row).
+ */
+export async function reimportPlaylistNow(
+  db: DatabaseService,
+  playlist: { id: number; name: string; source: string; source_url?: string | null; plex_playlist_id: string },
+  user: { id: number; plex_token: string },
+  server: { server_url: string; server_client_id?: string; library_id?: string | null }
+): Promise<void> {
+  const { PlexClient } = await import('./plex');
+
+  const result = await importPlaylist(
+    playlist.source as any,
+    playlist.source_url || playlist.plex_playlist_id,
+    {
+      userId: user.id,
+      serverUrl: server.server_url,
+      plexToken: user.plex_token,
+      libraryId: server.library_id || undefined,
+    },
+    db
+  );
+
+  const plex = new PlexClient(server.server_url, user.plex_token);
+
+  try {
+    const plexPlaylists = await plex.getPlaylists();
+    const existing = plexPlaylists.find((p: any) => p.ratingKey === playlist.plex_playlist_id || p.title === playlist.name);
+    if (existing) {
+      await plex.deletePlaylist(existing.ratingKey);
+    }
+  } catch (error: any) {
+    logger.warn('Failed to check for existing playlist before reimport', { playlistId: playlist.id, error: error.message });
+  }
+
+  const trackUris = result.matched
+    .filter((t: any) => t.matched && t.plexRatingKey)
+    .map((t: any) => `server://${server.server_client_id || 'playlist-lab-server'}/com.plexapp.plugins.library/library/metadata/${t.plexRatingKey}`);
+
+  const newPlaylist = await plex.createPlaylist(playlist.name, server.library_id || '', trackUris);
+
+  if (result.coverUrl) {
+    try {
+      await plex.uploadPlaylistPoster(newPlaylist.ratingKey, result.coverUrl);
+    } catch (error: any) {
+      logger.warn('Failed to upload cover art during reimport', { playlistId: playlist.id, error: error.message });
+    }
+  }
+
+  db.updatePlaylist(playlist.id, {
+    plex_playlist_id: newPlaylist.ratingKey,
+    updated_at: Math.floor(Date.now() / 1000),
+  } as any);
+
+  if (result.unmatched.length > 0) {
+    const missingSource = `Manual reimport – ${new Date().toLocaleDateString('en-GB')}`;
+    db.addMissingTracks(user.id, playlist.id, result.unmatched.map((t, i) => ({
+      title: t.title || 'Unknown',
+      artist: t.artist || 'Unknown',
+      album: t.album,
+      position: i + 1,
+      source: missingSource,
+    })));
+  }
+
+  logger.info('Manual reimport completed', { playlistId: playlist.id, matched: result.matchedCount, unmatched: result.unmatched.length });
+}
+
+/**
  * Store unmatched tracks in the missing_tracks table
  */
 export function storeMissingTracks(
@@ -372,12 +446,28 @@ async function scrapePlaylist(
         // Return the first playlist (or implement selection logic)
         return playlists[0];
       
-      case 'file':
-        debugLog('[scrapePlaylist] Calling parseM3UFile...');
-        // For file imports, sourceIdentifier is the file content
+      case 'file': {
+        // For file imports, sourceIdentifier is the file content. Dispatch on
+        // extension so the same set of formats this app can export to
+        // (M3U/M3U8, PLS, XSPF, CSV) can also be imported back in.
         const fileName = options?.filename || 'imported-playlist.m3u';
-        debugLog('[scrapePlaylist] Filename:', fileName);
-        return parseM3UFile(sourceIdentifier, fileName);
+        const ext = fileName.toLowerCase().substring(fileName.lastIndexOf('.'));
+        debugLog('[scrapePlaylist] Filename:', { fileName, ext });
+        switch (ext) {
+          case '.csv':
+            debugLog('[scrapePlaylist] Calling parseCSVFile...');
+            return parseCSVFile(sourceIdentifier, fileName);
+          case '.pls':
+            debugLog('[scrapePlaylist] Calling parsePLSFile...');
+            return parsePLSFile(sourceIdentifier, fileName);
+          case '.xspf':
+            debugLog('[scrapePlaylist] Calling parseXSPFFile...');
+            return parseXSPFFile(sourceIdentifier, fileName);
+          default:
+            debugLog('[scrapePlaylist] Calling parseM3UFile...');
+            return parseM3UFile(sourceIdentifier, fileName);
+        }
+      }
       
       default:
         throw new Error(`Unsupported source: ${source}`);

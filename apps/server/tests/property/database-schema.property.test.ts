@@ -366,14 +366,15 @@ describe('Database Schema Property Tests', () => {
     it('should maintain referential integrity across multiple users', async () => {
       await fc.assert(
         fc.asyncProperty(
-          // Generate multiple users
-          fc.array(
+          // Generate multiple users with unique plexUserId (plex_user_id has a
+          // UNIQUE constraint in the schema, so duplicates are not valid input)
+          fc.uniqueArray(
             fc.record({
               plexUserId: fc.string({ minLength: 1, maxLength: 50 }),
               plexUsername: fc.string({ minLength: 1, maxLength: 50 }),
               plexToken: fc.string({ minLength: 10, maxLength: 100 }),
             }),
-            { minLength: 2, maxLength: 5 }
+            { minLength: 2, maxLength: 5, selector: (user) => user.plexUserId }
           ),
           // Generate playlists per user
           fc.integer({ min: 1, max: 3 }),

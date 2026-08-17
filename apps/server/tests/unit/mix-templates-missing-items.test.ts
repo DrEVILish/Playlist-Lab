@@ -306,6 +306,85 @@ describe('Mix Templates - Missing Items Error Handling', () => {
     });
   });
 
+  describe('Artist/Album Mix - maxTracksPerArtist / maxTracksPerAlbum caps', () => {
+    it('should cap tracks pulled from each artist at maxTracksPerArtist', async () => {
+      // 3 artists, each with 5 available tracks, but maxTracksPerArtist=2 should mean
+      // the generated mix never contains more than 2 tracks from any single artist
+      // (i.e. at most 6 tracks total here), even though trackCount allows for more.
+      const template = db.createMixTemplate(testUserId, 'Capped Artist Mix', null, 'artist', {
+        trackCount: 50,
+        artistIds: ['artistA', 'artistB', 'artistC'],
+        maxTracksPerArtist: 2
+      });
+
+      (MockedPlexClient.prototype.getArtistPopularTracks as jest.Mock) = jest.fn()
+        .mockImplementation((_libraryId: string, artistId: string, count: number) => {
+          const tracks = Array.from({ length: 5 }, (_, i) => ({
+            ratingKey: `${artistId}-track${i}`,
+            grandparentTitle: artistId
+          }));
+          // Simulate the real Plex client honoring the requested count, so the cap is
+          // exercised the same way it would be in production.
+          return Promise.resolve(tracks.slice(0, count));
+        });
+
+      (MockedPlexClient.prototype.buildTrackUri as any) = jest.fn((key: string) => `server://track/${key}`);
+      (MockedPlexClient.prototype.buildLibraryUri as any) = jest.fn(() => 'server://library/1');
+      (MockedPlexClient.prototype.createPlaylist as jest.Mock) = jest.fn().mockResolvedValue({
+        ratingKey: 'playlist123',
+        title: 'Test Playlist'
+      });
+
+      const response = await request(app)
+        .post(`/api/mix-templates/${template.id}/generate`)
+        .send({ playlistName: 'Test Playlist' })
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.trackCount).toBeLessThanOrEqual(6);
+
+      // Each artist call should have requested at most maxTracksPerArtist tracks
+      const calls = (MockedPlexClient.prototype.getArtistPopularTracks as jest.Mock).mock.calls;
+      for (const call of calls) {
+        expect(call[2]).toBeLessThanOrEqual(2);
+      }
+    });
+
+    it('should cap tracks pulled from each album at maxTracksPerAlbum', async () => {
+      const template = db.createMixTemplate(testUserId, 'Capped Album Mix', null, 'album', {
+        trackCount: 50,
+        albumIds: ['albumA', 'albumB', 'albumC'],
+        maxTracksPerAlbum: 2
+      });
+
+      (MockedPlexClient.prototype.getAlbumTracks as jest.Mock) = jest.fn()
+        .mockImplementation((albumId: string) => {
+          const tracks = Array.from({ length: 5 }, (_, i) => ({
+            ratingKey: `${albumId}-track${i}`,
+            parentTitle: albumId
+          }));
+          return Promise.resolve(tracks);
+        });
+
+      (MockedPlexClient.prototype.buildTrackUri as any) = jest.fn((key: string) => `server://track/${key}`);
+      (MockedPlexClient.prototype.buildLibraryUri as any) = jest.fn(() => 'server://library/1');
+      (MockedPlexClient.prototype.createPlaylist as jest.Mock) = jest.fn().mockResolvedValue({
+        ratingKey: 'playlist123',
+        title: 'Test Playlist'
+      });
+
+      const response = await request(app)
+        .post(`/api/mix-templates/${template.id}/generate`)
+        .send({ playlistName: 'Test Playlist' })
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      // 3 albums x maxTracksPerAlbum(2) = 6 tracks max, even though each album has 5
+      // available and trackCount allows up to 50.
+      expect(response.body.trackCount).toBeLessThanOrEqual(6);
+    });
+  });
+
   describe('Genre/Mood/Decade Mix - No Matching Tracks', () => {
     it('should handle genre mix with no matching tracks', async () => {
       const template = db.createMixTemplate(testUserId, 'Genre Mix', null, 'genre', {
@@ -314,10 +393,13 @@ describe('Mix Templates - Missing Items Error Handling', () => {
       });
 
       // Mock MixService to return empty result
-      const mockGenerateCustomMix = jest.fn().mockResolvedValue({
+      // Note: mutate the existing automocked prototype method's implementation rather than
+      // reassigning it, since the route module holds a MixService singleton created at import
+      // time; a full reassignment of the prototype property does not affect that already
+      // constructed instance under jest's automock, leaving it undefined at call time.
+      (MockedMixService.prototype.generateCustomMix as jest.Mock).mockResolvedValue({
         trackKeys: []
       });
-      MockedMixService.prototype.generateCustomMix = mockGenerateCustomMix;
 
       const response = await request(app)
         .post(`/api/mix-templates/${template.id}/generate`)
@@ -325,8 +407,11 @@ describe('Mix Templates - Missing Items Error Handling', () => {
         .expect(500);
 
       expect(response.body.error).toBeDefined();
-      expect(response.body.error.message).toContain('No tracks found');
-      expect(response.body.error.message).toContain('may no longer exist');
+      // The specific "no tracks matched" message (naming the genre that matched nothing)
+      // should be surfaced instead of the generic fallback error.
+      expect(response.body.error.message).toContain('No tracks found matching genres');
+      expect(response.body.error.message).toContain('NonexistentGenre');
+      expect(response.body.error.message).not.toContain('may no longer exist');
     });
 
     it('should handle mood mix with no matching tracks', async () => {
@@ -335,10 +420,9 @@ describe('Mix Templates - Missing Items Error Handling', () => {
         moods: ['NonexistentMood']
       });
 
-      const mockGenerateCustomMix2 = jest.fn().mockResolvedValue({
+      (MockedMixService.prototype.generateCustomMix as jest.Mock).mockResolvedValue({
         trackKeys: []
       });
-      MockedMixService.prototype.generateCustomMix = mockGenerateCustomMix2;
 
       const response = await request(app)
         .post(`/api/mix-templates/${template.id}/generate`)
@@ -346,7 +430,70 @@ describe('Mix Templates - Missing Items Error Handling', () => {
         .expect(500);
 
       expect(response.body.error).toBeDefined();
-      expect(response.body.error.message).toContain('No tracks found');
+      expect(response.body.error.message).toContain('No tracks found matching moods');
+      expect(response.body.error.message).toContain('NonexistentMood');
+    });
+
+    it('should pass mood values to the moods filter, not the genres filter', async () => {
+      const template = db.createMixTemplate(testUserId, 'Chill Mood Mix', null, 'mood', {
+        trackCount: 50,
+        moods: ['chill', 'melancholy']
+      });
+
+      (MockedMixService.prototype.generateCustomMix as jest.Mock).mockResolvedValue({
+        trackKeys: ['track1', 'track2']
+      });
+      (MockedPlexClient.prototype.buildTrackUri as any) = jest.fn((key: string) => `server://track/${key}`);
+      (MockedPlexClient.prototype.buildLibraryUri as any) = jest.fn(() => 'server://library/1');
+      (MockedPlexClient.prototype.createPlaylist as jest.Mock) = jest.fn().mockResolvedValue({
+        ratingKey: 'playlist123',
+        title: 'Test Playlist'
+      });
+
+      const response = await request(app)
+        .post(`/api/mix-templates/${template.id}/generate`)
+        .send({ playlistName: 'Test Playlist' })
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+
+      // Mood templates should route to Plex's Mood tag filter, not the Genre filter.
+      const generateCustomMixCalls = (MockedMixService.prototype.generateCustomMix as jest.Mock).mock.calls;
+      expect(generateCustomMixCalls.length).toBe(1);
+      const passedFilters = generateCustomMixCalls[0][3];
+      expect(passedFilters.moods).toEqual(['chill', 'melancholy']);
+      expect(passedFilters.genres).toBeUndefined();
+    });
+
+    it('should build one disjoint year range per selected decade', async () => {
+      const template = db.createMixTemplate(testUserId, 'Sixties and Nineties Mix', null, 'decade', {
+        trackCount: 50,
+        decades: [1960, 1990]
+      });
+
+      (MockedMixService.prototype.generateCustomMix as jest.Mock).mockResolvedValue({
+        trackKeys: ['track1', 'track2']
+      });
+      (MockedPlexClient.prototype.buildTrackUri as any) = jest.fn((key: string) => `server://track/${key}`);
+      (MockedPlexClient.prototype.buildLibraryUri as any) = jest.fn(() => 'server://library/1');
+      (MockedPlexClient.prototype.createPlaylist as jest.Mock) = jest.fn().mockResolvedValue({
+        ratingKey: 'playlist123',
+        title: 'Test Playlist'
+      });
+
+      const response = await request(app)
+        .post(`/api/mix-templates/${template.id}/generate`)
+        .send({ playlistName: 'Test Playlist' })
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+
+      const generateCustomMixCalls = (MockedMixService.prototype.generateCustomMix as jest.Mock).mock.calls;
+      const passedFilters = generateCustomMixCalls[0][3];
+      expect(passedFilters.yearRanges).toEqual([
+        { min: 1960, max: 1969 },
+        { min: 1990, max: 1999 }
+      ]);
     });
 
     it('should warn when fewer tracks found than requested', async () => {
@@ -356,10 +503,9 @@ describe('Mix Templates - Missing Items Error Handling', () => {
       });
 
       // Mock MixService to return fewer tracks than requested
-      const mockGenerateCustomMix3 = jest.fn().mockResolvedValue({
+      (MockedMixService.prototype.generateCustomMix as jest.Mock).mockResolvedValue({
         trackKeys: ['track1', 'track2', 'track3'] // Only 3 tracks instead of 100
       });
-      MockedMixService.prototype.generateCustomMix = mockGenerateCustomMix3;
 
       (MockedPlexClient.prototype.buildTrackUri as any) = jest.fn((key: string) => `server://track/${key}`);
       (MockedPlexClient.prototype.buildLibraryUri as any) = jest.fn((libraryId: string) => 'server://library/1');
@@ -390,10 +536,9 @@ describe('Mix Templates - Missing Items Error Handling', () => {
         }
       });
 
-      const mockGenerateCustomMix4 = jest.fn().mockResolvedValue({
+      (MockedMixService.prototype.generateCustomMix as jest.Mock).mockResolvedValue({
         trackKeys: []
       });
-      MockedMixService.prototype.generateCustomMix = mockGenerateCustomMix4;
 
       const response = await request(app)
         .post(`/api/mix-templates/${template.id}/generate`)
@@ -410,9 +555,8 @@ describe('Mix Templates - Missing Items Error Handling', () => {
         customRules: {}
       });
 
-      const mockGenerateCustomMix5 = jest.fn()
+      (MockedMixService.prototype.generateCustomMix as jest.Mock)
         .mockRejectedValue(new Error('Plex API error'));
-      MockedMixService.prototype.generateCustomMix = mockGenerateCustomMix5;
 
       const response = await request(app)
         .post(`/api/mix-templates/${template.id}/generate`)

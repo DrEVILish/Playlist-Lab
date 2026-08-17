@@ -78,8 +78,12 @@ export class JobScheduler {
    * Start all registered jobs
    */
   start(): void {
+    // Reset the shutdown flag so jobs registered/started after a previous
+    // stop() actually run instead of being silently skipped forever (each
+    // job handler early-returns while isShuttingDown is true).
+    this.isShuttingDown = false;
     logger.info(`Starting ${this.jobs.size} job(s)`);
-    
+
     for (const [name, task] of this.jobs.entries()) {
       task.start();
       logger.info(`Started job: ${name}`);

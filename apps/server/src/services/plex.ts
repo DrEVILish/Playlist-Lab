@@ -11,6 +11,22 @@ import https from 'https';
 import { logger } from '../utils/logger';
 
 /**
+ * Thrown when Plex rejects the stored auth token (revoked, expired, or
+ * otherwise invalid). Distinguishable from generic errors so route handlers
+ * can respond with 401 (prompting re-login) instead of a generic 500.
+ */
+export class PlexAuthError extends Error {
+  code = 'PLEX_AUTH_INVALID';
+
+  constructor(message: string = 'Invalid or expired Plex token') {
+    super(message);
+    this.name = 'PlexAuthError';
+    // Maintain proper prototype chain when compiled down (extends Error across targets)
+    Object.setPrototypeOf(this, PlexAuthError.prototype);
+  }
+}
+
+/**
  * Plex library section
  */
 export interface PlexLibrary {
@@ -389,25 +405,39 @@ export class PlexClient {
               
               const allTracks = trackSearchResponse.data.MediaContainer.Metadata || [];
               logger.info(`[Plex] Found ${allTracks.length} tracks with title "${title}"`);
-              
-              // Match against either track artist (originalTitle) OR album artist (grandparentTitle).
-              // This covers all cases: compilations (artist in originalTitle), regular albums (artist in grandparentTitle),
-              // and tracks where the track artist differs from the album artist.
+
+              // Don't hard-filter these by artist. Compilation/soundtrack album
+              // tagging is inconsistent in practice - e.g. album artist set to
+              // the composer ("Lin-Manuel Miranda") with the true per-track
+              // performer ("Stephanie Beatriz") missing or mistagged in
+              // originalTitle. A strict artist filter here would silently
+              // discard the correct track before matching.ts's compilation-aware
+              // scoring (which allows an exact title match on a soundtrack/
+              // compilation album even without an artist match) ever sees it.
+              // Rank artist-matching candidates first, but keep the rest so
+              // matching.ts can still consider them via title-only matching.
+              // Cap defensively in case a very generic title returns a huge
+              // result set.
+              // ponytail: flat cap + naive rank, revisit with real pagination if a
+              // title regularly returns more than this many same-named tracks.
               const normalizeArtist = (a: string) => a.toLowerCase().replace(/[^a-z0-9]/g, '');
               const normalizedSearchArtist = normalizeArtist(artist);
-              
-              tracks = allTracks.filter((track: PlexTrack) => {
-                const trackArtist = track.originalTitle || '';
-                const albumArtist = track.grandparentTitle || '';
-                const normalizedTrackArtist = normalizeArtist(trackArtist);
-                const normalizedAlbumArtist = normalizeArtist(albumArtist);
-                return normalizedTrackArtist.includes(normalizedSearchArtist) || 
-                       normalizedSearchArtist.includes(normalizedTrackArtist) ||
-                       normalizedAlbumArtist.includes(normalizedSearchArtist) ||
-                       normalizedSearchArtist.includes(normalizedAlbumArtist);
-              });
-              
-              logger.info(`[Plex] Artist filter matched ${tracks.length} tracks (checking both track artist and album artist)`);
+              const artistMatches = (track: PlexTrack) => {
+                const trackArtist = normalizeArtist(track.originalTitle || '');
+                const albumArtist = normalizeArtist(track.grandparentTitle || '');
+                // Guard each side non-empty: "".includes('') / anything.includes('') is
+                // always true, which would let tracks with no originalTitle/grandparentTitle
+                // match every search artist.
+                return (!!trackArtist && (trackArtist.includes(normalizedSearchArtist) || normalizedSearchArtist.includes(trackArtist))) ||
+                       (!!albumArtist && (albumArtist.includes(normalizedSearchArtist) || normalizedSearchArtist.includes(albumArtist)));
+              };
+
+              const ranked = [...allTracks].sort((a: PlexTrack, b: PlexTrack) =>
+                Number(artistMatches(b)) - Number(artistMatches(a))
+              );
+              tracks = ranked.slice(0, 50);
+
+              logger.info(`[Plex] Title-only search returning ${tracks.length} candidates (${allTracks.filter(artistMatches).length} artist-matching) for scoring`);
             }
           } catch (err: any) {
             logger.warn(`[Plex] Artist-first search failed: ${err.message}, falling back to direct filter`);
@@ -494,7 +524,7 @@ export class PlexClient {
           throw new Error('Plex server is unreachable');
         }
         if (error.response?.status === 401) {
-          throw new Error('Invalid Plex token');
+          throw new PlexAuthError('Invalid Plex token');
         }
         if (error.isAxiosError) {
           throw new Error(`Failed to search tracks: ${error.message}`);
@@ -604,7 +634,7 @@ export class PlexClient {
         throw new Error('Plex server is unreachable');
       }
       if (error.response?.status === 401) {
-        throw new Error('Invalid Plex token');
+        throw new PlexAuthError('Invalid Plex token');
       }
       if (error.isAxiosError) {
         throw new Error(`Failed to get libraries: ${error.message}`);
@@ -651,7 +681,7 @@ export class PlexClient {
           throw new Error('Plex server is unreachable');
         }
         if (error.response?.status === 401) {
-          throw new Error('Invalid Plex token');
+          throw new PlexAuthError('Invalid Plex token');
         }
         if (error.response?.status === 404) {
           throw new Error('Library not found');
@@ -725,7 +755,7 @@ export class PlexClient {
                 throw new Error('Plex server is unreachable');
               }
               if (error.response?.status === 401) {
-                throw new Error('Invalid Plex token');
+                throw new PlexAuthError('Invalid Plex token');
               }
               if (error.response?.status === 404) {
                 throw new Error('Library not found');
@@ -760,7 +790,7 @@ export class PlexClient {
         throw new Error('Plex server is unreachable');
       }
       if (error.response?.status === 401) {
-        throw new Error('Invalid Plex token');
+        throw new PlexAuthError('Invalid Plex token');
       }
       if (error.isAxiosError) {
         throw new Error(`Failed to get play history: ${error.message}`);
@@ -785,7 +815,7 @@ export class PlexClient {
         throw new Error('Plex server is unreachable');
       }
       if (error.response?.status === 401) {
-        throw new Error('Invalid Plex token');
+        throw new PlexAuthError('Invalid Plex token');
       }
       if (error.isAxiosError) {
         throw new Error(`Failed to get playlists: ${error.message}`);
@@ -831,7 +861,7 @@ export class PlexClient {
             throw new Error('Plex server is unreachable');
           }
           if (error.response?.status === 401) {
-            throw new Error('Invalid Plex token');
+            throw new PlexAuthError('Invalid Plex token');
           }
           if (error.isAxiosError) {
             throw new Error(`Failed to create playlist: ${error.message}`);
@@ -855,7 +885,7 @@ export class PlexClient {
         throw new Error('Plex server is unreachable');
       }
       if (error.response?.status === 401) {
-        throw new Error('Invalid Plex token');
+        throw new PlexAuthError('Invalid Plex token');
       }
       if (error.response?.status === 404) {
         throw new Error('Playlist not found');
@@ -882,7 +912,7 @@ export class PlexClient {
         throw new Error('Plex server is unreachable');
       }
       if (error.response?.status === 401) {
-        throw new Error('Invalid Plex token');
+        throw new PlexAuthError('Invalid Plex token');
       }
       if (error.response?.status === 404) {
         throw new Error('Playlist not found');
@@ -943,7 +973,7 @@ export class PlexClient {
             throw new Error('Plex server is unreachable');
           }
           if (error.response?.status === 401) {
-            throw new Error('Invalid Plex token');
+            throw new PlexAuthError('Invalid Plex token');
           }
           if (error.response?.status === 404) {
             throw new Error('Playlist not found');
@@ -997,7 +1027,7 @@ export class PlexClient {
         throw new Error('Plex server is unreachable');
       }
       if (error.response?.status === 401) {
-        throw new Error('Invalid Plex token');
+        throw new PlexAuthError('Invalid Plex token');
       }
       if (error.response?.status === 404) {
         throw new Error('Playlist or item not found');
@@ -1027,7 +1057,7 @@ export class PlexClient {
         throw new Error('Plex server is unreachable');
       }
       if (error.response?.status === 401) {
-        throw new Error('Invalid Plex token');
+        throw new PlexAuthError('Invalid Plex token');
       }
       if (error.response?.status === 404) {
         throw new Error('Playlist or item not found');
@@ -1051,7 +1081,7 @@ export class PlexClient {
         throw new Error('Plex server is unreachable');
       }
       if (error.response?.status === 401) {
-        throw new Error('Invalid Plex token');
+        throw new PlexAuthError('Invalid Plex token');
       }
       if (error.response?.status === 404) {
         throw new Error('Playlist not found');
@@ -1923,7 +1953,7 @@ export class PlexClient {
       logger.error('Failed to get Plex friends', { error: error.message });
       
       if (error.response?.status === 401) {
-        throw new Error('Invalid Plex token');
+        throw new PlexAuthError('Invalid Plex token');
       }
       
       throw new Error('Failed to retrieve Plex friends');
@@ -2060,7 +2090,7 @@ export class PlexClient {
       });
       
       if (error.response?.status === 401) {
-        throw new Error('Authentication failed - invalid token');
+        throw new PlexAuthError('Authentication failed - invalid token');
       }
       
       throw new Error(error.message || 'Failed to retrieve friend playlists');
@@ -2203,7 +2233,7 @@ export class PlexClient {
       }
       
       if (error.response?.status === 401) {
-        throw new Error('Authentication failed - invalid token');
+        throw new PlexAuthError('Authentication failed - invalid token');
       }
       
       throw new Error(error.message || 'Failed to share playlist');

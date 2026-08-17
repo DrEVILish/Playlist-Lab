@@ -1,10 +1,5 @@
 /* Export Playlists Page - Column Layout */
 
-/* Reduce h1 bottom margin for tighter layout */
-.page-container:has(.export-layout) > h1 {
-  margin-bottom: 0.5rem;
-}
-
 .page-container:has(.export-layout) {
   flex: 1;
   min-height: 0;

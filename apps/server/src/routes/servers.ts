@@ -1,9 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { requireAuth } from '../middleware/auth';
-import { createValidationError, createInternalError, createNotFoundError } from '../middleware/error-handler';
+import { createValidationError, createInternalError, createNotFoundError, createAuthError } from '../middleware/error-handler';
 import { logger } from '../utils/logger';
 import { AuthService } from '../services/auth';
-import { PlexService } from '../services/plex';
+import { PlexService, PlexAuthError } from '../services/plex';
 
 const router = Router();
 const authService = new AuthService(
@@ -156,11 +156,14 @@ router.get('/libraries', requireAuth, async (req: Request, res: Response, next: 
 
     res.json({ libraries });
   } catch (error) {
-    logger.error('Failed to get libraries', { 
+    logger.error('Failed to get libraries', {
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
-      userId: req.session.userId 
+      userId: req.session.userId
     });
+    if (error instanceof PlexAuthError) {
+      return next(createAuthError('Your Plex session has expired or been revoked. Please log in again.'));
+    }
     next(createInternalError('Failed to retrieve music libraries'));
   }
 });
@@ -210,11 +213,14 @@ router.get('/library-folders', requireAuth, async (req: Request, res: Response, 
 
     res.json({ folders });
   } catch (error) {
-    logger.error('Failed to get library folders', { 
+    logger.error('Failed to get library folders', {
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
-      userId: req.session.userId 
+      userId: req.session.userId
     });
+    if (error instanceof PlexAuthError) {
+      return next(createAuthError('Your Plex session has expired or been revoked. Please log in again.'));
+    }
     next(createInternalError('Failed to retrieve library folders'));
   }
 });
@@ -270,69 +276,9 @@ router.post('/scan-library', requireAuth, async (req: Request, res: Response, ne
       path
     });
 
-    res.json({ 
-      success: true, 
-      message
-    });
-  } catch (error) {
-    logger.error('Failed to scan library', { 
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-      userId: req.session.userId 
-    });
-    next(createInternalError('Failed to trigger library scan'));
-  }
-});
-
-export default router;
-
-/**
- * POST /api/servers/scan-library
- * Trigger a scan/refresh of the selected library
- */
-router.post('/scan-library', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.session.userId!;
-    const db = req.dbService!;
-
-    // Get user to retrieve Plex token
-    const user = db.getUserById(userId);
-    if (!user) {
-      return next(createNotFoundError('User not found'));
-    }
-
-    // Get user's selected server
-    const userServer = db.getUserServer(userId);
-    if (!userServer) {
-      logger.warn('No server selected for user', { userId });
-      return next(createValidationError('No server selected. Please select a server first.'));
-    }
-
-    if (!userServer.library_id) {
-      logger.warn('No library selected for user', { userId });
-      return next(createValidationError('No library selected. Please select a library first.'));
-    }
-
-    logger.info('Triggering library scan', {
-      userId,
-      serverUrl: userServer.server_url,
-      libraryId: userServer.library_id,
-      libraryName: userServer.library_name
-    });
-
-    // Trigger library scan
-    const plexService = new PlexService(userServer.server_url, user.plex_token);
-    await plexService.scanLibrary(userServer.library_id);
-
-    logger.info('Library scan triggered successfully', {
-      userId,
-      libraryId: userServer.library_id,
-      libraryName: userServer.library_name
-    });
-
     res.json({
       success: true,
-      message: `Scanning library "${userServer.library_name}". This may take a few minutes.`
+      message
     });
   } catch (error) {
     logger.error('Failed to scan library', {
@@ -340,7 +286,12 @@ router.post('/scan-library', requireAuth, async (req: Request, res: Response, ne
       stack: error instanceof Error ? error.stack : undefined,
       userId: req.session.userId
     });
+    if (error instanceof PlexAuthError) {
+      return next(createAuthError('Your Plex session has expired or been revoked. Please log in again.'));
+    }
     next(createInternalError('Failed to trigger library scan'));
   }
 });
+
+export default router;
 

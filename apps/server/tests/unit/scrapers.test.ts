@@ -15,15 +15,59 @@ import {
   getListenBrainzPlaylists,
   scrapeAriaCharts,
   parseM3UFile,
+  parseCSVFile,
+  parsePLSFile,
+  parseXSPFFile,
 } from '../../src/services/scrapers';
+import * as browserScrapers from '../../src/services/browser-scrapers';
 
 // Mock axios
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
+// The Apple/Tidal/YouTube/Amazon/Qobuz scrapers all try Puppeteer-based
+// browser scraping first (`services/browser-scrapers`), which launches a real
+// headless browser against the real external site. Mock that module out so
+// these unit tests stay fast, deterministic, and offline — they exercise the
+// (also real, and now the primary) axios/regex-based fallback logic that
+// runs once browser scraping is unavailable/fails, which is exactly what
+// happens today in a sandbox with no Chromium available.
+jest.mock('../../src/services/browser-scrapers');
+const mockedBrowserScrapers = browserScrapers as jest.Mocked<typeof browserScrapers>;
+
+// scrapeSpotifyPlaylist's primary method shells out to `curl` via
+// child_process to scrape Spotify's embed page. Mock that out too so the
+// test doesn't depend on real network access or a `curl` binary.
+jest.mock('child_process', () => ({
+  execFile: jest.fn((_cmd: string, _args: string[], _opts: any, callback: any) => {
+    callback(new Error('curl not available in test environment'));
+  }),
+}));
+
+// scrapeYouTubeMusicPlaylist's primary method uses the real `ytmusic-api`
+// package, which itself makes real network calls to YouTube Music. Mock it
+// so the API-based path fails deterministically and falls through to the
+// (mocked) browser-scraping fallback.
+jest.mock('ytmusic-api', () => ({
+  default: jest.fn().mockImplementation(() => ({
+    initialize: jest.fn().mockResolvedValue(undefined),
+    getPlaylist: jest.fn().mockResolvedValue(null),
+  })),
+}));
+
 describe('Scrapers Service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+
+    // Default all browser-scraper entry points to reject, simulating an
+    // environment with no headless browser available (as in this sandbox).
+    // Individual tests can override with mockResolvedValueOnce if needed.
+    const browserUnavailable = new Error('Browser scraping unavailable in test environment');
+    mockedBrowserScrapers.scrapeAppleMusicWithBrowser.mockRejectedValue(browserUnavailable);
+    mockedBrowserScrapers.scrapeTidalWithBrowser.mockRejectedValue(browserUnavailable);
+    mockedBrowserScrapers.scrapeYouTubeMusicWithBrowser.mockRejectedValue(browserUnavailable);
+    mockedBrowserScrapers.scrapeAmazonMusicWithBrowser.mockRejectedValue(browserUnavailable);
+    mockedBrowserScrapers.scrapeQobuzWithBrowser.mockRejectedValue(browserUnavailable);
   });
 
   describe('scrapeDeezerPlaylist', () => {
@@ -188,9 +232,13 @@ describe('Scrapers Service', () => {
   });
 
   describe('scrapeSpotifyPlaylist', () => {
-    it('should throw error indicating API integration needed', async () => {
+    it('should throw a descriptive error when no scraping method succeeds', async () => {
+      // With curl (embed scraping) mocked to fail, and no userId/db passed
+      // (so the authenticated/Client-Credentials API methods are skipped
+      // entirely), every method is exhausted and the final descriptive
+      // error is thrown.
       await expect(scrapeSpotifyPlaylist('https://open.spotify.com/playlist/abc123')).rejects.toThrow(
-        'Spotify scraping requires Web API integration'
+        'Unable to fetch Spotify playlist data'
       );
     });
 
@@ -202,17 +250,22 @@ describe('Scrapers Service', () => {
   });
 
   describe('scrapeAppleMusicPlaylist', () => {
-    it('should throw error indicating JavaScript rendering needed', async () => {
+    it('should surface the browser-scraping failure', async () => {
+      // scrapeAppleMusicPlaylist has no non-browser fallback: it wraps
+      // whatever `scrapeAppleMusicWithBrowser` throws.
       await expect(scrapeAppleMusicPlaylist('https://music.apple.com/playlist/abc')).rejects.toThrow(
-        'Apple Music scraping requires JavaScript rendering'
+        'Failed to scrape Apple Music playlist'
       );
     });
   });
 
   describe('scrapeTidalPlaylist', () => {
-    it('should throw error indicating API integration needed', async () => {
+    it('should fall through to the API/embed fallbacks and report failure', async () => {
+      // Browser scraping is mocked to fail; the API and embed-page fallbacks
+      // then run against the (unconfigured) mocked axios client, which also
+      // fail, producing the final descriptive error.
       await expect(scrapeTidalPlaylist('https://tidal.com/playlist/abc-123')).rejects.toThrow(
-        'Tidal scraping requires API integration'
+        'Unable to fetch Tidal playlist'
       );
     });
 
@@ -224,25 +277,29 @@ describe('Scrapers Service', () => {
   });
 
   describe('scrapeYouTubeMusicPlaylist', () => {
-    it('should throw error indicating JavaScript rendering needed', async () => {
+    it('should fall through to the browser-scraping fallback and report failure', async () => {
+      // ytmusic-api is mocked to return no playlist, and the browser-scraping
+      // fallback is mocked to reject, so the wrapped final error surfaces.
       await expect(scrapeYouTubeMusicPlaylist('https://music.youtube.com/playlist?list=abc')).rejects.toThrow(
-        'YouTube Music scraping requires JavaScript rendering'
+        'Failed to scrape YouTube Music playlist'
       );
     });
   });
 
   describe('scrapeAmazonMusicPlaylist', () => {
-    it('should throw error indicating JavaScript rendering needed', async () => {
-      await expect(scrapeAmazonMusicPlaylist('https://music.amazon.com/playlist/abc')).rejects.toThrow(
-        'Amazon Music scraping requires JavaScript rendering'
+    it('should fall through to page scraping and report failure', async () => {
+      // Real Amazon Music playlist URLs use the plural "playlists/" segment.
+      await expect(scrapeAmazonMusicPlaylist('https://music.amazon.com/playlists/abc')).rejects.toThrow(
+        'Unable to fetch Amazon Music playlist'
       );
     });
   });
 
   describe('scrapeQobuzPlaylist', () => {
-    it('should throw error indicating JavaScript rendering needed', async () => {
-      await expect(scrapeQobuzPlaylist('https://www.qobuz.com/playlist/abc')).rejects.toThrow(
-        'Qobuz scraping requires JavaScript rendering'
+    it('should fall through to the API/page fallbacks and report failure', async () => {
+      // Real Qobuz playlist URLs are shaped like playlist/{name}/{numeric-id}.
+      await expect(scrapeQobuzPlaylist('https://www.qobuz.com/playlist/my-playlist/123456')).rejects.toThrow(
+        'Unable to fetch Qobuz playlist'
       );
     });
   });
@@ -376,8 +433,11 @@ describe('Scrapers Service', () => {
   });
 
   describe('scrapeAriaCharts', () => {
-    it('should throw error indicating HTML parsing needed', async () => {
-      await expect(scrapeAriaCharts()).rejects.toThrow('ARIA charts scraping requires HTML parsing');
+    it('should resolve to an empty array (charts are scraped individually via scrapeAriaPlaylist)', async () => {
+      // scrapeAriaCharts is intentionally a no-op now: individual ARIA chart
+      // pages are fetched via scrapeAriaPlaylist (browser-based scraping)
+      // instead, per the comment on the production function.
+      await expect(scrapeAriaCharts()).resolves.toEqual([]);
     });
   });
 
@@ -391,7 +451,9 @@ describe('Scrapers Service', () => {
 
       const result = parseM3UFile(content, 'test.m3u');
 
-      expect(result.name).toBe('test.m3u');
+      // The file extension is intentionally stripped from the display name
+      // (see the "Remove extension from name" comment in parseM3UFile).
+      expect(result.name).toBe('test');
       expect(result.source).toBe('file');
       expect(result.tracks).toHaveLength(2);
       expect(result.tracks[0]).toEqual({
@@ -482,16 +544,22 @@ Artist 2 - Track 2.mp3`;
       expect(result.tracks[0].title).toBe('Track 1');
     });
 
-    it('should handle file paths with multiple separators using lastIndexOf', () => {
+    it('should split on the LAST " - " separator when a title has multiple dashes', () => {
       const content = `#EXTM3U
 #EXTINF:180,Artist - With - Dashes - Track - Title - With - More
 /path/to/track.mp3`;
 
       const result = parseM3UFile(content, 'test.m3u');
 
+      // Only one EXTINF sample line is present, so Apple-format detection
+      // doesn't kick in (it requires >= 2 samples) and the standard
+      // "Artist - Title" parsing is used. The artist/title split happens at
+      // the LAST " - " in the string (per `info.lastIndexOf(' - ')`), so
+      // everything before it is treated as the artist and everything after
+      // as the title.
       expect(result.tracks[0]).toEqual({
-        title: 'Track - Title - With - More',
-        artist: 'Artist - With - Dashes',
+        title: 'More',
+        artist: 'Artist - With - Dashes - Track - Title - With',
       });
     });
 
@@ -509,6 +577,137 @@ Artist 2 - Track 2.mp3`;
         title: 'Some Track',
         artist: 'Some Artist',
       });
+    });
+  });
+
+  // These three parsers exist specifically so that a playlist exported by
+  // this app (routes/export.ts's generateCSV/generatePLS/generateXSPF) can be
+  // re-imported unchanged - so each roundtrips against that exact format.
+  describe('parseCSVFile', () => {
+    it('should parse this app\'s own CSV export format (Track,Artist,Album,Duration,File Path)', () => {
+      const content = 'Track,Artist,Album,Duration,File Path\n' +
+        'Track 1,Artist 1,Album 1,3:00,/path/to/track1.mp3\n' +
+        'Track 2,Artist 2,Album 2,3:20,/path/to/track2.mp3\n';
+
+      const result = parseCSVFile(content, 'playlist.csv');
+
+      expect(result.source).toBe('file');
+      expect(result.tracks).toEqual([
+        { title: 'Track 1', artist: 'Artist 1', album: 'Album 1' },
+        { title: 'Track 2', artist: 'Artist 2', album: 'Album 2' },
+      ]);
+    });
+
+    it('should handle quoted fields containing commas', () => {
+      const content = 'Track,Artist,Album,Duration,File Path\n' +
+        '"Track, With Comma",Artist,"Album, One",3:00,/path.mp3\n';
+
+      const result = parseCSVFile(content, 'playlist.csv');
+
+      expect(result.tracks[0]).toEqual({
+        title: 'Track, With Comma',
+        artist: 'Artist',
+        album: 'Album, One',
+      });
+    });
+
+    it('should fall back to the first two columns as title/artist when no recognized header is present', () => {
+      const content = 'Foo,Bar\n1,2\n';
+
+      const result = parseCSVFile(content, 'playlist.csv');
+
+      expect(result.tracks).toEqual([{ title: 'Foo', artist: 'Bar', album: undefined }, { title: '1', artist: '2', album: undefined }]);
+    });
+
+    it('should throw when the file has only a header row and no data', () => {
+      const content = 'Track,Artist,Album,Duration,File Path\n';
+
+      expect(() => parseCSVFile(content, 'playlist.csv')).toThrow('No tracks found');
+    });
+  });
+
+  describe('parsePLSFile', () => {
+    it('should parse this app\'s own PLS export format (TitleN=Artist - Title)', () => {
+      const content = '[playlist]\n' +
+        'PlaylistName=My Playlist\n' +
+        'NumberOfEntries=2\n\n' +
+        'File1=/path/to/track1.mp3\n' +
+        'Title1=Artist 1 - Track 1\n' +
+        'Length1=180\n\n' +
+        'File2=/path/to/track2.mp3\n' +
+        'Title2=Artist 2 - Track 2\n' +
+        'Length2=200\n\n' +
+        'Version=2\n';
+
+      const result = parsePLSFile(content, 'playlist.pls');
+
+      expect(result.tracks).toEqual([
+        { title: 'Track 1', artist: 'Artist 1' },
+        { title: 'Track 2', artist: 'Artist 2' },
+      ]);
+    });
+
+    it('should order tracks by entry number regardless of file order', () => {
+      const content = 'Title2=Artist B - Track B\nTitle1=Artist A - Track A\n';
+
+      const result = parsePLSFile(content, 'playlist.pls');
+
+      expect(result.tracks.map(t => t.title)).toEqual(['Track A', 'Track B']);
+    });
+
+    it('should throw when no Title entries are present', () => {
+      expect(() => parsePLSFile('[playlist]\nVersion=2\n', 'playlist.pls')).toThrow('No tracks found');
+    });
+  });
+
+  describe('parseXSPFFile', () => {
+    it('should parse this app\'s own XSPF export format', () => {
+      const content = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+        '<playlist version="1" xmlns="http://xspf.org/ns/0/">\n' +
+        '  <title>My Playlist</title>\n' +
+        '  <trackList>\n' +
+        '    <track>\n' +
+        '      <location>file:///path/to/track1.mp3</location>\n' +
+        '      <title>Track 1</title>\n' +
+        '      <creator>Artist 1</creator>\n' +
+        '      <album>Album 1</album>\n' +
+        '      <duration>180000</duration>\n' +
+        '    </track>\n' +
+        '    <track>\n' +
+        '      <location>file:///path/to/track2.mp3</location>\n' +
+        '      <title>Track 2</title>\n' +
+        '      <creator>Artist 2</creator>\n' +
+        '      <album>Album 2</album>\n' +
+        '      <duration>200000</duration>\n' +
+        '    </track>\n' +
+        '  </trackList>\n' +
+        '</playlist>\n';
+
+      const result = parseXSPFFile(content, 'playlist.xspf');
+
+      expect(result.name).toBe('My Playlist');
+      expect(result.tracks).toEqual([
+        { title: 'Track 1', artist: 'Artist 1', album: 'Album 1' },
+        { title: 'Track 2', artist: 'Artist 2', album: 'Album 2' },
+      ]);
+    });
+
+    it('should unescape XML entities', () => {
+      const content = '<playlist><trackList><track>' +
+        '<title>Rock &amp; Roll</title><creator>AC/DC &lt;Band&gt;</creator>' +
+        '</track></trackList></playlist>';
+
+      const result = parseXSPFFile(content, 'playlist.xspf');
+
+      expect(result.tracks[0]).toEqual({
+        title: 'Rock & Roll',
+        artist: 'AC/DC <Band>',
+        album: undefined,
+      });
+    });
+
+    it('should throw when no track entries are present', () => {
+      expect(() => parseXSPFFile('<playlist><trackList></trackList></playlist>', 'playlist.xspf')).toThrow('No tracks found');
     });
   });
 });

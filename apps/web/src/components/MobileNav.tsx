@@ -8,9 +8,6 @@ export const MobileNav: FC = () => {
   const { user } = useAuth();
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
-  const [isManageOpen, setIsManageOpen] = useState(
-    location.pathname.startsWith('/playlists/') || location.pathname === '/playlists'
-  );
 
   // Close menu when route changes
   useEffect(() => {
@@ -30,19 +27,15 @@ export const MobileNav: FC = () => {
   }, [isOpen]);
 
   const navItems = [
-    { path: '/', label: 'Dashboard' },
+    { path: '/', label: 'Home' },
     { path: '/import', label: 'Import' },
     { path: '/generate', label: 'Generate Mixes' },
+    { path: '/queue', label: 'Queue' },
     { path: '/schedules', label: 'Schedules' },
+    { path: '/playlists/home-users', label: 'Plex Home Users' },
+    { path: '/cross-import', label: 'Export to YouTube' },
     { path: '/settings', label: 'Settings' },
     ...(user?.isAdmin ? [{ path: '/admin', label: 'Admin' }] : []),
-  ];
-
-  const managePlaylistsItems = [
-    { path: '/playlists/edit', label: 'Edit Playlists' },
-    { path: '/playlists/share', label: 'Share Playlists' },
-    { path: '/playlists/backup', label: 'Backup & Restore' },
-    { path: '/playlists/missing', label: 'Missing Tracks' },
   ];
 
   return (
@@ -89,35 +82,6 @@ export const MobileNav: FC = () => {
               {item.label}
             </NavLink>
           ))}
-
-          <div className="mobile-nav-section">
-            <button
-              className="mobile-nav-section-toggle"
-              onClick={() => setIsManageOpen(!isManageOpen)}
-            >
-              <span>Manage Plex Playlists</span>
-              <span className="mobile-nav-section-icon">
-                {isManageOpen ? '▼' : '▶'}
-              </span>
-            </button>
-            {isManageOpen && (
-              <div className="mobile-nav-section-items">
-                {managePlaylistsItems.map((item) => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    className={({ isActive }) =>
-                      `mobile-nav-link mobile-nav-link-nested ${
-                        isActive ? 'mobile-nav-link-active' : ''
-                      }`
-                    }
-                  >
-                    {item.label}
-                  </NavLink>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
       </nav>
     </>

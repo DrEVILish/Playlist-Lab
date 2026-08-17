@@ -1,10 +1,21 @@
 import { Router, Request, Response } from 'express';
+import crypto from 'crypto';
 import { requireAuth } from '../middleware/auth';
 import { logger } from '../utils/logger';
 import { encrypt, decrypt } from '../utils/encryption';
 import { configService } from '../config';
 
 const router = Router();
+
+// Extend session type with a short-lived CSRF nonce for the Spotify OAuth
+// `state` parameter (standard OAuth CSRF hardening). Stored server-side on
+// the user's session at /login time and validated at /callback time instead
+// of trusting a raw userId round-tripped through the `state` param.
+declare module 'express-session' {
+  interface SessionData {
+    spotifyOAuthState?: string;
+  }
+}
 
 // Spotify OAuth configuration
 // Users provide their own Spotify app credentials through the UI
@@ -47,8 +58,9 @@ router.get('/login', requireAuth, (req: Request, res: Response) => {
     ).get(userId);
     
     if (!user?.spotify_client_id || !user?.spotify_client_secret) {
-      return res.status(500).json({ 
-        error: 'Spotify credentials not configured. Please provide your Client ID and Client Secret.' 
+      logger.warn('[Spotify] Login attempted without configured credentials', { userId });
+      return res.status(500).json({
+        error: 'Spotify credentials not configured. Please provide your Client ID and Client Secret.'
       });
     }
     
@@ -85,10 +97,17 @@ router.get('/login', requireAuth, (req: Request, res: Response) => {
     process.env.SPOTIFY_CLIENT_SECRET = clientSecret;
     
     const scopes = 'playlist-read-private playlist-read-collaborative user-library-read';
-    
+
     // Log the redirect URI being used for debugging
     logger.info('Spotify OAuth redirect URI', { redirectUri: getSpotifyRedirectUri(), userId });
-    
+
+    // Generate a random CSRF nonce for the `state` param and bind it to this
+    // session. The callback validates the returned state against this value
+    // (and identifies the user from the session, not from the state param)
+    // instead of trusting a raw userId round-tripped through `state`.
+    const oauthState = crypto.randomBytes(32).toString('hex');
+    req.session.spotifyOAuthState = oauthState;
+
     // Use authorization code flow (response_type=code)
     // This returns an authorization code that we exchange for tokens
     const authUrl = `https://accounts.spotify.com/authorize?` +
@@ -96,12 +115,23 @@ router.get('/login', requireAuth, (req: Request, res: Response) => {
       `client_id=${clientId}&` +
       `scope=${encodeURIComponent(scopes)}&` +
       `redirect_uri=${encodeURIComponent(getSpotifyRedirectUri())}&` +
-      `state=${userId}&` +
+      `state=${oauthState}&` +
       `show_dialog=true`;
-    
+
     logger.info('Generated Spotify auth URL', { authUrl: authUrl.replace(clientId, 'CLIENT_ID_HIDDEN'), userId });
-    
-    return res.json({ authUrl });
+
+    // Persist the nonce before responding so it's guaranteed to be available
+    // when the callback request comes back in (mirrors the explicit
+    // session.save() pattern used elsewhere in the auth flow).
+    req.session.save((saveErr) => {
+      if (saveErr) {
+        logger.error('Failed to save Spotify OAuth state to session', { error: saveErr, userId });
+        res.status(500).json({ error: 'Failed to initiate Spotify login' });
+        return;
+      }
+      res.json({ authUrl });
+    });
+    return;
   } catch (err) {
     logger.error('Failed to initiate Spotify login', { error: err });
     return res.status(500).json({ error: 'Failed to initiate Spotify login' });
@@ -193,14 +223,31 @@ router.get('/callback', async (req: Request, res: Response) => {
     if (!code || typeof code !== 'string') {
       return redirectToImport('error', 'no_code');
     }
-    
-    // Get user ID from state parameter
-    const userId = state ? parseInt(state as string) : null;
-    
-    if (!userId) {
+
+    // Validate the `state` param against the nonce stored server-side on this
+    // session at /login time (standard OAuth CSRF hardening — previously
+    // `state` was just the raw userId, which a third party could forge to
+    // have their authorization code exchanged into an arbitrary user's
+    // account). The user is identified from the session itself, never from
+    // the `state` param.
+    const expectedState = req.session.spotifyOAuthState;
+    if (!expectedState || typeof state !== 'string' || state !== expectedState) {
+      logger.warn('Spotify OAuth callback state mismatch', {
+        hasExpectedState: !!expectedState,
+        sessionId: req.sessionID,
+      });
       return redirectToImport('error', 'invalid_state');
     }
-    
+
+    // One-time use: clear the nonce now that it's been validated
+    delete req.session.spotifyOAuthState;
+
+    const userId = req.session.userId;
+    if (!userId) {
+      logger.warn('Spotify OAuth callback with no authenticated session', { sessionId: req.sessionID });
+      return redirectToImport('error', 'not_authenticated');
+    }
+
     // Get credentials from database
     const dbService = req.dbService || (req.app as any).get('dbService');
     if (!dbService) {

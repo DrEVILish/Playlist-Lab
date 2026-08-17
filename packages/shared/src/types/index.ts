@@ -113,6 +113,12 @@ export interface Schedule {
   startDate: string;
   lastRun?: number;
   config?: any;
+  /** Source service the playlist/chart originates from, e.g. 'spotify', 'deezer', 'billboard' */
+  source?: string;
+  /** Link to the original playlist/chart on its source service, if known */
+  sourceUrl?: string;
+  /** Unix timestamp (seconds) the schedule was created */
+  createdAt?: number;
 }
 
 // Missing track types

@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/auth';
 import { createValidationError, createInternalError, createNotFoundError, createForbiddenError } from '../middleware/error-handler';
 import { logger } from '../utils/logger';
 import { PlexService } from '../services/plex';
+import { reimportPlaylistNow } from '../services/import';
 import multer from 'multer';
 import FormData from 'form-data';
 import axios from 'axios';
@@ -52,7 +53,18 @@ router.get('/', requireAuth, async (req: Request, res: Response, next: NextFunct
       
       // Filter for audio playlists only
       const audioPlaylists = plexPlaylists.filter(p => p.playlistType === 'audio');
-      
+
+      // Cross-reference against our own tracking table (by plex_playlist_id)
+      // so callers get one merged list: live data straight from Plex (track
+      // count, duration, cover) plus our own metadata for playlists that
+      // were imported through this app (numeric id for looking up its
+      // schedule/missing tracks, original source + link). Playlists that
+      // exist in Plex but were never imported through this app (e.g.
+      // created directly in Plex) simply have no `dbId`/`source`.
+      const trackedByPlexId = new Map(
+        db.getUserPlaylists(requestedUserId).map(p => [p.plex_playlist_id, p])
+      );
+
       // Map to our format
       const playlists = audioPlaylists.map(p => {
         // Clean up duplicate prefixes in playlist names (e.g., "All out - All out 60s" -> "All out 60s")
@@ -62,12 +74,16 @@ router.get('/', requireAuth, async (req: Request, res: Response, next: NextFunct
           // If the prefix before " - " matches the first word after " - ", remove the prefix
           cleanName = parts[1];
         }
-        
+
+        const tracked = trackedByPlexId.get(p.ratingKey);
+
         return {
           id: p.ratingKey,
+          dbId: tracked?.id,
           plexPlaylistId: p.ratingKey,
           name: cleanName,
-          source: 'plex',
+          source: tracked?.source || 'plex',
+          sourceUrl: tracked?.source_url ?? undefined,
           trackCount: p.leafCount || 0,
           duration: p.duration || 0,
           composite: p.composite,
@@ -251,6 +267,97 @@ router.put('/:id', requireAuth, (req: Request, res: Response, next: NextFunction
   } catch (error) {
     logger.error('Failed to update playlist', { error, userId: req.session.userId, playlistId: req.params.id });
     next(createInternalError('Failed to update playlist'));
+  }
+});
+
+/**
+ * DELETE /api/playlists/by-plex-id/:ratingKey
+ * Delete a playlist identified by its Plex ratingKey rather than our
+ * internal numeric id - works for any playlist visible in Plex, including
+ * ones never imported through this app (so there's no numeric id for them;
+ * see GET /api/playlists's dbId field). Cleans up our tracking row too, if
+ * one happens to exist for it.
+ */
+router.delete('/by-plex-id/:ratingKey', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.session.userId!;
+    const db = req.dbService!;
+    const { ratingKey } = req.params;
+
+    const user = db.getUserById(userId);
+    if (!user) {
+      return next(createNotFoundError('User not found'));
+    }
+
+    const userServer = db.getUserServer(userId);
+    if (!userServer) {
+      return next(createValidationError('No server selected. Please select a server first.'));
+    }
+
+    const plexService = new PlexService(userServer.server_url, user.plex_token);
+    await plexService.deletePlaylist(ratingKey);
+
+    const tracked = db.getPlaylistByPlexId(userId, ratingKey);
+    if (tracked) {
+      db.deletePlaylist(tracked.id);
+    }
+
+    logger.info('Playlist deleted by Plex ratingKey', { userId, ratingKey, hadDbRecord: !!tracked });
+
+    res.json({ success: true });
+  } catch (error: any) {
+    logger.error('Failed to delete playlist by Plex ratingKey', { error: error.message, userId: req.session.userId });
+    next(createInternalError('Failed to delete playlist'));
+  }
+});
+
+const NON_REIMPORTABLE_SOURCES = ['plex', 'manual', 'template'];
+
+/**
+ * POST /api/playlists/:id/reimport
+ * Re-scrape a playlist from its original online source and replace its
+ * Plex tracks with the refreshed result. Fires the refresh in the
+ * background and returns immediately, mirroring POST /api/schedules/:id/run.
+ */
+router.post('/:id/reimport', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.session.userId!;
+    const db = req.dbService!;
+    const playlistId = parseInt(req.params.id, 10);
+
+    if (isNaN(playlistId)) {
+      return next(createValidationError('Invalid playlist ID'));
+    }
+
+    const playlist = db.getPlaylistById(playlistId);
+    if (!playlist) {
+      return next(createNotFoundError('Playlist not found'));
+    }
+
+    if (playlist.user_id !== userId) {
+      return next(createForbiddenError('You do not have permission to reimport this playlist'));
+    }
+
+    if (!playlist.source || NON_REIMPORTABLE_SOURCES.includes(playlist.source)) {
+      return next(createValidationError('This playlist has no online source to reimport from'));
+    }
+
+    const user = db.getUserById(userId);
+    const userServer = db.getUserServer(userId);
+    if (!user || !userServer) {
+      return next(createValidationError('No Plex server configured'));
+    }
+
+    logger.info('Manual reimport triggered', { playlistId, userId, source: playlist.source });
+
+    reimportPlaylistNow(db, playlist, user, userServer).catch((error: any) => {
+      logger.error('Manual reimport failed', { playlistId, error: error.message });
+    });
+
+    res.json({ success: true, message: 'Reimport started' });
+  } catch (error: any) {
+    logger.error('Failed to trigger reimport', { error: error.message, userId: req.session.userId });
+    next(createInternalError('Failed to trigger reimport'));
   }
 });
 
@@ -975,7 +1082,7 @@ router.post('/:id/share', requireAuth, async (req: Request, res: Response, next:
     }
 
     // Get or create playlist record in database
-    let playlistRecord = db.getPlaylistByPlexId(id);
+    let playlistRecord = db.getPlaylistByPlexId(currentUserId, id);
     if (!playlistRecord) {
       playlistRecord = db.createPlaylist(
         currentUserId,

@@ -21,6 +21,7 @@ jest.mock('../../src/utils/logger', () => ({
     info: jest.fn(),
     warn: jest.fn(),
     error: jest.fn(),
+    debug: jest.fn(),
   },
 }));
 
@@ -58,8 +59,10 @@ describe('YouTubeOAuthService', () => {
     // Reset mocks
     jest.clearAllMocks();
 
-    // Create service instance
+    // Create service instance. oauth2Client is initialized lazily on first
+    // use, so force initialization here before grabbing the mock instance.
     service = new YouTubeOAuthService();
+    service.isReady();
     mockOAuth2Client = (service as any).oauth2Client;
   });
 
@@ -85,10 +88,13 @@ describe('YouTubeOAuthService', () => {
       expect(newService.isReady()).toBe(false);
     });
 
-    it('should handle missing REDIRECT_URI', () => {
+    it('should fall back to the config service redirect URL when REDIRECT_URI is missing', () => {
+      // A missing YOUTUBE_REDIRECT_URI is no longer fatal: ensureInitialized()
+      // falls back to configService.getOAuthRedirectUrl(), so the service is
+      // still ready as long as client id/secret are configured.
       delete process.env.YOUTUBE_REDIRECT_URI;
       const newService = new YouTubeOAuthService();
-      expect(newService.isReady()).toBe(false);
+      expect(newService.isReady()).toBe(true);
     });
   });
 
@@ -117,6 +123,9 @@ describe('YouTubeOAuthService', () => {
       // Create a new instance without credentials
       const serviceWithoutCreds = Object.create(YouTubeOAuthService.prototype);
       (serviceWithoutCreds as any).isConfigured = false;
+      // Mark as already initialized so ensureInitialized() doesn't re-run
+      // and re-configure from the (still-valid) env vars in this test file.
+      (serviceWithoutCreds as any).initialized = true;
 
       expect(() => serviceWithoutCreds.getAuthUrl('test-state')).toThrow(
         'YouTube OAuth not configured'
@@ -171,6 +180,9 @@ describe('YouTubeOAuthService', () => {
     it('should throw error when not configured', async () => {
       const serviceWithoutCreds = Object.create(YouTubeOAuthService.prototype);
       (serviceWithoutCreds as any).isConfigured = false;
+      // Mark as already initialized so ensureInitialized() doesn't re-run
+      // and re-configure from the (still-valid) env vars in this test file.
+      (serviceWithoutCreds as any).initialized = true;
 
       await expect(serviceWithoutCreds.exchangeCode('code')).rejects.toThrow(
         'YouTube OAuth not configured'
@@ -243,6 +255,9 @@ describe('YouTubeOAuthService', () => {
     it('should throw error when not configured', async () => {
       const serviceWithoutCreds = Object.create(YouTubeOAuthService.prototype);
       (serviceWithoutCreds as any).isConfigured = false;
+      // Mark as already initialized so ensureInitialized() doesn't re-run
+      // and re-configure from the (still-valid) env vars in this test file.
+      (serviceWithoutCreds as any).initialized = true;
 
       await expect(serviceWithoutCreds.refreshAccessToken('token')).rejects.toThrow(
         'YouTube OAuth not configured'
@@ -637,6 +652,9 @@ describe('YouTubeOAuthService', () => {
     it('should throw error when not configured', async () => {
       const serviceWithoutCreds = Object.create(YouTubeOAuthService.prototype);
       (serviceWithoutCreds as any).isConfigured = false;
+      // Mark as already initialized so ensureInitialized() doesn't re-run
+      // and re-configure from the (still-valid) env vars in this test file.
+      (serviceWithoutCreds as any).initialized = true;
 
       await expect(serviceWithoutCreds.getYouTubeClient(1, {})).rejects.toThrow(
         'YouTube OAuth not configured'

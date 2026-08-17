@@ -434,7 +434,7 @@ export const QueuePage: FC = () => {
   if (isLoading) {
     return (
       <div className="page-container">
-        <h1>Import Queue</h1>
+        <h1 className="page-title">Import Queue</h1>
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
           <div style={{ textAlign: 'center' }}>
             <div className="spinner" style={{ margin: '0 auto 1rem' }}></div>
@@ -448,7 +448,7 @@ export const QueuePage: FC = () => {
   if (!activeQueue && completedImports.length === 0) {
     return (
       <div className="page-container">
-        <h1>Import Queue</h1>
+        <h1 className="page-title">Import Queue</h1>
         <div className="queue-empty">
           <h2>No Imports in Queue</h2>
           <p>Imports will appear here when they are processing or completed.</p>
@@ -460,7 +460,7 @@ export const QueuePage: FC = () => {
 
   return (
     <div className="page-container">
-      <h1>Import Queue</h1>
+      <h1 className="page-title">Import Queue</h1>
       
       <div className="queue-layout">
         {/* Left Panel - Import List */}

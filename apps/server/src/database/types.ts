@@ -158,6 +158,7 @@ export interface Schedule {
   start_date: string;
   last_run?: number;
   config?: string;  // JSON string
+  created_at?: number;
 }
 
 /**

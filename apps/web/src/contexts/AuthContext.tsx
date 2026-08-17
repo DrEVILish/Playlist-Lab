@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, type FC, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 interface User {
   plexUserId: string;
@@ -34,11 +35,28 @@ interface AuthProviderProps {
 export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const navigate = useNavigate();
 
   // Check authentication status on mount
   useEffect(() => {
     checkAuth();
   }, []);
+
+  // Handle session expiry (401) surfaced by the shared API client mid-session.
+  // The client dispatches this event (and skips it for /api/auth/me and
+  // /api/auth/poll, which already handle "not logged in" via checkAuth/login
+  // above) so we only react here to sessions that expired after login.
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      setUser(null);
+      navigate('/login', { replace: true });
+    };
+
+    window.addEventListener('auth:session-expired', handleSessionExpired);
+    return () => {
+      window.removeEventListener('auth:session-expired', handleSessionExpired);
+    };
+  }, [navigate]);
 
   const checkAuth = async () => {
     try {

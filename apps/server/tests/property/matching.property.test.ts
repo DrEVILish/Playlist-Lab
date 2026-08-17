@@ -8,10 +8,79 @@ import * as fc from 'fast-check';
 import Database from 'better-sqlite3';
 import { initializeDatabase } from '../../src/database/init';
 import { DatabaseService } from '../../src/database/database';
-import { MatchingService, DEFAULT_MATCHING_SETTINGS, MatchingSettings } from '../../src/services/matching';
+// `matching.ts` exposes a single function-based entry point, `matchPlaylist`
+// (there is no `MatchingService` class and no `DEFAULT_MATCHING_SETTINGS`
+// export). `MatchingSettings` lives in `database/types`.
+import { matchPlaylist } from '../../src/services/matching';
+import { MatchingSettings } from '../../src/database/types';
+import { PlexClient } from '../../src/services/plex';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+
+// Mock PlexClient so the "Matching Algorithm Behavior" tests below can drive
+// matchPlaylist without a real Plex server.
+jest.mock('../../src/services/plex');
+
+const DEFAULT_MATCHING_SETTINGS: MatchingSettings = {
+  minMatchScore: 0,
+  stripParentheses: true,
+  stripBrackets: true,
+  useFirstArtistOnly: false,
+  ignoreFeaturedArtists: true,
+  ignoreRemixInfo: true,
+  ignoreVersionInfo: false,
+  preferNonCompilation: true,
+  penalizeMonoVersions: true,
+  penalizeLiveVersions: true,
+  preferHigherRated: true,
+  minRatingForMatch: 0,
+  autoCompleteOnPerfectMatch: true,
+  playlistPrefixes: {
+    enabled: true,
+    spotify: '[Spotify] ',
+    deezer: '[Deezer] ',
+    apple: '[Apple Music] ',
+    tidal: '[Tidal] ',
+    youtube: '[YouTube Music] ',
+    amazon: '[Amazon Music] ',
+    qobuz: '[Qobuz] ',
+    listenbrainz: '[ListenBrainz] ',
+    file: '[Imported] ',
+    ai: '[AI Generated] ',
+  },
+  customStripPatterns: [],
+  featuredArtistPatterns: ['feat.', 'ft.', 'featuring'],
+  versionSuffixPatterns: ['- Remaster', '- Remix', '- Live'],
+  remasterPatterns: ['remaster', 'remastered'],
+  variousArtistsNames: ['Various Artists', 'Various', 'VA'],
+  penaltyKeywords: ['mono', 'live'],
+  priorityKeywords: ['remaster', 'deluxe'],
+};
+
+/**
+ * Runs a single-track match against a single candidate Plex search result via
+ * the real matchPlaylist entry point, and returns the resulting score.
+ */
+async function scoreOf(
+  sourceTrack: { title: string; artist: string },
+  plexTrack: { title: string; grandparentTitle: string; parentTitle: string; ratingKey: string },
+  settings: MatchingSettings
+): Promise<number | undefined> {
+  const mockPlexClient = {
+    searchTrack: jest.fn().mockResolvedValue([plexTrack]),
+  } as unknown as jest.Mocked<PlexClient>;
+  (PlexClient as jest.MockedClass<typeof PlexClient>).mockImplementation(() => mockPlexClient);
+
+  const [result] = await matchPlaylist(
+    [sourceTrack],
+    'http://localhost:32400',
+    'test-token',
+    undefined,
+    { ...settings }
+  );
+  return result.score;
+}
 
 /**
  * Create a temporary in-memory database for testing
@@ -180,39 +249,37 @@ describe('Matching Service Property Tests', () => {
     /**
      * Test that matching settings affect the matching algorithm behavior
      */
-    it('should apply settings when matching tracks', () => {
+    it('should apply settings when matching tracks', async () => {
       // Test with different minMatchScore values
-      fc.assert(
-        fc.property(
+      await fc.assert(
+        fc.asyncProperty(
           fc.integer({ min: 0, max: 100 }),
-          (minMatchScore) => {
+          async (minMatchScore) => {
             const settings: MatchingSettings = {
               ...DEFAULT_MATCHING_SETTINGS,
               minMatchScore,
             };
-            
-            const matchingService = new MatchingService(settings);
-            
+
             // Create a mock track with a known score
             const sourceTrack = {
               title: 'Test Song',
               artist: 'Test Artist',
             };
-            
+
             const plexTrack = {
               title: 'Test Song',
               grandparentTitle: 'Test Artist',
               parentTitle: 'Test Album',
               ratingKey: '12345',
             };
-            
-            // Calculate score
-            const score = matchingService.calculateScore(sourceTrack, plexTrack, settings);
-            
+
+            // Calculate score via the real matchPlaylist entry point
+            const score = await scoreOf(sourceTrack, plexTrack, settings);
+
             // Score should be between 0 and 100
             expect(score).toBeGreaterThanOrEqual(0);
             expect(score).toBeLessThanOrEqual(100);
-            
+
             // For exact matches, score should be 100
             expect(score).toBe(100);
           }
@@ -224,35 +291,33 @@ describe('Matching Service Property Tests', () => {
     /**
      * Test that stripParentheses setting affects title matching
      */
-    it('should respect stripParentheses setting', () => {
-      const matchingService = new MatchingService();
-      
+    it('should respect stripParentheses setting', async () => {
       const sourceTrack = {
         title: 'Song Title',
         artist: 'Artist Name',
       };
-      
+
       const plexTrackWithParens = {
         title: 'Song Title (Radio Edit)',
         grandparentTitle: 'Artist Name',
         parentTitle: 'Album',
         ratingKey: '123',
       };
-      
+
       // With stripParentheses = true (default), should match better
-      const scoreWithStrip = matchingService.calculateScore(
+      const scoreWithStrip = await scoreOf(
         sourceTrack,
         plexTrackWithParens,
         { ...DEFAULT_MATCHING_SETTINGS, stripParentheses: true }
       );
-      
+
       // With stripParentheses = false, might score lower
-      const scoreWithoutStrip = matchingService.calculateScore(
+      const scoreWithoutStrip = await scoreOf(
         sourceTrack,
         plexTrackWithParens,
         { ...DEFAULT_MATCHING_SETTINGS, stripParentheses: false }
       );
-      
+
       // Both should produce valid scores
       expect(scoreWithStrip).toBeGreaterThanOrEqual(0);
       expect(scoreWithStrip).toBeLessThanOrEqual(100);
@@ -263,35 +328,33 @@ describe('Matching Service Property Tests', () => {
     /**
      * Test that useFirstArtistOnly setting affects artist matching
      */
-    it('should respect useFirstArtistOnly setting', () => {
-      const matchingService = new MatchingService();
-      
+    it('should respect useFirstArtistOnly setting', async () => {
       const sourceTrack = {
         title: 'Collaboration Song',
         artist: 'Artist One',
       };
-      
+
       const plexTrack = {
         title: 'Collaboration Song',
         grandparentTitle: 'Artist One, Artist Two, Artist Three',
         parentTitle: 'Album',
         ratingKey: '456',
       };
-      
+
       // With useFirstArtistOnly = true, should match well
-      const scoreWithFirst = matchingService.calculateScore(
+      const scoreWithFirst = await scoreOf(
         sourceTrack,
         plexTrack,
         { ...DEFAULT_MATCHING_SETTINGS, useFirstArtistOnly: true }
       );
-      
+
       // With useFirstArtistOnly = false, might score differently
-      const scoreWithoutFirst = matchingService.calculateScore(
+      const scoreWithoutFirst = await scoreOf(
         sourceTrack,
         plexTrack,
         { ...DEFAULT_MATCHING_SETTINGS, useFirstArtistOnly: false }
       );
-      
+
       // Both should produce valid scores
       expect(scoreWithFirst).toBeGreaterThanOrEqual(0);
       expect(scoreWithFirst).toBeLessThanOrEqual(100);

@@ -311,7 +311,7 @@ describe('Missing Tracks Property Tests', () => {
                   artist: t.artist,
                   album: t.album,
                   position: t.position,
-                  afterTrackKey: t.afterTrackKey?.trim() || undefined,
+                  after_track_key: t.afterTrackKey?.trim() || undefined,
                   source: playlistData.source,
                 }))
               );

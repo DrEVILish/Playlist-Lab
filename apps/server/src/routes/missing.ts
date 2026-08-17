@@ -4,8 +4,19 @@ import { createValidationError, createInternalError, createNotFoundError, create
 import { logger } from '../utils/logger';
 import { PlexService } from '../services/plex';
 import { matchPlaylist } from '../services/matching';
+import type { DatabaseService } from '../database/database';
 
 const router = Router();
+
+// A full retry batch does a real Plex search (up to 4 HTTP round trips) per
+// track, so retrying a large missing-tracks list (100+ tracks across many
+// playlists) can take well over a minute. Awaiting that synchronously in the
+// request handler held the connection open long enough to trip client/proxy
+// timeouts, which surfaced to users as "An unknown error occurred" even
+// though the retry was actually still working server-side. Track one
+// in-flight retry per user so it can run in the background instead - the
+// client polls GET /api/missing to watch the list shrink as tracks resolve.
+const activeRetries = new Set<number>();
 
 /**
  * GET /api/missing
@@ -91,17 +102,56 @@ router.post('/retry', requireAuth, async (req: Request, res: Response, next: Nex
     }
 
     if (tracksToRetry.length === 0) {
-      return res.json({ 
-        matched: 0,
-        remaining: 0,
-        stillMissing: 0,
+      return res.json({
+        started: false,
+        totalTracks: 0,
         message: 'No missing tracks to retry'
+      });
+    }
+
+    if (activeRetries.has(userId)) {
+      return res.json({
+        started: false,
+        totalTracks: tracksToRetry.length,
+        message: 'A retry is already in progress. Check back shortly - the missing tracks list updates live as tracks resolve.'
       });
     }
 
     // Get user settings
     const settings = db.getUserSettings(userId);
 
+    activeRetries.add(userId);
+    res.json({
+      started: true,
+      totalTracks: tracksToRetry.length,
+      message: `Retrying ${tracksToRetry.length} track(s) - this list will update as they resolve.`
+    });
+
+    runRetryInBackground(userId, db, user, userServer, tracksToRetry, settings).finally(() => {
+      activeRetries.delete(userId);
+    });
+  } catch (error) {
+    logger.error('Failed to retry missing tracks', { error, userId: req.session.userId });
+    next(createInternalError('Failed to retry matching missing tracks'));
+  }
+});
+
+/**
+ * Matches and re-adds a batch of missing tracks. Runs detached from the
+ * request/response cycle (see the /retry handler above) so large batches
+ * don't hold an HTTP connection open long enough to hit client/proxy
+ * timeouts; progress is instead observable via GET /api/missing as each
+ * track resolves and is removed from the missing list.
+ */
+async function runRetryInBackground(
+  userId: number,
+  db: DatabaseService,
+  user: { plex_token: string },
+  userServer: { server_url: string; library_id?: string | null; server_client_id?: string | null },
+  tracksToRetry: Array<{ id: number; playlist_id: number; title: string; artist: string; album?: string | null; after_track_key?: string | null }>,
+  settings: { matching_settings: any }
+): Promise<void> {
+  try {
     // Convert missing tracks to external track format
     const externalTracks = tracksToRetry.map(t => ({
       title: t.title,
@@ -226,18 +276,16 @@ router.post('/retry', requireAuth, async (req: Request, res: Response, next: Nex
     }
 
     const stillMissing = tracksToRetry.length - matchedCount;
-
-    res.json({ 
-      matched: matchedCount,
-      remaining: stillMissing,
+    logger.info('[Missing Retry] Background retry complete', {
+      userId,
+      totalTracks: tracksToRetry.length,
+      matchedCount,
       stillMissing,
-      message: `Successfully matched ${matchedCount} of ${tracksToRetry.length} tracks`
     });
-  } catch (error) {
-    logger.error('Failed to retry missing tracks', { error, userId: req.session.userId });
-    next(createInternalError('Failed to retry matching missing tracks'));
+  } catch (error: any) {
+    logger.error('[Missing Retry] Background retry failed', { error: error.message, userId });
   }
-});
+}
 
 /**
  * POST /api/missing/add

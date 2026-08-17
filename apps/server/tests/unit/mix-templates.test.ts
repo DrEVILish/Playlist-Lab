@@ -465,7 +465,7 @@ describe('Mix Templates API', () => {
       expect(response.body.message).toContain('updated successfully');
 
       const updated = db.getMixTemplateById(template.id);
-      expect(updated?.configuration).toEqual(newConfig);
+      expect(updated?.configuration).toEqual({ ...newConfig, schemaVersion: 1 });
     });
 
     it('should update multiple fields at once', async () => {
@@ -487,7 +487,7 @@ describe('Mix Templates API', () => {
       const updated = db.getMixTemplateById(template.id);
       expect(updated?.name).toBe('New Name');
       expect(updated?.description).toBe('New Description');
-      expect(updated?.configuration).toEqual({ trackCount: 75, moods: ['chill'] });
+      expect(updated?.configuration).toEqual({ trackCount: 75, moods: ['chill'], schemaVersion: 1 });
     });
 
     it('should trim whitespace from name and description', async () => {
@@ -1211,7 +1211,7 @@ describe('Mix Templates API', () => {
         .get(`/api/mix-templates/${templateId}`)
         .expect(200);
 
-      expect(getResponse.body.configuration).toEqual(complexConfig);
+      expect(getResponse.body.configuration).toEqual({ ...complexConfig, schemaVersion: 1 });
     });
 
     it('should handle configuration with nested objects', async () => {
@@ -1242,7 +1242,7 @@ describe('Mix Templates API', () => {
         .get(`/api/mix-templates/${templateId}`)
         .expect(200);
 
-      expect(getResponse.body.configuration).toEqual(nestedConfig);
+      expect(getResponse.body.configuration).toEqual({ ...nestedConfig, schemaVersion: 1 });
     });
 
     it('should handle configuration with arrays of different types', async () => {
@@ -1268,7 +1268,7 @@ describe('Mix Templates API', () => {
         .get(`/api/mix-templates/${templateId}`)
         .expect(200);
 
-      expect(getResponse.body.configuration).toEqual(arrayConfig);
+      expect(getResponse.body.configuration).toEqual({ ...arrayConfig, schemaVersion: 1 });
     });
 
     it('should preserve boolean values in configuration', async () => {
@@ -1295,7 +1295,7 @@ describe('Mix Templates API', () => {
         .get(`/api/mix-templates/${templateId}`)
         .expect(200);
 
-      expect(getResponse.body.configuration).toEqual(booleanConfig);
+      expect(getResponse.body.configuration).toEqual({ ...booleanConfig, schemaVersion: 1 });
       expect(getResponse.body.configuration.allowDuplicateArtists).toBe(true);
       expect(getResponse.body.configuration.allowDuplicateAlbums).toBe(false);
     });
@@ -2002,7 +2002,7 @@ describe('Mix Templates API', () => {
           .get(`/api/mix-templates/${templateId}`)
           .expect(200);
 
-        expect(getResponse.body.configuration).toEqual(complexConfig);
+        expect(getResponse.body.configuration).toEqual({ ...complexConfig, schemaVersion: 1 });
       });
 
       it('should handle configuration with nested objects', async () => {
@@ -2033,7 +2033,7 @@ describe('Mix Templates API', () => {
           .get(`/api/mix-templates/${templateId}`)
           .expect(200);
 
-        expect(getResponse.body.configuration).toEqual(nestedConfig);
+        expect(getResponse.body.configuration).toEqual({ ...nestedConfig, schemaVersion: 1 });
       });
 
       it('should handle configuration with arrays of different types', async () => {
@@ -2059,7 +2059,7 @@ describe('Mix Templates API', () => {
           .get(`/api/mix-templates/${templateId}`)
           .expect(200);
 
-        expect(getResponse.body.configuration).toEqual(arrayConfig);
+        expect(getResponse.body.configuration).toEqual({ ...arrayConfig, schemaVersion: 1 });
       });
 
       it('should preserve boolean values in configuration', async () => {
@@ -2086,7 +2086,7 @@ describe('Mix Templates API', () => {
           .get(`/api/mix-templates/${templateId}`)
           .expect(200);
 
-        expect(getResponse.body.configuration).toEqual(booleanConfig);
+        expect(getResponse.body.configuration).toEqual({ ...booleanConfig, schemaVersion: 1 });
         expect(getResponse.body.configuration.allowDuplicateArtists).toBe(true);
         expect(getResponse.body.configuration.allowDuplicateAlbums).toBe(false);
       });
@@ -2113,7 +2113,7 @@ describe('Mix Templates API', () => {
           .get(`/api/mix-templates/${createResponse.body.id}`)
           .expect(200);
 
-        expect(getResponse.body.configuration).toEqual(artistConfig);
+        expect(getResponse.body.configuration).toEqual({ ...artistConfig, schemaVersion: 1 });
         expect(getResponse.body.configuration.artistIds).toHaveLength(3);
       });
 
@@ -2138,7 +2138,7 @@ describe('Mix Templates API', () => {
           .get(`/api/mix-templates/${createResponse.body.id}`)
           .expect(200);
 
-        expect(getResponse.body.configuration).toEqual(albumConfig);
+        expect(getResponse.body.configuration).toEqual({ ...albumConfig, schemaVersion: 1 });
         expect(getResponse.body.configuration.albumIds).toHaveLength(2);
       });
 
@@ -2162,7 +2162,7 @@ describe('Mix Templates API', () => {
           .get(`/api/mix-templates/${createResponse.body.id}`)
           .expect(200);
 
-        expect(getResponse.body.configuration).toEqual(genreConfig);
+        expect(getResponse.body.configuration).toEqual({ ...genreConfig, schemaVersion: 1 });
         expect(getResponse.body.configuration.genres).toHaveLength(4);
       });
 
@@ -2186,7 +2186,7 @@ describe('Mix Templates API', () => {
           .get(`/api/mix-templates/${createResponse.body.id}`)
           .expect(200);
 
-        expect(getResponse.body.configuration).toEqual(moodConfig);
+        expect(getResponse.body.configuration).toEqual({ ...moodConfig, schemaVersion: 1 });
         expect(getResponse.body.configuration.moods).toHaveLength(3);
       });
 
@@ -2210,7 +2210,7 @@ describe('Mix Templates API', () => {
           .get(`/api/mix-templates/${createResponse.body.id}`)
           .expect(200);
 
-        expect(getResponse.body.configuration).toEqual(decadeConfig);
+        expect(getResponse.body.configuration).toEqual({ ...decadeConfig, schemaVersion: 1 });
         expect(getResponse.body.configuration.decades).toHaveLength(5);
       });
 
@@ -2245,7 +2245,7 @@ describe('Mix Templates API', () => {
           .get(`/api/mix-templates/${createResponse.body.id}`)
           .expect(200);
 
-        expect(getResponse.body.configuration).toEqual(customConfig);
+        expect(getResponse.body.configuration).toEqual({ ...customConfig, schemaVersion: 1 });
         expect(getResponse.body.configuration.customRules.includeGenres).toHaveLength(2);
         expect(getResponse.body.configuration.customRules.excludeGenres).toHaveLength(2);
       });
@@ -2273,7 +2273,7 @@ describe('Mix Templates API', () => {
           .get(`/api/mix-templates/${createResponse.body.id}`)
           .expect(200);
 
-        expect(getResponse.body.configuration).toEqual(specialCharsConfig);
+        expect(getResponse.body.configuration).toEqual({ ...specialCharsConfig, schemaVersion: 1 });
         expect(getResponse.body.description).toContain('@#$%^&*()');
       });
 
@@ -2302,7 +2302,7 @@ describe('Mix Templates API', () => {
           .get(`/api/mix-templates/${createResponse.body.id}`)
           .expect(200);
 
-        expect(getResponse.body.configuration).toEqual(numericConfig);
+        expect(getResponse.body.configuration).toEqual({ ...numericConfig, schemaVersion: 1 });
         expect(getResponse.body.configuration.trackCount).toBe(1);
       });
 
@@ -2331,7 +2331,7 @@ describe('Mix Templates API', () => {
           .get(`/api/mix-templates/${createResponse.body.id}`)
           .expect(200);
 
-        expect(getResponse.body.configuration).toEqual(largeNumberConfig);
+        expect(getResponse.body.configuration).toEqual({ ...largeNumberConfig, schemaVersion: 1 });
         expect(getResponse.body.configuration.trackCount).toBe(10000);
       });
 
@@ -2362,7 +2362,7 @@ describe('Mix Templates API', () => {
           .get(`/api/mix-templates/${createResponse.body.id}`)
           .expect(200);
 
-        expect(getResponse.body.configuration).toEqual(deeplyNestedConfig);
+        expect(getResponse.body.configuration).toEqual({ ...deeplyNestedConfig, schemaVersion: 1 });
         expect(getResponse.body.configuration.customRules.filters.advanced.playCount.min).toBe(5);
       });
 
@@ -2389,7 +2389,7 @@ describe('Mix Templates API', () => {
           .get(`/api/mix-templates/${createResponse.body.id}`)
           .expect(200);
 
-        expect(getResponse.body.configuration).toEqual(unicodeConfig);
+        expect(getResponse.body.configuration).toEqual({ ...unicodeConfig, schemaVersion: 1 });
         expect(getResponse.body.name).toContain('🎵');
         expect(getResponse.body.description).toContain('😀');
       });
@@ -2465,7 +2465,7 @@ describe('Mix Templates API', () => {
           .get(`/api/mix-templates/${templateId}`)
           .expect(200);
 
-        expect(getResponse.body.configuration).toEqual(updatedConfig);
+        expect(getResponse.body.configuration).toEqual({ ...updatedConfig, schemaVersion: 1 });
         expect(getResponse.body.configuration.moods).toHaveLength(3);
       });
 
@@ -2488,7 +2488,7 @@ describe('Mix Templates API', () => {
           .get(`/api/mix-templates/${createResponse.body.id}`)
           .expect(200);
 
-        expect(getResponse.body.configuration).toEqual(minimalConfig);
+        expect(getResponse.body.configuration).toEqual({ ...minimalConfig, schemaVersion: 1 });
         expect(getResponse.body.configuration.sortBy).toBeUndefined();
         expect(getResponse.body.configuration.customRules).toBeUndefined();
       });
@@ -2513,7 +2513,7 @@ describe('Mix Templates API', () => {
           .get(`/api/mix-templates/${createResponse.body.id}`)
           .expect(200);
 
-        expect(getResponse.body.configuration).toEqual(config);
+        expect(getResponse.body.configuration).toEqual({ ...config, schemaVersion: 1 });
         // Description can be null or undefined when not provided
         expect(getResponse.body.description == null).toBe(true);
       });
@@ -3161,7 +3161,7 @@ describe('Mix Templates API', () => {
           .get('/api/mix-templates/99999')
           .expect(404);
 
-        expect(response.body.error.message).toBe('Template not found');
+        expect(response.body.error.message).toBe('Template not found. It may have been deleted.');
       });
 
       it('should provide clear error message for permission denied', async () => {
@@ -3182,7 +3182,7 @@ describe('Mix Templates API', () => {
           .get('/api/mix-templates/not-a-number')
           .expect(400);
 
-        expect(response.body.error.message).toBe('Invalid template ID');
+        expect(response.body.error.message).toBe('Invalid template ID. Please provide a valid numeric ID.');
       });
 
       it('should provide clear error message for name too long', async () => {

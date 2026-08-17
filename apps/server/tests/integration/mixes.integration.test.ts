@@ -424,4 +424,83 @@ describe('Mix Generation Integration Tests', () => {
     expect(results.newMusic).toHaveProperty('trackKeys');
     expect(results.newMusic).toHaveProperty('trackCount');
   });
+
+  /**
+   * Regression test: generateCustomMix's yearRanges option must only include tracks
+   * from the explicitly selected (disjoint) ranges, not everything between the overall
+   * min and max (e.g. selecting the 1960s + 1990s should exclude the 1970s/1980s).
+   */
+  test('should only include tracks from selected decades when yearRanges is provided', async () => {
+    const tracksAcrossDecades = [
+      { ratingKey: 't1960', grandparentTitle: 'Retro Artist', year: 1965, title: 'Sixties song' },
+      { ratingKey: 't1975', grandparentTitle: 'Retro Artist', year: 1975, title: 'Seventies song' },
+      { ratingKey: 't1985', grandparentTitle: 'Retro Artist', year: 1985, title: 'Eighties song' },
+      { ratingKey: 't1995', grandparentTitle: 'Retro Artist', year: 1995, title: 'Nineties song' }
+    ];
+
+    const mockSearchArtist = jest.fn().mockResolvedValue({ ratingKey: 'artist-1' });
+    const mockGetArtistPopularTracks = jest.fn().mockResolvedValue(tracksAcrossDecades);
+
+    (PlexClient as jest.MockedClass<typeof PlexClient>).mockImplementation(() => ({
+      searchArtist: mockSearchArtist,
+      getArtistPopularTracks: mockGetArtistPopularTracks
+    } as any));
+
+    const result = await mixService.generateCustomMix(
+      mockServerUrl,
+      mockToken,
+      mockLibraryId,
+      {
+        trackCount: 10,
+        artistNames: ['Retro Artist'],
+        // Broad range covering all 4 decades (as mix-templates.ts sets for the initial
+        // fetch), narrowed by yearRanges to only the selected decades.
+        releasedAfterYear: 1960,
+        releasedBeforeYear: 1999,
+        yearRanges: [{ min: 1960, max: 1969 }, { min: 1990, max: 1999 }],
+        sortBy: 'random',
+        sortDirection: 'desc'
+      }
+    );
+
+    expect(result.trackKeys).toContain('t1960');
+    expect(result.trackKeys).toContain('t1995');
+    expect(result.trackKeys).not.toContain('t1975');
+    expect(result.trackKeys).not.toContain('t1985');
+  });
+
+  /**
+   * Regression test: generateWorkoutMix must not place the same track in two different
+   * segments (warmup/build/peak/cooldown) of the same generated playlist.
+   */
+  test('should not produce duplicate tracks across workout mix segments', async () => {
+    const poolSize = 45;
+    const tracksWithTempo = Array.from({ length: poolSize }, (_, i) => ({
+      ratingKey: `t${i}`,
+      title: `Track ${i}`,
+      musicAnalysis: { tempo: 60 + i }
+    }));
+
+    const mockGetTracksWithAdvancedFilters = jest.fn().mockResolvedValue(tracksWithTempo);
+
+    (PlexClient as jest.MockedClass<typeof PlexClient>).mockImplementation(() => ({
+      getTracksWithAdvancedFilters: mockGetTracksWithAdvancedFilters
+    } as any));
+
+    const result = await mixService.generateWorkoutMix(
+      mockServerUrl,
+      mockToken,
+      mockLibraryId,
+      {
+        trackCount: 30,
+        warmupTracks: 5,
+        peakTracks: 5,
+        cooldownTracks: 5
+      }
+    );
+
+    const uniqueKeys = new Set(result.trackKeys);
+    expect(uniqueKeys.size).toBe(result.trackKeys.length);
+    expect(result.trackKeys.length).toBeGreaterThan(0);
+  });
 });

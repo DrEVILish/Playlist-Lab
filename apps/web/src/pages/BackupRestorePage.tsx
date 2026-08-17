@@ -163,43 +163,15 @@ export const BackupRestorePage: FC = () => {
     });
   };
 
-  const handleRestore = async () => {
-    if (!restoreData || selectedRestorePlaylists.size === 0) return;
-    
-    setIsProcessing(true);
-    setError(null);
-    let restoredCount = 0;
-    let failedCount = 0;
-    
-    const selectedArray = Array.from(selectedRestorePlaylists);
-    
-    for (let i = 0; i < selectedArray.length; i++) {
-      const playlistIndex = selectedArray[i];
-      const playlist = restoreData.playlists[playlistIndex];
-      
-      setStatusMessage(`Restoring "${playlist.title}" (${i + 1}/${selectedArray.length})...`);
-      
-      try {
-        // This would need backend support to search and match tracks
-        // For now, show a message that this feature needs implementation
-        setError('Restore functionality requires backend API support. Please implement the restore endpoint.');
-        break;
-      } catch (err) {
-        console.error(`Failed to restore ${playlist.title}:`, err);
-        failedCount++;
-      }
-    }
-    
-    if (!error) {
-      setStatusMessage(`Restore complete! ${restoredCount} restored, ${failedCount} failed.`);
-      setRestoreData(null);
-      setSelectedRestorePlaylists(new Set());
-      loadPlaylists();
-    }
-    
-    setIsProcessing(false);
-    setTimeout(() => setStatusMessage(''), 5000);
-  };
+  // NOTE: Restoring a backup means re-creating playlists from title/artist/album
+  // text and matching each track against the Plex library from scratch - the same
+  // kind of fuzzy library-wide search + match/confirm flow the playlist import
+  // feature implements (see apps/server/src/routes/import.ts, ~2000 lines with
+  // session/progress/queue handling). There is no lightweight server endpoint to
+  // pair this with (unlike the settings-only /api/migrate/desktop restore), so a
+  // real implementation is a substantial feature in its own right rather than a
+  // small fix. Restore is intentionally disabled below - the file upload/parse/
+  // selection UI is kept so users can still inspect what a backup contains.
 
   const formatDuration = (ms: number) => {
     const minutes = Math.floor(ms / 60000);
@@ -212,7 +184,7 @@ export const BackupRestorePage: FC = () => {
   if (isLoading) {
     return (
       <div className="page-container">
-        <h1>Backup & Restore</h1>
+        <h1 className="page-title">Backup & Restore</h1>
         <div className="loading">Loading playlists...</div>
       </div>
     );
@@ -220,7 +192,7 @@ export const BackupRestorePage: FC = () => {
 
   return (
     <div className="page-container">
-      <h1>Backup & Restore</h1>
+      <h1 className="page-title">Backup & Restore</h1>
       <p className="page-description">
         Backup your playlists to a JSON file or restore them from a previous backup.
       </p>
@@ -235,7 +207,11 @@ export const BackupRestorePage: FC = () => {
           <p className="backup-meta">
             Backup from {new Date(restoreData.exportDate).toLocaleDateString()} • {restoreData.playlists.length} playlist(s)
           </p>
-          
+          <p className="backup-description">
+            Restoring playlists from a backup is not supported yet. You can still inspect the
+            contents of this backup file below.
+          </p>
+
           <div className="backup-actions">
             <button
               className="btn btn-secondary btn-small"
@@ -275,10 +251,10 @@ export const BackupRestorePage: FC = () => {
           
           <button
             className="btn btn-primary btn-full"
-            onClick={handleRestore}
-            disabled={selectedRestorePlaylists.size === 0 || isProcessing}
+            disabled
+            title="Restore is not implemented yet"
           >
-            {isProcessing ? 'Restoring...' : `Restore ${selectedRestorePlaylists.size} Playlist(s)`}
+            Restore Not Yet Supported
           </button>
         </div>
       ) : (

@@ -331,9 +331,11 @@ describe('YouTube login flow', () => {
 
   beforeEach(() => jest.restoreAllMocks());
 
-  it('getOAuthUrl returns the browser-login page URL', async () => {
+  it('getOAuthUrl returns the manual cookie-paste form page URL', async () => {
+    // YouTube uses a manual cookie paste form instead of a Puppeteer-driven
+    // browser login flow (more reliable in headless/server environments).
     const url = await youtubePlainTargetAdapter.getOAuthUrl!(userId, db, REDIRECT_URI.replace('SERVICE', 'youtube'));
-    expect(url).toContain('browser-login');
+    expect(url).toContain('/form');
     expect(url).toContain(String(userId));
   });
 

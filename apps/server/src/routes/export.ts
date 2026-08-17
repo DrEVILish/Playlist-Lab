@@ -21,7 +21,7 @@ router.post('/export', async (req: Request, res: Response, next: NextFunction) =
       return next(createValidationError('playlistId is required'));
     }
 
-    if (!format || !['m3u', 'm3u8', 'pls', 'xspf', 'csv'].includes(format)) {
+    if (!format || !['m3u', 'm3u8', 'pls', 'xspf', 'csv', 'txt'].includes(format)) {
       return next(createValidationError('Invalid format'));
     }
 
@@ -91,6 +91,11 @@ router.post('/export', async (req: Request, res: Response, next: NextFunction) =
         content = generateCSV(tracks);
         contentType = 'text/csv';
         extension = 'csv';
+        break;
+      case 'txt':
+        content = generateTXT(tracks);
+        contentType = 'text/plain';
+        extension = 'txt';
         break;
       default:
         return next(createValidationError('Unsupported format'));
@@ -209,6 +214,17 @@ function generateCSV(tracks: any[]): string {
   }
 
   return content;
+}
+
+/**
+ * Generate plain-text format: one "Artist - Title" per line, matching what
+ * this app's own .txt file importer (scrapers.ts's parseM3UFile fallback
+ * path) expects, so a playlist exported to .txt can be re-imported unchanged.
+ */
+function generateTXT(tracks: any[]): string {
+  return tracks
+    .map(track => `${track.grandparentTitle || 'Unknown Artist'} - ${track.title || 'Unknown Track'}`)
+    .join('\n') + '\n';
 }
 
 /**

@@ -283,11 +283,19 @@ async function findBestMatch(
          normalizeForComparison(albumArtist).includes('compilation');
       
       // Also check if album name suggests it's a soundtrack/compilation
-      const isSoundtrackAlbum = albumNameLower.includes('soundtrack') || 
+      const isSoundtrackAlbum = albumNameLower.includes('soundtrack') ||
                                 albumNameLower.includes('ost') ||
                                 albumArtistLower.includes('cast') ||
                                 albumArtistLower.includes('soundtrack');
-      const isCompilation = isVariousArtists || isSoundtrackAlbum;
+      // Plex itself only populates a track's originalTitle when the track-level
+      // artist differs from the album artist (e.g. a movie soundtrack credited
+      // to its composer as album artist, with each song's actual performer set
+      // per-track). That's true regardless of whether the album/artist name
+      // happens to contain "soundtrack" or "Various Artists" - e.g. an album
+      // artist of "Lin-Manuel Miranda" with a track originalTitle of
+      // "Stephanie Beatriz" is exactly this case.
+      const hasDistinctTrackArtist = !!trackArtist && normalizeForComparison(trackArtist) !== normalizeForComparison(albumArtist);
+      const isCompilation = isVariousArtists || isSoundtrackAlbum || hasDistinctTrackArtist;
       
       // For compilations with exact title match, allow title-only matching
       const cleanSourceTitle = normalizeForComparison(cleanTrackTitle(track.title));
@@ -307,7 +315,7 @@ async function findBestMatch(
       });
       
       // Allow match if artist matches, or it's a compilation with exact title match
-      if (!albumArtistMatches && !trackArtistMatches && !anyArtistMatches && !isVariousArtists && !allowTitleOnlyMatch) {
+      if (!albumArtistMatches && !trackArtistMatches && !anyArtistMatches && !allowTitleOnlyMatch) {
         logger.info(`[Matching] Artist mismatch, skipping`);
         continue;
       }
@@ -321,8 +329,10 @@ async function findBestMatch(
       logger.info(`[Matching] Initial score: ${score}`);
       
       // Penalize Various Artists compilations heavily (but still allow them as last resort)
-      // BUT: Don't penalize if the track artist (originalTitle) matches
-      if (isCompilation && !albumArtistMatches && !trackArtistMatches) {
+      // BUT: Don't penalize if the track artist (originalTitle) matches, or any individual
+      // artist from a multi-artist source string matches (e.g. "Artist A & Artist B" where
+      // Plex only tags "Artist B" as the track artist).
+      if (isCompilation && !albumArtistMatches && !trackArtistMatches && !anyArtistMatches) {
         score -= 40;
         logger.info(`[Matching] Compilation penalty applied, new score: ${score}`);
       }
@@ -384,7 +394,11 @@ async function findBestMatch(
         if (albumArtistMatches) {
           score += 50; // Big bonus for proper album artist match
           logger.info(`[Matching] Non-compilation bonus applied, new score: ${score}`);
-        } else if (isCompilation) {
+        } else if (isCompilation && !trackArtistMatches && !anyArtistMatches) {
+          // Only penalize when neither the track artist nor any individual artist from a
+          // multi-artist source string matches - if one does, this is a correctly-identified
+          // track on a Various Artists/soundtrack album (e.g. "Try Everything" by Shakira on
+          // the Zootopia soundtrack), not a bad match.
           score -= 30; // Penalty for compilation/Various Artists
           logger.info(`[Matching] Compilation penalty (preferNonCompilation) applied, new score: ${score}`);
         }
@@ -426,6 +440,12 @@ async function findBestMatch(
     return null;
   }
 }
+
+// Matches a trailing "- From <Movie>" qualifier, e.g. Spotify's
+// `Try Everything - From "Zootropolis"` (the UK release title for Zootopia).
+// Storefronts commonly append this to movie/TV tie-in songs; Plex's own track
+// title for the same song is normally just the bare song title.
+const MOVIE_TIE_IN_PATTERN = /\s*-\s*from\s+.+$/gi;
 
 function getCoreTitle(title: string): string {
   let core = title;
@@ -476,7 +496,13 @@ function getCoreTitle(title: string): string {
   for (const pattern of remasterPatterns) {
     core = core.replace(pattern, '');
   }
-  
+
+  // Movie/TV tie-in qualifier, e.g. Spotify's `Try Everything - From "Zootropolis"`.
+  // Plex's own track title for the same song is normally just the bare song
+  // title, so leaving this in makes every search for the song fail outright.
+  // (Kept in sync with the identical pattern in cleanTrackTitle() below.)
+  core = core.replace(MOVIE_TIE_IN_PATTERN, '');
+
   if (currentMatchingSettings.stripParentheses) core = core.replace(/\([^)]*\)/g, '');
   if (currentMatchingSettings.stripBrackets) core = core.replace(/\[[^\]]*\]/g, '');
   return core.replace(/\s+/g, ' ').trim();
@@ -532,7 +558,9 @@ function cleanTrackTitle(title: string): string {
   for (const pattern of remasterPatterns) {
     cleaned = cleaned.replace(pattern, '');
   }
-  
+
+  cleaned = cleaned.replace(MOVIE_TIE_IN_PATTERN, '');
+
   if (currentMatchingSettings.stripParentheses) cleaned = cleaned.replace(/\([^)]*\)/g, '');
   if (currentMatchingSettings.stripBrackets) cleaned = cleaned.replace(/\[[^\]]*\]/g, '');
   return cleaned.replace(/\s+/g, ' ').trim() || title;
@@ -592,7 +620,11 @@ function artistsMatch(sourceArtist: string, plexArtist: string): boolean {
   return false;
 }
 
-const REMIX_KEYWORDS = /\b(remix|remixed|edit|mix|version|acoustic|live|instrumental|radio edit|bootleg|dub|extended|vip|flip|rework|reimagined)\b/i;
+// NOTE: deliberately does not include the bare word "version" - it's too
+// generic and false-positives on legitimate, non-remixed compilation/
+// soundtrack qualifiers like "(Soundtrack Version)" or "(Movie Version)",
+// which would otherwise take an unwarranted -30 remix penalty.
+const REMIX_KEYWORDS = /\b(remix|remixed|edit|mix|acoustic|live|instrumental|radio edit|bootleg|dub|extended|vip|flip|rework|reimagined)\b/i;
 const REMASTER_KEYWORDS = /\b(remaster(?:ed)?)\b/i;
 const ALTERNATE_VERSION_KEYWORDS = /\b(unplugged|acoustic|live|instrumental|radio edit|session|performance|cover)\b/i;
 const DEMO_KEYWORDS = /\b(demo)\b/i;

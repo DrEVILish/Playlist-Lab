@@ -79,7 +79,7 @@ import playlistsRoutes from './routes/playlists';
 import missingRoutes from './routes/missing';
 import adminRoutes from './routes/admin';
 import migrateRoutes from './routes/migrate';
-import importRoutes from './routes/import';
+import importRoutes, { importSessions, cancelledSessions, progressState } from './routes/import';
 import mixesRoutes from './routes/mixes';
 import schedulesRoutes from './routes/schedules';
 import proxyRoutes from './routes/proxy';
@@ -817,13 +817,25 @@ app.use('/api/*', (_req: Request, res: Response) => {
 app.use(errorHandler);
 
 // Initialize import queue handler
-// Store active import sessions for progress tracking
-const importSessions = new Map<string, EventEmitter>();
-const cancelledSessions = new Set<string>();
-const progressState = new Map<string, any>();
+// NOTE: importSessions/cancelledSessions/progressState are imported from
+// routes/import.ts so that the queue job handler below shares the exact same
+// Map/Set instances that the SSE (/api/import/progress/:sessionId) and
+// polling (/api/import/status/:sessionId) endpoints read from. Previously
+// this module declared its own separate copies, which meant progress/complete
+// events emitted here were written into maps nobody was listening on.
 
 // Initialize import queue with database
 importQueue.initialize(db);
+
+// Connect queue-level cancellation to the shared cancelledSessions set.
+// ImportQueue.cancelJob() marks the job cancelled in the DB and emits
+// 'job-cancelled', but does not itself touch cancelledSessions. Without this
+// listener, cancelling a job that is currently *processing* would update the
+// queue status but the in-flight matchPlaylist() run would keep going, since
+// its isCancelled() check only consults cancelledSessions.
+importQueue.on('job-cancelled', (job: { sessionId: string }) => {
+  cancelledSessions.add(job.sessionId);
+});
 
 importQueue.setHandler(async (job) => {
   logger.info('Import queue processing job', {

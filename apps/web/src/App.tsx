@@ -5,18 +5,13 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { AuthCallbackPage } from './pages/AuthCallbackPage';
-import { DashboardPage } from './pages/DashboardPage';
 import { ImportPage } from './pages/ImportPage';
 import { QueuePage } from './pages/QueuePage';
+import { CrossImportPage } from './pages/CrossImportPage';
 import { GenerateMixesPage } from './pages/GenerateMixesPage';
 import { PlaylistsPage } from './pages/PlaylistsPage';
-import { EditPlaylistsPage } from './pages/EditPlaylistsPage';
-import { SharePlaylistsPage } from './pages/SharePlaylistsPage';
-import { ExportPlaylistsPage } from './pages/ExportPlaylistsPage';
 import { PlexHomePage } from './pages/PlexHomePage';
-import { BackupRestorePage } from './pages/BackupRestorePage';
 import { SchedulesPage } from './pages/SchedulesPage';
-import { MissingTracksPage } from './pages/MissingTracksPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AdminPage } from './pages/AdminPage';
 
@@ -35,17 +30,22 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<DashboardPage />} />
+        {/* Home is the unified playlist table (see pages/PlaylistsPage.tsx) -
+            edit/schedule/reimport/share/export/backup all live there as row
+            actions. Import and Generate Mixes open as modals from the header
+            (see components/Header.tsx); their routes stay for bookmarks. */}
+        <Route index element={<PlaylistsPage />} />
         <Route path="import" element={<ImportPage />} />
         <Route path="queue" element={<QueuePage />} />
+        <Route path="cross-import" element={<CrossImportPage />} />
         <Route path="generate" element={<GenerateMixesPage />} />
-        <Route path="playlists" element={<PlaylistsPage />} />
-        <Route path="playlists/edit" element={<EditPlaylistsPage />} />
-        <Route path="playlists/share" element={<SharePlaylistsPage />} />
-        <Route path="playlists/export" element={<ExportPlaylistsPage />} />
+        <Route path="playlists" element={<Navigate to="/" replace />} />
+        <Route path="playlists/edit" element={<Navigate to="/" replace />} />
+        <Route path="playlists/share" element={<Navigate to="/" replace />} />
+        <Route path="playlists/export" element={<Navigate to="/" replace />} />
+        <Route path="playlists/backup" element={<Navigate to="/" replace />} />
+        <Route path="playlists/missing" element={<Navigate to="/" replace />} />
         <Route path="playlists/home-users" element={<PlexHomePage />} />
-        <Route path="playlists/backup" element={<BackupRestorePage />} />
-        <Route path="playlists/missing" element={<MissingTracksPage />} />
         <Route path="schedules" element={<SchedulesPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="admin" element={<AdminPage />} />

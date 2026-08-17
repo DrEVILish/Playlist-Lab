@@ -313,7 +313,12 @@ export class MixService {
       // Release date filters
       releasedAfterYear?: number;
       releasedBeforeYear?: number;
-      
+      // Disjoint year ranges (e.g. multiple selected decades). When present, a track must
+      // fall within at least one of these ranges to be included. This is applied as a
+      // post-fetch filter after tracks are retrieved via whichever strategy is used below,
+      // so it works regardless of how the initial candidate pool was assembled.
+      yearRanges?: Array<{ min?: number; max?: number }>;
+
       // Rating & popularity
       minRating?: number;
       maxRating?: number;
@@ -371,7 +376,8 @@ export class MixService {
 
     // Auto-enable popular tracks optimization if year filter is present
     // This prevents timeouts on large libraries when filtering by year
-    const hasYearFilter = settings.releasedAfterYear || settings.releasedBeforeYear;
+    const hasYearFilter = settings.releasedAfterYear || settings.releasedBeforeYear ||
+      (settings.yearRanges && settings.yearRanges.length > 0);
     const hasArtistFilter = settings.artistNames && settings.artistNames.length > 0;
     const shouldUsePopularTracksOptimization = settings.popularTracksOnly || (hasYearFilter && !settings.popularTracksOnly);
     
@@ -758,6 +764,29 @@ export class MixService {
       });
     }
 
+    // Apply disjoint year range filtering (e.g. multiple selected decades). This runs
+    // regardless of which strategy above populated `tracks`, so it correctly excludes
+    // years outside the actually-selected ranges even when the initial fetch used a
+    // broader single min/max range (e.g. releasedAfterYear/releasedBeforeYear) to narrow
+    // the candidate pool for performance.
+    if (settings.yearRanges && settings.yearRanges.length > 0) {
+      const beforeYearRangeFilter = tracks.length;
+      tracks = tracks.filter(track => {
+        const trackYear = track.year || track.parentYear;
+        if (!trackYear) return false;
+        return settings.yearRanges!.some(range => {
+          const minOk = range.min === undefined || trackYear >= range.min;
+          const maxOk = range.max === undefined || trackYear <= range.max;
+          return minOk && maxOk;
+        });
+      });
+      logger.info('[Year Range Filter] Applied disjoint year ranges', {
+        before: beforeYearRangeFilter,
+        after: tracks.length,
+        ranges: settings.yearRanges
+      });
+    }
+
     progressEmitter?.emit('progress', {
       type: 'progress',
       stage: 'filtering',
@@ -1035,8 +1064,8 @@ export class MixService {
             allTracks.push(...tracks);
           }
         }
-      } catch (error) {
-        console.error(`Failed to get similar artists for ${artistKey}:`, error);
+      } catch (error: any) {
+        logger.error(`[Mixes] Failed to get similar artists for ${artistKey}`, { error: error?.message || error });
       }
     }
 
@@ -1235,8 +1264,8 @@ export class MixService {
           const albumTracks = await plex.getAlbumTracks(album.ratingKey);
           allTracks.push(...albumTracks.slice(0, settings.tracksPerAlbum));
         }
-      } catch (error) {
-        console.error(`Failed to get tracks for album ${album.ratingKey}:`, error);
+      } catch (error: any) {
+        logger.error(`[Mixes] Failed to get tracks for album ${album.ratingKey}`, { error: error?.message || error });
       }
     }
 
@@ -1288,24 +1317,43 @@ export class MixService {
     const medIntensity = tracksWithTempo.slice(third, third * 2);
     const highIntensity = tracksWithTempo.slice(third * 2);
 
+    // Shuffle each intensity tier exactly once. Segments that draw from the same tier
+    // (warmup/cooldown both use lowIntensity, build/cool-down-from-peak both use
+    // medIntensity) then take non-overlapping slices of that single shuffled array,
+    // instead of re-shuffling from scratch per segment (which could hand out the same
+    // track to two different segments of the same playlist).
+    const shuffledLow = this.shuffle(lowIntensity);
+    const shuffledMed = this.shuffle(medIntensity);
+    const shuffledHigh = this.shuffle(highIntensity);
+
     // Build workout progression
     const workout: PlexTrack[] = [];
-    
+    const addedKeys = new Set<string>();
+
+    const addTracks = (source: PlexTrack[]) => {
+      for (const track of source) {
+        if (!addedKeys.has(track.ratingKey)) {
+          workout.push(track);
+          addedKeys.add(track.ratingKey);
+        }
+      }
+    };
+
     // Warmup
-    workout.push(...this.shuffle(lowIntensity).slice(0, settings.warmupTracks));
-    
+    addTracks(shuffledLow.slice(0, settings.warmupTracks));
+
     // Build to peak
     const buildTracks = Math.floor((settings.trackCount - settings.warmupTracks - settings.peakTracks - settings.cooldownTracks) / 2);
-    workout.push(...this.shuffle(medIntensity).slice(0, buildTracks));
-    
+    addTracks(shuffledMed.slice(0, buildTracks));
+
     // Peak
-    workout.push(...this.shuffle(highIntensity).slice(0, settings.peakTracks));
-    
+    addTracks(shuffledHigh.slice(0, settings.peakTracks));
+
     // Cool down from peak
-    workout.push(...this.shuffle(medIntensity).slice(buildTracks, buildTracks * 2));
-    
+    addTracks(shuffledMed.slice(buildTracks, buildTracks * 2));
+
     // Final cooldown
-    workout.push(...this.shuffle(lowIntensity).slice(settings.warmupTracks, settings.warmupTracks + settings.cooldownTracks));
+    addTracks(shuffledLow.slice(settings.warmupTracks, settings.warmupTracks + settings.cooldownTracks));
 
     return {
       trackKeys: workout.map(t => t.ratingKey),

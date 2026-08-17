@@ -11,12 +11,21 @@ import { logger } from '../utils/logger';
 import { importPlaylist } from './import';
 import { MixService } from './mixes';
 import { PlexClient } from './plex';
+import type { Schedule } from '../database/types';
 
 /**
- * Execute playlist refresh schedules that are due
+ * Execute playlist refresh schedules that are due.
+ *
+ * @param schedulesOverride - When provided, these schedules are executed
+ *   directly instead of querying `db.getDueSchedules()`. Used by
+ *   runSingleSchedule() for manual "Run Now" triggers so it doesn't need to
+ *   mutate any shared state on `db` (which is a process-wide singleton).
  */
-async function executePlaylistRefreshSchedules(db: DatabaseService): Promise<{ executed: number; failed: number }> {
-  const dueSchedules = db.getDueSchedules().filter(s => s.schedule_type === 'playlist_refresh');
+async function executePlaylistRefreshSchedules(
+  db: DatabaseService,
+  schedulesOverride?: Schedule[]
+): Promise<{ executed: number; failed: number }> {
+  const dueSchedules = (schedulesOverride ?? db.getDueSchedules()).filter(s => s.schedule_type === 'playlist_refresh');
 
   let executed = 0;
   let failed = 0;
@@ -208,7 +217,7 @@ async function executePlaylistRefreshSchedules(db: DatabaseService): Promise<{ e
         // miss and create a fresh playlist record every time the schedule
         // fired (see issue #33). Fall back to matching by user + playlist
         // name so repeat runs of the same named playlist reuse one record.
-        let existingPlaylist = db.getPlaylistByPlexId(newPlaylist.ratingKey);
+        let existingPlaylist = db.getPlaylistByPlexId(schedule.user_id, newPlaylist.ratingKey);
         if (!existingPlaylist) {
           existingPlaylist = db.getPlaylistByUserAndName(schedule.user_id, playlistName);
         }
@@ -308,10 +317,18 @@ async function executePlaylistRefreshSchedules(db: DatabaseService): Promise<{ e
 
 
 /**
- * Execute mix generation schedules that are due
+ * Execute mix generation schedules that are due.
+ *
+ * @param schedulesOverride - When provided, these schedules are executed
+ *   directly instead of querying `db.getDueSchedules()`. Used by
+ *   runSingleSchedule() for manual "Run Now" triggers so it doesn't need to
+ *   mutate any shared state on `db` (which is a process-wide singleton).
  */
-async function executeMixGenerationSchedules(db: DatabaseService): Promise<{ executed: number; failed: number }> {
-  const dueSchedules = db.getDueSchedules().filter(s => s.schedule_type === 'mix_generation');
+async function executeMixGenerationSchedules(
+  db: DatabaseService,
+  schedulesOverride?: Schedule[]
+): Promise<{ executed: number; failed: number }> {
+  const dueSchedules = (schedulesOverride ?? db.getDueSchedules()).filter(s => s.schedule_type === 'mix_generation');
   
   let executed = 0;
   let failed = 0;
@@ -667,33 +684,23 @@ export async function runSingleSchedule(db: DatabaseService, schedule: any): Pro
 
   try {
     if (schedule.schedule_type === 'playlist_refresh') {
-      // Execute the playlist refresh logic for this specific schedule
-      // We'll temporarily modify getDueSchedules to return this schedule
-      const originalGetDueSchedules = db.getDueSchedules.bind(db);
-      db.getDueSchedules = () => [schedule];
-      
-      try {
-        await executePlaylistRefreshSchedules(db);
-      } finally {
-        // Restore original function
-        db.getDueSchedules = originalGetDueSchedules;
-      }
-      
+      // Execute the playlist refresh logic for just this schedule, passing
+      // it directly as an override instead of monkey-patching
+      // db.getDueSchedules(). `db` is a process-wide singleton and this
+      // function can be invoked fire-and-forget (not awaited) concurrently
+      // for multiple schedules (e.g. "Run Now" and "Run All Schedules"), so
+      // mutating shared state on it is not safe - overlapping calls would
+      // race on saving/restoring the original method.
+      await executePlaylistRefreshSchedules(db, [schedule]);
+
       logger.info('Manual playlist refresh completed', {
         scheduleId: schedule.id
       });
     } else if (schedule.schedule_type === 'mix_generation') {
-      // Execute the mix generation logic for this specific schedule
-      const originalGetDueSchedules = db.getDueSchedules.bind(db);
-      db.getDueSchedules = () => [schedule];
-      
-      try {
-        await executeMixGenerationSchedules(db);
-      } finally {
-        // Restore original function
-        db.getDueSchedules = originalGetDueSchedules;
-      }
-      
+      // Same rationale as above - pass the schedule directly rather than
+      // mutating shared db state.
+      await executeMixGenerationSchedules(db, [schedule]);
+
       logger.info('Manual mix generation completed', {
         scheduleId: schedule.id
       });

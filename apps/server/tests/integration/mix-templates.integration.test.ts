@@ -274,7 +274,7 @@ describe('Mix Templates Integration Tests', () => {
   });
 
   describe('Edit Template Workflow', () => {
-    it('should update template name', () => {
+    it('should update template name', async () => {
       const template = dbService.createMixTemplate(
         userId,
         'Original Name',
@@ -282,6 +282,11 @@ describe('Mix Templates Integration Tests', () => {
         'custom',
         { trackCount: 50 }
       );
+
+      // created_at/updated_at use millisecond-resolution Date.now(); since create+update
+      // now run back-to-back within the same millisecond, force the clock forward so the
+      // timestamps are guaranteed to differ instead of flaking on a tie.
+      await new Promise(resolve => setTimeout(resolve, 2));
 
       dbService.updateMixTemplate(template.id, {
         name: 'Updated Name'
@@ -338,8 +343,8 @@ describe('Mix Templates Integration Tests', () => {
 
       const updated = dbService.getMixTemplateById(template.id);
       expect(updated!.configuration.trackCount).toBe(100);
-      expect(updated!.configuration.customRules.includeGenres).toHaveLength(2);
-      expect(updated!.configuration.customRules.minRating).toBe(8);
+      expect(updated!.configuration.customRules!.includeGenres).toHaveLength(2);
+      expect(updated!.configuration.customRules!.minRating).toBe(8);
     });
 
     it('should update multiple fields at once', () => {
@@ -548,15 +553,15 @@ describe('Mix Templates Integration Tests', () => {
       );
 
       const saved = dbService.getMixTemplateById(template.id);
-      expect(saved!.configuration.customRules.playedInLastDays).toBe(7);
-      expect(saved!.configuration.customRules.notPlayedInLastDays).toBe(30);
-      expect(saved!.configuration.customRules.addedInLastDays).toBe(90);
-      expect(saved!.configuration.customRules.yearRange).toEqual({ min: 1990, max: 2020 });
-      expect(saved!.configuration.customRules.includeGenres).toHaveLength(3);
-      expect(saved!.configuration.customRules.excludeGenres).toHaveLength(2);
-      expect(saved!.configuration.customRules.minRating).toBe(8);
-      expect(saved!.configuration.customRules.maxRating).toBe(10);
-      expect(saved!.configuration.customRules.includeUnplayed).toBe(false);
+      expect(saved!.configuration.customRules!.playedInLastDays).toBe(7);
+      expect(saved!.configuration.customRules!.notPlayedInLastDays).toBe(30);
+      expect(saved!.configuration.customRules!.addedInLastDays).toBe(90);
+      expect(saved!.configuration.customRules!.yearRange).toEqual({ min: 1990, max: 2020 });
+      expect(saved!.configuration.customRules!.includeGenres).toHaveLength(3);
+      expect(saved!.configuration.customRules!.excludeGenres).toHaveLength(2);
+      expect(saved!.configuration.customRules!.minRating).toBe(8);
+      expect(saved!.configuration.customRules!.maxRating).toBe(10);
+      expect(saved!.configuration.customRules!.includeUnplayed).toBe(false);
     });
 
     it('should handle artist mix with advanced options', () => {

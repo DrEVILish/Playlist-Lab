@@ -22,7 +22,14 @@ describe('Mix Template Performance Tests', () => {
     }
 
     db = new Database(testDbPath);
-    
+
+    // Match production configuration (see src/database/init.ts): enable WAL mode so
+    // writes aren't fsync'd to the rollback journal on every single insert. Without
+    // this, the file-backed db used here for realistic performance testing is far
+    // slower than production, since production always initializes through
+    // initializeDatabase() which sets this pragma.
+    db.pragma('journal_mode = WAL');
+
     // Create schema
     const schema = fs.readFileSync(
       path.join(__dirname, '../../src/database/schema.sql'),

@@ -46,6 +46,16 @@ export function attachDatabase(dbService: DatabaseService) {
  * Returns 401 if user is not authenticated
  */
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+  // ponytail: dev-only bypass for reviewing UI without logging in, never
+  // live in production (requires both an explicit opt-in flag and a
+  // non-production NODE_ENV). Logs in as the first user in the DB.
+  if (!req.session.userId && process.env.DEV_NO_AUTH === 'true' && process.env.NODE_ENV !== 'production' && req.dbService) {
+    const firstUser = req.dbService.getFirstUser();
+    if (firstUser) {
+      req.session.userId = firstUser.id;
+    }
+  }
+
   // Skip verbose logging for frequently polled endpoints
   const isPolling = req.path.startsWith('/status/') || req.path.startsWith('/progress/') || req.path === '/queue' || req.path.startsWith('/queue/');
   

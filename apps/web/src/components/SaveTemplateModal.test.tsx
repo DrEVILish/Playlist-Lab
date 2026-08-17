@@ -20,10 +20,10 @@ describe('SaveTemplateModal', () => {
       />
     );
 
-    expect(screen.getByText('Save Mix Template')).toBeInTheDocument();
-    expect(screen.getByLabelText(/Template Name/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Save Mix' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Mix Name/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Description/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Save Template/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Save Mix/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Cancel/i })).toBeInTheDocument();
   });
 
@@ -36,7 +36,7 @@ describe('SaveTemplateModal', () => {
       />
     );
 
-    const saveButton = screen.getByRole('button', { name: /Save Template/i });
+    const saveButton = screen.getByRole('button', { name: /Save Mix/i });
     expect(saveButton).toBeDisabled();
   });
 
@@ -49,10 +49,10 @@ describe('SaveTemplateModal', () => {
       />
     );
 
-    const nameInput = screen.getByLabelText(/Template Name/i);
+    const nameInput = screen.getByLabelText(/Mix Name/i);
     fireEvent.change(nameInput, { target: { value: 'My Template' } });
 
-    const saveButton = screen.getByRole('button', { name: /Save Template/i });
+    const saveButton = screen.getByRole('button', { name: /Save Mix/i });
     expect(saveButton).not.toBeDisabled();
   });
 
@@ -67,13 +67,13 @@ describe('SaveTemplateModal', () => {
       />
     );
 
-    const nameInput = screen.getByLabelText(/Template Name/i);
+    const nameInput = screen.getByLabelText(/Mix Name/i);
     const descriptionInput = screen.getByLabelText(/Description/i);
     
     fireEvent.change(nameInput, { target: { value: 'My Template' } });
     fireEvent.change(descriptionInput, { target: { value: 'Test description' } });
 
-    const saveButton = screen.getByRole('button', { name: /Save Template/i });
+    const saveButton = screen.getByRole('button', { name: /Save Mix/i });
     fireEvent.click(saveButton);
 
     await waitFor(() => {
@@ -92,13 +92,13 @@ describe('SaveTemplateModal', () => {
       />
     );
 
-    const nameInput = screen.getByLabelText(/Template Name/i);
+    const nameInput = screen.getByLabelText(/Mix Name/i);
     const descriptionInput = screen.getByLabelText(/Description/i);
     
     fireEvent.change(nameInput, { target: { value: '  My Template  ' } });
     fireEvent.change(descriptionInput, { target: { value: '  Test description  ' } });
 
-    const saveButton = screen.getByRole('button', { name: /Save Template/i });
+    const saveButton = screen.getByRole('button', { name: /Save Mix/i });
     fireEvent.click(saveButton);
 
     await waitFor(() => {
@@ -116,7 +116,7 @@ describe('SaveTemplateModal', () => {
     );
 
     // The save button should be disabled when name is empty
-    const saveButton = screen.getByRole('button', { name: /Save Template/i });
+    const saveButton = screen.getByRole('button', { name: /Save Mix/i });
     expect(saveButton).toBeDisabled();
   });
 
@@ -132,10 +132,10 @@ describe('SaveTemplateModal', () => {
       />
     );
 
-    const nameInput = screen.getByLabelText(/Template Name/i);
+    const nameInput = screen.getByLabelText(/Mix Name/i);
     fireEvent.change(nameInput, { target: { value: 'My Template' } });
 
-    const saveButton = screen.getByRole('button', { name: /Save Template/i });
+    const saveButton = screen.getByRole('button', { name: /Save Mix/i });
     fireEvent.click(saveButton);
 
     await waitFor(() => {
@@ -167,7 +167,7 @@ describe('SaveTemplateModal', () => {
       />
     );
 
-    const overlay = screen.getByText('Save Mix Template').closest('.save-template-overlay');
+    const overlay = screen.getByRole('heading', { name: 'Save Mix' }).closest('.save-template-overlay');
     if (overlay) {
       fireEvent.click(overlay);
       expect(mockOnClose).toHaveBeenCalled();
@@ -183,7 +183,7 @@ describe('SaveTemplateModal', () => {
       />
     );
 
-    expect(screen.getByLabelText(/Template Name/i)).toBeDisabled();
+    expect(screen.getByLabelText(/Mix Name/i)).toBeDisabled();
     expect(screen.getByLabelText(/Description/i)).toBeDisabled();
     expect(screen.getByRole('button', { name: /Saving.../i })).toBeDisabled();
     expect(screen.getByRole('button', { name: /Cancel/i })).toBeDisabled();
@@ -212,7 +212,7 @@ describe('SaveTemplateModal', () => {
       />
     );
 
-    const nameInput = screen.getByLabelText(/Template Name/i);
+    const nameInput = screen.getByLabelText(/Mix Name/i);
     fireEvent.change(nameInput, { target: { value: 'My Template' } });
 
     // Simulate Ctrl+S

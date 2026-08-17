@@ -1,19 +1,15 @@
 import type { FC } from 'react';
 import { useState, useEffect } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import './Sidebar.css';
 
 export const Sidebar: FC = () => {
   const { user } = useAuth();
-  const location = useLocation();
   const [version, setVersion] = useState<string>('');
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<any>(null);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [isManageOpen, setIsManageOpen] = useState(
-    location.pathname.startsWith('/playlists/') || location.pathname === '/playlists'
-  );
 
   // Fetch version on mount and poll for changes (detects post-update server restart)
   useEffect(() => {
@@ -102,20 +98,16 @@ export const Sidebar: FC = () => {
     }
   };
 
+  // Home (the unified playlist table, pages/PlaylistsPage.tsx) and Import/
+  // Generate Mixes (modals launched from the header, components/Header.tsx)
+  // aren't listed here to avoid duplicating what's already one click away.
+  // Settings moved to the header cog for the same reason. What's left are
+  // pages with no header/logo shortcut of their own.
   const navItems = [
-    { path: '/', label: 'Dashboard' },
-    { path: '/import', label: 'Import' },
     { path: '/queue', label: 'Queue' },
-    { path: '/generate', label: 'Generate Mixes' },
     { path: '/schedules', label: 'Schedules' },
-  ];
-
-  const managePlaylistsItems = [
-    { path: '/playlists/edit', label: 'Edit Playlists' },
-    { path: '/playlists/share', label: 'Share Playlists' },
-    { path: '/playlists/export', label: 'Export Playlists' },
-    { path: '/playlists/backup', label: 'Backup & Restore' },
-    { path: '/playlists/missing', label: 'Missing Tracks' },
+    { path: '/playlists/home-users', label: 'Plex Home Users' },
+    { path: '/cross-import', label: 'Export to YouTube' },
   ];
 
   return (
@@ -129,45 +121,10 @@ export const Sidebar: FC = () => {
               className={({ isActive }) =>
                 `sidebar-link ${isActive ? 'sidebar-link-active' : ''}`
               }
-              end={item.path === '/'}
             >
               <span className="sidebar-link-label">{item.label}</span>
             </NavLink>
           ))}
-          
-          <div className="sidebar-section">
-            <button
-              className="sidebar-section-toggle"
-              onClick={() => setIsManageOpen(!isManageOpen)}
-            >
-              <span className="sidebar-section-label">Manage Plex Playlists</span>
-              <span className="sidebar-section-icon">{isManageOpen ? '▼' : '▶'}</span>
-            </button>
-            {isManageOpen && (
-              <div className="sidebar-section-items">
-                {managePlaylistsItems.map((item) => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    className={({ isActive }) =>
-                      `sidebar-link sidebar-link-nested ${isActive ? 'sidebar-link-active' : ''}`
-                    }
-                  >
-                    <span className="sidebar-link-label">{item.label}</span>
-                  </NavLink>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <NavLink
-            to="/settings"
-            className={({ isActive }) =>
-              `sidebar-link ${isActive ? 'sidebar-link-active' : ''}`
-            }
-          >
-            <span className="sidebar-link-label">Settings</span>
-          </NavLink>
 
           {user?.isAdmin && (
             <NavLink

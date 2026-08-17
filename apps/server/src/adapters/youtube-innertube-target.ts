@@ -767,7 +767,12 @@ export const youtubeInnertubeTargetAdapter: TargetAdapter = {
     try {
       logger.info('[YouTubeInnertubeAdapter] Creating playlist', { name, trackCount: tracks.length });
 
-      // Get OAuth tokens
+      // Get a valid (auto-refreshed if expired/expiring) OAuth access token.
+      // getValidAccessToken checks a 5-minute expiry buffer and refreshes +
+      // persists new tokens via refreshAccessToken() before returning, unlike
+      // getTokens() which just decrypts whatever is stored without validating
+      // expiry (see youtube-oauth-target.ts's getYouTubeClient() for the same pattern).
+      const accessToken = await youtubeOAuthService.getValidAccessToken(userId, db);
       const tokens = await youtubeOAuthService.getTokens(userId, db);
       if (!tokens) {
         throw new Error('Not authenticated with YouTube');
@@ -779,9 +784,9 @@ export const youtubeInnertubeTargetAdapter: TargetAdapter = {
         retrieve_player: false,
       });
 
-      // Authenticate with OAuth tokens
+      // Authenticate with OAuth tokens (use the freshly-validated access token)
       await youtube.session.signIn({
-        access_token: tokens.access_token,
+        access_token: accessToken,
         refresh_token: tokens.refresh_token || '',
         expiry_date: new Date(tokens.expires_at || Date.now() + 3600000).toISOString(),
       } as any);
@@ -833,8 +838,12 @@ export const youtubeInnertubeTargetAdapter: TargetAdapter = {
 
   async hasValidConnection(userId: number, db: any): Promise<boolean> {
     try {
-      const tokens = await youtubeOAuthService.getTokens(userId, db);
-      return tokens !== null;
+      // Use getValidAccessToken (expiry-checked, auto-refreshing) rather than
+      // getTokens() so a connection with an expired access token but a valid
+      // refresh token is still reported as valid (and expired-without-refresh
+      // connections are correctly reported as invalid).
+      await youtubeOAuthService.getValidAccessToken(userId, db);
+      return true;
     } catch (err) {
       return false;
     }

@@ -12,14 +12,15 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit for playlist files
   fileFilter: (_req, file, cb) => {
-    // Accept M3U, M3U8, and TXT files (some programs export as .txt)
-    const allowedExtensions = ['.m3u', '.m3u8', '.txt'];
+    // Accept every format this app can also export a playlist to (M3U/M3U8,
+    // PLS, XSPF, CSV), plus TXT (some programs export playlists as .txt).
+    const allowedExtensions = ['.m3u', '.m3u8', '.pls', '.xspf', '.csv', '.txt'];
     const ext = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf('.'));
-    
+
     if (allowedExtensions.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error(`Invalid file type. Please upload M3U, M3U8, or TXT playlist files. Got: ${ext}`));
+      cb(new Error(`Invalid file type. Please upload an M3U, M3U8, PLS, XSPF, CSV, or TXT playlist file. Got: ${ext}`));
     }
   }
 });
@@ -27,11 +28,15 @@ const upload = multer({
 const router = Router();
 
 // Store active import sessions
-const importSessions = new Map<string, EventEmitter>();
-const cancelledSessions = new Set<string>();
+// NOTE: These are exported and shared with index.ts's import-queue job handler.
+// Both the queue-based import path (index.ts) and the SSE/polling endpoints below
+// (and the direct, non-queue import path further down this file) must read/write
+// the SAME Map/Set instances, or progress and cancellation silently go nowhere.
+export const importSessions = new Map<string, EventEmitter>();
+export const cancelledSessions = new Set<string>();
 
 // Store progress state for polling
-const progressState = new Map<string, any>();
+export const progressState = new Map<string, any>();
 
 // All import routes require authentication
 router.use(requireAuth);
@@ -605,14 +610,18 @@ router.post('/file', requireAuth, upload.single('file'), async (req: Request, re
       return next(createValidationError('File is empty. Please upload a valid playlist file.'));
     }
     
-    // Basic validation - check if it looks like a playlist file
+    // Basic validation - check if it looks like a playlist file. PLS/XSPF/CSV
+    // are trusted by extension (they have their own dedicated parsers), since
+    // sniffing for M3U-specific markers would reject all of them.
+    const ext = filename.toLowerCase().substring(filename.lastIndexOf('.'));
+    const isStructuredFormat = ['.pls', '.xspf', '.csv'].includes(ext);
     const hasExtinf = content.includes('#EXTINF');
     const hasM3UHeader = content.includes('#EXTM3U');
     const hasFilePaths = /\.(mp3|m4a|flac|wav|ogg|aac|wma)/i.test(content);
-    
-    if (!hasExtinf && !hasM3UHeader && !hasFilePaths) {
+
+    if (!isStructuredFormat && !hasExtinf && !hasM3UHeader && !hasFilePaths) {
       debugLog('[File Import] File validation failed - no playlist markers found');
-      return next(createValidationError('File does not appear to be a valid M3U playlist. Please check the file format.'));
+      return next(createValidationError('File does not appear to be a valid playlist. Please check the file format.'));
     }
 
     const userId = req.session.userId!;
@@ -1541,125 +1550,6 @@ router.post('/preview', async (req: Request, res: Response, next: NextFunction) 
 });
 
 /**
- * POST /api/import/search
- * Search Plex library for manual rematch
- */
-router.post('/search', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { query } = req.body;
-
-    if (!query || typeof query !== 'string') {
-      return next(createValidationError('query is required and must be a string'));
-    }
-
-    const userId = req.session.userId!;
-    const db = req.dbService!;
-
-    // Get user's Plex token and server info
-    const userRow = (db as any).db.prepare('SELECT plex_token FROM users WHERE id = ?').get(userId);
-    
-    if (!userRow) {
-      return next(createValidationError('User not found'));
-    }
-
-    const { plex_token: plexToken } = userRow;
-
-    if (!plexToken) {
-      return next(createValidationError('Plex token not configured. Please configure your Plex server in Settings.'));
-    }
-
-    // Get server URL and library ID
-    const serverRow = (db as any).db.prepare('SELECT server_url, library_id FROM user_servers WHERE user_id = ?').get(userId);
-    
-    if (!serverRow) {
-      return next(createValidationError('Plex server not configured. Please configure your Plex server in Settings.'));
-    }
-
-    const { server_url: serverUrl, library_id: libraryId } = serverRow;
-
-    if (!serverUrl) {
-      return next(createValidationError('Plex server URL not configured. Please configure your Plex server in Settings.'));
-    }
-
-    // Import PlexClient and search
-    const { PlexClient } = await import('../services/plex');
-    const plexClient = new PlexClient(serverUrl, plexToken);
-    
-    // Try hub search first (searches all fields)
-    let results = await plexClient.searchTrack(query, libraryId);
-    
-    // If hub search returns results but they're all from compilations or albums,
-    // also try a direct track title search to find tracks where title = album name
-    if (results.length > 0 && libraryId) {
-      const hasNonCompilationTrack = results.some((track: any) => {
-        const artist = track.grandparentTitle || '';
-        return artist && !artist.toLowerCase().includes('various') && !artist.toLowerCase().includes('compilation');
-      });
-      
-      // If all results are compilations, try direct track search
-      if (!hasNonCompilationTrack) {
-        logger.info(`[Manual Search] All hub results are compilations, trying direct track search for: "${query}"`);
-        try {
-          const directResults = await plexClient.searchTrack('', libraryId, undefined, query);
-          logger.info(`[Manual Search] Direct track search returned ${directResults.length} results`);
-          
-          // Merge results, avoiding duplicates
-          for (const track of directResults) {
-            if (!results.some((r: any) => r.ratingKey === track.ratingKey)) {
-              results.push(track);
-            }
-          }
-        } catch (err) {
-          logger.warn(`[Manual Search] Direct track search failed: ${err}`);
-        }
-      }
-    }
-    
-    // If still no results and we have a library, try direct track search as fallback
-    if (results.length === 0 && libraryId) {
-      logger.info(`[Manual Search] No hub results, trying direct track search for: "${query}"`);
-      try {
-        results = await plexClient.searchTrack('', libraryId, undefined, query);
-        logger.info(`[Manual Search] Direct track search returned ${results.length} results`);
-      } catch (err) {
-        logger.warn(`[Manual Search] Direct track search failed: ${err}`);
-      }
-    }
-    
-    // Enrich tracks missing artist/album/media by fetching full metadata
-    const enrichedResults = await Promise.all(
-      results.map(async (track: any) => {
-        if (track.grandparentTitle && track.parentTitle && track.Media?.length) {
-          return track;
-        }
-        try {
-          const detail = await plexClient.getTrackDetails(track.ratingKey);
-          return detail || track;
-        } catch {
-          return track;
-        }
-      })
-    );
-    
-    // Return results with all needed fields
-    const tracks = enrichedResults.map((track: any) => ({
-      ratingKey: track.ratingKey,
-      title: track.title,
-      artist: track.grandparentTitle || track.originalTitle || '',
-      album: track.parentTitle || '',
-      codec: track.Media?.[0]?.audioCodec?.toUpperCase() || '',
-      bitrate: track.Media?.[0]?.bitrate || 0,
-      duration: track.duration || 0,
-    }));
-
-    res.json({ tracks });
-  } catch (error: any) {
-    logger.error('Failed to search tracks', { error: error.message });
-    next(createInternalError(error.message || 'Failed to search tracks'));
-  }
-});
-
-/**
  * POST /api/import/confirm
  * Create playlist from matched tracks and optionally save missing tracks
  */
@@ -1883,6 +1773,7 @@ router.get('/spotify/user/:userId/playlists', async (req: Request, res: Response
     const adapter = adapterRegistry.getSource('spotify');
 
     if (!adapter || !adapter.searchPlaylists) {
+      logger.error('[Spotify User Playlists] Spotify adapter not available or missing searchPlaylists');
       res.status(500).json({
         error: { message: 'Spotify adapter not available' }
       });
@@ -1980,6 +1871,7 @@ router.get('/spotify/playlist/:playlistId/tracks', async (req: Request, res: Res
     const adapter = adapterRegistry.getSource('spotify');
 
     if (!adapter || !adapter.fetchTracks) {
+      logger.error('[Spotify Playlist Tracks] Spotify adapter not available or missing fetchTracks');
       res.status(500).json({
         error: { message: 'Spotify adapter not available' }
       });

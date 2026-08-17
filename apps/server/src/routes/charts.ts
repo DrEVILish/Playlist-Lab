@@ -4,6 +4,7 @@
 
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -76,8 +77,8 @@ router.get('/:source/:country', requireAuth, async (req, res) => {
     }
     
     return res.json({ playlists });
-  } catch (error) {
-    console.error(`[Charts] Error fetching ${source} charts for ${country}:`, error);
+  } catch (error: any) {
+    logger.error(`[Charts] Error fetching ${source} charts for ${country}`, { error: error?.message || error });
     return res.status(500).json({ error: 'Failed to fetch charts' });
   }
 });

@@ -110,8 +110,63 @@ describe('Schedule Routes', () => {
 
       expect(response.body.success).toBe(true);
       expect(response.body.schedules).toHaveLength(2);
-      expect(response.body.schedules[0].schedule_type).toBe('mix_generation');
-      expect(response.body.schedules[1].schedule_type).toBe('playlist_refresh');
+      expect(response.body.schedules[0].scheduleType).toBe('mix_generation');
+      expect(response.body.schedules[1].scheduleType).toBe('playlist_refresh');
+    });
+
+    it('should include the source playlist link for playlist-refresh schedules', async () => {
+      const sourcedPlaylist = dbService.createPlaylist(
+        userId,
+        'plex-playlist-2',
+        'Sourced Playlist',
+        'spotify',
+        'https://open.spotify.com/playlist/abc123'
+      );
+      dbService.createSchedule(userId, {
+        playlist_id: sourcedPlaylist.id,
+        schedule_type: 'playlist_refresh',
+        frequency: 'weekly',
+        start_date: '2024-01-01'
+      });
+
+      const response = await request(app).get('/api/schedules').expect(200);
+
+      const schedule = response.body.schedules[0];
+      expect(schedule.source).toBe('spotify');
+      expect(schedule.sourceUrl).toBe('https://open.spotify.com/playlist/abc123');
+    });
+
+    it('should include the source chart link for chart-import schedules', async () => {
+      dbService.createSchedule(userId, {
+        schedule_type: 'playlist_refresh',
+        frequency: 'daily',
+        start_date: '2024-01-01',
+        config: {
+          chartName: 'Billboard Hot 100',
+          chartSource: 'billboard',
+          chartUrl: 'https://www.billboard.com/charts/hot-100/'
+        }
+      });
+
+      const response = await request(app).get('/api/schedules').expect(200);
+
+      const schedule = response.body.schedules[0];
+      expect(schedule.source).toBe('billboard');
+      expect(schedule.sourceUrl).toBe('https://www.billboard.com/charts/hot-100/');
+    });
+
+    it('should omit source fields when there is no linked playlist or chart URL', async () => {
+      dbService.createSchedule(userId, {
+        schedule_type: 'mix_generation',
+        frequency: 'daily',
+        start_date: '2024-01-01',
+        config: { mixTypes: ['weekly'] }
+      });
+
+      const response = await request(app).get('/api/schedules').expect(200);
+
+      const schedule = response.body.schedules[0];
+      expect(schedule.sourceUrl).toBeUndefined();
     });
   });
 
@@ -129,9 +184,9 @@ describe('Schedule Routes', () => {
 
       expect(response.body.success).toBe(true);
       expect(response.body.schedule).toBeDefined();
-      expect(response.body.schedule.schedule_type).toBe('mix_generation');
+      expect(response.body.schedule.scheduleType).toBe('mix_generation');
       expect(response.body.schedule.frequency).toBe('daily');
-      expect(response.body.schedule.user_id).toBe(userId);
+      expect(response.body.schedule.userId).toBe(userId);
     });
 
     it('should create a playlist refresh schedule', async () => {
@@ -147,8 +202,8 @@ describe('Schedule Routes', () => {
 
       expect(response.body.success).toBe(true);
       expect(response.body.schedule).toBeDefined();
-      expect(response.body.schedule.schedule_type).toBe('playlist_refresh');
-      expect(response.body.schedule.playlist_id).toBe(playlistId);
+      expect(response.body.schedule.scheduleType).toBe('playlist_refresh');
+      expect(response.body.schedule.playlistId).toBe(playlistId);
     });
 
     it('should reject schedule with missing required fields', async () => {
@@ -242,7 +297,10 @@ describe('Schedule Routes', () => {
         .expect(200);
 
       expect(response.body.success).toBe(true);
-      expect(JSON.parse(response.body.schedule.config)).toEqual({
+      // transformSchedule() already parses config into an object before
+      // sending it in the API response (see src/routes/schedules.ts), so
+      // no JSON.parse is needed here.
+      expect(response.body.schedule.config).toEqual({
         mixTypes: ['weekly', 'daily', 'timecapsule']
       });
     });

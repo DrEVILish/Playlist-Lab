@@ -427,6 +427,10 @@ async function generateMixFromTemplate(
   const warnings: string[] = [];
 
   let trackKeys: string[] = [];
+  // Set when a more specific "no tracks matched" message is computed (e.g. naming which
+  // genres/moods/decades matched nothing), so the final empty-trackKeys check below can
+  // surface it instead of a generic fallback error.
+  let noTracksMessage: string | undefined;
 
   // Generate mix based on template type
   switch (template.mix_type) {
@@ -512,6 +516,13 @@ async function generateMixFromTemplate(
       const missingArtists: string[] = [];
       const foundArtists: string[] = [];
 
+      // Even split across artists, capped by the configured maxTracksPerArtist (if set)
+      // so a single artist can never contribute more than that many tracks.
+      const artistEvenSplit = Math.ceil(config.trackCount / (config.artistIds?.length || 1));
+      const perArtistLimit = config.maxTracksPerArtist && config.maxTracksPerArtist > 0
+        ? Math.min(artistEvenSplit, config.maxTracksPerArtist)
+        : artistEvenSplit;
+
       for (const artistId of config.artistIds || []) {
         try {
           // Retry network operations for fetching artist tracks
@@ -519,7 +530,7 @@ async function generateMixFromTemplate(
             () => plex.getArtistPopularTracks(
               libraryId,
               artistId,
-              Math.ceil(config.trackCount / (config.artistIds?.length || 1))
+              perArtistLimit
             ),
             `Fetch tracks for artist ${artistId}`
           );
@@ -535,10 +546,13 @@ async function generateMixFromTemplate(
           const artistName = tracks[0]?.grandparentTitle || artistId;
           foundArtists.push(artistName);
 
+          let addedForArtist = 0;
           for (const track of tracks) {
+            if (addedForArtist >= perArtistLimit) break;
             if (!addedKeys.has(track.ratingKey) && trackKeys.length < config.trackCount) {
               trackKeys.push(track.ratingKey);
               addedKeys.add(track.ratingKey);
+              addedForArtist++;
             }
           }
         } catch (error: any) {
@@ -578,6 +592,13 @@ async function generateMixFromTemplate(
       const missingAlbums: string[] = [];
       const foundAlbums: string[] = [];
 
+      // Cap the number of tracks pulled from a single album at the configured
+      // maxTracksPerAlbum (if set); otherwise fall back to taking the whole album
+      // (existing behavior), bounded overall by config.trackCount.
+      const perAlbumLimit = config.maxTracksPerAlbum && config.maxTracksPerAlbum > 0
+        ? config.maxTracksPerAlbum
+        : Infinity;
+
       for (const albumId of config.albumIds || []) {
         try {
           // Retry network operations for fetching album tracks
@@ -597,10 +618,13 @@ async function generateMixFromTemplate(
           const albumName = tracks[0]?.parentTitle || albumId;
           foundAlbums.push(albumName);
 
+          let addedForAlbum = 0;
           for (const track of tracks) {
+            if (addedForAlbum >= perAlbumLimit) break;
             if (!addedKeys.has(track.ratingKey) && trackKeys.length < config.trackCount) {
               trackKeys.push(track.ratingKey);
               addedKeys.add(track.ratingKey);
+              addedForAlbum++;
             }
           }
         } catch (error: any) {
@@ -647,15 +671,20 @@ async function generateMixFromTemplate(
       if (template.mix_type === 'genre') {
         filters.genres = config.genres;
       } else if (template.mix_type === 'mood') {
-        filters.genres = config.moods; // Moods are treated as genres in Plex
+        // Moods are matched against Plex's Mood tag, not the Genre tag
+        filters.moods = config.moods;
       } else if (template.mix_type === 'decade') {
-        // Convert decades to year ranges
+        // Build one disjoint [decadeStart, decadeStart+9] range per selected decade so
+        // that e.g. selecting 1960s + 1990s does not also pull in 1970s/1980s tracks.
         const decades = config.decades || [];
         if (decades.length > 0) {
-          const minDecade = Math.min(...decades);
-          const maxDecade = Math.max(...decades);
-          filters.releasedAfterYear = minDecade;
-          filters.releasedBeforeYear = maxDecade + 9; // Include full decade
+          filters.yearRanges = decades.map((decade: number) => ({ min: decade, max: decade + 9 }));
+          // Also set a broad min/max range covering all selected decades. This is used
+          // by generateCustomMix's performance optimization to narrow the initial fetch;
+          // the yearRanges filter above then excludes years outside the actually
+          // selected decades from that broader pool.
+          filters.releasedAfterYear = Math.min(...decades);
+          filters.releasedBeforeYear = Math.max(...decades) + 9;
         }
       }
 
@@ -678,7 +707,8 @@ async function generateMixFromTemplate(
           const filterValues = template.mix_type === 'genre' ? config.genres?.join(', ') :
                              template.mix_type === 'mood' ? config.moods?.join(', ') :
                              config.decades?.join(', ');
-          warnings.push(`No tracks found matching ${filterType}: ${filterValues}`);
+          noTracksMessage = `No tracks found matching ${filterType}: ${filterValues}`;
+          warnings.push(noTracksMessage);
         } else if (trackKeys.length < config.trackCount) {
           warnings.push(`Only found ${trackKeys.length} tracks matching criteria (requested ${config.trackCount})`);
         }
@@ -704,7 +734,7 @@ async function generateMixFromTemplate(
   }
 
   if (trackKeys.length === 0) {
-    throw new Error('No tracks found matching template criteria. The items in this template may no longer exist in your library.');
+    throw new Error(noTracksMessage || 'No tracks found matching template criteria. The items in this template may no longer exist in your library.');
   }
 
   // Build track URIs and library URI
@@ -1257,8 +1287,10 @@ router.post('/:id/generate', async (req: Request, res: Response, next: NextFunct
     else if (error.message?.includes('token') || error.message?.includes('401') || error.message?.includes('authentication')) {
       errorMessage = 'Plex authentication failed. Please reconnect your Plex account in settings.';
     }
-    // Library/resource not found errors
-    else if (error.message?.includes('library') || error.message?.includes('404') || error.message?.includes('not found')) {
+    // Library/resource not found errors (raw technical 404s only - errors raised inside
+    // generateMixFromTemplate already carry their own specific, user-friendly wording and
+    // should pass through unchanged rather than being clobbered by this generic message)
+    else if (error.message?.includes('404')) {
       errorMessage = 'Music library or template items not found. Please verify your library selection and template configuration.';
     }
     // Permission errors

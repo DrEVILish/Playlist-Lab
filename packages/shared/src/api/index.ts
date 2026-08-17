@@ -62,6 +62,19 @@ export class APIClient {
           },
         }));
 
+        // Notify the app of session expiry so it can bounce the user to
+        // /login. Skip the auth bootstrap endpoints themselves, since a 401
+        // from those just means "not logged in yet" (normal on first load)
+        // rather than a session that expired mid-use.
+        if (
+          response.status === 401 &&
+          typeof window !== 'undefined' &&
+          endpoint !== '/api/auth/me' &&
+          endpoint !== '/api/auth/poll'
+        ) {
+          window.dispatchEvent(new CustomEvent('auth:session-expired'));
+        }
+
         throw new APIError(
           error.error?.code || 'UNKNOWN_ERROR',
           error.error?.message || 'Request failed',
@@ -214,6 +227,19 @@ export class APIClient {
     return this.request(`/api/playlists/${id}`, { method: 'DELETE' });
   }
 
+  // Deletes by Plex ratingKey instead of our internal numeric id - works for
+  // any playlist visible in Plex, including ones never imported through this
+  // app (which have no numeric id to pass to deletePlaylist() above).
+  async deletePlaylistByPlexId(ratingKey: string): Promise<{ success: boolean }> {
+    return this.request(`/api/playlists/by-plex-id/${ratingKey}`, { method: 'DELETE' });
+  }
+
+  // Re-scrapes the playlist from its original online source and replaces its
+  // Plex tracks. Fires in the background - use refreshPlaylists() afterward.
+  async reimportPlaylist(id: number | string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/api/playlists/${id}/reimport`, { method: 'POST' });
+  }
+
   async getPlaylistTracks(id: number | string): Promise<{ tracks: any[] }> {
     return this.request(`/api/playlists/${id}/tracks`);
   }
@@ -350,6 +376,11 @@ export class APIClient {
 
     if (!response.ok) {
       const error: any = await response.json();
+
+      if (response.status === 401 && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('auth:session-expired'));
+      }
+
       throw new APIError(
         error.error?.code || 'UNKNOWN_ERROR',
         error.error?.message || 'Import failed',
@@ -612,11 +643,7 @@ export class APIClient {
       start_date: schedule.startDate,
       config: schedule.config,
     };
-    
-    console.log('Creating schedule - input:', schedule);
-    console.log('Creating schedule - transformed body:', body);
-    console.log('Creating schedule - stringified:', JSON.stringify(body));
-    
+
     return this.request('/api/schedules', {
       method: 'POST',
       body: JSON.stringify(body),
@@ -749,9 +776,14 @@ export class APIClient {
     return this.request('/api/missing');
   }
 
+  // Starts matching in the background (a full retry batch does several real
+  // Plex API calls per track, so large batches can take minutes) and returns
+  // immediately once the job is queued. Watch the missing tracks list shrink
+  // via getMissingTracks() to see live progress instead of a final count.
   async retryMissingTracks(playlistId?: number, trackIds?: number[]): Promise<{
-    matched: number;
-    remaining: number;
+    started: boolean;
+    totalTracks: number;
+    message: string;
   }> {
     return this.request('/api/missing/retry', {
       method: 'POST',

@@ -13,6 +13,7 @@
 import axios from 'axios';
 import { EventEmitter } from 'events';
 import { debugLog } from '../utils/debug-logger';
+import { logger } from '../utils/logger';
 
 export interface ExternalTrack {
   title: string;
@@ -70,7 +71,7 @@ export async function scrapeDeezerPlaylist(playlistId: string, progressEmitter?:
       coverUrl: data.picture_xl || data.picture_big || data.picture_medium || data.picture,
     };
   } catch (error) {
-    console.error('[Deezer] Scrape error:', error);
+    logger.error('[Deezer] Scrape error:', { error: (error as any)?.message || error });
     throw new Error(`Failed to scrape Deezer playlist: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -134,7 +135,7 @@ export async function getDeezerCharts(country: string): Promise<ExternalPlaylist
       }
     }
   } catch (error) {
-    console.error('[Deezer] Charts error:', error);
+    logger.error('[Deezer] Charts error:', { error: (error as any)?.message || error });
   }
 
   return playlists;
@@ -228,7 +229,7 @@ export async function scrapeSpotifyPlaylist(url: string, progressEmitter?: Event
               }
               console.log(`[Spotify] Puppeteer found ${browserResult.tracks.length} tracks (not more than embed), using embed result`);
             } catch (browserError: any) {
-              console.warn('[Spotify] Puppeteer fallback failed, using embed result:', browserError.message);
+              logger.warn('[Spotify] Puppeteer fallback failed, using embed result:', { error: browserError.message });
             }
           }
           
@@ -251,9 +252,9 @@ export async function scrapeSpotifyPlaylist(url: string, progressEmitter?: Event
         }
       }
       
-      console.warn('[Spotify] Embed page returned no track data, trying API methods');
+      logger.warn('[Spotify] Embed page returned no track data, trying API methods');
     } catch (embedError: any) {
-      console.error('[Spotify] Embed scraping failed:', embedError.message);
+      logger.error('[Spotify] Embed scraping failed:', { error: embedError.message });
     }
     
     // Method 2: Try Spotify API if user is authenticated (requires Premium on app owner)
@@ -313,7 +314,7 @@ export async function scrapeSpotifyPlaylist(url: string, progressEmitter?: Event
           }
         }
       } catch (apiError: any) {
-        console.error('[Spotify] API method failed:', apiError.message);
+        logger.error('[Spotify] API method failed:', { error: apiError.message });
       }
     }
     
@@ -372,7 +373,7 @@ export async function scrapeSpotifyPlaylist(url: string, progressEmitter?: Event
         }
       }
     } catch (ccError: any) {
-      console.error('[Spotify] Client Credentials method failed:', ccError.message);
+      logger.error('[Spotify] Client Credentials method failed:', { error: ccError.message });
     }
     
     // All methods failed
@@ -384,7 +385,7 @@ export async function scrapeSpotifyPlaylist(url: string, progressEmitter?: Event
       'Make sure the playlist is public and the URL is correct.'
     );
   } catch (error) {
-    console.error('[Spotify] Scrape error:', error);
+    logger.error('[Spotify] Scrape error:', { error: (error as any)?.message || error });
     throw error;
   }
 }
@@ -413,7 +414,7 @@ export async function scrapeAppleMusicPlaylist(url: string, progressEmitter?: Ev
     const { scrapeAppleMusicWithBrowser } = await import('./browser-scrapers');
     return await scrapeAppleMusicWithBrowser(url, progressEmitter);
   } catch (browserError) {
-    console.error('[Apple Music] Browser scraping failed:', browserError);
+    logger.error('[Apple Music] Browser scraping failed:', { error: (browserError as any)?.message || browserError });
     throw new Error(`Failed to scrape Apple Music playlist: ${browserError instanceof Error ? browserError.message : 'Unknown error'}`);
   }
 }
@@ -440,7 +441,7 @@ export async function scrapeTidalPlaylist(url: string, progressEmitter?: EventEm
     const { scrapeTidalWithBrowser } = await import('./browser-scrapers');
     return await scrapeTidalWithBrowser(url, progressEmitter);
   } catch (browserError) {
-    console.error('[Tidal] Browser scraping failed, trying API fallback:', browserError);
+    logger.error('[Tidal] Browser scraping failed, trying API fallback:', { error: (browserError as any)?.message || browserError });
     
     // Extract playlist UUID from URL
     const match = url.match(/playlist\/([a-zA-Z0-9-]+)/);
@@ -489,7 +490,7 @@ export async function scrapeTidalPlaylist(url: string, progressEmitter?: EventEm
         };
       }
     } catch (apiError) {
-      console.error('[Tidal] API fetch failed:', apiError);
+      logger.error('[Tidal] API fetch failed:', { error: (apiError as any)?.message || apiError });
     }
     
     // Fallback: Try to scrape the embed page
@@ -524,7 +525,7 @@ export async function scrapeTidalPlaylist(url: string, progressEmitter?: EventEm
         }
       }
     } catch (embedError) {
-      console.error('[Tidal] Embed scraping failed:', embedError);
+      logger.error('[Tidal] Embed scraping failed:', { error: (embedError as any)?.message || embedError });
     }
     
     throw new Error('Unable to fetch Tidal playlist. The playlist may be private or require authentication.');
@@ -588,7 +589,7 @@ export async function scrapeYouTubeMusicPlaylist(url: string, progressEmitter?: 
     
     // If no tracks found, throw error to trigger browser scraping fallback
     if (trackList.length === 0) {
-      console.warn('[YouTube Music] No tracks found via API, falling back to browser scraping');
+      logger.warn('[YouTube Music] No tracks found via API, falling back to browser scraping');
       throw new Error('No tracks found in playlist via API');
     }
     
@@ -643,14 +644,14 @@ export async function scrapeYouTubeMusicPlaylist(url: string, progressEmitter?: 
       coverUrl,
     };
   } catch (error) {
-    console.error('[YouTube Music] API scraping failed:', error);
+    logger.error('[YouTube Music] API scraping failed:', { error: (error as any)?.message || error });
     
     // Fallback to browser scraping if API fails
     try {
       const { scrapeYouTubeMusicWithBrowser } = await import('./browser-scrapers');
       return await scrapeYouTubeMusicWithBrowser(url, progressEmitter);
     } catch (browserError) {
-      console.error('[YouTube Music] Browser scraping also failed:', browserError);
+      logger.error('[YouTube Music] Browser scraping also failed:', { error: (browserError as any)?.message || browserError });
       throw new Error(`Failed to scrape YouTube Music playlist: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -676,7 +677,7 @@ export async function scrapeAmazonMusicPlaylist(url: string, progressEmitter?: E
     const { scrapeAmazonMusicWithBrowser } = await import('./browser-scrapers');
     return await scrapeAmazonMusicWithBrowser(url, progressEmitter);
   } catch (browserError) {
-    console.error('[Amazon Music] Browser scraping failed, trying page scraping fallback:', browserError);
+    logger.error('[Amazon Music] Browser scraping failed, trying page scraping fallback:', { error: (browserError as any)?.message || browserError });
     
     // Extract playlist ID from URL
     const match = url.match(/playlists\/([a-zA-Z0-9]+)/);
@@ -723,11 +724,11 @@ export async function scrapeAmazonMusicPlaylist(url: string, progressEmitter?: E
             };
           }
         } catch (parseError) {
-          console.error('[Amazon Music] Failed to parse data:', parseError);
+          logger.error('[Amazon Music] Failed to parse data:', { error: (parseError as any)?.message || parseError });
         }
       }
     } catch (error) {
-      console.error('[Amazon Music] Page fetch failed:', error);
+      logger.error('[Amazon Music] Page fetch failed:', { error: (error as any)?.message || error });
     }
     
     throw new Error('Unable to fetch Amazon Music playlist. Amazon has strong anti-scraping measures and requires authentication.');
@@ -754,7 +755,7 @@ export async function scrapeQobuzPlaylist(url: string, progressEmitter?: EventEm
     const { scrapeQobuzWithBrowser } = await import('./browser-scrapers');
     return await scrapeQobuzWithBrowser(url, progressEmitter);
   } catch (browserError) {
-    console.error('[Qobuz] Browser scraping failed, trying API fallback:', browserError);
+    logger.error('[Qobuz] Browser scraping failed, trying API fallback:', { error: (browserError as any)?.message || browserError });
     
     // Extract playlist ID from URL
     // Format: https://www.qobuz.com/*/playlist/{name}/{id}
@@ -803,7 +804,7 @@ export async function scrapeQobuzPlaylist(url: string, progressEmitter?: EventEm
         };
       }
     } catch (apiError) {
-      console.error('[Qobuz] API fetch failed:', apiError);
+      logger.error('[Qobuz] API fetch failed:', { error: (apiError as any)?.message || apiError });
     }
     
     // Fallback: Try to scrape the page
@@ -838,11 +839,11 @@ export async function scrapeQobuzPlaylist(url: string, progressEmitter?: EventEm
             };
           }
         } catch (parseError) {
-          console.error('[Qobuz] Failed to parse data:', parseError);
+          logger.error('[Qobuz] Failed to parse data:', { error: (parseError as any)?.message || parseError });
         }
       }
     } catch (pageError) {
-      console.error('[Qobuz] Page scraping failed:', pageError);
+      logger.error('[Qobuz] Page scraping failed:', { error: (pageError as any)?.message || pageError });
     }
     
     throw new Error('Unable to fetch Qobuz playlist. The playlist may be private or require authentication.');
@@ -883,13 +884,13 @@ export async function getListenBrainzPlaylists(username: string): Promise<Extern
           tracks,
         });
       } catch (error) {
-        console.error(`[ListenBrainz] Error fetching playlist ${playlist.identifier}:`, error);
+        logger.error(`[ListenBrainz] Error fetching playlist ${playlist.identifier}:`, { error: (error as any)?.message || error });
       }
     }
     
     return playlists;
   } catch (error) {
-    console.error('[ListenBrainz] Error:', error);
+    logger.error('[ListenBrainz] Error:', { error: (error as any)?.message || error });
     throw new Error(`Failed to fetch ListenBrainz playlists: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -922,7 +923,7 @@ export async function scrapeAriaPlaylist(url: string, progressEmitter?: EventEmi
     const { scrapeAriaChartWithBrowser } = await import('./browser-scrapers');
     return await scrapeAriaChartWithBrowser(url, progressEmitter);
   } catch (browserError) {
-    console.error('[ARIA] Browser scraping failed:', browserError);
+    logger.error('[ARIA] Browser scraping failed:', { error: (browserError as any)?.message || browserError });
     throw new Error(`Failed to scrape ARIA chart: ${browserError instanceof Error ? browserError.message : 'Unknown error'}`);
   }
 }
@@ -944,7 +945,7 @@ export async function scrapeBillboardPlaylist(url: string, progressEmitter?: Eve
     const { scrapeBillboardChart } = await import('./browser-scrapers');
     return await scrapeBillboardChart(url, progressEmitter);
   } catch (error) {
-    console.error('[Billboard] Scraping failed:', error);
+    logger.error('[Billboard] Scraping failed:', { error: (error as any)?.message || error });
     throw new Error(`Failed to scrape Billboard chart: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -1033,7 +1034,7 @@ export async function scrapeLastfmPlaylist(url: string, progressEmitter?: EventE
             currentTrackName: `Fetching tracks from ${artist.name}...`
           });
         } catch (err) {
-          console.error(`Failed to fetch tracks for ${artist.name}:`, err);
+          logger.error(`Failed to fetch tracks for ${artist.name}:`, { error: (err as any)?.message || err });
         }
       }
 
@@ -1079,7 +1080,7 @@ export async function scrapeLastfmPlaylist(url: string, progressEmitter?: EventE
             currentTrackName: `Fetching tracks from ${tag.name} tag...`
           });
         } catch (err) {
-          console.error(`Failed to fetch tracks for tag ${tag.name}:`, err);
+          logger.error(`Failed to fetch tracks for tag ${tag.name}:`, { error: (err as any)?.message || err });
         }
       }
 
@@ -1123,7 +1124,7 @@ export async function scrapeLastfmPlaylist(url: string, progressEmitter?: EventE
     };
 
   } catch (error) {
-    console.error('[Last.fm] API request failed:', error);
+    logger.error('[Last.fm] API request failed:', { error: (error as any)?.message || error });
     throw new Error(`Failed to fetch Last.fm chart: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -1309,6 +1310,167 @@ export function parseM3UFile(content: string, fileName: string): ExternalPlaylis
   };
 }
 
+/**
+ * Parse a CSV playlist file. Matches the header/column order produced by
+ * this app's own CSV export (routes/export.ts's generateCSV): Track,Artist,
+ * Album,Duration,File Path - so a playlist exported to CSV can be re-imported
+ * unchanged. Also tolerates a reordered/partial header (matched by name) for
+ * CSV files from other sources.
+ */
+export function parseCSVFile(content: string, fileName: string): ExternalPlaylist {
+  const lines = content.split(/\r?\n/).filter(l => l.trim().length > 0);
+  if (lines.length === 0) {
+    throw new Error('CSV file is empty.');
+  }
+
+  const parseRow = (line: string): string[] => {
+    const cells: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (inQuotes) {
+        if (char === '"' && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else if (char === '"') {
+          inQuotes = false;
+        } else {
+          current += char;
+        }
+      } else if (char === '"') {
+        inQuotes = true;
+      } else if (char === ',') {
+        cells.push(current);
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    cells.push(current);
+    return cells;
+  };
+
+  const header = parseRow(lines[0]).map(h => h.trim().toLowerCase());
+  const titleIdx = header.findIndex(h => h === 'track' || h === 'title');
+  const artistIdx = header.findIndex(h => h === 'artist');
+  const albumIdx = header.findIndex(h => h === 'album');
+
+  const dataLines = titleIdx >= 0 || artistIdx >= 0 ? lines.slice(1) : lines;
+  const tracks: ExternalTrack[] = [];
+
+  for (const line of dataLines) {
+    const cells = parseRow(line);
+    const title = titleIdx >= 0 ? cells[titleIdx]?.trim() : cells[0]?.trim();
+    const artist = artistIdx >= 0 ? cells[artistIdx]?.trim() : cells[1]?.trim();
+    const album = albumIdx >= 0 ? cells[albumIdx]?.trim() : undefined;
+
+    if (title) {
+      tracks.push({ title, artist: artist || 'Unknown', album: album || undefined });
+    }
+  }
+
+  if (tracks.length === 0) {
+    throw new Error('No tracks found in CSV file. Expected a "Track"/"Title" column and an "Artist" column.');
+  }
+
+  return {
+    id: `csv-${Date.now()}`,
+    name: fileName.replace(/\.[^.]+$/, ''),
+    description: `Imported from ${fileName}`,
+    source: 'file',
+    tracks,
+  };
+}
+
+/**
+ * Parse a PLS playlist file. Matches this app's own PLS export
+ * (routes/export.ts's generatePLS): TitleN=Artist - Title lines.
+ */
+export function parsePLSFile(content: string, fileName: string): ExternalPlaylist {
+  const lines = content.split(/\r?\n/);
+  const titles = new Map<number, string>();
+
+  for (const line of lines) {
+    const match = line.match(/^Title(\d+)=(.+)$/i);
+    if (match) {
+      titles.set(parseInt(match[1], 10), match[2].trim());
+    }
+  }
+
+  const tracks: ExternalTrack[] = [];
+  for (const num of [...titles.keys()].sort((a, b) => a - b)) {
+    const info = titles.get(num)!;
+    const dashIndex = info.lastIndexOf(' - ');
+    if (dashIndex > 0) {
+      tracks.push({
+        artist: info.substring(0, dashIndex).trim(),
+        title: info.substring(dashIndex + 3).trim(),
+      });
+    } else {
+      tracks.push({ title: info, artist: 'Unknown' });
+    }
+  }
+
+  if (tracks.length === 0) {
+    throw new Error('No tracks found in PLS file. Expected "TitleN=Artist - Title" entries.');
+  }
+
+  return {
+    id: `pls-${Date.now()}`,
+    name: fileName.replace(/\.[^.]+$/, ''),
+    description: `Imported from ${fileName}`,
+    source: 'file',
+    tracks,
+  };
+}
+
+/**
+ * Parse an XSPF playlist file (XML). Matches this app's own XSPF export
+ * (routes/export.ts's generateXSPF): one <track> per entry with <title>/
+ * <creator>/<album> children.
+ */
+export function parseXSPFFile(content: string, fileName: string): ExternalPlaylist {
+  const unescapeXml = (str: string) => str
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+
+  const extractTag = (block: string, tag: string): string | undefined => {
+    const match = block.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'i'));
+    return match ? unescapeXml(match[1].trim()) : undefined;
+  };
+
+  const trackBlocks = content.match(/<track>[\s\S]*?<\/track>/gi) || [];
+  const tracks: ExternalTrack[] = [];
+
+  for (const block of trackBlocks) {
+    const title = extractTag(block, 'title');
+    if (!title) continue;
+    tracks.push({
+      title,
+      artist: extractTag(block, 'creator') || 'Unknown',
+      album: extractTag(block, 'album'),
+    });
+  }
+
+  if (tracks.length === 0) {
+    throw new Error('No tracks found in XSPF file. Expected <track> entries with a <title>.');
+  }
+
+  const titleMatch = content.match(/<title>([\s\S]*?)<\/title>/i);
+  const playlistName = titleMatch ? unescapeXml(titleMatch[1].trim()) : fileName.replace(/\.[^.]+$/, '');
+
+  return {
+    id: `xspf-${Date.now()}`,
+    name: playlistName,
+    description: `Imported from ${fileName}`,
+    source: 'file',
+    tracks,
+  };
+}
 
 // ==================== SEARCH FUNCTIONS ====================
 
@@ -1331,7 +1493,7 @@ export async function searchDeezerPlaylists(query: string): Promise<Array<{ name
       count: playlist.nb_tracks || 0,
     }));
   } catch (error) {
-    console.error('Failed to search Deezer playlists:', error);
+    logger.error('Failed to search Deezer playlists:', { error: (error as any)?.message || error });
     return [];
   }
 }
@@ -1393,7 +1555,7 @@ export async function getDeezerPopularPlaylists(country: string): Promise<Array<
 
     return results;
   } catch (error) {
-    console.error('[Deezer] Failed to fetch popular playlists:', error);
+    logger.error('[Deezer] Failed to fetch popular playlists:', { error: (error as any)?.message || error });
     return [];
   }
 }
@@ -1422,7 +1584,7 @@ export async function searchYouTubeMusicPlaylists(query: string): Promise<Array<
       };
     });
   } catch (error) {
-    console.error('Failed to search YouTube Music playlists:', error);
+    logger.error('Failed to search YouTube Music playlists:', { error: (error as any)?.message || error });
     return [];
   }
 }
@@ -1450,7 +1612,7 @@ export async function searchAppleMusicPlaylists(country: string): Promise<Array<
       count: undefined,
     }));
   } catch (error) {
-    console.error(`[Apple Music] Failed to fetch playlists for ${country}:`, error);
+    logger.error(`[Apple Music] Failed to fetch playlists for ${country}:`, { error: (error as any)?.message || error });
     return [];
   }
 }
@@ -1549,7 +1711,7 @@ export async function scrapeYouTubePlaylist(url: string, progressEmitter?: Event
       coverUrl,
     };
   } catch (error) {
-    console.error('[YouTube] Scraping failed:', error);
+    logger.error('[YouTube] Scraping failed:', { error: (error as any)?.message || error });
     throw new Error(`Failed to scrape YouTube playlist: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -1565,7 +1727,7 @@ export async function getSpotifyPopularPlaylists(country: string, userId?: numbe
     const token = await getSpotifyClientCredentialsToken(userId, db);
     
     if (!token) {
-      console.warn('[Spotify Charts] No Client Credentials token available');
+      logger.warn('[Spotify Charts] No Client Credentials token available');
       return [];
     }
 
@@ -1605,7 +1767,7 @@ export async function getSpotifyPopularPlaylists(country: string, userId?: numbe
     
     const bothFailedWithPremium = isPremiumError(featuredRes) && isPremiumError(toplistsRes);
     if (bothFailedWithPremium) {
-      console.warn('[Spotify Charts] Premium required for browse API');
+      logger.warn('[Spotify Charts] Premium required for browse API');
       return [{ name: '__premium_required__', url: '', description: 'Spotify Premium required', count: 0, premiumRequired: true }];
     }
 
@@ -1626,7 +1788,7 @@ export async function getSpotifyPopularPlaylists(country: string, userId?: numbe
     console.log(`[Spotify Charts] Found ${results.length} playlists for country ${country}`);
     return results;
   } catch (error) {
-    console.error('[Spotify Charts] Error fetching popular playlists:', error);
+    logger.error('[Spotify Charts] Error fetching popular playlists:', { error: (error as any)?.message || error });
     return [];
   }
 }

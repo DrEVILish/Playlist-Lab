@@ -145,6 +145,16 @@ export class DatabaseService {
   }
 
   /**
+   * Get the first-created user (lowest id). Used by the DEV_NO_AUTH bypass
+   * to pick who to log in as when reviewing the UI without a real session.
+   */
+  getFirstUser(): User | null {
+    const stmt = this.db.prepare('SELECT * FROM users ORDER BY id ASC LIMIT 1');
+    const result = stmt.get() as User | undefined;
+    return result ?? null;
+  }
+
+  /**
    * Get user by Plex username
    */
   getUserByPlexUsername(username: string): User | null {
@@ -183,17 +193,22 @@ export class DatabaseService {
     libraryId?: string,
     libraryName?: string
   ): UserServer {
-    // Delete existing server for this user
-    this.db.prepare('DELETE FROM user_servers WHERE user_id = ?').run(userId);
-    
-    // Insert new server
-    const stmt = this.db.prepare(`
+    const insertStmt = this.db.prepare(`
       INSERT INTO user_servers (user_id, server_name, server_client_id, server_url, library_id, library_name)
       VALUES (?, ?, ?, ?, ?, ?)
     `);
-    
-    const result = stmt.run(userId, serverName, serverClientId, serverUrl, libraryId, libraryName);
-    
+    const deleteStmt = this.db.prepare('DELETE FROM user_servers WHERE user_id = ?');
+
+    // Delete existing server and insert the new one atomically - if the
+    // INSERT throws after the DELETE, the transaction rolls back instead of
+    // leaving the user with zero server rows.
+    const replaceServer = this.db.transaction(() => {
+      deleteStmt.run(userId);
+      return insertStmt.run(userId, serverName, serverClientId, serverUrl, libraryId, libraryName);
+    });
+
+    const result = replaceServer();
+
     return {
       id: result.lastInsertRowid as number,
       user_id: userId,
@@ -386,20 +401,22 @@ export class DatabaseService {
    * Create a new schedule
    */
   createSchedule(userId: number, schedule: ScheduleInput): Schedule {
+    const now = Math.floor(Date.now() / 1000);
     const stmt = this.db.prepare(`
-      INSERT INTO schedules (user_id, playlist_id, schedule_type, frequency, start_date, config)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO schedules (user_id, playlist_id, schedule_type, frequency, start_date, config, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
-    
+
     const result = stmt.run(
       userId,
       schedule.playlist_id,
       schedule.schedule_type,
       schedule.frequency,
       schedule.start_date,
-      schedule.config ? JSON.stringify(schedule.config) : null
+      schedule.config ? JSON.stringify(schedule.config) : null,
+      now
     );
-    
+
     return {
       id: result.lastInsertRowid as number,
       user_id: userId,
@@ -407,7 +424,8 @@ export class DatabaseService {
       schedule_type: schedule.schedule_type,
       frequency: schedule.frequency,
       start_date: schedule.start_date,
-      config: schedule.config ? JSON.stringify(schedule.config) : undefined
+      config: schedule.config ? JSON.stringify(schedule.config) : undefined,
+      created_at: now
     };
   }
 
@@ -435,8 +453,15 @@ export class DatabaseService {
     const now = Math.floor(Date.now() / 1000);
     const currentDate = new Date();
     
-    // Get all schedules
-    const stmt = this.db.prepare('SELECT * FROM schedules');
+    // Get all schedules belonging to enabled users only - a disabled user's
+    // schedules must not keep firing in the background after an admin
+    // disables them via POST /api/admin/users/:userId/disable.
+    const stmt = this.db.prepare(`
+      SELECT schedules.*
+      FROM schedules
+      JOIN users ON users.id = schedules.user_id
+      WHERE users.is_enabled = 1
+    `);
     const allSchedules = stmt.all() as Schedule[];
     
     return allSchedules.filter(schedule => {
@@ -650,6 +675,27 @@ export class DatabaseService {
       WHERE id = ?
     `);
     stmt.run(executionId);
+  }
+
+  /**
+   * Reconcile schedule executions left stuck in the 'running' state by an
+   * unclean shutdown/restart. Since this service is restarted periodically,
+   * any execution that was in-flight at restart time would otherwise stay
+   * 'running' forever - which also permanently disables that schedule's
+   * "Run Now" button in the UI (the frontend derives isRunning from any
+   * execution with status 'running'). Intended to be called once at startup.
+   *
+   * @returns Number of executions marked as failed
+   */
+  reconcileStuckExecutions(): number {
+    const stmt = this.db.prepare(`
+      UPDATE schedule_executions
+      SET status = 'failed', completed_at = ?, error_message = ?
+      WHERE status = 'running'
+    `);
+    const now = Math.floor(Date.now() / 1000);
+    const result = stmt.run(now, 'Execution interrupted by server restart');
+    return result.changes;
   }
 
   /**
@@ -888,13 +934,17 @@ export class DatabaseService {
    * Get missing track statistics (most commonly missing tracks)
    */
   getMissingTrackStats(): MissingTrackStat[] {
+    // Group by normalized (case/whitespace-insensitive) title+artist, same
+    // as addMissingTracks' dedup logic, so e.g. "Song" and "song " aggregate
+    // into a single stat instead of being counted separately. MIN() picks a
+    // consistent (if arbitrary) original-cased variant for display.
     const stmt = this.db.prepare(`
-      SELECT 
-        title || ' - ' || artist as track,
-        artist,
+      SELECT
+        MIN(title) || ' - ' || MIN(artist) as track,
+        MIN(artist) as artist,
         COUNT(*) as count
       FROM missing_tracks
-      GROUP BY title, artist
+      GROUP BY LOWER(TRIM(title)), LOWER(TRIM(artist))
       ORDER BY count DESC
       LIMIT 100
     `);
@@ -1089,14 +1139,20 @@ export class DatabaseService {
   }
 
   /**
-   * Get playlist by Plex ID
+   * Get playlist by Plex ID, scoped to a single user.
+   *
+   * This is a multi-user app where each user has their own independent Plex
+   * server, so ratingKeys (small sequential integers) can collide across
+   * users. Looking up by plex_playlist_id alone could silently return - and
+   * then mutate - a different user's playlist record, so callers must
+   * always scope this to the requesting user.
    */
-  getPlaylistByPlexId(plexPlaylistId: string): Playlist | null {
+  getPlaylistByPlexId(userId: number, plexPlaylistId: string): Playlist | null {
     const stmt = this.db.prepare(`
-      SELECT * FROM playlists WHERE plex_playlist_id = ?
+      SELECT * FROM playlists WHERE user_id = ? AND plex_playlist_id = ?
     `);
 
-    return stmt.get(plexPlaylistId) as Playlist | null;
+    return (stmt.get(userId, plexPlaylistId) as Playlist | undefined) ?? null;
   }
 
   /**

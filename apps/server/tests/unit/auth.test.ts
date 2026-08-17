@@ -209,8 +209,9 @@ describe('Authentication Routes', () => {
       expect(response.body.user).toEqual({
         id: expect.any(Number),
         plexUserId: '98765',
-        username: 'testuser',
-        thumb: 'https://plex.tv/users/avatar.png',
+        plexUsername: 'testuser',
+        plexThumb: 'https://plex.tv/users/avatar.png',
+        isAdmin: true,
       });
 
       // Verify user was created in database
@@ -243,10 +244,18 @@ describe('Authentication Routes', () => {
       (AuthService.prototype.pollAuth as jest.Mock).mockResolvedValue(mockPin);
       (AuthService.prototype.getUserInfo as jest.Mock).mockResolvedValue(mockUserInfo);
 
+      // last_login is stored with second-level resolution (Math.floor(Date.now() / 1000)),
+      // so advance the clock to guarantee the updated timestamp differs from the
+      // one recorded a moment ago by createUser(), instead of relying on the
+      // test happening to straddle a real wall-clock second boundary.
+      const dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 2000);
+
       const response = await request(app)
         .post('/api/auth/poll')
         .send({ pinId: 12345, code: 'ABCD1234' })
         .expect(200);
+
+      dateNowSpy.mockRestore();
 
       expect(response.body.authenticated).toBe(true);
       expect(response.body.user.id).toBe(existingUser.id);
@@ -278,6 +287,153 @@ describe('Authentication Routes', () => {
 
       expect(response.body.error).toBeDefined();
       expect(response.body.error.message).toContain('Failed to complete authentication');
+    });
+  });
+
+  describe('Plex Home membership re-verification on every login', () => {
+    const adminPlexId = 'admin-98111';
+    const managedPlexId = 'managed-98222';
+
+    afterEach(() => {
+      const db = getDatabase();
+      db.prepare('DELETE FROM users WHERE plex_user_id IN (?, ?)').run(adminPlexId, managedPlexId);
+    });
+
+    it('disables a returning non-admin user who is no longer a Plex Home member (not just checked at first login)', async () => {
+      // Bootstrap the first (admin) user.
+      (AuthService.prototype.pollAuth as jest.Mock).mockResolvedValueOnce({
+        id: 1,
+        code: 'ADMIN',
+        authToken: 'admin-token',
+      });
+      (AuthService.prototype.getUserInfo as jest.Mock).mockResolvedValueOnce({
+        id: adminPlexId,
+        username: 'admin-user',
+        thumb: 'thumb',
+      });
+
+      await request(app)
+        .post('/api/auth/poll')
+        .send({ pinId: 1, code: 'ADMIN' })
+        .expect(200);
+
+      // First login for the managed (non-admin) user: currently a Plex Home
+      // member, so they should be created and enabled.
+      (AuthService.prototype.pollAuth as jest.Mock).mockResolvedValueOnce({
+        id: 2,
+        code: 'MANAGED1',
+        authToken: 'managed-token-1',
+      });
+      (AuthService.prototype.getUserInfo as jest.Mock).mockResolvedValueOnce({
+        id: managedPlexId,
+        username: 'managed-user',
+        thumb: 'thumb',
+      });
+      (AuthService.prototype.getHomeUsers as jest.Mock).mockResolvedValueOnce([
+        { id: managedPlexId },
+      ]);
+
+      const firstLogin = await request(app)
+        .post('/api/auth/poll')
+        .send({ pinId: 2, code: 'MANAGED1' })
+        .expect(200);
+
+      expect(firstLogin.body.authenticated).toBe(true);
+
+      const managedUser = dbService.getUserByPlexId(managedPlexId);
+      expect(managedUser).toBeDefined();
+      expect(dbService.isUserEnabled(managedUser!.id)).toBe(true);
+
+      // Admin removes the managed user from Plex Home; on their *next*
+      // login (not the first), membership must be re-checked and access
+      // revoked — this is the bug the fix addresses.
+      (AuthService.prototype.pollAuth as jest.Mock).mockResolvedValueOnce({
+        id: 3,
+        code: 'MANAGED2',
+        authToken: 'managed-token-2',
+      });
+      (AuthService.prototype.getUserInfo as jest.Mock).mockResolvedValueOnce({
+        id: managedPlexId,
+        username: 'managed-user',
+        thumb: 'thumb',
+      });
+      (AuthService.prototype.getHomeUsers as jest.Mock).mockResolvedValueOnce([]);
+
+      const secondLogin = await request(app)
+        .post('/api/auth/poll')
+        .send({ pinId: 3, code: 'MANAGED2' })
+        .expect(200);
+
+      expect(secondLogin.body.authenticated).toBe(false);
+      expect(secondLogin.body.denied).toBe(true);
+      expect(dbService.isUserEnabled(managedUser!.id)).toBe(false);
+    });
+
+    it('re-enables a returning non-admin user who was disabled but has since been re-added to Plex Home', async () => {
+      // Bootstrap the admin user.
+      (AuthService.prototype.pollAuth as jest.Mock).mockResolvedValueOnce({
+        id: 4,
+        code: 'ADMIN2',
+        authToken: 'admin-token-2',
+      });
+      (AuthService.prototype.getUserInfo as jest.Mock).mockResolvedValueOnce({
+        id: adminPlexId,
+        username: 'admin-user',
+        thumb: 'thumb',
+      });
+
+      await request(app)
+        .post('/api/auth/poll')
+        .send({ pinId: 4, code: 'ADMIN2' })
+        .expect(200);
+
+      // First login for managed user: NOT a Plex Home member, so disabled by default.
+      (AuthService.prototype.pollAuth as jest.Mock).mockResolvedValueOnce({
+        id: 5,
+        code: 'MANAGED3',
+        authToken: 'managed-token-3',
+      });
+      (AuthService.prototype.getUserInfo as jest.Mock).mockResolvedValueOnce({
+        id: managedPlexId,
+        username: 'managed-user',
+        thumb: 'thumb',
+      });
+      (AuthService.prototype.getHomeUsers as jest.Mock).mockResolvedValueOnce([]);
+
+      const firstLogin = await request(app)
+        .post('/api/auth/poll')
+        .send({ pinId: 5, code: 'MANAGED3' })
+        .expect(200);
+
+      expect(firstLogin.body.authenticated).toBe(false);
+      expect(firstLogin.body.denied).toBe(true);
+
+      const managedUser = dbService.getUserByPlexId(managedPlexId);
+      expect(managedUser).toBeDefined();
+      expect(dbService.isUserEnabled(managedUser!.id)).toBe(false);
+
+      // Admin adds the user to Plex Home; their next login should re-enable them.
+      (AuthService.prototype.pollAuth as jest.Mock).mockResolvedValueOnce({
+        id: 6,
+        code: 'MANAGED4',
+        authToken: 'managed-token-4',
+      });
+      (AuthService.prototype.getUserInfo as jest.Mock).mockResolvedValueOnce({
+        id: managedPlexId,
+        username: 'managed-user',
+        thumb: 'thumb',
+      });
+      (AuthService.prototype.getHomeUsers as jest.Mock).mockResolvedValueOnce([
+        { id: managedPlexId },
+      ]);
+
+      const secondLogin = await request(app)
+        .post('/api/auth/poll')
+        .send({ pinId: 6, code: 'MANAGED4' })
+        .expect(200);
+
+      expect(secondLogin.body.authenticated).toBe(true);
+      expect(dbService.isUserEnabled(managedUser!.id)).toBe(true);
     });
   });
 
@@ -354,8 +510,9 @@ describe('Authentication Routes', () => {
       expect(response.body).toEqual({
         id: user.id,
         plexUserId: '98765',
-        username: 'testuser',
-        thumb: 'https://plex.tv/users/avatar.png',
+        plexUsername: 'testuser',
+        plexThumb: 'https://plex.tv/users/avatar.png',
+        isAdmin: true,
       });
     });
   });

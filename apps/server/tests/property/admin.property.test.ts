@@ -109,7 +109,10 @@ describe('Admin Features Property Tests', () => {
                   
                   // Track which users have which tracks
                   for (const track of userMissingTracks) {
-                    const key = `${track.title}|${track.artist}`;
+                    // getMissingTrackStats() returns `track` as the display string
+                    // `${title} - ${artist}` (see DatabaseService.getMissingTrackStats),
+                    // so the key here must be built the same way to match up with stats.
+                    const key = `${track.title} - ${track.artist}|${track.artist}`;
                     if (!trackUserCounts.has(key)) {
                       trackUserCounts.set(key, new Set());
                     }

@@ -101,12 +101,15 @@ describe('Import Workflow Integration Tests', () => {
   });
 
   describe('Cache Behavior', () => {
-    it('should use fresh cache when available', async () => {
-      // Setup: Store fresh cache
-      const mockPlaylist = {
+    it('should scrape fresh data even when a fresh cache entry exists', async () => {
+      // Import always scrapes fresh data (cache is only used as a fallback
+      // if scraping fails - see the "Always scrape fresh (no cache-first)"
+      // comment in importPlaylist). A pre-existing fresh cache entry should
+      // therefore NOT prevent the scraper from being called.
+      const cachedPlaylist = {
         id: 'spotify-123',
-        name: 'Test Playlist',
-        description: 'Test Description',
+        name: 'Cached Playlist',
+        description: 'Cached Description',
         source: 'spotify',
         tracks: [
           { title: 'Track 1', artist: 'Artist 1', album: 'Album 1' },
@@ -117,13 +120,22 @@ describe('Import Workflow Integration Tests', () => {
       dbService.saveCachedPlaylist(
         'spotify',
         'https://open.spotify.com/playlist/123',
-        mockPlaylist.name,
-        mockPlaylist.description,
-        mockPlaylist.tracks
+        cachedPlaylist.name,
+        cachedPlaylist.description,
+        cachedPlaylist.tracks
       );
 
-      // Mock scraper should NOT be called
-      (scrapeSpotifyPlaylist as jest.Mock).mockResolvedValue(mockPlaylist);
+      const scrapedPlaylist = {
+        id: 'spotify-123',
+        name: 'Test Playlist',
+        description: 'Test Description',
+        source: 'spotify',
+        tracks: [
+          { title: 'Track 1', artist: 'Artist 1', album: 'Album 1' },
+          { title: 'Track 2', artist: 'Artist 2', album: 'Album 2' },
+        ],
+      };
+      (scrapeSpotifyPlaylist as jest.Mock).mockResolvedValue(scrapedPlaylist);
 
       // Execute: Import playlist
       const result = await importPlaylist(
@@ -133,9 +145,9 @@ describe('Import Workflow Integration Tests', () => {
         dbService
       );
 
-      // Verify: Should use cache, not call scraper
-      expect(result.usedCache).toBe(true);
-      expect(scrapeSpotifyPlaylist).not.toHaveBeenCalled();
+      // Verify: Should scrape fresh data rather than short-circuiting on cache
+      expect(result.usedCache).toBe(false);
+      expect(scrapeSpotifyPlaylist).toHaveBeenCalled();
       expect(result.playlistName).toBe('Test Playlist');
       expect(result.totalCount).toBe(2);
     });
@@ -181,7 +193,14 @@ describe('Import Workflow Integration Tests', () => {
 
       // Verify: Should scrape fresh data
       expect(result.usedCache).toBe(false);
-      expect(scrapeSpotifyPlaylist).toHaveBeenCalledWith('https://open.spotify.com/playlist/123');
+      // scrapePlaylist forwards progressEmitter/userId/db (for authenticated
+      // Spotify API access) in addition to the source identifier.
+      expect(scrapeSpotifyPlaylist).toHaveBeenCalledWith(
+        'https://open.spotify.com/playlist/123',
+        undefined,
+        userId,
+        expect.anything()
+      );
       expect(result.playlistName).toBe('Fresh Playlist');
       expect(result.totalCount).toBe(2);
 
@@ -214,7 +233,12 @@ describe('Import Workflow Integration Tests', () => {
 
       // Verify: Should scrape and cache
       expect(result.usedCache).toBe(false);
-      expect(scrapeSpotifyPlaylist).toHaveBeenCalledWith('https://open.spotify.com/playlist/456');
+      expect(scrapeSpotifyPlaylist).toHaveBeenCalledWith(
+        'https://open.spotify.com/playlist/456',
+        undefined,
+        userId,
+        expect.anything()
+      );
       expect(result.playlistName).toBe('New Playlist');
 
       // Verify cache was updated
@@ -250,9 +274,9 @@ describe('Import Workflow Integration Tests', () => {
       // Verify: Response indicates no matches
       expect(result.matchedCount).toBe(0);
       expect(result.totalCount).toBe(2);
-      expect(result.tracks).toHaveLength(2);
-      expect(result.tracks[0].matched).toBe(false);
-      expect(result.tracks[1].matched).toBe(false);
+      expect(result.unmatched).toHaveLength(2);
+      expect(result.unmatched[0].matched).toBe(false);
+      expect(result.unmatched[1].matched).toBe(false);
     });
   });
 

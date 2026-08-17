@@ -16,7 +16,7 @@
 
 .layout-main {
   flex: 1;
-  padding: 1.5rem;
+  padding: 1rem 1.25rem;
   background: linear-gradient(180deg, var(--background) 0%, var(--background-elevated) 100%);
   min-height: 0;
   overflow-y: auto;
