@@ -1,11 +1,9 @@
 import type { FC } from 'react';
 import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
 import './MobileNav.css';
 
 export const MobileNav: FC = () => {
-  const { user } = useAuth();
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
 
@@ -30,12 +28,7 @@ export const MobileNav: FC = () => {
     { path: '/', label: 'Home' },
     { path: '/import', label: 'Import' },
     { path: '/generate', label: 'Generate Mixes' },
-    { path: '/queue', label: 'Queue' },
-    { path: '/schedules', label: 'Schedules' },
-    { path: '/playlists/home-users', label: 'Plex Home Users' },
-    { path: '/cross-import', label: 'Export to YouTube' },
     { path: '/settings', label: 'Settings' },
-    ...(user?.isAdmin ? [{ path: '/admin', label: 'Admin' }] : []),
   ];
 
   return (

@@ -54,7 +54,15 @@ export interface ImportState {
   allowStatic?: boolean;
 }
 
-export const CrossImportPage: FC = () => {
+interface CrossImportPageProps {
+  /** When provided (e.g. launched from a playlist row's Export menu), the
+   * playlist-picker step is skipped and export goes straight to matching
+   * once YouTube is connected. allowLive/allowStatic default to false in
+   * this shortcut path since there's no picker step to set them from. */
+  initialPlaylist?: PlaylistInfo;
+}
+
+export const CrossImportPage: FC<CrossImportPageProps> = ({ initialPlaylist }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [importState, setImportState] = useState<ImportState>({});
   const [youtubeConnected, setYoutubeConnected] = useState(false);
@@ -87,12 +95,16 @@ export const CrossImportPage: FC = () => {
     fetchPlexSource();
   }, []);
 
-  // Auto-advance to playlist selection if YouTube is already connected
+  // Auto-advance once YouTube is connected: straight to matching if a
+  // playlist was already chosen (export-menu shortcut), else to the picker.
   useEffect(() => {
-    if (!checkingConnection && youtubeConnected && currentStep === 0) {
+    if (checkingConnection || !youtubeConnected || currentStep !== 0) return;
+    if (initialPlaylist && plexSource) {
+      handlePlaylistSelected(initialPlaylist, initialPlaylist.id, false, false);
+    } else if (!initialPlaylist) {
       setCurrentStep(1);
     }
-  }, [checkingConnection, youtubeConnected, currentStep]);
+  }, [checkingConnection, youtubeConnected, currentStep, initialPlaylist, plexSource]);
 
   const checkYouTubeConnection = async () => {
     try {

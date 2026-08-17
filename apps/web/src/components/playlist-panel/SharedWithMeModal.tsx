@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useEscapeKey } from '../../hooks/useEscapeKey';
 import '../../pages/SharePlaylistsPage.css';
 
 interface SharedPlaylist {
@@ -17,6 +18,8 @@ export function SharedWithMeModal({ onClose }: { onClose: () => void }) {
   const [sharedPlaylists, setSharedPlaylists] = useState<SharedPlaylist[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEscapeKey(true, onClose);
 
   useEffect(() => {
     (async () => {

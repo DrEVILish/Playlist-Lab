@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../contexts/AppContext';
+import { useEscapeKey } from '../../hooks/useEscapeKey';
 import '../../pages/EditPlaylistsPage.css';
 
 export interface EditablePlaylist {
@@ -55,6 +56,9 @@ export function PlaylistEditor({ playlist, onPlaylistUpdated }: { playlist: Edit
   const [replaceSearchQuery, setReplaceSearchQuery] = useState('');
   const [replaceSearchResults, setReplaceSearchResults] = useState<Track[]>([]);
   const [searchingReplace, setSearchingReplace] = useState(false);
+
+  useEscapeKey(showAddTracksModal, () => setShowAddTracksModal(false));
+  useEscapeKey(showReplaceModal, () => handleCloseReplaceModal());
 
   const scrollPositionRef = useRef<number>(0);
   const shouldRestoreScroll = useRef<boolean>(false);

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useEscapeKey } from '../../hooks/useEscapeKey';
 import '../../pages/SharePlaylistsPage.css';
 
 interface PlexFriend {
@@ -20,6 +21,8 @@ export function ShareModal({ playlistId, playlistName, onClose }: { playlistId: 
   const [error, setError] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   const [shareSuccess, setShareSuccess] = useState<string | null>(null);
+
+  useEscapeKey(true, onClose);
 
   useEffect(() => {
     const loadFriends = async () => {

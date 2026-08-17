@@ -1,6 +1,7 @@
 import type { FC } from 'react';
 import { useState, useEffect } from 'react';
 import './QuickMixSettingsModal.css';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface QuickMixSettingsModalProps {
   mixType: 'weekly' | 'daily' | 'timecapsule' | 'newmusic' | 'deepcuts' | 'workout' | 'forgottenfavorites';
@@ -19,6 +20,7 @@ export const QuickMixSettingsModal: FC<QuickMixSettingsModalProps> = ({
   isGenerating,
   defaultSettings,
 }) => {
+  useEscapeKey(true, onClose);
   // Weekly Mix settings
   const [topArtists, setTopArtists] = useState(defaultSettings?.weeklyMix?.topArtists || 10);
   const [tracksPerArtist, setTracksPerArtist] = useState(defaultSettings?.weeklyMix?.tracksPerArtist || 3);

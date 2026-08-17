@@ -2,6 +2,8 @@ import type { FC } from 'react';
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useApp } from '../contexts/AppContext';
+import { useAuth } from '../contexts/AuthContext';
+import { AdminPage } from './AdminPage';
 import type { PlexServer } from '@playlist-lab/shared';
 import './SettingsPage.css';
 
@@ -22,12 +24,13 @@ const DEFAULT_MIX_SETTINGS = {
   newMusic: { albumCount: 10, tracksPerAlbum: 3 },
 };
 
-type SettingsTab = 'plex' | 'server' | 'ai' | 'matching' | 'mixes' | 'services';
+type SettingsTab = 'plex' | 'server' | 'ai' | 'matching' | 'mixes' | 'services' | 'admin';
 
 
 
 export const SettingsPage: FC = () => {
   const { settings, server, apiClient, refreshSettings, setServer } = useApp();
+  const { user } = useAuth();
   const location = useLocation();
   const isFirstTimeSetup = location.state?.firstTimeSetup;
 
@@ -244,6 +247,7 @@ export const SettingsPage: FC = () => {
     { id: 'matching', label: 'Matching', description: 'Track matching' },
     { id: 'mixes', label: 'Mixes', description: 'Mix generation' },
     { id: 'services', label: 'Connected Services', description: 'OAuth connections' },
+    ...(user?.isAdmin ? [{ id: 'admin' as const, label: 'Admin', description: 'Users & server admin' }] : []),
   ];
 
   return (
@@ -320,6 +324,7 @@ export const SettingsPage: FC = () => {
             />
           )}
           {activeTab === 'services' && <ConnectedServicesTab />}
+          {activeTab === 'admin' && user?.isAdmin && <AdminPage />}
         </div>
       </div>
     </div>

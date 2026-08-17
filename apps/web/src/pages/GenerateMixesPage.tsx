@@ -8,6 +8,7 @@ import { QuickMixSettingsModal } from '../components/QuickMixSettingsModal';
 import { SaveTemplateModal } from '../components/SaveTemplateModal';
 import { TemplateList, type MixTemplate } from '../components/TemplateList';
 import { EditTemplateModal } from '../components/EditTemplateModal';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import './GenerateMixesPage.css';
 
 type MixType = 'weekly' | 'daily' | 'timecapsule' | 'newmusic' | 'deepcuts' | 'artistdiscovery' | 'mood' | 'era' | 'genreevolution' | 'artistjourney' | 'workout' | 'forgottenfavorites' | 'genreblend' | 'custom' | 'all';
@@ -46,6 +47,9 @@ export const GenerateMixesPage: FC = () => {
   const [scheduleRunTime, setScheduleRunTime] = useState<string>('09:00');
   const [isCreatingSchedule, setIsCreatingSchedule] = useState(false);
   const [scheduleQuickMix, setScheduleQuickMix] = useState<{ mixType: QuickMixType; settings: any } | null>(null);
+
+  useEscapeKey(!!scheduleTemplate, () => setScheduleTemplate(null));
+  useEscapeKey(!!scheduleQuickMix, () => setScheduleQuickMix(null));
 
   const mixes = [
     {
@@ -402,7 +406,7 @@ export const GenerateMixesPage: FC = () => {
     const currentMixType = advancedMixType;
     setAdvancedMixType(null);
     // Navigate to schedules page
-    window.location.href = `/schedules?mixType=${currentMixType}&settings=${encodeURIComponent(JSON.stringify(settings))}`;
+    window.location.href = `/?mixType=${currentMixType}&settings=${encodeURIComponent(JSON.stringify(settings))}`;
   };
 
   const handleSaveCustomMixAsTemplate = async (customSettings: CustomMixSettings) => {
@@ -739,7 +743,7 @@ export const GenerateMixesPage: FC = () => {
                     <a href="/playlists" className="btn btn-secondary btn-small">
                       View
                     </a>
-                    <a href={`/schedules?playlist=${playlist.plexPlaylistId}`} className="btn btn-primary btn-small">
+                    <a href={`/?playlist=${playlist.plexPlaylistId}`} className="btn btn-primary btn-small">
                       Schedule
                     </a>
                   </div>

@@ -1,6 +1,5 @@
 import type { FC } from 'react';
 import { Fragment, useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
 import { useApp } from '../contexts/AppContext';
 import type { Schedule, MissingTrack } from '@playlist-lab/shared';
 import { PlaylistEditor } from '../components/playlist-panel/PlaylistEditor';
@@ -11,6 +10,7 @@ import { MissingTracksPanel } from '../components/playlist-panel/MissingTracksPa
 import { SharedWithMeModal } from '../components/playlist-panel/SharedWithMeModal';
 import { BackupRestorePage } from './BackupRestorePage';
 import { getNextRunTimestamp } from '../utils/scheduleTime';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import './PlaylistsPage.css';
 
 interface Playlist {
@@ -44,6 +44,9 @@ export const PlaylistsPage: FC = () => {
   const [showBackupAll, setShowBackupAll] = useState(false);
   const [showSharedWithMe, setShowSharedWithMe] = useState(false);
 
+  useEscapeKey(modal?.type === 'edit', () => setModal(null));
+  useEscapeKey(showBackupAll, () => setShowBackupAll(false));
+
   const loadMissingTracks = async () => {
     try {
       const response = await apiClient.getMissingTracks();
@@ -69,7 +72,7 @@ export const PlaylistsPage: FC = () => {
     const missingFor = params.get('missingFor');
     if (missingFor) {
       setExpandedMissingFor(parseInt(missingFor, 10));
-      window.history.replaceState({}, '', '/playlists');
+      window.history.replaceState({}, '', '/');
     }
   }, [playlists]);
 
@@ -233,9 +236,6 @@ export const PlaylistsPage: FC = () => {
           />
           <button className="btn btn-secondary" onClick={() => setShowSharedWithMe(true)}>Shared With Me</button>
           <button className="btn btn-secondary" onClick={() => setShowBackupAll(true)}>Backup / Restore</button>
-          <Link to="/schedules" className="btn btn-secondary" title="Full schedule table, including mix-generation schedules and run history">
-            All Schedules
-          </Link>
         </div>
       </div>
 
@@ -378,7 +378,7 @@ export const PlaylistsPage: FC = () => {
       )}
 
       {modal?.type === 'export' && (
-        <ExportModal playlistId={modal.playlist.id} playlistName={modal.playlist.name} onClose={() => setModal(null)} />
+        <ExportModal playlistId={modal.playlist.id} playlistName={modal.playlist.name} trackCount={modal.playlist.trackCount} onClose={() => setModal(null)} />
       )}
 
       {modal?.type === 'schedule' && modal.playlist.dbId && (

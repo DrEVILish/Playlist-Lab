@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { CrossImportPage } from '../../pages/CrossImportPage';
+import { useEscapeKey } from '../../hooks/useEscapeKey';
 import '../../pages/ExportPlaylistsPage.css';
 
 type ExportFormat = 'm3u' | 'm3u8' | 'pls' | 'xspf' | 'csv' | 'txt';
@@ -22,14 +24,19 @@ const FORMATS: FormatOption[] = [
 /**
  * Export-to-file dialog for a single playlist. Extracted from the former
  * standalone Export Playlists page so it can be launched as a row action
- * from the unified playlist control panel. Every format here (and only
+ * from the unified playlist control panel. Every file format here (and only
  * these formats) is also importable via the Import page's "File" source -
  * see services/scrapers.ts's parseM3UFile/parseCSVFile/parsePLSFile/parseXSPFFile.
+ * YouTube is a separate export path (an OAuth-driven match/review wizard,
+ * not a file download) reusing CrossImportPage with the playlist preselected.
  */
-export function ExportModal({ playlistId, playlistName, onClose }: { playlistId: string; playlistName: string; onClose: () => void }) {
+export function ExportModal({ playlistId, playlistName, trackCount, onClose }: { playlistId: string; playlistName: string; trackCount?: number; onClose: () => void }) {
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('m3u8');
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showYouTube, setShowYouTube] = useState(false);
+
+  useEscapeKey(true, onClose);
 
   const handleExport = async () => {
     setExporting(true);
@@ -68,6 +75,20 @@ export function ExportModal({ playlistId, playlistName, onClose }: { playlistId:
     }
   };
 
+  if (showYouTube) {
+    return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '95vw', width: '900px', maxHeight: '90vh', overflow: 'auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+            <button className="btn btn-secondary btn-small" onClick={() => setShowYouTube(false)}>← Back to Export</button>
+            <button className="btn btn-secondary btn-small" onClick={onClose}>Close</button>
+          </div>
+          <CrossImportPage initialPlaylist={{ id: playlistId, name: playlistName, trackCount: trackCount ?? 0 }} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
@@ -89,6 +110,13 @@ export function ExportModal({ playlistId, playlistName, onClose }: { playlistId:
               </div>
             </div>
           ))}
+          <div className="export-format-item" onClick={() => setShowYouTube(true)}>
+            <div className="export-format-badge">YT</div>
+            <div className="export-format-info">
+              <div className="export-format-title">YouTube</div>
+              <div className="export-format-description">Match and create a playlist on YouTube</div>
+            </div>
+          </div>
         </div>
 
         <div className="modal-actions">

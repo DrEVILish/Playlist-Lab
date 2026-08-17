@@ -170,7 +170,7 @@ export const SchedulesPage: FC = () => {
 
     // Clear URL parameters after state is set
     if (playlistId || mixType || templateId) {
-      window.history.replaceState({}, '', '/schedules');
+      window.history.replaceState({}, '', '/');
     }
   }, []);
 
@@ -867,7 +867,7 @@ export const SchedulesPage: FC = () => {
                     <td>
                       {missingCount > 0 && schedule.playlistId ? (
                         <Link
-                          to={`/playlists?missingFor=${schedule.playlistId}`}
+                          to={`/?missingFor=${schedule.playlistId}`}
                           style={{ color: 'var(--warning-color)', fontWeight: 500 }}
                           title="View these missing tracks"
                         >

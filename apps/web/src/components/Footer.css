@@ -1,7 +1,7 @@
 .footer {
   background-color: var(--background);
   border-top: 1px solid var(--border);
-  padding: 1.25rem 0;
+  padding: 0.625rem 0;
   flex-shrink: 0;
   z-index: 10;
 }
@@ -10,10 +10,37 @@
   max-width: 1400px;
   margin: 0 auto;
   padding: 0 1.5rem;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
 }
 
 .footer-text {
   font-size: 0.8125rem;
   color: var(--text-muted);
+}
+
+.footer-version {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.footer-update-btn {
+  padding: 0.1875rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #4a9ea8 0%, #5b9bd5 100%);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.footer-update-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }

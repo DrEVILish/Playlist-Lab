@@ -2,6 +2,7 @@ import type { FC } from 'react';
 import { useState, useEffect } from 'react';
 import { useApp } from '../contexts/AppContext';
 import './CustomMixModal.css';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface CustomMixModalProps {
   onClose: () => void;
@@ -76,6 +77,7 @@ export interface CustomMixSettings {
 
 export const CustomMixModal: FC<CustomMixModalProps> = ({ onClose, onGenerate, onSaveAsTemplate, isGenerating, initialSettings }) => {
   const { apiClient } = useApp();
+  useEscapeKey(true, onClose);
   const [settings, setSettings] = useState<CustomMixSettings>({
     name: 'My Custom Mix',
     trackCount: 50,

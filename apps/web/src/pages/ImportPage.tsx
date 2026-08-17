@@ -2,8 +2,9 @@ import type { FC } from 'react';
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../contexts/AppContext';
 import type { MatchedTrack } from '@playlist-lab/shared';
+import { ImportFromPlexHome } from '../components/ImportFromPlexHome';
 
-type ImportSource = 'spotify' | 'deezer' | 'apple' | 'tidal' | 'youtube' | 'amazon' | 'qobuz' | 'listenbrainz' | 'file' | 'ai' | 'aria' | 'billboard' | 'lastfm';
+type ImportSource = 'spotify' | 'deezer' | 'apple' | 'tidal' | 'youtube' | 'amazon' | 'qobuz' | 'listenbrainz' | 'file' | 'ai' | 'aria' | 'billboard' | 'lastfm' | 'plexhome';
 
 interface ImportResult {
   matched: MatchedTrack[];
@@ -527,6 +528,7 @@ export const ImportPage: FC = () => {
     { id: 'listenbrainz' as const, name: 'ListenBrainz', placeholder: 'Username' },
     { id: 'file' as const, name: 'File (M3U/PLS/XSPF/CSV)', placeholder: 'Upload an M3U, M3U8, PLS, XSPF, or CSV playlist file' },
     { id: 'ai' as const, name: 'AI Generated', placeholder: 'Describe the playlist you want...' },
+    { id: 'plexhome' as const, name: 'Plex Home Users', placeholder: 'Copy a playlist from another Plex Home user' },
   ];
 
 
@@ -1426,13 +1428,42 @@ export const ImportPage: FC = () => {
       }
       
       // Navigate to schedules page
-      window.location.href = '/schedules';
+      window.location.href = '/';
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create schedule');
     } finally {
       setIsImporting(false);
     }
   };
+
+  // Plex Home Users is a self-contained "copy their playlist to me" flow,
+  // unrelated to the scrape-and-match logic every other source shares below
+  // - so it gets its own early return rather than threading a new branch
+  // through handleImport() and the rest of this file.
+  if (activeSource === 'plexhome') {
+    return (
+      <div className="page-container">
+        <div className="page-header">
+          <h1 className="page-title">Import</h1>
+        </div>
+        <div style={{ marginBottom: '1.5rem' }}>
+          <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Select Source</label>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {sources.map(source => (
+              <button
+                key={source.id}
+                className={`btn ${activeSource === source.id ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setActiveSource(source.id)}
+              >
+                {source.name}
+              </button>
+            ))}
+          </div>
+        </div>
+        <ImportFromPlexHome />
+      </div>
+    );
+  }
 
   return (
     <div className="page-container">

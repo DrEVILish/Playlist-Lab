@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import type { Schedule } from '@playlist-lab/shared';
 import { getNextRunDate } from '../../utils/scheduleTime';
+import { useEscapeKey } from '../../hooks/useEscapeKey';
 
 /**
  * Create/manage the refresh schedule for a single playlist. Extracted from
@@ -30,6 +31,8 @@ export function ScheduleModal({
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<any[] | null>(null);
+
+  useEscapeKey(true, onClose);
 
   useEffect(() => {
     if (!schedule) return;

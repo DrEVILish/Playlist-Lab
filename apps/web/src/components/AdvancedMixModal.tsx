@@ -2,6 +2,7 @@ import type { FC } from 'react';
 import { useState, useEffect } from 'react';
 import { useApp } from '../contexts/AppContext';
 import './AdvancedMixModal.css';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface AdvancedMixModalProps {
   mixType: 'artistdiscovery' | 'mood' | 'era' | 'genreevolution' | 'artistjourney' | 'genreblend';
@@ -13,7 +14,8 @@ interface AdvancedMixModalProps {
 
 export const AdvancedMixModal: FC<AdvancedMixModalProps> = ({ mixType, onClose, onGenerate, onAddToSchedule, isGenerating }) => {
   const { apiClient } = useApp();
-  
+  useEscapeKey(true, onClose);
+
   // Common settings
   const [playlistName, setPlaylistName] = useState('');
   const [trackCount, setTrackCount] = useState(50);
