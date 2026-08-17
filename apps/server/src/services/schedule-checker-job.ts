@@ -201,10 +201,24 @@ async function executePlaylistRefreshSchedules(db: DatabaseService): Promise<{ e
           updated_at: Math.floor(Date.now() / 1000)
         });
       } else {
-        // For chart imports or new playlists, create a database record
-        const existingPlaylist = db.getPlaylistByPlexId(newPlaylist.ratingKey);
+        // For chart imports or new playlists, there's no schedule.playlist_id
+        // to key off yet. Since overwriteExisting deletes and recreates the
+        // Plex playlist on every run, the new Plex ratingKey never matches a
+        // prior run's, so looking up by plex_playlist_id alone would always
+        // miss and create a fresh playlist record every time the schedule
+        // fired (see issue #33). Fall back to matching by user + playlist
+        // name so repeat runs of the same named playlist reuse one record.
+        let existingPlaylist = db.getPlaylistByPlexId(newPlaylist.ratingKey);
+        if (!existingPlaylist) {
+          existingPlaylist = db.getPlaylistByUserAndName(schedule.user_id, playlistName);
+        }
+
         if (existingPlaylist) {
           playlistDbId = existingPlaylist.id;
+          db.updatePlaylist(playlistDbId, {
+            plex_playlist_id: newPlaylist.ratingKey,
+            updated_at: Math.floor(Date.now() / 1000)
+          });
         } else {
           // Create new playlist record
           const createdPlaylist = db.createPlaylist(
@@ -223,6 +237,11 @@ async function executePlaylistRefreshSchedules(db: DatabaseService): Promise<{ e
             isChartImport
           });
         }
+
+        // Persist the resolved playlist record back onto the schedule so
+        // future runs go straight to the "update existing record" branch
+        // above instead of re-resolving (and risking a new record) each time.
+        db.linkSchedulePlaylist(schedule.id, playlistDbId);
       }
 
       // Save any unmatched tracks to missing_tracks
@@ -230,9 +249,11 @@ async function executePlaylistRefreshSchedules(db: DatabaseService): Promise<{ e
         const runDate = new Date().toLocaleDateString('en-GB');
         const missingSource = `Scheduled import – ${runDate}`;
 
-        // Clear old missing tracks for this playlist before adding new ones
-        db.clearPlaylistMissingTracks(playlistDbId);
-
+        // Merge into the playlist's existing missing-tracks entry rather
+        // than wiping and re-adding: tracks still missing get refreshed,
+        // newly-missing tracks get added, and tracks that dropped off this
+        // run's unmatched list are left alone as a record for the future
+        // (per issue #33).
         const missingTracks = result.unmatched.map((t: any, i: number) => ({
           title: t.title || 'Unknown',
           artist: t.artist || 'Unknown',
