@@ -432,7 +432,14 @@ export const SchedulesPage: FC = () => {
     </th>
   );
 
-  const sortedSchedules = [...schedules].sort((a, b) => {
+  // Schedules tied to an existing playlist now show inline in the playlist
+  // table above (frequency, status, next/last run, click to manage) - only
+  // list ones that table can't represent: mix-generation schedules (never
+  // tied to a playlist) and chart-import schedules before their first run
+  // has created one.
+  const visibleSchedules = schedules.filter(s => !s.playlistId);
+
+  const sortedSchedules = [...visibleSchedules].sort((a, b) => {
     let cmp = 0;
     switch (sortKey) {
       case 'name':
@@ -457,8 +464,17 @@ export const SchedulesPage: FC = () => {
     return sortDir === 'asc' ? cmp : -cmp;
   });
 
+  // Nothing left to show once playlist-tied schedules are filtered out
+  // (they're inline in the playlist table above) - rather than leave an
+  // empty "Schedules" section sitting under it, only render this at all
+  // when there's a mix-generation/chart-import schedule to list, or the
+  // create form is open (e.g. via Generate Mixes' "schedule this" link).
+  if (visibleSchedules.length === 0 && !showCreateForm) {
+    return null;
+  }
+
   return (
-    <div className="page-container">
+    <div className="page-container" style={{ borderTop: '1px solid var(--border)', paddingTop: '0.75rem' }}>
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 className="page-title">Schedules</h1>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -802,7 +818,7 @@ export const SchedulesPage: FC = () => {
         <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>
           Loading schedules...
         </div>
-      ) : schedules.length === 0 ? (
+      ) : visibleSchedules.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>
           No schedules configured
         </div>

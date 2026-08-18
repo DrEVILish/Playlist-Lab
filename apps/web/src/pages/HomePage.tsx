@@ -3,10 +3,12 @@ import { PlaylistsPage } from './PlaylistsPage';
 import { SchedulesPage } from './SchedulesPage';
 
 /** Home = playlists + schedules combined onto one page (they used to be
- * separate nav destinations; per-playlist schedules already showed inline
- * in the playlist table, so this just adds the full schedule list -
- * including mix-generation schedules not tied to any single playlist -
- * below it instead of behind a separate link). */
+ * separate nav destinations). Playlist-tied schedules show inline in the
+ * playlist table itself now, so SchedulesPage only renders anything below
+ * it for schedules that table can't represent - mix-generation schedules,
+ * or a chart-import schedule before its first run creates a playlist -
+ * and renders nothing at all when there's none of those (see its own
+ * early-return). */
 export const HomePage: FC = () => (
   // Both PlaylistsPage and SchedulesPage are `.page-container`s designed to
   // be the sole flex:1/min-height:0 child of .layout-main, sized to fill it
@@ -20,8 +22,6 @@ export const HomePage: FC = () => (
   // way it used to scroll one page-container's content.
   <div>
     <PlaylistsPage />
-    <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.75rem' }}>
-      <SchedulesPage />
-    </div>
+    <SchedulesPage />
   </div>
 );
