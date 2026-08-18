@@ -88,6 +88,7 @@ interface Playlist {
   sourceUrl?: string;
   trackCount?: number;
   duration?: number;
+  smart?: boolean;
   composite?: string;
   createdAt: number;
   updatedAt: number;

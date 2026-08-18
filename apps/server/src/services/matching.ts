@@ -320,106 +320,10 @@ async function findBestMatch(
         continue;
       }
       
-      // For Various Artists compilations, prefer track artist over album artist
-      const plexArtist = isCompilation && trackArtist 
-        ? trackArtist 
-        : (albumArtistMatches ? albumArtist : (trackArtist || albumArtist));
-      let score = calculateMatchScore(track.title, track.artist, plexTitle, plexArtist);
-      
-      logger.info(`[Matching] Initial score: ${score}`);
-      
-      // Penalize Various Artists compilations heavily (but still allow them as last resort)
-      // BUT: Don't penalize if the track artist (originalTitle) matches, or any individual
-      // artist from a multi-artist source string matches (e.g. "Artist A & Artist B" where
-      // Plex only tags "Artist B" as the track artist).
-      if (isCompilation && !albumArtistMatches && !trackArtistMatches && !anyArtistMatches) {
-        score -= 40;
-        logger.info(`[Matching] Compilation penalty applied, new score: ${score}`);
-      }
-      
-      // Extra penalty if we only matched by title (no artist match at all) on a compilation
-      if (allowTitleOnlyMatch && !trackArtistMatches && !anyArtistMatches) {
-        score -= 20;
-        logger.info(`[Matching] Title-only match penalty applied, new score: ${score}`);
-      }
-      
-      // Penalize re-recorded versions when source track is not a re-recording
-      if (!hasReRecordedIndicator(track.title) && hasReRecordedIndicator(plexTitle)) {
-        score -= 50;
-        logger.info(`[Matching] Re-recorded penalty applied, new score: ${score}`);
-      }
-      
-      // Penalize sped up / slowed down versions when source track is not speed-modified
-      if (!hasSpeedModifiedIndicator(track.title) && hasSpeedModifiedIndicator(plexTitle)) {
-        score -= 50;
-        logger.info(`[Matching] Speed-modified penalty applied, new score: ${score}`);
-      }
-      
-      // Penalize remixes when source track is not a remix
-      if (!hasRemixIndicator(track.title) && hasRemixIndicator(plexTitle)) {
-        score -= 30;
-        logger.info(`[Matching] Remix penalty applied, new score: ${score}`);
-      }
-      
-      // Penalize alternate versions (unplugged, acoustic, live, etc.) when source doesn't have them
-      if (!hasAlternateVersionIndicator(track.title) && hasAlternateVersionIndicator(plexTitle)) {
-        score -= 35;
-        logger.info(`[Matching] Alternate version penalty applied, new score: ${score}`);
-      }
-      
-      // Penalize demo versions when source doesn't have demo indicator
-      if (!hasDemoIndicator(track.title) && hasDemoIndicator(plexTitle)) {
-        score -= 35;
-        logger.info(`[Matching] Demo version penalty applied, new score: ${score}`);
-      }
-      
-      // Prefer remasters (better quality of the same track)
-      if (hasRemasterIndicator(plexTitle) && !hasRemixIndicator(plexTitle)) {
-        score += 5;
-        logger.info(`[Matching] Remaster bonus applied, new score: ${score}`);
-      }
-      
-      // Prefer self-titled tracks (album name = track name)
-      // This helps when searching for "Chameleon" and there's both:
-      // - Album "Chameleon" with track "Chameleon" (self-titled)
-      // - Album "Changa" with track "Chameleon"
-      const normalizedAlbum = normalizeForComparison(albumName);
-      const normalizedTrack = normalizeForComparison(plexTitle);
-      if (normalizedAlbum && normalizedTrack && normalizedAlbum === normalizedTrack) {
-        score += 10;
-        logger.info(`[Matching] Self-titled track bonus applied (album="${albumName}" = track="${plexTitle}"), new score: ${score}`);
-      }
-      
-      if (currentMatchingSettings.preferNonCompilation) {
-        if (albumArtistMatches) {
-          score += 50; // Big bonus for proper album artist match
-          logger.info(`[Matching] Non-compilation bonus applied, new score: ${score}`);
-        } else if (isCompilation && !trackArtistMatches && !anyArtistMatches) {
-          // Only penalize when neither the track artist nor any individual artist from a
-          // multi-artist source string matches - if one does, this is a correctly-identified
-          // track on a Various Artists/soundtrack album (e.g. "Try Everything" by Shakira on
-          // the Zootopia soundtrack), not a bad match.
-          score -= 30; // Penalty for compilation/Various Artists
-          logger.info(`[Matching] Compilation penalty (preferNonCompilation) applied, new score: ${score}`);
-        }
-      }
-      
-      logger.info(`[Matching] Final score: ${score}, minMatchScore: ${currentMatchingSettings.minMatchScore}`);
-      
-      if (!bestMatch || score > bestMatch.rankScore) {
-        const displayScore = Math.min(100, Math.max(0, score)); // Use rankScore (with bonuses) for display
-        const media = result.Media?.[0];
-        bestMatch = { 
-          ratingKey: result.ratingKey, 
-          score: displayScore, 
-          rankScore: score, 
-          plexTitle, 
-          plexArtist, 
-          plexAlbum: albumName, 
-          plexCodec: media?.audioCodec?.toUpperCase(), 
-          plexBitrate: media?.bitrate 
-        };
-        logger.info(`[Matching] New best match!`, { ratingKey: result.ratingKey, score, displayScore });
+      const scored = scorePlexCandidate(track.title, track.artist, result, currentMatchingSettings);
+      if (!bestMatch || scored.rankScore > bestMatch.rankScore) {
+        bestMatch = { ratingKey: result.ratingKey, ...scored };
+        logger.info(`[Matching] New best match!`, { ratingKey: result.ratingKey, score: scored.rankScore, displayScore: scored.score });
       }
     }
     
@@ -439,6 +343,96 @@ async function findBestMatch(
     logger.error('[Matching] Error in findBestMatch', { error: error.message });
     return null;
   }
+}
+
+export interface ScoredCandidate {
+  score: number;
+  rankScore: number;
+  plexTitle: string;
+  plexArtist: string;
+  plexAlbum: string;
+  plexCodec?: string;
+  plexBitrate?: number;
+}
+
+/**
+ * The same score a candidate would get during a real import: calculateMatchScore()
+ * plus every version/compilation bonus and penalty findBestMatch() applies while
+ * picking a track's best match. Exported so other call sites (e.g. the manual
+ * rematch search) can show the real score instead of re-deriving their own.
+ */
+export function scorePlexCandidate(sourceTitle: string, sourceArtist: string, result: any, settings: MatchingSettings): ScoredCandidate {
+  // calculateMatchScore() and the title/artist cleaners it calls all read the
+  // module-level currentMatchingSettings rather than taking settings as a
+  // parameter (matchPlaylist() sets it before its own matching loop runs) -
+  // called standalone, outside that loop, it would otherwise still be
+  // whatever a previous request left it as, or unset entirely.
+  currentMatchingSettings = settings;
+
+  const plexTitle = result.title || '';
+  const albumArtist = result.grandparentTitle || '';
+  const albumName = result.parentTitle || '';
+  const trackArtist = result.originalTitle || '';
+
+  const albumArtistMatches = !!albumArtist && artistsMatch(sourceArtist, albumArtist);
+  const trackArtistMatches = !!trackArtist && artistsMatch(sourceArtist, trackArtist);
+  const sourceArtists = sourceArtist.split(/\s*[,&\/]\s*/).map(a => a.trim()).filter(Boolean);
+  const anyArtistMatches = sourceArtists.length > 1 && sourceArtists.some(a => {
+    const cleanA = normalizeForComparison(a);
+    const cleanAlbum = normalizeForComparison(albumArtist);
+    const cleanTrack = normalizeForComparison(trackArtist);
+    return (cleanAlbum && (cleanA === cleanAlbum || cleanAlbum.includes(cleanA) || cleanA.includes(cleanAlbum))) ||
+           (cleanTrack && (cleanA === cleanTrack || cleanTrack.includes(cleanA) || cleanA.includes(cleanTrack)));
+  });
+
+  const albumArtistLower = albumArtist.toLowerCase();
+  const albumNameLower = albumName.toLowerCase();
+  const isVariousArtists = settings.variousArtistsNames?.some(
+    (name: string) => albumArtistLower === name.toLowerCase() || albumArtistLower.includes(name.toLowerCase())
+  ) || normalizeForComparison(albumArtist).includes('various') || normalizeForComparison(albumArtist).includes('compilation');
+  const isSoundtrackAlbum = albumNameLower.includes('soundtrack') || albumNameLower.includes('ost') ||
+    albumArtistLower.includes('cast') || albumArtistLower.includes('soundtrack');
+  const hasDistinctTrackArtist = !!trackArtist && normalizeForComparison(trackArtist) !== normalizeForComparison(albumArtist);
+  const isCompilation = isVariousArtists || isSoundtrackAlbum || hasDistinctTrackArtist;
+
+  const cleanSourceTitle = normalizeForComparison(cleanTrackTitle(sourceTitle));
+  const cleanPlexTitle = normalizeForComparison(cleanTrackTitle(plexTitle));
+  const exactTitleMatch = cleanSourceTitle === cleanPlexTitle;
+  const allowTitleOnlyMatch = isCompilation && exactTitleMatch;
+
+  const plexArtist = isCompilation && trackArtist
+    ? trackArtist
+    : (albumArtistMatches ? albumArtist : (trackArtist || albumArtist));
+  let score = calculateMatchScore(sourceTitle, sourceArtist, plexTitle, plexArtist);
+
+  if (isCompilation && !albumArtistMatches && !trackArtistMatches && !anyArtistMatches) score -= 40;
+  if (allowTitleOnlyMatch && !trackArtistMatches && !anyArtistMatches) score -= 20;
+  if (!hasReRecordedIndicator(sourceTitle) && hasReRecordedIndicator(plexTitle)) score -= 50;
+  if (!hasSpeedModifiedIndicator(sourceTitle) && hasSpeedModifiedIndicator(plexTitle)) score -= 50;
+  if (!hasRemixIndicator(sourceTitle) && hasRemixIndicator(plexTitle)) score -= 30;
+  if (!hasAlternateVersionIndicator(sourceTitle) && hasAlternateVersionIndicator(plexTitle)) score -= 35;
+  if (!hasDemoIndicator(sourceTitle) && hasDemoIndicator(plexTitle)) score -= 35;
+  if (hasRemasterIndicator(plexTitle) && !hasRemixIndicator(plexTitle)) score += 5;
+
+  const normalizedAlbum = normalizeForComparison(albumName);
+  const normalizedTrack = normalizeForComparison(plexTitle);
+  if (normalizedAlbum && normalizedTrack && normalizedAlbum === normalizedTrack) score += 10;
+
+  if (settings.preferNonCompilation) {
+    if (albumArtistMatches) score += 50;
+    else if (isCompilation && !trackArtistMatches && !anyArtistMatches) score -= 30;
+  }
+
+  const media = result.Media?.[0];
+  return {
+    score: Math.min(100, Math.max(0, score)),
+    rankScore: score,
+    plexTitle,
+    plexArtist,
+    plexAlbum: albumName,
+    plexCodec: media?.audioCodec?.toUpperCase(),
+    plexBitrate: media?.bitrate,
+  };
 }
 
 // Matches a trailing "- From <Movie>" qualifier, e.g. Spotify's

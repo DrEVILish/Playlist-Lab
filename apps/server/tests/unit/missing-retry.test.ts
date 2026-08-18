@@ -8,7 +8,9 @@
  * unknown error occurred" even though the retry was still working
  * server-side. It now responds immediately once the job is queued and runs
  * the matching in the background; these tests cover that contract plus the
- * per-user in-flight guard that stops overlapping retries from piling up.
+ * per-user queue that lets a retry requested while one is already running
+ * join in behind it (deduped, tracked via GET /retry-status) rather than
+ * being rejected outright.
  */
 
 import request from 'supertest';
@@ -135,16 +137,41 @@ describe('POST /api/missing/retry', () => {
     expect(remaining).toHaveLength(0);
   });
 
-  it('rejects an overlapping retry for the same user instead of starting a second background job', async () => {
+  it('queues an overlapping retry for the same user instead of rejecting it, then runs it once the first finishes', async () => {
     const first = await request(app).post('/api/missing/retry').send({}).expect(200);
     expect(first.body.started).toBe(true);
+    expect(first.body.queued).toBeUndefined();
 
     const second = await request(app).post('/api/missing/retry').send({}).expect(200);
-    expect(second.body.started).toBe(false);
-    expect(second.body.message).toMatch(/already in progress/i);
+    expect(second.body.started).toBe(true);
+    expect(second.body.queued).toBe(true);
+    expect(second.body.message).toMatch(/queued/i);
+
+    // Still only one background job in flight - the second call didn't start
+    // its own matchPlaylist() run, it just joined the pending queue.
+    const statusWhileFirstRuns = await request(app).get('/api/missing/retry-status').expect(200);
+    expect(statusWhileFirstRuns.body.active).not.toBeNull();
+
+    // Finish the first batch. Nothing matched (matchResult defaults to []),
+    // so the track is still missing and the queued retry should pick it up
+    // and start a second matchPlaylist() run automatically.
+    resolveMatch!();
+    for (let i = 0; i < 10; i++) {
+      await new Promise((r) => setImmediate(r));
+    }
+
+    // The chain moved on to the queued batch rather than going idle - proof
+    // it actually ran automatically instead of just being dropped.
+    const statusBetweenBatches = await request(app).get('/api/missing/retry-status').expect(200);
+    expect(statusBetweenBatches.body.active).not.toBeNull();
 
     resolveMatch!();
-    await new Promise((r) => setImmediate(r));
+    for (let i = 0; i < 10; i++) {
+      await new Promise((r) => setImmediate(r));
+    }
+
+    const statusAfterChain = await request(app).get('/api/missing/retry-status').expect(200);
+    expect(statusAfterChain.body.active).toBeNull();
   });
 
   it('allows a new retry once the previous background job has finished', async () => {

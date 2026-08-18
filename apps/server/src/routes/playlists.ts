@@ -86,6 +86,7 @@ router.get('/', requireAuth, async (req: Request, res: Response, next: NextFunct
           sourceUrl: tracked?.source_url ?? undefined,
           trackCount: p.leafCount || 0,
           duration: p.duration || 0,
+          smart: !!p.smart,
           composite: p.composite,
           thumb: p.composite,
           createdAt: p.addedAt ? p.addedAt * 1000 : Date.now(),

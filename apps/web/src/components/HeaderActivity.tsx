@@ -14,6 +14,11 @@ interface QueueStatus {
   queued: Array<{ id: string }>;
 }
 
+interface RetryStatus {
+  current: number;
+  total: number;
+}
+
 /**
  * Compact replacement for the old standalone Queue page + floating widget:
  * a header progress pill showing the currently-processing import (and how
@@ -21,19 +26,24 @@ interface QueueStatus {
  * but haven't been reviewed/saved yet still need the fuller QueuePage UI
  * (rematching tracks, choosing overwrite options, etc.) - rather than lose
  * that, a "N to review" badge opens it in a modal on demand instead of it
- * being a permanent nav destination.
+ * being a permanent nav destination. A second pill shows missing-tracks
+ * retry progress (see routes/missing.ts) - retries requested while one is
+ * already running queue up instead of being rejected, so this is the only
+ * visible sign of that queued work until it starts.
  */
 export const HeaderActivity: FC = () => {
   const [status, setStatus] = useState<QueueStatus | null>(null);
   const [reviewCount, setReviewCount] = useState(0);
+  const [retryStatus, setRetryStatus] = useState<RetryStatus | null>(null);
   const [showQueueModal, setShowQueueModal] = useState(false);
 
   useEffect(() => {
     const poll = async () => {
       try {
-        const [queueRes, completedRes] = await Promise.all([
+        const [queueRes, completedRes, retryRes] = await Promise.all([
           fetch('/api/import/queue', { credentials: 'include' }),
           fetch('/api/import/queue/completed', { credentials: 'include' }),
+          fetch('/api/missing/retry-status', { credentials: 'include' }),
         ]);
         if (queueRes.ok) {
           const data = await queueRes.json();
@@ -43,12 +53,16 @@ export const HeaderActivity: FC = () => {
           const data = await completedRes.json();
           setReviewCount((data.completed || []).length);
         }
+        if (retryRes.ok) {
+          const data = await retryRes.json();
+          setRetryStatus(data.active || null);
+        }
       } catch {
         // Silently fail - server might be restarting
       }
     };
     poll();
-    const interval = setInterval(poll, 5000);
+    const interval = setInterval(poll, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -58,42 +72,61 @@ export const HeaderActivity: FC = () => {
   const queuedCount = status?.queued?.length || 0;
   const hasActivity = !!processing || queuedCount > 0;
 
-  if (!hasActivity && reviewCount === 0) return null;
-
   const pct = processing?.progress && processing.progress.total > 0
     ? Math.min(100, Math.round((processing.progress.current / processing.progress.total) * 100))
     : null;
+  const retryPct = retryStatus && retryStatus.total > 0
+    ? Math.min(100, Math.round((retryStatus.current / retryStatus.total) * 100))
+    : null;
+
+  if (!hasActivity && reviewCount === 0 && !retryStatus) return null;
 
   return (
     <>
-      <button
-        className="header-activity"
-        onClick={() => setShowQueueModal(true)}
-        title={reviewCount > 0
-          ? `${reviewCount} import(s) finished matching tracks but were never saved as a playlist - click to review and save or discard them`
-          : 'Import activity'}
-      >
-        {processing && (
-          <>
-            <span className="header-activity-spinner" />
-            <span className="header-activity-label">
-              {processing.playlistName || processing.source}
-              {pct !== null ? ` ${pct}%` : '…'}
-            </span>
-            {pct !== null && (
-              <span className="header-activity-bar">
-                <span className="header-activity-bar-fill" style={{ width: `${pct}%` }} />
+      {(hasActivity || reviewCount > 0) && (
+        <button
+          className="header-activity"
+          onClick={() => setShowQueueModal(true)}
+          title={reviewCount > 0
+            ? `${reviewCount} import(s) finished matching tracks but were never saved as a playlist - click to review and save or discard them`
+            : 'Import activity'}
+        >
+          {processing && (
+            <>
+              <span className="header-activity-spinner" />
+              <span className="header-activity-label">
+                {processing.playlistName || processing.source}
+                {pct !== null ? ` ${pct}%` : '…'}
               </span>
-            )}
-          </>
-        )}
-        {!processing && queuedCount > 0 && (
-          <span className="header-activity-label">{queuedCount} queued</span>
-        )}
-        {reviewCount > 0 && (
-          <span className="header-activity-badge">{reviewCount} import{reviewCount === 1 ? '' : 's'} unsaved</span>
-        )}
-      </button>
+              {pct !== null && (
+                <span className="header-activity-bar">
+                  <span className="header-activity-bar-fill" style={{ width: `${pct}%` }} />
+                </span>
+              )}
+            </>
+          )}
+          {!processing && queuedCount > 0 && (
+            <span className="header-activity-label">{queuedCount} queued</span>
+          )}
+          {reviewCount > 0 && (
+            <span className="header-activity-badge">{reviewCount} import{reviewCount === 1 ? '' : 's'} unsaved</span>
+          )}
+        </button>
+      )}
+
+      {retryStatus && (
+        <span className="header-activity" title="Retrying missing tracks against your Plex library">
+          <span className="header-activity-spinner" />
+          <span className="header-activity-label">
+            Retrying {retryStatus.current}/{retryStatus.total}
+          </span>
+          {retryPct !== null && (
+            <span className="header-activity-bar">
+              <span className="header-activity-bar-fill" style={{ width: `${retryPct}%` }} />
+            </span>
+          )}
+        </span>
+      )}
 
       {showQueueModal && createPortal(
         <div className="modal-overlay" onClick={() => setShowQueueModal(false)}>

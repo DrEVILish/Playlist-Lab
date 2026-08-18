@@ -60,3 +60,15 @@ export const DeleteIcon: FC = () => (
     <line x1="14" y1="11" x2="14" y2="17" />
   </svg>
 );
+
+export const FilterIcon: FC = () => (
+  <svg {...base} width={12} height={12}>
+    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+  </svg>
+);
+
+export const SmartIcon: FC = () => (
+  <svg {...base} width={12} height={12} fill="currentColor" stroke="none">
+    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+  </svg>
+);

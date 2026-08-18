@@ -1,5 +1,5 @@
-import type { FC } from 'react';
-import { Fragment, useState, useEffect, useMemo } from 'react';
+import type { FC, ReactNode } from 'react';
+import { Fragment, useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../contexts/AppContext';
 import type { Schedule, MissingTrack } from '@playlist-lab/shared';
 import { PlaylistEditor } from '../components/playlist-panel/PlaylistEditor';
@@ -9,10 +9,134 @@ import { ScheduleModal } from '../components/playlist-panel/ScheduleModal';
 import { MissingTracksPanel } from '../components/playlist-panel/MissingTracksPanel';
 import { SharedWithMeModal } from '../components/playlist-panel/SharedWithMeModal';
 import { BackupRestorePage } from './BackupRestorePage';
-import { getNextRunTimestamp, getNextRunRelative } from '../utils/scheduleTime';
+import { getNextRunTimestamp, getNextRunRelative, getNextRunDate } from '../utils/scheduleTime';
 import { useEscapeKey } from '../hooks/useEscapeKey';
-import { EditIcon, ShareIcon, ExportIcon, ReimportIcon, BackupIcon, DeleteIcon } from '../components/icons';
+import { EditIcon, ShareIcon, ExportIcon, ReimportIcon, BackupIcon, DeleteIcon, FilterIcon, SmartIcon } from '../components/icons';
 import './PlaylistsPage.css';
+
+interface FilterOption { value: string; label: string }
+
+/** Small popover filter menu attached to a table header. Shared by the
+ * Source, Missing Tracks and Schedule columns below - click-outside and
+ * Escape both close it, and the button that opens it is highlighted
+ * whenever a non-default option is selected. */
+const FilterMenu: FC<{ options: FilterOption[]; value: string; onChange: (v: string) => void }> = ({ options, value, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  const active = value !== options[0]?.value;
+
+  useEscapeKey(open, () => setOpen(false));
+
+  useEffect(() => {
+    if (!open) return;
+    const onClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [open]);
+
+  return (
+    <span className="th-filter" ref={ref}>
+      <button
+        type="button"
+        className={`th-filter-btn ${active ? 'active' : ''}`}
+        onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
+        title="Filter"
+      >
+        <FilterIcon />
+      </button>
+      {open && (
+        <div className="th-filter-menu" onClick={(e) => e.stopPropagation()}>
+          {options.map(opt => (
+            <button
+              key={opt.value}
+              type="button"
+              className={`th-filter-option ${value === opt.value ? 'active' : ''}`}
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
+  );
+};
+
+/** Popover filter with min/max number inputs, for the Tracks and Duration
+ * columns. Shares the open/close-on-outside-click/Escape behavior with
+ * FilterMenu above but needs free-form inputs instead of a fixed option list. */
+const RangeFilterMenu: FC<{ unit: string; min: string; max: string; onChange: (min: string, max: string) => void }> = ({ unit, min, max, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  const active = min !== '' || max !== '';
+
+  useEscapeKey(open, () => setOpen(false));
+
+  useEffect(() => {
+    if (!open) return;
+    const onClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [open]);
+
+  return (
+    <span className="th-filter" ref={ref}>
+      <button
+        type="button"
+        className={`th-filter-btn ${active ? 'active' : ''}`}
+        onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
+        title="Filter"
+      >
+        <FilterIcon />
+      </button>
+      {open && (
+        <div className="th-filter-menu th-filter-menu-range" onClick={(e) => e.stopPropagation()}>
+          <label>
+            Min {unit}
+            <input type="number" min={0} value={min} onChange={(e) => onChange(e.target.value, max)} placeholder="0" />
+          </label>
+          <label>
+            Max {unit}
+            <input type="number" min={0} value={max} onChange={(e) => onChange(min, e.target.value)} placeholder="Any" />
+          </label>
+          {active && (
+            <button type="button" className="th-filter-option" onClick={() => onChange('', '')}>Clear</button>
+          )}
+        </div>
+      )}
+    </span>
+  );
+};
+
+/** Sortable column header, optionally with a filter popover. Declared at
+ * module scope (not inside PlaylistsPage) and takes sort state as explicit
+ * props rather than closing over it - a component declared inside another
+ * component's body is a new function identity every render, which makes
+ * React remount its whole subtree (losing FilterMenu/RangeFilterMenu's open
+ * state) every time any state this file owns changes, including on every
+ * keystroke in a range filter's inputs. */
+const SortableHeader: FC<{
+  label: string;
+  sortKeyName: SortKey;
+  currentSortKey: SortKey;
+  currentSortDir: SortDir;
+  onSort: (key: SortKey) => void;
+  filter?: ReactNode;
+}> = ({ label, sortKeyName, currentSortKey, currentSortDir, onSort, filter }) => (
+  <th className="sortable" onClick={() => onSort(sortKeyName)}>
+    <div className={filter ? 'th-with-filter' : undefined}>
+      <span className="th-label">
+        {label}
+        {currentSortKey === sortKeyName && <span className="sort-arrow">{currentSortDir === 'asc' ? '▲' : '▼'}</span>}
+      </span>
+      {filter}
+    </div>
+  </th>
+);
 
 interface Playlist {
   id: string;
@@ -22,10 +146,11 @@ interface Playlist {
   sourceUrl?: string;
   trackCount: number;
   duration: number;
+  smart?: boolean;
   composite?: string;
 }
 
-type SortKey = 'name' | 'tracks' | 'duration' | 'missing' | 'schedule';
+type SortKey = 'name' | 'tracks' | 'duration' | 'missing' | 'schedule' | 'nextRun' | 'lastRun';
 type SortDir = 'asc' | 'desc';
 type Modal = { type: 'edit' | 'share' | 'export' | 'schedule'; playlist: Playlist } | null;
 
@@ -47,6 +172,16 @@ export const PlaylistsPage: FC = () => {
   const [showAttentionOnly, setShowAttentionOnly] = useState(false);
   const [runningExecutions, setRunningExecutions] = useState<any[]>([]);
   const [recentExecutions, setRecentExecutions] = useState<any[]>([]);
+  const [sourceFilter, setSourceFilter] = useState('all');
+  const [missingFilter, setMissingFilter] = useState('all');
+  const [scheduleFilter, setScheduleFilter] = useState('all');
+  const [smartFilter, setSmartFilter] = useState('all');
+  const [tracksMin, setTracksMin] = useState('');
+  const [tracksMax, setTracksMax] = useState('');
+  const [durationMin, setDurationMin] = useState(''); // minutes
+  const [durationMax, setDurationMax] = useState(''); // minutes
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   useEscapeKey(modal?.type === 'edit', () => setModal(null));
   useEscapeKey(showBackupAll, () => setShowBackupAll(false));
@@ -210,19 +345,41 @@ export const PlaylistsPage: FC = () => {
     }
   };
 
-  const SortableHeader: FC<{ label: string; sortKeyName: SortKey }> = ({ label, sortKeyName }) => (
-    <th className="sortable" onClick={() => toggleSort(sortKeyName)}>
-      {label}
-      {sortKey === sortKeyName && <span className="sort-arrow">{sortDir === 'asc' ? '▲' : '▼'}</span>}
-    </th>
-  );
-
   const needsAttention = (playlist: Playlist) => {
     const missingCount = playlist.dbId ? (missingByDbId[playlist.dbId]?.length ?? 0) : 0;
     if (missingCount > 0) return true;
     const schedule = playlist.dbId ? scheduleByDbId.get(playlist.dbId) : undefined;
     return !!schedule && getScheduleStatus(schedule.id) === 'failed';
   };
+
+  const sourceFilterOptions = useMemo((): FilterOption[] => {
+    const labels = new Set<string>();
+    playlists.forEach(p => labels.add(getSourceLabel(p.source) || 'Plex'));
+    return [{ value: 'all', label: 'All Sources' }, ...Array.from(labels).sort().map(l => ({ value: l, label: l }))];
+  }, [playlists]);
+
+  const missingFilterOptions: FilterOption[] = [
+    { value: 'all', label: 'All' },
+    { value: 'has', label: 'Has Missing Tracks' },
+    { value: 'none', label: 'No Missing Tracks' },
+  ];
+
+  const scheduleFilterOptions: FilterOption[] = [
+    { value: 'all', label: 'All' },
+    { value: 'none', label: 'Not Scheduled' },
+    { value: 'daily', label: 'Daily' },
+    { value: 'weekly', label: 'Weekly' },
+    { value: 'fortnightly', label: 'Fortnightly' },
+    { value: 'monthly', label: 'Monthly' },
+    { value: 'failed', label: 'Failed Last Run' },
+    { value: 'running', label: 'Running Now' },
+  ];
+
+  const smartFilterOptions: FilterOption[] = [
+    { value: 'all', label: 'All' },
+    { value: 'smart', label: 'Smart Playlists Only' },
+    { value: 'regular', label: 'Regular Playlists Only' },
+  ];
 
   const stats = useMemo(() => {
     const totalMissing = Object.values(missingByDbId).reduce((sum, tracks) => sum + tracks.length, 0);
@@ -239,6 +396,32 @@ export const PlaylistsPage: FC = () => {
     if (showAttentionOnly) {
       filtered = filtered.filter(needsAttention);
     }
+    if (sourceFilter !== 'all') {
+      filtered = filtered.filter(p => (getSourceLabel(p.source) || 'Plex') === sourceFilter);
+    }
+    if (missingFilter !== 'all') {
+      filtered = filtered.filter(p => {
+        const count = p.dbId ? (missingByDbId[p.dbId]?.length ?? 0) : 0;
+        return missingFilter === 'has' ? count > 0 : count === 0;
+      });
+    }
+    if (scheduleFilter !== 'all') {
+      filtered = filtered.filter(p => {
+        const schedule = p.dbId ? scheduleByDbId.get(p.dbId) : undefined;
+        if (scheduleFilter === 'none') return !schedule;
+        if (!schedule) return false;
+        if (scheduleFilter === 'failed') return getScheduleStatus(schedule.id) === 'failed';
+        if (scheduleFilter === 'running') return getScheduleStatus(schedule.id) === 'running';
+        return schedule.frequency === scheduleFilter;
+      });
+    }
+    if (smartFilter !== 'all') {
+      filtered = filtered.filter(p => smartFilter === 'smart' ? !!p.smart : !p.smart);
+    }
+    if (tracksMin !== '') filtered = filtered.filter(p => p.trackCount >= Number(tracksMin));
+    if (tracksMax !== '') filtered = filtered.filter(p => p.trackCount <= Number(tracksMax));
+    if (durationMin !== '') filtered = filtered.filter(p => p.duration >= Number(durationMin) * 60000);
+    if (durationMax !== '') filtered = filtered.filter(p => p.duration <= Number(durationMax) * 60000);
 
     const sorted = [...filtered].sort((a, b) => {
       let cmp = 0;
@@ -258,12 +441,19 @@ export const PlaylistsPage: FC = () => {
           cmp = av - bv;
           break;
         }
-        case 'schedule': {
+        case 'schedule':
+        case 'nextRun': {
           const as = a.dbId ? scheduleByDbId.get(a.dbId) : undefined;
           const bs = b.dbId ? scheduleByDbId.get(b.dbId) : undefined;
           const av = as ? (getNextRunTimestamp(as) ?? Infinity) : Infinity;
           const bv = bs ? (getNextRunTimestamp(bs) ?? Infinity) : Infinity;
           cmp = av - bv;
+          break;
+        }
+        case 'lastRun': {
+          const as = a.dbId ? scheduleByDbId.get(a.dbId) : undefined;
+          const bs = b.dbId ? scheduleByDbId.get(b.dbId) : undefined;
+          cmp = (as?.lastRun ?? -Infinity) - (bs?.lastRun ?? -Infinity);
           break;
         }
       }
@@ -272,7 +462,19 @@ export const PlaylistsPage: FC = () => {
 
     return sorted;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playlists, search, sortKey, sortDir, missingByDbId, scheduleByDbId, showAttentionOnly, runningExecutions, recentExecutions]);
+  }, [playlists, search, sortKey, sortDir, missingByDbId, scheduleByDbId, showAttentionOnly, runningExecutions, recentExecutions, sourceFilter, missingFilter, scheduleFilter, smartFilter, tracksMin, tracksMax, durationMin, durationMax]);
+
+  // Any filter/search/sort change should reset back to page 1 so users don't
+  // land on a now-empty page.
+  useEffect(() => {
+    setPage(1);
+  }, [search, showAttentionOnly, sourceFilter, missingFilter, scheduleFilter, smartFilter, tracksMin, tracksMax, durationMin, durationMax, sortKey, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredSorted.length / pageSize));
+  const pagedPlaylists = useMemo(
+    () => filteredSorted.slice((page - 1) * pageSize, page * pageSize),
+    [filteredSorted, page, pageSize]
+  );
 
   return (
     <div className="page-container">
@@ -331,17 +533,59 @@ export const PlaylistsPage: FC = () => {
           <table className="playlists-table">
             <thead>
               <tr>
-                <SortableHeader label="Playlist" sortKeyName="name" />
-                <th>Source</th>
-                <SortableHeader label="Tracks" sortKeyName="tracks" />
-                <SortableHeader label="Duration" sortKeyName="duration" />
-                <SortableHeader label="Missing Tracks" sortKeyName="missing" />
-                <SortableHeader label="Schedule" sortKeyName="schedule" />
+                <SortableHeader
+                  label="Playlist"
+                  sortKeyName="name"
+                  currentSortKey={sortKey}
+                  currentSortDir={sortDir}
+                  onSort={toggleSort}
+                  filter={<FilterMenu options={smartFilterOptions} value={smartFilter} onChange={setSmartFilter} />}
+                />
+                <th>
+                  <div className="th-with-filter">
+                    <span className="th-label">Source</span>
+                    <FilterMenu options={sourceFilterOptions} value={sourceFilter} onChange={setSourceFilter} />
+                  </div>
+                </th>
+                <SortableHeader
+                  label="Tracks"
+                  sortKeyName="tracks"
+                  currentSortKey={sortKey}
+                  currentSortDir={sortDir}
+                  onSort={toggleSort}
+                  filter={<RangeFilterMenu unit="tracks" min={tracksMin} max={tracksMax} onChange={(mn, mx) => { setTracksMin(mn); setTracksMax(mx); }} />}
+                />
+                <SortableHeader
+                  label="Duration"
+                  sortKeyName="duration"
+                  currentSortKey={sortKey}
+                  currentSortDir={sortDir}
+                  onSort={toggleSort}
+                  filter={<RangeFilterMenu unit="min" min={durationMin} max={durationMax} onChange={(mn, mx) => { setDurationMin(mn); setDurationMax(mx); }} />}
+                />
+                <SortableHeader
+                  label="Missing Tracks"
+                  sortKeyName="missing"
+                  currentSortKey={sortKey}
+                  currentSortDir={sortDir}
+                  onSort={toggleSort}
+                  filter={<FilterMenu options={missingFilterOptions} value={missingFilter} onChange={setMissingFilter} />}
+                />
+                <SortableHeader
+                  label="Schedule"
+                  sortKeyName="schedule"
+                  currentSortKey={sortKey}
+                  currentSortDir={sortDir}
+                  onSort={toggleSort}
+                  filter={<FilterMenu options={scheduleFilterOptions} value={scheduleFilter} onChange={setScheduleFilter} />}
+                />
+                <SortableHeader label="Next Run" sortKeyName="nextRun" currentSortKey={sortKey} currentSortDir={sortDir} onSort={toggleSort} />
+                <SortableHeader label="Last Run" sortKeyName="lastRun" currentSortKey={sortKey} currentSortDir={sortDir} onSort={toggleSort} />
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredSorted.map(playlist => {
+              {pagedPlaylists.map(playlist => {
                 const missingTracks = playlist.dbId ? (missingByDbId[playlist.dbId] || []) : [];
                 const schedule = playlist.dbId ? scheduleByDbId.get(playlist.dbId) : undefined;
                 const scheduleStatus = schedule ? getScheduleStatus(schedule.id) : null;
@@ -363,6 +607,11 @@ export const PlaylistsPage: FC = () => {
                             )}
                           </div>
                           <span className="playlist-name" title={playlist.name}>{playlist.name}</span>
+                          {playlist.smart && (
+                            <span className="smart-badge" title="Smart playlist - built from Plex's own rules, not a fixed track list">
+                              <SmartIcon /> Smart
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td>
@@ -404,6 +653,12 @@ export const PlaylistsPage: FC = () => {
                           </span>
                         )}
                       </td>
+                      <td>
+                        {schedule ? getNextRunDate(schedule) : '—'}
+                      </td>
+                      <td>
+                        {schedule?.lastRun ? new Date(schedule.lastRun * 1000).toLocaleDateString() : '—'}
+                      </td>
                       <td className="col-actions">
                         <div className="row-actions">
                           <button className="icon-btn" onClick={() => setModal({ type: 'edit', playlist })} title="Edit tracks"><EditIcon /></button>
@@ -421,7 +676,7 @@ export const PlaylistsPage: FC = () => {
                     </tr>
                     {isExpanded && playlist.dbId && (
                       <tr>
-                        <td colSpan={7} style={{ padding: 0 }}>
+                        <td colSpan={9} style={{ padding: 0 }}>
                           <MissingTracksPanel
                             playlistId={playlist.dbId}
                             tracks={missingTracks}
@@ -435,6 +690,20 @@ export const PlaylistsPage: FC = () => {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {!isLoading && filteredSorted.length > 0 && (
+        <div className="playlists-pagination">
+          <span className="playlists-pagination-info">
+            Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredSorted.length)} of {filteredSorted.length}
+          </span>
+          <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} className="playlists-pagination-size">
+            {[25, 50, 100, 200].map(n => <option key={n} value={n}>{n} / page</option>)}
+          </select>
+          <button className="btn btn-secondary btn-small" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}>Previous</button>
+          <span className="playlists-pagination-page">Page {page} of {totalPages}</span>
+          <button className="btn btn-secondary btn-small" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Next</button>
         </div>
       )}
 

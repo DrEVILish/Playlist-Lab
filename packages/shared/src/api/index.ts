@@ -782,6 +782,8 @@ export class APIClient {
   // via getMissingTracks() to see live progress instead of a final count.
   async retryMissingTracks(playlistId?: number, trackIds?: number[]): Promise<{
     started: boolean;
+    /** true when a retry was already running and this one was queued to run right after it, instead of rejected. */
+    queued?: boolean;
     totalTracks: number;
     message: string;
   }> {
@@ -789,6 +791,11 @@ export class APIClient {
       method: 'POST',
       body: JSON.stringify({ playlistId, trackIds }),
     });
+  }
+
+  /** Polled by the header's activity indicator to show live retry progress. */
+  async getMissingRetryStatus(): Promise<{ active: { current: number; total: number } | null }> {
+    return this.request('/api/missing/retry-status');
   }
 
   async removeMissingTrack(id: number): Promise<void> {

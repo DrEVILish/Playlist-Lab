@@ -10,6 +10,11 @@ interface RematchResult {
   codec: string;
   bitrate: number;
   duration: number;
+  /** The same 0-100 score findBestMatch() computes during a real import
+   * (services/matching.ts's scorePlexCandidate), not a re-derived one. */
+  matchScore?: number;
+  /** Whether this score clears the user's configured minimum match score. */
+  matched?: boolean;
 }
 
 /**
@@ -133,7 +138,11 @@ export function MissingTracksPanel({ playlistId, tracks, onChanged }: { playlist
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ query: rematchQuery }),
+        body: JSON.stringify({
+          query: rematchQuery,
+          originalTitle: rematchTrack?.title,
+          originalArtist: rematchTrack?.artist,
+        }),
       });
       if (!response.ok) throw new Error('Search failed');
       const data = await response.json();
@@ -245,6 +254,7 @@ export function MissingTracksPanel({ playlistId, tracks, onChanged }: { playlist
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                   <thead>
                     <tr style={{ backgroundColor: 'var(--surface)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0 }}>
+                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 600, width: '90px' }} title="The same score a real import would compute for this candidate">Match</th>
                       <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 600 }}>Title</th>
                       <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 600 }}>Artist</th>
                       <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 600 }}>Album</th>
@@ -256,6 +266,24 @@ export function MissingTracksPanel({ playlistId, tracks, onChanged }: { playlist
                   <tbody>
                     {rematchResults.map((result, idx) => (
                       <tr key={idx} style={{ borderBottom: idx < rematchResults.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                        <td style={{ padding: '0.75rem' }}>
+                          {result.matchScore !== undefined ? (
+                            <span
+                              title={result.matched ? 'Would auto-match at your current settings' : "Below your minimum match score - won't auto-match"}
+                              style={{
+                                display: 'inline-block',
+                                padding: '0.125rem 0.5rem',
+                                borderRadius: '4px',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                color: result.matched ? 'var(--success)' : (result.matchScore >= 50 ? 'var(--warning)' : 'var(--error)'),
+                                backgroundColor: result.matched ? 'rgba(102, 187, 106, 0.1)' : (result.matchScore >= 50 ? 'rgba(255, 167, 38, 0.1)' : 'rgba(239, 83, 80, 0.1)'),
+                              }}
+                            >
+                              {Math.round(result.matchScore)}%
+                            </span>
+                          ) : '-'}
+                        </td>
                         <td style={{ padding: '0.75rem', fontWeight: 500 }}>{result.title}</td>
                         <td style={{ padding: '0.75rem', color: 'var(--text-secondary)' }}>{result.artist || '-'}</td>
                         <td style={{ padding: '0.75rem', color: 'var(--text-secondary)' }}>{result.album || '-'}</td>

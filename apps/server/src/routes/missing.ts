@@ -1,10 +1,12 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { EventEmitter } from 'events';
 import { requireAuth } from '../middleware/auth';
 import { createValidationError, createInternalError, createNotFoundError, createForbiddenError } from '../middleware/error-handler';
 import { logger } from '../utils/logger';
 import { PlexService } from '../services/plex';
 import { matchPlaylist } from '../services/matching';
 import type { DatabaseService } from '../database/database';
+import type { MissingTrack } from '../database/types';
 
 const router = Router();
 
@@ -15,8 +17,17 @@ const router = Router();
 // timeouts, which surfaced to users as "An unknown error occurred" even
 // though the retry was actually still working server-side. Track one
 // in-flight retry per user so it can run in the background instead - the
-// client polls GET /api/missing to watch the list shrink as tracks resolve.
-const activeRetries = new Set<number>();
+// client polls GET /api/missing to watch the list shrink as tracks resolve,
+// and GET /api/missing/retry-status for live current/total progress (shown
+// as a progress pill in the header).
+interface RetryProgress { current: number; total: number }
+const activeRetries = new Map<number, RetryProgress>();
+
+// A retry requested while one is already running for that user doesn't get
+// rejected - its tracks are merged into a pending batch (deduped by track
+// id, so repeated "Retry All" clicks don't pile up duplicate work) that
+// starts automatically as soon as the current one finishes.
+const pendingRetries = new Map<number, Map<number, MissingTrack>>();
 
 /**
  * GET /api/missing
@@ -109,32 +120,84 @@ router.post('/retry', requireAuth, async (req: Request, res: Response, next: Nex
       });
     }
 
-    if (activeRetries.has(userId)) {
-      return res.json({
-        started: false,
-        totalTracks: tracksToRetry.length,
-        message: 'A retry is already in progress. Check back shortly - the missing tracks list updates live as tracks resolve.'
-      });
-    }
-
     // Get user settings
     const settings = db.getUserSettings(userId);
 
-    activeRetries.add(userId);
+    if (activeRetries.has(userId)) {
+      let queue = pendingRetries.get(userId);
+      if (!queue) {
+        queue = new Map<number, MissingTrack>();
+        pendingRetries.set(userId, queue);
+      }
+      for (const track of tracksToRetry) queue.set(track.id, track);
+
+      return res.json({
+        started: true,
+        queued: true,
+        totalTracks: tracksToRetry.length,
+        message: `A retry is already running - ${queue.size} track(s) are queued to run next as soon as it finishes.`
+      });
+    }
+
     res.json({
       started: true,
       totalTracks: tracksToRetry.length,
       message: `Retrying ${tracksToRetry.length} track(s) - this list will update as they resolve.`
     });
 
-    runRetryInBackground(userId, db, user, userServer, tracksToRetry, settings).finally(() => {
-      activeRetries.delete(userId);
-    });
+    startRetryChain(userId, db, user, userServer, tracksToRetry, settings);
   } catch (error) {
     logger.error('Failed to retry missing tracks', { error, userId: req.session.userId });
     next(createInternalError('Failed to retry matching missing tracks'));
   }
 });
+
+/**
+ * GET /api/missing/retry-status
+ * Current retry progress for the header's progress indicator, null when idle.
+ */
+router.get('/retry-status', requireAuth, (req: Request, res: Response) => {
+  const userId = req.session.userId!;
+  const progress = activeRetries.get(userId);
+  res.json({ active: progress ? { ...progress } : null });
+});
+
+/**
+ * Runs one retry batch, then - if more tracks were queued while it ran -
+ * immediately starts another batch for those, re-reading them fresh from
+ * the DB first since some may have resolved via other means (e.g. a manual
+ * rematch) while this chain was running. activeRetries only clears once the
+ * whole chain is idle, so the header progress indicator and the "already
+ * running" queue check both see one continuous operation.
+ */
+async function startRetryChain(
+  userId: number,
+  db: DatabaseService,
+  user: { plex_token: string },
+  userServer: { server_url: string; library_id?: string | null; server_client_id?: string | null },
+  tracksToRetry: MissingTrack[],
+  settings: { matching_settings: any }
+): Promise<void> {
+  activeRetries.set(userId, { current: 0, total: tracksToRetry.length });
+
+  await runRetryInBackground(userId, db, user, userServer, tracksToRetry, settings);
+
+  const queue = pendingRetries.get(userId);
+  pendingRetries.delete(userId);
+
+  if (queue && queue.size > 0) {
+    // Re-check against the current missing list so tracks already resolved
+    // (by this run or anything else) don't get retried again.
+    const stillMissingIds = new Set(db.getUserMissingTracks(userId).map(t => t.id));
+    const nextBatch = Array.from(queue.values()).filter(t => stillMissingIds.has(t.id));
+    if (nextBatch.length > 0) {
+      await startRetryChain(userId, db, user, userServer, nextBatch, settings);
+      return;
+    }
+  }
+
+  activeRetries.delete(userId);
+}
 
 /**
  * Matches and re-adds a batch of missing tracks. Runs detached from the
@@ -148,7 +211,7 @@ async function runRetryInBackground(
   db: DatabaseService,
   user: { plex_token: string },
   userServer: { server_url: string; library_id?: string | null; server_client_id?: string | null },
-  tracksToRetry: Array<{ id: number; playlist_id: number; title: string; artist: string; album?: string | null; after_track_key?: string | null }>,
+  tracksToRetry: MissingTrack[],
   settings: { matching_settings: any }
 ): Promise<void> {
   try {
@@ -159,13 +222,23 @@ async function runRetryInBackground(
       album: t.album || ''
     }));
 
+    // matchPlaylist() emits a 'progress' event after every batch of 5 tracks
+    // it searches - forward those into activeRetries so GET /retry-status
+    // (polled for the header's progress pill) reflects real progress instead
+    // of just "running".
+    const progressEmitter = new EventEmitter();
+    progressEmitter.on('progress', (data: { current: number; total: number }) => {
+      activeRetries.set(userId, { current: data.current, total: data.total });
+    });
+
     // Attempt to match tracks
     const matchedTracks = await matchPlaylist(
       externalTracks,
       userServer.server_url,
       user.plex_token,
       userServer.library_id || '',
-      settings.matching_settings
+      settings.matching_settings,
+      progressEmitter
     );
 
     // Process matched tracks

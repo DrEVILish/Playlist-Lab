@@ -794,7 +794,7 @@ router.post('/search', async (req: Request, res: Response, next: NextFunction) =
  */
 router.post('/plex/search', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { query, libraryId } = req.body;
+    const { query, libraryId, originalTitle, originalArtist } = req.body;
 
     if (!query || typeof query !== 'string') {
       return next(createValidationError('query is required and must be a string'));
@@ -1245,18 +1245,37 @@ router.post('/plex/search', async (req: Request, res: Response, next: NextFuncti
         bitrate: bitrateKbps,
         duration: track.duration || 0,
         score: score,
+        plexRaw: track,
       };
     });
 
-    // Sort by score (highest first)
-    tracksWithScores.sort((a, b) => b.score - a.score);
-    
-    // Remove score from final output (internal use only)
-    const tracks = tracksWithScores.map(({ score, ...track }) => track);
+    // When the caller identifies which missing track this search is trying to
+    // replace, score every result with the exact same function findBestMatch()
+    // uses during a real import (services/matching.ts's scorePlexCandidate) -
+    // not a re-derived approximation - so "Manual Rematch" shows the real
+    // match score instead of nothing (the old free-text relevance score below
+    // was never even sent to the frontend).
+    let withMatchScore = tracksWithScores;
+    let sortByMatchScore = false;
+    if (typeof originalTitle === 'string' && typeof originalArtist === 'string') {
+      const { scorePlexCandidate } = await import('../services/matching');
+      const matchingSettings = db.getUserSettings(userId).matching_settings;
+      const effectiveMinScore = matchingSettings.minMatchScore <= 1 ? matchingSettings.minMatchScore * 100 : matchingSettings.minMatchScore;
+      withMatchScore = tracksWithScores.map((track) => {
+        const scored = scorePlexCandidate(originalTitle, originalArtist, track.plexRaw, matchingSettings);
+        return { ...track, matchScore: scored.score, matched: scored.score >= effectiveMinScore };
+      });
+      sortByMatchScore = true;
+    }
 
-    logger.info(`[Plex Search] Returning ${tracks.length} tracks sorted by relevance`);
+    // Sort by the real match score when we have one, otherwise by free-text relevance
+    withMatchScore.sort((a: any, b: any) => sortByMatchScore ? b.matchScore - a.matchScore : b.score - a.score);
 
-    // Return tracks with mapped metadata
+    // Remove internal-only fields from final output
+    const tracks = withMatchScore.map(({ score, plexRaw, ...track }: any) => track);
+
+    logger.info(`[Plex Search] Returning ${tracks.length} tracks sorted by ${sortByMatchScore ? 'match score' : 'relevance'}`);
+
     res.json({ tracks });
   } catch (error: any) {
     logger.error('Failed to search Plex tracks', { error: error.message, query: req.body.query });
