@@ -95,17 +95,14 @@ docker-compose logs -f
 
 **Option 3: Manual Installation**
 ```bash
-# Install dependencies
-npm install
-
 # Build shared package
-cd packages/shared && npm run build && cd ../..
+cd packages/shared && npm install && npm run build && cd ../..
 
 # Build server
-cd apps/server && npm run build && cd ../..
+cd apps/server && npm install && npm run build && cd ../..
 
 # Build web app
-cd apps/web && npm run build && cd ../..
+cd apps/web && npm install && npm run build && cd ../..
 
 # Start server
 cd apps/server && npm start
@@ -164,15 +161,12 @@ This ensures OAuth callbacks and other features work correctly with your reverse
 git clone https://github.com/yourusername/playlist-lab.git
 cd playlist-lab
 
-# Install dependencies
-npm install
-
 # Build shared package
-cd packages/shared && npm run build && cd ../..
+cd packages/shared && npm install && npm run build && cd ../..
 
-# Start development servers
-npm run dev:server  # Server on port 3001
-npm run dev:web     # Web app on port 5173
+# Start development servers (in separate terminals)
+cd apps/server && npm install && npm run dev  # Server on port 3001
+cd apps/web && npm install && npm run dev     # Web app on port 5173
 ```
 
 ## Technology Stack

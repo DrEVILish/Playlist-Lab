@@ -185,22 +185,27 @@ router.get('/shared-playlists', async (req: Request, res: Response, next: NextFu
       }>;
     }> = [];
     
-    for (const friend of friends) {
-      try {
-        const playlists = await plexClient.getFriendPlaylists(friend.username);
+    // Each friend's playlist list is an independent Plex API call - fetch
+    // them concurrently instead of one at a time.
+    const results = await Promise.allSettled(
+      friends.map(friend => plexClient.getFriendPlaylists(friend.username))
+    );
+    results.forEach((result, i) => {
+      const friend = friends[i];
+      if (result.status === 'fulfilled') {
         friendPlaylists.push({
           username: friend.username,
           friendlyName: friend.friendlyName || friend.username,
-          playlists
+          playlists: result.value
         });
-      } catch (err: any) {
-        logger.warn('Failed to get playlists for friend', { 
-          username: friend.username, 
-          error: err.message 
+      } else {
+        logger.warn('Failed to get playlists for friend', {
+          username: friend.username,
+          error: result.reason?.message
         });
         // Continue with other friends
       }
-    }
+    });
     
     return res.json({ friendPlaylists });
   } catch (error) {

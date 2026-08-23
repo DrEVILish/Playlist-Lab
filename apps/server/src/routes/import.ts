@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/auth';
 import { createValidationError, createInternalError } from '../middleware/error-handler';
 import { logger } from '../utils/logger';
 import { importPlaylist, ImportOptions } from '../services/import';
+import { matchPlaylist, dedupeByPlexRatingKey } from '../services/matching';
 import { EventEmitter } from 'events';
 import { debugLog } from '../utils/debug-logger';
 import multer from 'multer';
@@ -1569,6 +1570,61 @@ router.post('/preview', async (req: Request, res: Response, next: NextFunction) 
 });
 
 /**
+ * POST /api/import/match
+ * Match a plain list of {title, artist, album} tracks against the user's
+ * Plex library, without any source-specific scraping first. Used wherever
+ * the caller already has track text from somewhere other than a scraped
+ * playlist URL - e.g. restoring a backup JSON file - and just needs the
+ * same matching engine every other import path uses (services/matching.ts's
+ * matchPlaylist) before calling POST /confirm to actually create the
+ * playlist from the result.
+ */
+router.post('/match', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { tracks } = req.body;
+
+    if (!tracks || !Array.isArray(tracks) || tracks.length === 0) {
+      return next(createValidationError('tracks is required and must be a non-empty array'));
+    }
+
+    const userId = req.session.userId!;
+    const db = req.dbService!;
+
+    const userRow = (db as any).db.prepare('SELECT plex_token FROM users WHERE id = ?').get(userId);
+    if (!userRow) {
+      return next(createValidationError('User not found'));
+    }
+    const { plex_token: plexToken } = userRow;
+    if (!plexToken || typeof plexToken !== 'string') {
+      return next(createValidationError('No Plex token found. Please log in again.'));
+    }
+
+    const serverRow = (db as any).db.prepare('SELECT server_url, library_id FROM user_servers WHERE user_id = ?').get(userId);
+    if (!serverRow) {
+      return next(createValidationError('No Plex server configured. Please go to Settings and select a server.'));
+    }
+    const { server_url: serverUrl, library_id: libraryId } = serverRow;
+    if (!serverUrl) {
+      return next(createValidationError('No Plex server URL configured. Please go to Settings and select a server.'));
+    }
+
+    const settings = db.getUserSettings(userId);
+    const externalTracks = tracks.map((t: any) => ({
+      title: String(t.title || ''),
+      artist: String(t.artist || ''),
+      album: t.album ? String(t.album) : undefined,
+    }));
+
+    const matched = await matchPlaylist(externalTracks, serverUrl, plexToken, libraryId, settings.matching_settings);
+
+    res.json({ matched });
+  } catch (error: any) {
+    logger.error('Failed to match tracks', { error: error.message });
+    next(createInternalError(error.message || 'Failed to match tracks'));
+  }
+});
+
+/**
  * POST /api/import/confirm
  * Create playlist from matched tracks and optionally save missing tracks
  */
@@ -1691,8 +1747,7 @@ router.post('/confirm', async (req: Request, res: Response, next: NextFunction) 
     }
 
     // Create playlist in Plex
-    const trackUris = tracks
-      .filter((t: any) => t.matched && t.plexRatingKey)
+    const trackUris = dedupeByPlexRatingKey(tracks.filter((t: any) => t.matched && t.plexRatingKey))
       .map((t: any) => `server://${serverClientId}/com.plexapp.plugins.library/library/metadata/${t.plexRatingKey}`);
     
     logger.info('Confirm import - track URI details', {

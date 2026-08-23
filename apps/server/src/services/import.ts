@@ -29,7 +29,7 @@ import {
   scrapeLastfmPlaylist,
   ExternalPlaylist,
 } from './scrapers';
-import { matchPlaylist, MatchedTrack } from './matching';
+import { matchPlaylist, MatchedTrack, dedupeByPlexRatingKey } from './matching';
 import { logger } from '../utils/logger';
 import { logImportDebug } from '../utils/import-debug-logger';
 import { EventEmitter } from 'events';
@@ -299,8 +299,7 @@ export async function reimportPlaylistNow(
     logger.warn('Failed to check for existing playlist before reimport', { playlistId: playlist.id, error: error.message });
   }
 
-  const trackUris = result.matched
-    .filter((t: any) => t.matched && t.plexRatingKey)
+  const trackUris = dedupeByPlexRatingKey(result.matched.filter((t: any) => t.matched && t.plexRatingKey))
     .map((t: any) => `server://${server.server_client_id || 'playlist-lab-server'}/com.plexapp.plugins.library/library/metadata/${t.plexRatingKey}`);
 
   const newPlaylist = await plex.createPlaylist(playlist.name, server.library_id || '', trackUris);

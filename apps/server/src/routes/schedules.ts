@@ -12,7 +12,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { createValidationError, createInternalError } from '../middleware/error-handler';
 import { logger } from '../utils/logger';
-import { ScheduleInput } from '../database/types';
+import { ScheduleInput, Playlist } from '../database/types';
 import { DatabaseService } from '../database/database';
 
 const router = Router();
@@ -25,14 +25,17 @@ router.use(requireAuth);
  * Resolves the original source playlist/chart URL so the UI can link back to
  * it: chart-import schedules carry it directly in config.chartUrl, while
  * regular playlist-refresh schedules look it up from the linked playlist row.
+ * `playlistsById`, when given, is used instead of a fresh per-call DB lookup -
+ * callers transforming a whole list should batch-fetch once and pass it in
+ * (see GET / below) rather than triggering one query per schedule.
  */
-function transformSchedule(dbSchedule: any, db: DatabaseService): any {
+function transformSchedule(dbSchedule: any, db: DatabaseService, playlistsById?: Map<number, Playlist>): any {
   const config = dbSchedule.config ? (typeof dbSchedule.config === 'string' ? JSON.parse(dbSchedule.config) : dbSchedule.config) : undefined;
 
   let source: string | undefined = config?.chartSource;
   let sourceUrl: string | undefined = config?.chartUrl;
   if (!sourceUrl && dbSchedule.playlist_id) {
-    const playlist = db.getPlaylistById(dbSchedule.playlist_id);
+    const playlist = playlistsById ? playlistsById.get(dbSchedule.playlist_id) : db.getPlaylistById(dbSchedule.playlist_id);
     source = playlist?.source;
     sourceUrl = playlist?.source_url ?? undefined;
   }
@@ -64,7 +67,8 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     logger.info('Getting user schedules', { userId });
 
     const dbSchedules = db.getUserSchedules(userId);
-    const schedules = dbSchedules.map(s => transformSchedule(s, db));
+    const playlistsById = new Map(db.getUserPlaylists(userId).map(p => [p.id, p]));
+    const schedules = dbSchedules.map(s => transformSchedule(s, db, playlistsById));
 
     res.json({
       success: true,

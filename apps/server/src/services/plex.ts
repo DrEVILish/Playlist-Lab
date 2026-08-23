@@ -1346,9 +1346,15 @@ export class PlexClient {
   }
 
   /**
-   * Get tracks not played in X days (for rediscoveries)
+   * Get tracks not played in X days (for rediscoveries).
+   *
+   * @param includeNeverPlayed - Also mix in tracks with no play history at all.
+   *   Off by default because "rediscoveries" (Daily Mix) means tracks the user
+   *   actually played before and forgot about; Time Capsule wants this on, since
+   *   a genuinely-forgotten, never-touched track is arguably the most on-theme
+   *   result and would otherwise be excluded just for lacking a lastViewedAt.
    */
-  async getStalePlayedTracks(libraryId: string, daysAgo: number, limit: number): Promise<PlexTrack[]> {
+  async getStalePlayedTracks(libraryId: string, daysAgo: number, limit: number, includeNeverPlayed = false): Promise<PlexTrack[]> {
     try {
       const response = await this.client.get<PlexMediaContainer>(
         `/library/sections/${libraryId}/all`,
@@ -1363,7 +1369,7 @@ export class PlexClient {
       );
 
       const tracks = response.data.MediaContainer.Metadata || [];
-      
+
       // Filter to tracks not played in X days
       const cutoff = Date.now() - daysAgo * 24 * 60 * 60 * 1000;
       const staleTracks = tracks.filter((t: PlexTrack) => {
@@ -1371,7 +1377,37 @@ export class PlexClient {
         return lastViewed * 1000 < cutoff;
       });
 
-      return staleTracks.slice(0, limit);
+      if (!includeNeverPlayed) {
+        return staleTracks.slice(0, limit);
+      }
+
+      const neverPlayedResponse = await this.client.get<PlexMediaContainer>(
+        `/library/sections/${libraryId}/all`,
+        {
+          params: {
+            type: 10,
+            viewCount: 0,
+            'X-Plex-Container-Size': limit * 2
+          }
+        }
+      );
+      const neverPlayed = neverPlayedResponse.data.MediaContainer.Metadata || [];
+
+      // Interleave so never-played tracks aren't crowded out when the stale-play
+      // pool alone is already bigger than `limit`.
+      const merged: PlexTrack[] = [];
+      const seenKeys = new Set<string>();
+      const poolLength = Math.max(staleTracks.length, neverPlayed.length);
+      for (let i = 0; i < poolLength && merged.length < limit; i++) {
+        for (const track of [staleTracks[i], neverPlayed[i]]) {
+          if (track && !seenKeys.has(track.ratingKey) && merged.length < limit) {
+            merged.push(track);
+            seenKeys.add(track.ratingKey);
+          }
+        }
+      }
+
+      return merged;
     } catch (error: any) {
       if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
         throw new Error('Plex server is unreachable');

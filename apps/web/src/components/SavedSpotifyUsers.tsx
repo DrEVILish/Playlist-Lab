@@ -1,5 +1,6 @@
 import type { FC } from 'react';
 import { useState, useEffect } from 'react';
+import { useConfirm } from '../contexts/ConfirmContext';
 
 interface SavedSpotifyUser {
   id: number;
@@ -20,6 +21,7 @@ interface SavedSpotifyUsersProps {
 }
 
 export const SavedSpotifyUsers: FC<SavedSpotifyUsersProps> = ({ onSelectPlaylist }) => {
+  const confirmDialog = useConfirm();
   const [savedUsers, setSavedUsers] = useState<SavedSpotifyUser[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -118,7 +120,7 @@ export const SavedSpotifyUsers: FC<SavedSpotifyUsersProps> = ({ onSelectPlaylist
   };
 
   const handleDeleteUser = async (id: number) => {
-    if (!confirm('Remove this saved Spotify user?')) return;
+    if (!await confirmDialog('Remove this saved Spotify user?')) return;
 
     try {
       const response = await fetch(`/api/saved-spotify-users/${id}`, {

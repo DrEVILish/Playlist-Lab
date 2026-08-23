@@ -629,7 +629,10 @@ describe('Matching Service', () => {
           parentTitle: 'Live Album',
           ratingKey: '12345',
         },
-        { ...DEFAULT_MATCHING_SETTINGS, penalizeLiveVersions: true }
+        // Disable the non-compilation bonus so the score isn't pushed up and
+        // clamped at the 100 ceiling (same reasoning as the title-only-match
+        // test above), which would otherwise mask the alternate-version penalty.
+        { ...DEFAULT_MATCHING_SETTINGS, penalizeLiveVersions: true, preferNonCompilation: false }
       );
 
       // Should still match but with a lower score due to the alternate-version penalty

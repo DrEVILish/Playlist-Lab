@@ -5,6 +5,7 @@ import { MatchingStep } from '../components/cross-import/MatchingStep';
 import { ReviewStep } from '../components/cross-import/ReviewStep';
 import { ConfirmationStep } from '../components/cross-import/ConfirmationStep';
 import type { MatchResult } from '../components/cross-import/types';
+import { useToast } from '../contexts/ToastContext';
 import './CrossImportPage.css';
 
 export interface SourceInfo {
@@ -63,6 +64,7 @@ interface CrossImportPageProps {
 }
 
 export const CrossImportPage: FC<CrossImportPageProps> = ({ initialPlaylist }) => {
+  const toast = useToast();
   const [currentStep, setCurrentStep] = useState(0);
   const [importState, setImportState] = useState<ImportState>({});
   const [youtubeConnected, setYoutubeConnected] = useState(false);
@@ -153,10 +155,10 @@ export const CrossImportPage: FC<CrossImportPageProps> = ({ initialPlaylist }) =
         throw new Error(data.error || 'Failed to save credentials');
       }
 
-      alert('✅ Credentials saved! Please restart the Playlist Lab server for changes to take effect.');
+      toast.success('Credentials saved! Please restart the Playlist Lab server for changes to take effect.');
       setShowSetupGuide(false);
     } catch (err: any) {
-      alert('❌ Error: ' + (err.message || 'Failed to save credentials'));
+      toast.error(err.message || 'Failed to save credentials');
     } finally {
       setSavingCredentials(false);
     }
@@ -196,7 +198,7 @@ export const CrossImportPage: FC<CrossImportPageProps> = ({ initialPlaylist }) =
 
       const popup = window.open(data.authUrl, 'youtube_auth_popup', 'width=600,height=700,scrollbars=yes');
       if (!popup) {
-        alert('Popup blocked. Please allow popups and try again.');
+        toast.error('Popup blocked. Please allow popups and try again.');
         setConnecting(false);
         return;
       }
@@ -212,7 +214,7 @@ export const CrossImportPage: FC<CrossImportPageProps> = ({ initialPlaylist }) =
             setYoutubeConnected(true);
             setCurrentStep(1); // Move to playlist selection
           } else {
-            alert(`Connection failed: ${event.data.detail || 'unknown error'}`);
+            toast.error(`Connection failed: ${event.data.detail || 'unknown error'}`);
           }
         }
       };
@@ -231,7 +233,7 @@ export const CrossImportPage: FC<CrossImportPageProps> = ({ initialPlaylist }) =
         }
       }, 500);
     } catch (err: any) {
-      alert(err.message || 'Failed to connect to YouTube');
+      toast.error(err.message || 'Failed to connect to YouTube');
       setConnecting(false);
     }
   };
@@ -391,7 +393,7 @@ export const CrossImportPage: FC<CrossImportPageProps> = ({ initialPlaylist }) =
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(`${window.location.protocol}//${window.location.hostname}:3001/api/cross-import/oauth/youtube/callback`);
-                      alert('Copied to clipboard!');
+                      toast.success('Copied to clipboard!');
                     }}
                     style={{
                       marginTop: '8px',

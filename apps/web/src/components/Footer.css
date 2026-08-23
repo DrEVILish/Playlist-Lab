@@ -20,27 +20,3 @@
   font-size: 0.8125rem;
   color: var(--text-muted);
 }
-
-.footer-version {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
-}
-
-.footer-update-btn {
-  padding: 0.1875rem 0.5rem;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  color: #fff;
-  background: linear-gradient(135deg, #4a9ea8 0%, #5b9bd5 100%);
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.footer-update-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}

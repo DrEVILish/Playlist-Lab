@@ -2,6 +2,8 @@ import type { FC } from 'react';
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../contexts/AppContext';
 import type { MatchedTrack } from '@playlist-lab/shared';
+import { useEscapeKey } from '../hooks/useEscapeKey';
+import { useConfirm } from '../contexts/ConfirmContext';
 import './QueuePage.css';
 
 interface CompletedImport {
@@ -19,6 +21,7 @@ interface CompletedImport {
 
 export const QueuePage: FC = () => {
   const { apiClient, refreshPlaylists, refreshMissingTracksCount } = useApp();
+  const confirmDialog = useConfirm();
   const [completedImports, setCompletedImports] = useState<CompletedImport[]>([]);
   const [activeQueue, setActiveQueue] = useState<any>(null);
   const [selectedImport, setSelectedImport] = useState<CompletedImport | null>(null);
@@ -38,15 +41,7 @@ export const QueuePage: FC = () => {
   // Track whether mousedown started on the backdrop
   const backdropMouseDown = useRef(false);
 
-  // ESC key closes the rematch modal
-  useEffect(() => {
-    if (!rematchTrack) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setRematchTrack(null);
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [rematchTrack]);
+  useEscapeKey(!!rematchTrack, () => setRematchTrack(null));
 
   // Load completed imports and active queue
   useEffect(() => {
@@ -134,7 +129,7 @@ export const QueuePage: FC = () => {
   };
 
   const handleDiscardImport = async (importId: string) => {
-    if (!confirm('Discard this import? This cannot be undone.')) {
+    if (!await confirmDialog('Discard this import? This cannot be undone.')) {
       return;
     }
 
@@ -156,7 +151,7 @@ export const QueuePage: FC = () => {
   };
 
   const handleCancelJob = async (jobId: string) => {
-    if (!confirm('Cancel this import? This cannot be undone.')) {
+    if (!await confirmDialog('Cancel this import? This cannot be undone.')) {
       return;
     }
 
@@ -444,7 +439,7 @@ export const QueuePage: FC = () => {
   };
 
   const handleDiscardAll = async () => {
-    if (!confirm(`Discard all ${completedImports.length} pending import(s)? This cannot be undone.`)) {
+    if (!await confirmDialog(`Discard all ${completedImports.length} pending import(s)? This cannot be undone.`)) {
       return;
     }
     try {

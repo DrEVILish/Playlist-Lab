@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useConfirm } from '../contexts/ConfirmContext';
+import { useToast } from '../contexts/ToastContext';
 import { AdminPage } from './AdminPage';
 import type { PlexServer } from '@playlist-lab/shared';
 import './SettingsPage.css';
@@ -693,6 +695,9 @@ interface ServerConfigTabProps {
 }
 
 const ServerConfigTab: FC<ServerConfigTabProps> = ({ apiClient }) => {
+  const { version, updateInfo, isUpdating, installUpdate } = useApp();
+  const confirmDialog = useConfirm();
+  const toast = useToast();
   const [publicUrl, setPublicUrl] = useState('');
   const [_configuredPublicUrl, setConfiguredPublicUrl] = useState('');
   const [oauthRedirectUrls, setOauthRedirectUrls] = useState<Record<string, string>>({});
@@ -743,6 +748,15 @@ const ServerConfigTab: FC<ServerConfigTabProps> = ({ apiClient }) => {
     setPublicUrl('http://127.0.0.1:3001');
     setError(null);
     setSuccessMessage(null);
+  };
+
+  const handleUpdate = async () => {
+    if (!await confirmDialog(`Update to version ${updateInfo?.latestVersion}?\n\nThe application will restart automatically.`, { title: 'Update Playlist Lab?', confirmLabel: 'Update', danger: false })) return;
+    try {
+      await installUpdate();
+    } catch (err) {
+      toast.error(`Update failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
   };
 
   if (isLoading) {
@@ -829,6 +843,24 @@ const ServerConfigTab: FC<ServerConfigTabProps> = ({ apiClient }) => {
           <li>Update OAuth app redirect URIs to match your public URL</li>
           <li>Restart the server</li>
         </ol>
+      </div>
+
+      <div className="settings-subsection" style={{ marginTop: '2rem' }}>
+        <h3>About</h3>
+        <div className="settings-field">
+          <label className="settings-label">Version</label>
+          <p className="settings-hint">
+            {version ? `v${version}` : 'Loading...'}
+            {updateInfo?.updateAvailable && (
+              <>
+                {' — '}v{updateInfo.latestVersion} is available.{' '}
+                <button className="btn btn-primary btn-small" onClick={handleUpdate} disabled={isUpdating}>
+                  {isUpdating ? 'Updating...' : 'Update'}
+                </button>
+              </>
+            )}
+          </p>
+        </div>
       </div>
     </div>
   );

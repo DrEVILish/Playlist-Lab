@@ -1,6 +1,8 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import type { MissingTrack } from '@playlist-lab/shared';
+import { Modal } from '../Modal';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
 interface RematchResult {
   ratingKey: string;
@@ -25,6 +27,7 @@ interface RematchResult {
  */
 export function MissingTracksPanel({ playlistId, tracks, onChanged }: { playlistId: number; tracks: MissingTrack[]; onChanged: () => void }) {
   const { apiClient } = useApp();
+  const confirmDialog = useConfirm();
   const [isRetrying, setIsRetrying] = useState(false);
   const [retryingTrackId, setRetryingTrackId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -34,16 +37,33 @@ export function MissingTracksPanel({ playlistId, tracks, onChanged }: { playlist
   const [rematchQuery, setRematchQuery] = useState('');
   const [rematchResults, setRematchResults] = useState<RematchResult[]>([]);
   const [isSearchingRematch, setIsSearchingRematch] = useState(false);
-  const backdropMouseDown = useRef(false);
+  const [isClearing, setIsClearing] = useState(false);
 
-  useEffect(() => {
-    if (!rematchTrack) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') handleCloseRematch();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [rematchTrack]);
+  /**
+   * Polls the retry-status endpoint (real server-reported progress, not a
+   * derived guess) until the current retry chain - including anything
+   * queued behind it, since they share one per-user chain server-side -
+   * finishes, and reports whether it failed outright. Waits for `active` to
+   * appear at least once before treating a null response as "done", since a
+   * queued-but-not-yet-started batch has no retry-status entry until the
+   * one ahead of it finishes; without that, a track queued behind a large
+   * "Retry All" would otherwise look instantly finished.
+   */
+  const waitForRetryCompletion = async (maxWaitMs = 5 * 60 * 1000): Promise<{ error?: string; timedOut?: boolean }> => {
+    const start = Date.now();
+    let hasStarted = false;
+    while (Date.now() - start < maxWaitMs) {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      const { active } = await apiClient.getMissingRetryStatus();
+      if (active?.error) return { error: active.error };
+      if (active) {
+        hasStarted = true;
+      } else if (hasStarted) {
+        return {};
+      }
+    }
+    return { timedOut: true };
+  };
 
   const handleRetryAll = async () => {
     setIsRetrying(true);
@@ -56,21 +76,17 @@ export function MissingTracksPanel({ playlistId, tracks, onChanged }: { playlist
         setError(response.message);
         return;
       }
-      let lastCount = initialCount;
-      let stableStreak = 0;
-      for (let i = 0; i < 100 && stableStreak < 2; i++) {
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        const data = await apiClient.getMissingTracks();
-        const currentCount = data.missingTracks.find(g => g.playlistId === playlistId)?.tracks.length ?? 0;
-        if (currentCount === lastCount) {
-          stableStreak++;
-        } else {
-          stableStreak = 0;
-          lastCount = currentCount;
-        }
-      }
-      setRetryResult({ matched: Math.max(0, initialCount - lastCount), remaining: lastCount });
+      const { error: retryError, timedOut } = await waitForRetryCompletion();
       onChanged();
+      if (retryError) {
+        setError(`Retry failed: ${retryError}`);
+      } else if (timedOut) {
+        setError('Retry is taking longer than expected - check back shortly.');
+      } else {
+        const data = await apiClient.getMissingTracks();
+        const remaining = data.missingTracks.find(g => g.playlistId === playlistId)?.tracks.length ?? 0;
+        setRetryResult({ matched: Math.max(0, initialCount - remaining), remaining });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to retry matching');
     } finally {
@@ -87,18 +103,21 @@ export function MissingTracksPanel({ playlistId, tracks, onChanged }: { playlist
         setError(response.message);
         return;
       }
-      let stillMissing = true;
-      for (let i = 0; i < 20 && stillMissing; i++) {
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        const data = await apiClient.getMissingTracks();
-        stillMissing = data.missingTracks.some(g => g.tracks.some(t => t.id === trackId));
-      }
-      if (stillMissing) {
-        setError('Track still not found in your Plex library');
-      } else {
-        setRetryResult({ matched: 1, remaining: 0 });
-      }
+      const { error: retryError, timedOut } = await waitForRetryCompletion();
       onChanged();
+      if (retryError) {
+        setError(`Retry failed: ${retryError}`);
+      } else if (timedOut) {
+        setError('Retry is taking longer than expected - check back shortly.');
+      } else {
+        const data = await apiClient.getMissingTracks();
+        const stillMissing = data.missingTracks.some(g => g.tracks.some(t => t.id === trackId));
+        if (stillMissing) {
+          setError('Track still not found in your Plex library');
+        } else {
+          setRetryResult({ matched: 1, remaining: 0 });
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to retry track');
     } finally {
@@ -107,7 +126,7 @@ export function MissingTracksPanel({ playlistId, tracks, onChanged }: { playlist
   };
 
   const handleRemoveTrack = async (id: number) => {
-    if (!confirm('Are you sure you want to remove this track from the missing list?')) return;
+    if (!await confirmDialog('Are you sure you want to remove this track from the missing list?')) return;
     setError(null);
     try {
       await apiClient.removeMissingTrack(id);
@@ -115,6 +134,35 @@ export function MissingTracksPanel({ playlistId, tracks, onChanged }: { playlist
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to remove track');
     }
+  };
+
+  const handleClearPlaylist = async () => {
+    if (!await confirmDialog('Are you sure you want to clear all missing tracks for this playlist?')) return;
+    setIsClearing(true);
+    setError(null);
+    try {
+      await apiClient.clearPlaylistMissingTracks(playlistId);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to clear tracks');
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
+  const handleExportCSV = () => {
+    const csv = [
+      ['Title', 'Artist', 'Album', 'Source', 'Added At'],
+      ...tracks.map(track => [track.title, track.artist, track.album || '', track.source, new Date(track.addedAt).toLocaleDateString()]),
+    ].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `missing-tracks-${playlistId}-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleOpenRematch = (track: MissingTrack) => {
@@ -172,9 +220,17 @@ export function MissingTracksPanel({ playlistId, tracks, onChanged }: { playlist
         <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
           {tracks.length} missing track{tracks.length !== 1 ? 's' : ''}
         </span>
-        <button className="btn btn-primary btn-small" onClick={handleRetryAll} disabled={isRetrying}>
-          {isRetrying ? 'Retrying...' : 'Retry All'}
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button className="btn btn-secondary btn-small" onClick={handleExportCSV} title="Download this playlist's missing tracks as a CSV file">
+            Export CSV
+          </button>
+          <button className="btn btn-secondary btn-small" onClick={handleClearPlaylist} disabled={isClearing} title="Give up on matching these and remove them from the missing list">
+            {isClearing ? 'Clearing...' : 'Clear'}
+          </button>
+          <button className="btn btn-primary btn-small" onClick={handleRetryAll} disabled={isRetrying}>
+            {isRetrying ? 'Retrying...' : 'Retry All'}
+          </button>
+        </div>
       </div>
 
       {error && <div className="error-message" style={{ marginBottom: '0.75rem' }}>{error}</div>}
@@ -216,18 +272,10 @@ export function MissingTracksPanel({ playlistId, tracks, onChanged }: { playlist
       ))}
 
       {rematchTrack && (
-        <div
-          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
-          onMouseDown={(e) => { if (e.target === e.currentTarget) backdropMouseDown.current = true; }}
-          onMouseUp={(e) => { if (e.target === e.currentTarget && backdropMouseDown.current) handleCloseRematch(); backdropMouseDown.current = false; }}
-        >
-          <div
-            style={{ backgroundColor: 'var(--surface)', borderRadius: '8px', padding: '1.5rem', width: '950px', maxWidth: '95vw', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}
-            onMouseDown={(e) => { backdropMouseDown.current = false; e.stopPropagation(); }}
-          >
+        <Modal onClose={handleCloseRematch} ariaLabel="Manual Rematch" contentStyle={{ width: '950px', maxWidth: '95vw', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <h2 style={{ margin: 0 }}>Manual Rematch</h2>
-              <button onClick={handleCloseRematch} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '1.5rem', cursor: 'pointer' }}>×</button>
+              <button onClick={handleCloseRematch} aria-label="Close" style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '1.5rem', cursor: 'pointer' }}>×</button>
             </div>
 
             <div style={{ padding: '0.75rem', backgroundColor: 'rgba(100, 181, 246, 0.1)', border: '1px solid rgba(100, 181, 246, 0.3)', borderRadius: '4px', marginBottom: '1rem' }}>
@@ -308,8 +356,7 @@ export function MissingTracksPanel({ playlistId, tracks, onChanged }: { playlist
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
               <button className="btn btn-secondary" onClick={handleCloseRematch}>Cancel</button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

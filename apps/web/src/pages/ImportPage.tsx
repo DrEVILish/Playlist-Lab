@@ -3,6 +3,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../contexts/AppContext';
 import type { MatchedTrack } from '@playlist-lab/shared';
 import { ImportFromPlexHome } from '../components/ImportFromPlexHome';
+import { useEscapeKey } from '../hooks/useEscapeKey';
+import { useToast } from '../contexts/ToastContext';
 
 type ImportSource = 'spotify' | 'deezer' | 'apple' | 'tidal' | 'youtube' | 'amazon' | 'qobuz' | 'listenbrainz' | 'file' | 'ai' | 'aria' | 'billboard' | 'lastfm' | 'plexhome';
 
@@ -26,6 +28,7 @@ interface PopularPlaylist {
 
 export const ImportPage: FC = () => {
   const { apiClient, refreshPlaylists, refreshMissingTracksCount, settings } = useApp();
+  const toast = useToast();
   const [activeSource, setActiveSource] = useState<ImportSource>(() => {
     const saved = localStorage.getItem('selectedCountry');
     return saved === 'AU' ? 'aria' : 'deezer';
@@ -1121,15 +1124,7 @@ export const ImportPage: FC = () => {
   // Track whether mousedown started on the backdrop
   const backdropMouseDown = useRef(false);
 
-  // ESC key closes the rematch modal
-  useEffect(() => {
-    if (!rematchTrack) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') handleCloseRematch();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [rematchTrack]);
+  useEscapeKey(!!rematchTrack, handleCloseRematch);
 
   const handleSearchRematch = async () => {
     if (!rematchQuery.trim()) return;
@@ -1280,7 +1275,7 @@ export const ImportPage: FC = () => {
         window.location.href = '/missing';
       } catch (error: any) {
         console.error('Failed to save missing tracks:', error);
-        alert(`Failed to save missing tracks: ${error.message || 'Unknown error'}`);
+        toast.error(`Failed to save missing tracks: ${error.message || 'Unknown error'}`);
       }
     };
 

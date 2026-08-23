@@ -32,6 +32,43 @@ export class NetworkError extends Error {
 export class APIClient {
   constructor(private baseURL: string, private getToken?: () => string | null) {}
 
+  /**
+   * Parses a failed response into an APIError and throws it, dispatching
+   * `auth:session-expired` first on a 401 so the app can bounce to /login.
+   * Shared between `request()` and any caller (like `importFile`) that has
+   * to use a raw `fetch` instead - e.g. because it sends FormData - so the
+   * two don't drift on which endpoints are exempt from the expiry event.
+   */
+  private async throwApiError(endpoint: string, response: Response, fallbackMessage: string): Promise<never> {
+    const error: any = await response.json().catch(() => ({
+      error: {
+        code: 'UNKNOWN_ERROR',
+        message: fallbackMessage,
+        statusCode: response.status,
+      },
+    }));
+
+    // Notify the app of session expiry so it can bounce the user to
+    // /login. Skip the auth bootstrap endpoints themselves, since a 401
+    // from those just means "not logged in yet" (normal on first load)
+    // rather than a session that expired mid-use.
+    if (
+      response.status === 401 &&
+      typeof window !== 'undefined' &&
+      endpoint !== '/api/auth/me' &&
+      endpoint !== '/api/auth/poll'
+    ) {
+      window.dispatchEvent(new CustomEvent('auth:session-expired'));
+    }
+
+    throw new APIError(
+      error.error?.code || 'UNKNOWN_ERROR',
+      error.error?.message || fallbackMessage,
+      response.status,
+      error.error?.details
+    );
+  }
+
   private async request<T>(
     endpoint: string,
     options?: RequestInit
@@ -54,33 +91,7 @@ export class APIClient {
       });
 
       if (!response.ok) {
-        const error: any = await response.json().catch(() => ({
-          error: {
-            code: 'UNKNOWN_ERROR',
-            message: 'An unknown error occurred',
-            statusCode: response.status,
-          },
-        }));
-
-        // Notify the app of session expiry so it can bounce the user to
-        // /login. Skip the auth bootstrap endpoints themselves, since a 401
-        // from those just means "not logged in yet" (normal on first load)
-        // rather than a session that expired mid-use.
-        if (
-          response.status === 401 &&
-          typeof window !== 'undefined' &&
-          endpoint !== '/api/auth/me' &&
-          endpoint !== '/api/auth/poll'
-        ) {
-          window.dispatchEvent(new CustomEvent('auth:session-expired'));
-        }
-
-        throw new APIError(
-          error.error?.code || 'UNKNOWN_ERROR',
-          error.error?.message || 'Request failed',
-          response.status,
-          error.error?.details
-        );
+        await this.throwApiError(endpoint, response, 'Request failed');
       }
 
       // Handle 204 No Content
@@ -375,21 +386,21 @@ export class APIClient {
     });
 
     if (!response.ok) {
-      const error: any = await response.json();
-
-      if (response.status === 401 && typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('auth:session-expired'));
-      }
-
-      throw new APIError(
-        error.error?.code || 'UNKNOWN_ERROR',
-        error.error?.message || 'Import failed',
-        response.status,
-        error.error?.details
-      );
+      await this.throwApiError('/api/import/file', response, 'Import failed');
     }
 
     return response.json() as any;
+  }
+
+  /** Matches a plain {title, artist, album} track list against the user's
+   * Plex library without scraping a source URL first - e.g. for restoring
+   * a backup file. Feed the result into confirmImport() to create the
+   * playlist. */
+  async matchTracks(tracks: Array<{ title: string; artist: string; album?: string }>): Promise<{ matched: MatchedTrack[] }> {
+    return this.request('/api/import/match', {
+      method: 'POST',
+      body: JSON.stringify({ tracks }),
+    });
   }
 
   async confirmImport(data: {
@@ -778,8 +789,10 @@ export class APIClient {
 
   // Starts matching in the background (a full retry batch does several real
   // Plex API calls per track, so large batches can take minutes) and returns
-  // immediately once the job is queued. Watch the missing tracks list shrink
-  // via getMissingTracks() to see live progress instead of a final count.
+  // immediately once the job is queued. Poll getMissingRetryStatus() for
+  // live current/total/error progress instead of re-fetching the full
+  // missing-tracks list, and check `queued` - a queued batch hasn't started
+  // yet, so its retry-status entry won't exist until the running one finishes.
   async retryMissingTracks(playlistId?: number, trackIds?: number[]): Promise<{
     started: boolean;
     /** true when a retry was already running and this one was queued to run right after it, instead of rejected. */
@@ -793,8 +806,11 @@ export class APIClient {
     });
   }
 
-  /** Polled by the header's activity indicator to show live retry progress. */
-  async getMissingRetryStatus(): Promise<{ active: { current: number; total: number } | null }> {
+  /** Polled by the header's activity indicator to show live retry progress.
+   * `error` is set (and the entry left in place instead of being cleared)
+   * when a batch fails outright - e.g. a revoked Plex token - so pollers can
+   * distinguish "genuinely still missing" from "the retry itself errored". */
+  async getMissingRetryStatus(): Promise<{ active: { current: number; total: number; error?: string } | null }> {
     return this.request('/api/missing/retry-status');
   }
 

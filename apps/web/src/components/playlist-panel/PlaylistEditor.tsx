@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
+import { useConfirm } from '../../contexts/ConfirmContext';
+import { useToast } from '../../contexts/ToastContext';
 import '../../pages/EditPlaylistsPage.css';
 
 export interface EditablePlaylist {
@@ -33,6 +35,8 @@ interface Track {
  */
 export function PlaylistEditor({ playlist, onPlaylistUpdated }: { playlist: EditablePlaylist; onPlaylistUpdated?: () => void }) {
   const { apiClient, server } = useApp();
+  const confirmDialog = useConfirm();
+  const toast = useToast();
   const [tracks, setTracks] = useState<Track[]>([]);
   const [tracksLoading, setTracksLoading] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -123,18 +127,22 @@ export function PlaylistEditor({ playlist, onPlaylistUpdated }: { playlist: Edit
 
   const handleRemoveSelected = async () => {
     if (selectedForRemoval.size === 0) return;
-    if (!confirm(`Remove ${selectedForRemoval.size} selected track(s) from the playlist?`)) return;
+    if (!await confirmDialog(`Remove ${selectedForRemoval.size} selected track(s) from the playlist?`)) return;
 
     try {
       setRemovingTracks(true);
-      for (const playlistItemID of selectedForRemoval) {
-        await apiClient.removeTrackFromPlaylist(playlist.id, playlistItemID.toString());
-      }
+      const results = await Promise.allSettled(
+        Array.from(selectedForRemoval).map(playlistItemID =>
+          apiClient.removeTrackFromPlaylist(playlist.id, playlistItemID.toString())
+        )
+      );
+      const failed = results.filter(r => r.status === 'rejected').length;
       await loadTracks();
       setSelectedForRemoval(new Set());
       onPlaylistUpdated?.();
+      if (failed > 0) toast.error(`Failed to remove ${failed} of ${results.length} track(s)`);
     } catch (err: any) {
-      alert(err.message || 'Failed to remove some tracks');
+      toast.error(err.message || 'Failed to remove some tracks');
       await loadTracks();
     } finally {
       setRemovingTracks(false);
@@ -142,13 +150,13 @@ export function PlaylistEditor({ playlist, onPlaylistUpdated }: { playlist: Edit
   };
 
   const handleRemoveTrack = async (playlistItemId: number) => {
-    if (!confirm('Remove this track from the playlist?')) return;
+    if (!await confirmDialog('Remove this track from the playlist?')) return;
     try {
       await apiClient.removeTrackFromPlaylist(playlist.id, playlistItemId.toString());
       setTracks(tracks.filter(t => t.playlistItemID !== playlistItemId));
       onPlaylistUpdated?.();
     } catch (err: any) {
-      alert(err.message || 'Failed to remove track');
+      toast.error(err.message || 'Failed to remove track');
     }
   };
 
@@ -189,7 +197,7 @@ export function PlaylistEditor({ playlist, onPlaylistUpdated }: { playlist: Edit
 
       if (!response.ok) throw new Error(`Failed to reorder tracks: ${response.status} ${response.statusText}`);
     } catch (err: any) {
-      alert(`Failed to reorder tracks: ${err.message}`);
+      toast.error(`Failed to reorder tracks: ${err.message}`);
       setTracks(originalTracks);
     }
     setDraggedIndex(null);
@@ -207,7 +215,7 @@ export function PlaylistEditor({ playlist, onPlaylistUpdated }: { playlist: Edit
     audioElement.src = `/api/proxy/audio?ratingKey=${track.ratingKey}`;
     audioElement.play().catch(err => {
       console.error('Failed to play track:', err);
-      alert('Failed to play track');
+      toast.error('Failed to play track');
     });
     setCurrentlyPlaying(track.ratingKey);
     audioElement.onended = () => setCurrentlyPlaying(null);
@@ -245,11 +253,11 @@ export function PlaylistEditor({ playlist, onPlaylistUpdated }: { playlist: Edit
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
+      toast.error('Please select an image file');
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      alert('Image must be less than 5MB');
+      toast.error('Image must be less than 5MB');
       return;
     }
 
@@ -272,9 +280,9 @@ export function PlaylistEditor({ playlist, onPlaylistUpdated }: { playlist: Edit
 
       setCoverUrl(`${playlist.composite}?t=${Date.now()}`);
       onPlaylistUpdated?.();
-      alert('Cover uploaded successfully!');
+      toast.success('Cover uploaded successfully!');
     } catch (err: any) {
-      alert(err.message || 'Failed to upload cover');
+      toast.error(err.message || 'Failed to upload cover');
     } finally {
       setUploadingCover(false);
       e.target.value = '';
@@ -283,7 +291,7 @@ export function PlaylistEditor({ playlist, onPlaylistUpdated }: { playlist: Edit
 
   const handleSearchTracks = async () => {
     if (!searchArtist.trim() && !searchTrack.trim() && !searchAlbum.trim()) {
-      alert('Please enter at least one search term');
+      toast.error('Please enter at least one search term');
       return;
     }
     try {
@@ -309,7 +317,7 @@ export function PlaylistEditor({ playlist, onPlaylistUpdated }: { playlist: Edit
       })));
     } catch (err) {
       console.error('Search failed:', err);
-      alert('Failed to search tracks');
+      toast.error('Failed to search tracks');
     } finally {
       setSearching(false);
     }
@@ -344,10 +352,10 @@ export function PlaylistEditor({ playlist, onPlaylistUpdated }: { playlist: Edit
       setSearchResults([]);
       setShowAddTracksModal(false);
       onPlaylistUpdated?.();
-      alert(`Added ${trackIds.length} track(s) to playlist`);
+      toast.success(`Added ${trackIds.length} track(s) to playlist`);
     } catch (err) {
       console.error('Failed to add tracks:', err);
-      alert('Failed to add tracks to playlist');
+      toast.error('Failed to add tracks to playlist');
     }
   };
 
@@ -404,7 +412,7 @@ export function PlaylistEditor({ playlist, onPlaylistUpdated }: { playlist: Edit
       })));
     } catch (err) {
       console.error('Search failed:', err);
-      alert('Failed to search tracks');
+      toast.error('Failed to search tracks');
     } finally {
       setSearchingReplace(false);
     }
@@ -463,7 +471,7 @@ export function PlaylistEditor({ playlist, onPlaylistUpdated }: { playlist: Edit
       onPlaylistUpdated?.();
       handleCloseReplaceModal();
     } catch (err: any) {
-      alert(`Failed to replace track: ${err.message || 'Unknown error'}`);
+      toast.error(`Failed to replace track: ${err.message || 'Unknown error'}`);
       shouldRestoreScroll.current = false;
       await loadTracks();
     }

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CrossImportPage } from '../../pages/CrossImportPage';
-import { useEscapeKey } from '../../hooks/useEscapeKey';
+import { Modal } from '../Modal';
 import '../../pages/ExportPlaylistsPage.css';
 
 type ExportFormat = 'm3u' | 'm3u8' | 'pls' | 'xspf' | 'csv' | 'txt';
@@ -35,8 +35,6 @@ export function ExportModal({ playlistId, playlistName, trackCount, onClose }: {
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showYouTube, setShowYouTube] = useState(false);
-
-  useEscapeKey(true, onClose);
 
   const handleExport = async () => {
     setExporting(true);
@@ -77,31 +75,32 @@ export function ExportModal({ playlistId, playlistName, trackCount, onClose }: {
 
   if (showYouTube) {
     return (
-      <div className="modal-overlay" onClick={onClose}>
-        <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '95vw', width: '900px', maxHeight: '90vh', overflow: 'auto' }}>
+      <Modal onClose={onClose} contentStyle={{ maxWidth: '95vw', width: '900px', maxHeight: '90vh', overflow: 'auto' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
             <button className="btn btn-secondary btn-small" onClick={() => setShowYouTube(false)}>← Back to Export</button>
             <button className="btn btn-secondary btn-small" onClick={onClose}>Close</button>
           </div>
           <CrossImportPage initialPlaylist={{ id: playlistId, name: playlistName, trackCount: trackCount ?? 0 }} />
-        </div>
-      </div>
+      </Modal>
     );
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+    <Modal onClose={onClose} contentStyle={{ maxWidth: '480px' }}>
         <h2>Export "{playlistName}"</h2>
 
         {error && <div className="export-error"><span>{error}</span></div>}
 
-        <div className="export-formats-list">
+        <div className="export-formats-list" role="radiogroup" aria-label="Export format">
           {FORMATS.map((format) => (
             <div
               key={format.id}
               className={`export-format-item ${selectedFormat === format.id ? 'active' : ''}`}
+              role="radio"
+              aria-checked={selectedFormat === format.id}
+              tabIndex={0}
               onClick={() => setSelectedFormat(format.id)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedFormat(format.id); } }}
             >
               <div className="export-format-badge">{format.name}</div>
               <div className="export-format-info">
@@ -110,7 +109,13 @@ export function ExportModal({ playlistId, playlistName, trackCount, onClose }: {
               </div>
             </div>
           ))}
-          <div className="export-format-item" onClick={() => setShowYouTube(true)}>
+          <div
+            className="export-format-item"
+            role="button"
+            tabIndex={0}
+            onClick={() => setShowYouTube(true)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowYouTube(true); } }}
+          >
             <div className="export-format-badge">YT</div>
             <div className="export-format-info">
               <div className="export-format-title">YouTube</div>
@@ -125,7 +130,6 @@ export function ExportModal({ playlistId, playlistName, trackCount, onClose }: {
             {exporting ? 'Exporting...' : 'Export'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

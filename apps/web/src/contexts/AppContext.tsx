@@ -77,7 +77,7 @@ interface UserSettings {
   aiProvider?: 'gemini' | 'grok';
 }
 
-interface Playlist {
+export interface Playlist {
   /** Plex ratingKey - this list comes from GET /api/playlists, a live read of Plex's own playlists, not our DB's playlists table. */
   id: string;
   /** Our internal numeric playlists.id, present only if this Plex playlist was imported through this app (so it has a schedule/missing-tracks/source to look up). */
@@ -94,6 +94,11 @@ interface Playlist {
   updatedAt: number;
 }
 
+interface UpdateInfo {
+  updateAvailable: boolean;
+  latestVersion?: string;
+}
+
 interface AppState {
   server: PlexServer | null;
   settings: UserSettings | null;
@@ -101,6 +106,9 @@ interface AppState {
   schedules: Schedule[];
   missingTracksCount: number;
   isLoading: boolean;
+  version: string;
+  updateInfo: UpdateInfo | null;
+  isUpdating: boolean;
 }
 
 interface AppContextType extends AppState {
@@ -112,6 +120,7 @@ interface AppContextType extends AppState {
   refreshMissingTracksCount: () => Promise<void>;
   refreshSettings: () => Promise<void>;
   refreshAll: () => Promise<void>;
+  installUpdate: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -137,6 +146,9 @@ export const AppProvider: FC<AppProviderProps> = ({ children }) => {
     schedules: [],
     missingTracksCount: 0,
     isLoading: true, // Start as true to prevent premature redirects before initial data loads
+    version: '',
+    updateInfo: null,
+    isUpdating: false,
   });
 
   // Create API client instance (stable reference — never recreated)
@@ -155,9 +167,77 @@ export const AppProvider: FC<AppProviderProps> = ({ children }) => {
         schedules: [],
         missingTracksCount: 0,
         isLoading: false,
+        version: '',
+        updateInfo: null,
+        isUpdating: false,
       });
     }
   }, [isAuthenticated]);
+
+  // Poll the running version (detects a post-update server restart and
+  // reloads the page) and whether a newer release is available. Lives here
+  // rather than in the Header/Settings components that display it so there's
+  // one poll loop shared by both.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let initialVersion = '';
+    const checkVersion = async () => {
+      try {
+        const res = await fetch('/api/version', { credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!initialVersion) {
+          initialVersion = data.version;
+          setState((prev) => ({ ...prev, version: data.version }));
+        } else if (data.version !== initialVersion) {
+          window.location.reload();
+        }
+      } catch {
+        // Server might be restarting - silently retry next tick
+      }
+    };
+
+    const checkForUpdates = async () => {
+      try {
+        const res = await fetch('/api/update/check', { credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        setState((prev) => ({ ...prev, updateInfo: data }));
+      } catch {
+        // Silently fail
+      }
+    };
+
+    checkVersion();
+    checkForUpdates();
+    const versionInterval = setInterval(checkVersion, 30 * 1000);
+    const updateInterval = setInterval(checkForUpdates, 6 * 60 * 60 * 1000);
+    return () => {
+      clearInterval(versionInterval);
+      clearInterval(updateInterval);
+    };
+  }, [isAuthenticated]);
+
+  const installUpdate = async () => {
+    setState((prev) => ({ ...prev, isUpdating: true }));
+    try {
+      const res = await fetch('/api/update/install', { method: 'POST', credentials: 'include' });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Unknown error');
+      }
+      // On success, keep showing "Updating..." until the server restarts and
+      // the version poll above notices and reloads the page.
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('Failed to fetch')) {
+        // Server is restarting - expected, keep showing "Updating..."
+      } else {
+        setState((prev) => ({ ...prev, isUpdating: false }));
+        throw err;
+      }
+    }
+  };
 
   const setServer = (server: PlexServer) => {
     setState((prev) => ({ ...prev, server }));
@@ -323,6 +403,7 @@ export const AppProvider: FC<AppProviderProps> = ({ children }) => {
     refreshMissingTracksCount,
     refreshSettings,
     refreshAll,
+    installUpdate,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

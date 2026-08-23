@@ -28,23 +28,35 @@ export const MobileNav: FC = () => {
     { path: '/', label: 'Home' },
     { path: '/import', label: 'Import' },
     { path: '/generate', label: 'Generate Mixes' },
+    { path: '/shared-with-me', label: 'Shared With Me' },
+    { path: '/backup', label: 'Backup / Restore' },
+    { path: '/status', label: 'Status' },
     { path: '/settings', label: 'Settings' },
   ];
 
   return (
     <>
-      <button
-        className="mobile-nav-toggle"
-        onClick={() => setIsOpen(!isOpen)}
-        aria-label="Toggle navigation menu"
-        aria-expanded={isOpen}
-      >
-        <span className={`hamburger ${isOpen ? 'hamburger-open' : ''}`}>
-          <span></span>
-          <span></span>
-          <span></span>
-        </span>
-      </button>
+      {/* Hidden while open: this button sits in the page header, outside
+          the slide-out panel, and its z-index has to stay above the page
+          content for the closed (hamburger) state to be clickable - but
+          that same z-index then floats it above the open panel too, right
+          on top of the panel's own "Menu" heading and close button. The
+          panel already has its own close button once open, so there's no
+          need to keep this one visible/interactive at the same time. */}
+      {!isOpen && (
+        <button
+          className="mobile-nav-toggle"
+          onClick={() => setIsOpen(true)}
+          aria-label="Open navigation menu"
+          aria-expanded={false}
+        >
+          <span className="hamburger">
+            <span></span>
+            <span></span>
+            <span></span>
+          </span>
+        </button>
+      )}
 
       {isOpen && (
         <div className="mobile-nav-overlay" onClick={() => setIsOpen(false)} />

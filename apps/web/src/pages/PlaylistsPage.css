@@ -48,6 +48,29 @@
   overflow-x: auto;
 }
 
+.bulk-actions-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.875rem;
+  margin-bottom: 0.75rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--primary-color);
+  background: rgba(91, 155, 213, 0.08);
+}
+
+.bulk-actions-count {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-right: 0.25rem;
+}
+
+.col-select {
+  width: 2rem;
+  text-align: center;
+}
+
 .playlists-table {
   width: 100%;
   border-collapse: collapse;

@@ -1,6 +1,7 @@
 import type { FC } from 'react';
 import { useState, useEffect } from 'react';
 import { useApp } from '../contexts/AppContext';
+import { useConfirm } from '../contexts/ConfirmContext';
 import type { User } from '@playlist-lab/shared';
 
 interface AdminStats {
@@ -24,6 +25,7 @@ interface JobStatus {
 
 export const AdminPage: FC = () => {
   const { apiClient } = useApp();
+  const confirmDialog = useConfirm();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [missingTracks, setMissingTracks] = useState<MissingTrackStat[]>([]);
@@ -86,7 +88,7 @@ export const AdminPage: FC = () => {
   };
 
   const handleDeleteUser = async (userId: number, username: string) => {
-    if (!confirm(`Are you sure you want to delete user "${username}" and all their data?`)) {
+    if (!await confirmDialog(`Are you sure you want to delete user "${username}" and all their data?`)) {
       return;
     }
     setActionLoading(userId);

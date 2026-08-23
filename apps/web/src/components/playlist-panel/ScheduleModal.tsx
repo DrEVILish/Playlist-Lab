@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import type { Schedule } from '@playlist-lab/shared';
 import { getNextRunDate } from '../../utils/scheduleTime';
-import { useEscapeKey } from '../../hooks/useEscapeKey';
+import { Modal } from '../Modal';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
 /**
  * Create/manage the refresh schedule for a single playlist. Extracted from
@@ -23,6 +24,7 @@ export function ScheduleModal({
   onClose: () => void;
 }) {
   const { apiClient, refreshSchedules } = useApp();
+  const confirmDialog = useConfirm();
   const [frequency, setFrequency] = useState<'daily' | 'weekly' | 'fortnightly' | 'monthly'>(schedule?.frequency ?? 'weekly');
   const [startDate, setStartDate] = useState(schedule?.startDate ?? new Date().toISOString().split('T')[0]);
   const [runTime, setRunTime] = useState(schedule?.config?.run_time ?? '');
@@ -31,8 +33,6 @@ export function ScheduleModal({
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<any[] | null>(null);
-
-  useEscapeKey(true, onClose);
 
   useEffect(() => {
     if (!schedule) return;
@@ -68,7 +68,7 @@ export function ScheduleModal({
 
   const handleDelete = async () => {
     if (!schedule) return;
-    if (!confirm('Delete this schedule?')) return;
+    if (!await confirmDialog('Delete this schedule?')) return;
     setIsDeleting(true);
     setError(null);
     try {
@@ -93,8 +93,7 @@ export function ScheduleModal({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+    <Modal onClose={onClose} contentStyle={{ maxWidth: '520px' }}>
         <h2>{schedule ? 'Manage Schedule' : 'Create Schedule'} — {playlistName}</h2>
 
         {error && <div className="error-message">{error}</div>}
@@ -189,7 +188,6 @@ export function ScheduleModal({
             {isSaving ? 'Saving...' : schedule ? 'Save Changes' : 'Create Schedule'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

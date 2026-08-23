@@ -1,22 +1,138 @@
-import type { FC } from 'react';
+import type { FC, ReactNode } from 'react';
 import { useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { useApp } from '../contexts/AppContext';
-import type { Playlist } from '@playlist-lab/shared';
+import type { Playlist, Schedule } from '@playlist-lab/shared';
+import { getNextRunDate } from '../utils/scheduleTime';
 import { CustomMixModal, type CustomMixSettings } from './CustomMixModal';
 import { AdvancedMixModal } from '../components/AdvancedMixModal';
 import { QuickMixSettingsModal } from '../components/QuickMixSettingsModal';
 import { SaveTemplateModal } from '../components/SaveTemplateModal';
 import { TemplateList, type MixTemplate } from '../components/TemplateList';
 import { EditTemplateModal } from '../components/EditTemplateModal';
+import { Modal } from '../components/Modal';
+import { useConfirm } from '../contexts/ConfirmContext';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import './GenerateMixesPage.css';
 
 type MixType = 'weekly' | 'daily' | 'timecapsule' | 'newmusic' | 'deepcuts' | 'artistdiscovery' | 'mood' | 'era' | 'genreevolution' | 'artistjourney' | 'workout' | 'forgottenfavorites' | 'genreblend' | 'custom' | 'all';
 type AdvancedMixType = 'artistdiscovery' | 'mood' | 'era' | 'genreevolution' | 'artistjourney' | 'genreblend';
 type QuickMixType = 'weekly' | 'daily' | 'timecapsule' | 'newmusic' | 'deepcuts' | 'workout' | 'forgottenfavorites';
+type Frequency = 'daily' | 'weekly' | 'fortnightly' | 'monthly';
 
-export const GenerateMixesPage: FC = () => {
-  const { apiClient, settings, refreshPlaylists, refreshSchedules } = useApp();
+/** Shared by the "schedule this template" and "schedule this quick mix"
+ * modals below - both prompt for the same frequency/start-date/run-time,
+ * differing only in the summary shown at the top and what confirming does. */
+const ScheduleFrequencyModal: FC<{
+  summary: ReactNode;
+  frequency: Frequency;
+  setFrequency: (f: Frequency) => void;
+  startDate: string;
+  setStartDate: (d: string) => void;
+  runTime: string;
+  setRunTime: (t: string) => void;
+  isSaving: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}> = ({ summary, frequency, setFrequency, startDate, setStartDate, runTime, setRunTime, isSaving, onConfirm, onCancel }) => (
+  <Modal onClose={onCancel} ariaLabel="Schedule Mix" contentStyle={{ maxWidth: '500px' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+      <h2 style={{ margin: 0 }}>Schedule Mix</h2>
+      <button className="btn btn-secondary btn-small" onClick={onCancel} aria-label="Close">✕</button>
+    </div>
+
+    <div style={{ marginBottom: '1.5rem' }}>{summary}</div>
+
+    <div style={{ marginBottom: '1.5rem' }}>
+      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Update Frequency</label>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        {[
+          { value: 'daily', label: 'Daily' },
+          { value: 'weekly', label: 'Weekly' },
+          { value: 'fortnightly', label: 'Fortnightly (Every 2 weeks)' },
+          { value: 'monthly', label: 'Monthly' },
+        ].map(option => (
+          <label
+            key={option.value}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              padding: '0.75rem',
+              border: '1px solid var(--border)',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              backgroundColor: frequency === option.value ? 'var(--surface-hover)' : 'transparent',
+            }}
+          >
+            <input
+              type="radio"
+              name="frequency"
+              value={option.value}
+              checked={frequency === option.value}
+              onChange={(e) => setFrequency(e.target.value as Frequency)}
+              style={{ marginRight: '0.75rem' }}
+            />
+            {option.label}
+          </label>
+        ))}
+      </div>
+    </div>
+
+    <div style={{ marginBottom: '1.5rem' }}>
+      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Start Date</label>
+      <input
+        type="date"
+        value={startDate}
+        onChange={(e) => setStartDate(e.target.value)}
+        min={new Date().toISOString().split('T')[0]}
+        style={{ width: '100%', padding: '0.75rem', border: '1px solid var(--border)', borderRadius: '4px', backgroundColor: 'var(--surface)', color: 'var(--text-primary)', fontSize: '1rem' }}
+      />
+      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+        First update will occur on this date
+      </div>
+    </div>
+
+    <div style={{ marginBottom: '1.5rem' }}>
+      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Run Time</label>
+      <select
+        value={runTime}
+        onChange={(e) => setRunTime(e.target.value)}
+        style={{ width: '100%', padding: '0.75rem', border: '1px solid var(--border)', borderRadius: '4px', backgroundColor: 'var(--surface)', color: 'var(--text-primary)', fontSize: '1rem' }}
+      >
+        {Array.from({ length: 144 }, (_, i) => {
+          const hour = Math.floor(i / 6);
+          const minute = (i % 6) * 10;
+          const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+          return <option key={timeStr} value={timeStr}>{timeStr}</option>;
+        })}
+      </select>
+      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+        Schedules are checked every 10 minutes
+      </div>
+    </div>
+
+    <div style={{ display: 'flex', gap: '0.5rem' }}>
+      <button className="btn btn-primary" onClick={onConfirm} disabled={isSaving} style={{ flex: 1 }}>
+        {isSaving ? 'Creating...' : 'Create Schedule'}
+      </button>
+      <button className="btn btn-secondary" onClick={onCancel} disabled={isSaving} style={{ flex: 1 }}>
+        Cancel
+      </button>
+    </div>
+  </Modal>
+);
+
+/**
+ * `onNavigateAway`, when given, is called just before a Link inside this
+ * page navigates elsewhere - this page is also rendered inside a header
+ * modal (see components/Header.tsx), which controls its own open/closed
+ * state independently of the route, so a plain <Link> would change the URL
+ * underneath while the modal overlay stayed put. Header passes a callback
+ * that closes it; the plain /generate route usage leaves this undefined.
+ */
+export const GenerateMixesPage: FC<{ onNavigateAway?: () => void }> = ({ onNavigateAway }) => {
+  const { apiClient, settings, schedules, refreshPlaylists, refreshSchedules } = useApp();
+  const confirmDialog = useConfirm();
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState<{ message: string; progress: number } | null>(null);
   const [generatedPlaylists, setGeneratedPlaylists] = useState<Playlist[]>([]);
@@ -46,86 +162,75 @@ export const GenerateMixesPage: FC = () => {
   });
   const [scheduleRunTime, setScheduleRunTime] = useState<string>('09:00');
   const [isCreatingSchedule, setIsCreatingSchedule] = useState(false);
-  const [scheduleQuickMix, setScheduleQuickMix] = useState<{ mixType: QuickMixType; settings: any } | null>(null);
+  const [scheduleQuickMix, setScheduleQuickMix] = useState<{ mixType: QuickMixType | AdvancedMixType; settings: any } | null>(null);
+  const [runningScheduleId, setRunningScheduleId] = useState<number | null>(null);
+  const [deletingScheduleId, setDeletingScheduleId] = useState<number | null>(null);
 
   useEscapeKey(!!scheduleTemplate, () => setScheduleTemplate(null));
   useEscapeKey(!!scheduleQuickMix, () => setScheduleQuickMix(null));
 
-  const mixes = [
+  const mixSchedules = schedules.filter(s => s.scheduleType === 'mix_generation');
+
+  const handleRunMixSchedule = async (scheduleId: number) => {
+    setRunningScheduleId(scheduleId);
+    setError(null);
+    try {
+      await apiClient.runSchedule(scheduleId);
+      await refreshSchedules();
+      setSuccessMessage('Schedule started');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to run schedule');
+    } finally {
+      setRunningScheduleId(null);
+    }
+  };
+
+  const handleDeleteMixSchedule = async (schedule: Schedule) => {
+    if (!await confirmDialog('Delete this schedule?')) return;
+    setDeletingScheduleId(schedule.id);
+    setError(null);
+    try {
+      await apiClient.deleteSchedule(schedule.id);
+      await refreshSchedules();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete schedule');
+    } finally {
+      setDeletingScheduleId(null);
+    }
+  };
+
+  // Grouped so mixes that pull from the same underlying signal (your play
+  // history vs. your library's structure) sit together, since several of
+  // these are easy to confuse at a glance - Time Capsule/Deep Cuts/Forgotten
+  // Favorites all sound similar but key off different axes of play history
+  // (recency alone, low play count, or high-then-abandoned), which their
+  // descriptions now call out explicitly instead of just naming the mix.
+  const mixGroups: { group: string; groupDescription: string; mixes: { id: MixType; name: string; description: string }[] }[] = [
     {
-      id: 'weekly' as const,
-      name: 'Weekly Mix',
-      description: 'Tracks from your most-played artists',
+      group: 'From Your Listening History',
+      groupDescription: 'Built from your play counts and recency - each uses a different angle',
+      mixes: [
+        { id: 'weekly', name: 'Weekly Mix', description: 'Your most-played artists right now' },
+        { id: 'daily', name: 'Daily Mix', description: 'Recent plays, plus related tracks and rediscoveries' },
+        { id: 'timecapsule', name: 'Time Capsule', description: "Anything you haven't played in a while, regardless of how often you used to play it" },
+        { id: 'forgottenfavorites', name: 'Forgotten Favorites', description: "Tracks you used to play a lot but have stopped playing recently" },
+        { id: 'deepcuts', name: 'Deep Cuts Mix', description: "Tracks with low play counts you've likely never given much attention" },
+        { id: 'workout', name: 'Workout Mix', description: 'A progressive tempo build for exercise' },
+      ],
     },
     {
-      id: 'daily' as const,
-      name: 'Daily Mix',
-      description: 'Recent plays, related tracks, and rediscoveries',
-    },
-    {
-      id: 'timecapsule' as const,
-      name: 'Time Capsule',
-      description: 'Tracks you haven\'t played in a while',
-    },
-    {
-      id: 'newmusic' as const,
-      name: 'New Music Mix',
-      description: 'Recently added albums',
-    },
-    {
-      id: 'deepcuts' as const,
-      name: 'Deep Cuts Mix',
-      description: 'Hidden gems with low play counts',
-    },
-    {
-      id: 'artistdiscovery' as const,
-      name: 'Artist Discovery',
-      description: 'Tracks from similar artists',
-    },
-    {
-      id: 'mood' as const,
-      name: 'Mood Mix',
-      description: 'Tracks filtered by mood tags',
-    },
-    {
-      id: 'era' as const,
-      name: 'Era Mix',
-      description: 'Tracks from a specific decade',
-    },
-    {
-      id: 'genreevolution' as const,
-      name: 'Genre Evolution',
-      description: 'How a genre evolved over time',
-    },
-    {
-      id: 'artistjourney' as const,
-      name: 'Artist Journey',
-      description: 'Chronological artist discography',
-    },
-    {
-      id: 'workout' as const,
-      name: 'Workout Mix',
-      description: 'Progressive tempo build',
-    },
-    {
-      id: 'forgottenfavorites' as const,
-      name: 'Forgotten Favorites',
-      description: 'High play count, not played recently',
-    },
-    {
-      id: 'genreblend' as const,
-      name: 'Genre Blend',
-      description: 'Tracks spanning multiple genres',
-    },
-    {
-      id: 'custom' as const,
-      name: 'Custom Mix',
-      description: 'Create a mix with your own filters',
-    },
-    {
-      id: 'all' as const,
-      name: 'Generate All',
-      description: 'Create all mixes at once',
+      group: 'Explore Your Library',
+      groupDescription: "Built from your library's structure - genres, eras, artists - not your play history",
+      mixes: [
+        { id: 'newmusic', name: 'New Music Mix', description: 'Recently added albums' },
+        { id: 'artistdiscovery', name: 'Artist Discovery', description: 'Tracks from artists similar to ones you like' },
+        { id: 'mood', name: 'Mood Mix', description: 'Tracks filtered by mood tags' },
+        { id: 'era', name: 'Era Mix', description: 'Tracks from a specific decade' },
+        { id: 'genreevolution', name: 'Genre Evolution', description: 'How a genre evolved over time' },
+        { id: 'artistjourney', name: 'Artist Journey', description: "One artist's discography in chronological order" },
+        { id: 'genreblend', name: 'Genre Blend', description: 'Tracks spanning multiple genres' },
+      ],
     },
   ];
 
@@ -402,11 +507,11 @@ export const GenerateMixesPage: FC = () => {
   };
 
   const handleAddAdvancedMixToSchedule = (settings: any) => {
-    setShowAdvancedMixModal(false);
-    const currentMixType = advancedMixType;
-    setAdvancedMixType(null);
-    // Navigate to schedules page
-    window.location.href = `/?mixType=${currentMixType}&settings=${encodeURIComponent(JSON.stringify(settings))}`;
+    if (advancedMixType) {
+      setScheduleQuickMix({ mixType: advancedMixType, settings });
+      setShowAdvancedMixModal(false);
+      setAdvancedMixType(null);
+    }
   };
 
   const handleSaveCustomMixAsTemplate = async (customSettings: CustomMixSettings) => {
@@ -673,26 +778,50 @@ export const GenerateMixesPage: FC = () => {
             <h2 className="section-title">Quick Mixes</h2>
             <p className="section-description">Generate instant playlists with customizable settings</p>
           </div>
+          {mixGroups.map(group => (
+            <div key={group.group} style={{ marginBottom: '1.5rem' }}>
+              <h3 style={{ fontSize: '0.9375rem', marginBottom: '0.125rem' }}>{group.group}</h3>
+              <p className="section-description" style={{ marginBottom: '0.75rem' }}>{group.groupDescription}</p>
+              <div className="quick-mixes-grid">
+                {group.mixes.map(mix => (
+                  <button
+                    key={mix.id}
+                    className={`quick-mix-card ${isGenerating && selectedMix === mix.id ? 'generating' : ''}`}
+                    onClick={() => !isGenerating && handleGenerate(mix.id)}
+                    disabled={isGenerating && selectedMix !== mix.id}
+                  >
+                    <div className="quick-mix-content">
+                      <h3 className="quick-mix-name">{mix.name}</h3>
+                      <p className="quick-mix-description">{mix.description}</p>
+                    </div>
+                    {isGenerating && selectedMix === mix.id && (
+                      <div className="quick-mix-status">
+                        <div className="spinner"></div>
+                        <span>Generating...</span>
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
           <div className="quick-mixes-grid">
-            {mixes.filter(mix => mix.id !== 'custom').map(mix => (
-              <button
-                key={mix.id}
-                className={`quick-mix-card ${isGenerating && selectedMix === mix.id ? 'generating' : ''}`}
-                onClick={() => !isGenerating && handleGenerate(mix.id)}
-                disabled={isGenerating && selectedMix !== mix.id}
-              >
-                <div className="quick-mix-content">
-                  <h3 className="quick-mix-name">{mix.name}</h3>
-                  <p className="quick-mix-description">{mix.description}</p>
+            <button
+              className={`quick-mix-card ${isGenerating && selectedMix === 'all' ? 'generating' : ''}`}
+              onClick={() => !isGenerating && handleGenerate('all')}
+              disabled={isGenerating && selectedMix !== 'all'}
+            >
+              <div className="quick-mix-content">
+                <h3 className="quick-mix-name">Generate All</h3>
+                <p className="quick-mix-description">Create every mix above at once</p>
+              </div>
+              {isGenerating && selectedMix === 'all' && (
+                <div className="quick-mix-status">
+                  <div className="spinner"></div>
+                  <span>Generating...</span>
                 </div>
-                {isGenerating && selectedMix === mix.id && (
-                  <div className="quick-mix-status">
-                    <div className="spinner"></div>
-                    <span>Generating...</span>
-                  </div>
-                )}
-              </button>
-            ))}
+              )}
+            </button>
           </div>
         </section>
 
@@ -726,6 +855,49 @@ export const GenerateMixesPage: FC = () => {
           </div>
         </section>
 
+        {/* Scheduled Mixes - mix-generation schedules aren't tied to any
+            playlist, so they can't show in the playlist table's Schedule
+            column like playlist-refresh schedules do; this is their only
+            manage UI. */}
+        {mixSchedules.length > 0 && (
+          <section className="generated-playlists-section">
+            <div className="section-header">
+              <h2 className="section-title">Scheduled Mixes</h2>
+            </div>
+            <div className="generated-playlists-list">
+              {mixSchedules.map(schedule => (
+                <div key={schedule.id} className="generated-playlist-item">
+                  <div className="playlist-info">
+                    <div className="playlist-name">
+                      {schedule.config?.mixName || schedule.config?.templateName || 'Mix'}
+                    </div>
+                    <div className="playlist-status">
+                      {schedule.frequency} • next {getNextRunDate(schedule)}
+                      {schedule.lastRun ? ` • last run ${new Date(schedule.lastRun * 1000).toLocaleDateString()}` : ''}
+                    </div>
+                  </div>
+                  <div className="playlist-actions">
+                    <button
+                      className="btn btn-secondary btn-small"
+                      onClick={() => handleRunMixSchedule(schedule.id)}
+                      disabled={runningScheduleId === schedule.id}
+                    >
+                      {runningScheduleId === schedule.id ? 'Running…' : 'Run Now'}
+                    </button>
+                    <button
+                      className="btn btn-secondary btn-small"
+                      onClick={() => handleDeleteMixSchedule(schedule)}
+                      disabled={deletingScheduleId === schedule.id}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Generated Playlists */}
         {generatedPlaylists.length > 0 && (
           <section className="generated-playlists-section">
@@ -740,12 +912,12 @@ export const GenerateMixesPage: FC = () => {
                     <div className="playlist-status">Created successfully • {playlist.trackCount} tracks</div>
                   </div>
                   <div className="playlist-actions">
-                    <a href="/playlists" className="btn btn-secondary btn-small">
+                    <Link to="/" onClick={onNavigateAway} className="btn btn-secondary btn-small">
                       View
-                    </a>
-                    <a href={`/?playlist=${playlist.plexPlaylistId}`} className="btn btn-primary btn-small">
+                    </Link>
+                    <Link to={`/?scheduleFor=${playlist.id}`} onClick={onNavigateAway} className="btn btn-primary btn-small">
                       Schedule
-                    </a>
+                    </Link>
                   </div>
                 </div>
               ))}
@@ -849,307 +1021,55 @@ export const GenerateMixesPage: FC = () => {
         />
       )}
 
-      {/* Schedule Template Modal */}
       {scheduleTemplate && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.7)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          padding: '1rem',
-        }}>
-          <div className="card" style={{
-            maxWidth: '500px',
-            width: '100%',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h2 style={{ margin: 0 }}>Schedule Mix</h2>
-              <button
-                className="btn btn-secondary btn-small"
-                onClick={() => setScheduleTemplate(null)}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div style={{ marginBottom: '1.5rem' }}>
-              <div style={{ fontWeight: 500, marginBottom: '0.5rem' }}>{scheduleTemplate.name}</div>
+        <ScheduleFrequencyModal
+          summary={
+            <>
+              <div style={{ fontWeight: 500, marginBottom: "0.5rem" }}>{scheduleTemplate.name}</div>
               {scheduleTemplate.description && (
-                <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                <div style={{ fontSize: "0.875rem", color: "var(--text-secondary)" }}>
                   {scheduleTemplate.description}
                 </div>
               )}
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.5rem" }}>
                 This schedule will generate a new playlist from this template
               </div>
-            </div>
-
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
-                Update Frequency
-              </label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {[
-                  { value: 'daily', label: 'Daily' },
-                  { value: 'weekly', label: 'Weekly' },
-                  { value: 'fortnightly', label: 'Fortnightly (Every 2 weeks)' },
-                  { value: 'monthly', label: 'Monthly' },
-                ].map(option => (
-                  <label
-                    key={option.value}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      padding: '0.75rem',
-                      border: '1px solid var(--border)',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      backgroundColor: scheduleFrequency === option.value ? 'var(--surface-hover)' : 'transparent',
-                    }}
-                  >
-                    <input
-                      type="radio"
-                      name="frequency"
-                      value={option.value}
-                      checked={scheduleFrequency === option.value}
-                      onChange={(e) => setScheduleFrequency(e.target.value as any)}
-                      style={{ marginRight: '0.75rem' }}
-                    />
-                    {option.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
-                Start Date
-              </label>
-              <input
-                type="date"
-                value={scheduleStartDate}
-                onChange={(e) => setScheduleStartDate(e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  border: '1px solid var(--border)',
-                  borderRadius: '4px',
-                  backgroundColor: 'var(--surface)',
-                  color: 'var(--text-primary)',
-                  fontSize: '1rem',
-                }}
-              />
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                First update will occur on this date
-              </div>
-            </div>
-
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
-                Run Time
-              </label>
-              <select
-                value={scheduleRunTime}
-                onChange={(e) => setScheduleRunTime(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  border: '1px solid var(--border)',
-                  borderRadius: '4px',
-                  backgroundColor: 'var(--surface)',
-                  color: 'var(--text-primary)',
-                  fontSize: '1rem',
-                }}
-              >
-                {Array.from({ length: 144 }, (_, i) => {
-                  const hour = Math.floor(i / 6);
-                  const minute = (i % 6) * 10;
-                  const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-                  return <option key={timeStr} value={timeStr}>{timeStr}</option>;
-                })}
-              </select>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                Schedules are checked every 10 minutes
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button
-                className="btn btn-primary"
-                onClick={handleScheduleConfirm}
-                disabled={isCreatingSchedule}
-                style={{ flex: 1 }}
-              >
-                {isCreatingSchedule ? 'Creating...' : 'Create Schedule'}
-              </button>
-              <button
-                className="btn btn-secondary"
-                onClick={() => setScheduleTemplate(null)}
-                disabled={isCreatingSchedule}
-                style={{ flex: 1 }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+          frequency={scheduleFrequency}
+          setFrequency={setScheduleFrequency}
+          startDate={scheduleStartDate}
+          setStartDate={setScheduleStartDate}
+          runTime={scheduleRunTime}
+          setRunTime={setScheduleRunTime}
+          isSaving={isCreatingSchedule}
+          onConfirm={handleScheduleConfirm}
+          onCancel={() => setScheduleTemplate(null)}
+        />
       )}
 
-      {/* Schedule Quick Mix Modal */}
       {scheduleQuickMix && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.7)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          padding: '1rem',
-        }}>
-          <div className="card" style={{
-            maxWidth: '500px',
-            width: '100%',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h2 style={{ margin: 0 }}>Schedule Mix</h2>
-              <button
-                className="btn btn-secondary btn-small"
-                onClick={() => setScheduleQuickMix(null)}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div style={{ marginBottom: '1.5rem' }}>
-              <div style={{ fontWeight: 500, marginBottom: '0.5rem' }}>
+        <ScheduleFrequencyModal
+          summary={
+            <>
+              <div style={{ fontWeight: 500, marginBottom: "0.5rem" }}>
                 {scheduleQuickMix.settings.playlistName || `${scheduleQuickMix.mixType} Mix`}
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.5rem" }}>
                 This schedule will generate a new {scheduleQuickMix.mixType} mix
               </div>
-            </div>
-
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
-                Update Frequency
-              </label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {[
-                  { value: 'daily', label: 'Daily' },
-                  { value: 'weekly', label: 'Weekly' },
-                  { value: 'fortnightly', label: 'Fortnightly (Every 2 weeks)' },
-                  { value: 'monthly', label: 'Monthly' },
-                ].map(option => (
-                  <label
-                    key={option.value}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      padding: '0.75rem',
-                      border: '1px solid var(--border)',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      backgroundColor: scheduleFrequency === option.value ? 'var(--surface-hover)' : 'transparent',
-                    }}
-                  >
-                    <input
-                      type="radio"
-                      name="quickFrequency"
-                      value={option.value}
-                      checked={scheduleFrequency === option.value}
-                      onChange={(e) => setScheduleFrequency(e.target.value as any)}
-                      style={{ marginRight: '0.75rem' }}
-                    />
-                    {option.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
-                Start Date
-              </label>
-              <input
-                type="date"
-                value={scheduleStartDate}
-                onChange={(e) => setScheduleStartDate(e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  border: '1px solid var(--border)',
-                  borderRadius: '4px',
-                  backgroundColor: 'var(--surface)',
-                  color: 'var(--text-primary)',
-                  fontSize: '1rem',
-                }}
-              />
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                First update will occur on this date
-              </div>
-            </div>
-
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
-                Run Time
-              </label>
-              <select
-                value={scheduleRunTime}
-                onChange={(e) => setScheduleRunTime(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  border: '1px solid var(--border)',
-                  borderRadius: '4px',
-                  backgroundColor: 'var(--surface)',
-                  color: 'var(--text-primary)',
-                  fontSize: '1rem',
-                }}
-              >
-                {Array.from({ length: 144 }, (_, i) => {
-                  const hour = Math.floor(i / 6);
-                  const minute = (i % 6) * 10;
-                  const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-                  return <option key={timeStr} value={timeStr}>{timeStr}</option>;
-                })}
-              </select>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                Schedules are checked every 10 minutes
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button
-                className="btn btn-primary"
-                onClick={handleScheduleQuickMixConfirm}
-                disabled={isCreatingSchedule}
-                style={{ flex: 1 }}
-              >
-                {isCreatingSchedule ? 'Creating...' : 'Create Schedule'}
-              </button>
-              <button
-                className="btn btn-secondary"
-                onClick={() => setScheduleQuickMix(null)}
-                disabled={isCreatingSchedule}
-                style={{ flex: 1 }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+          frequency={scheduleFrequency}
+          setFrequency={setScheduleFrequency}
+          startDate={scheduleStartDate}
+          setStartDate={setScheduleStartDate}
+          runTime={scheduleRunTime}
+          setRunTime={setScheduleRunTime}
+          isSaving={isCreatingSchedule}
+          onConfirm={handleScheduleQuickMixConfirm}
+          onCancel={() => setScheduleQuickMix(null)}
+        />
       )}
 
     </div>

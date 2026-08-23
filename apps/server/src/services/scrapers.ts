@@ -1154,19 +1154,33 @@ export function parseM3UFile(content: string, fileName: string): ExternalPlaylis
   
   let currentTitle = '';
   let currentArtist = '';
-  
-  // Detect format by analyzing first few EXTINF lines
-  // Apple Music/iTunes uses "Title - Artist", most others use "Artist - Title"
-  let useAppleFormat = false;
+
+  // Per-pair heuristic: if the part after " - " looks like a single artist name
+  // (no special chars like parentheses), it's likely Apple format (Title - Artist).
+  // Returns null when the pair doesn't lean clearly either way.
+  const detectPairFormat = (beforeDash: string, afterDash: string): boolean | null => {
+    const afterDashSimple = !/[(\[{]/.test(afterDash) && afterDash.length < 50;
+    const beforeDashComplex = /[(\[{]/.test(beforeDash);
+
+    if (afterDashSimple && beforeDashComplex) return true; // Apple format
+    if (!afterDashSimple || afterDash.length > 50) return false; // Standard format
+    return null; // Ambiguous - caller falls back to the file-level default
+  };
+
+  // Detect a file-level default format by analyzing first few EXTINF lines.
+  // Apple Music/iTunes uses "Title - Artist", most others use "Artist - Title".
+  // This is only a fallback for individual lines whose own pair is ambiguous -
+  // each line is still re-checked against detectPairFormat() below, so an
+  // atypical sample (e.g. classical tracks with parenthetical info) can't flip
+  // every track in the file, only the ones with no clearer signal of their own.
+  let useAppleFormatDefault = false;
   const sampleLines = lines.slice(0, 30).filter(l => l.trim().startsWith('#EXTINF:'));
   debugLog('[parseM3UFile] Sample EXTINF lines found: ' + sampleLines.length);
-  
+
   if (sampleLines.length >= 2) {
-    // Heuristic: if the part after " - " looks like a single artist name (no special chars like parentheses),
-    // it's likely Apple format (Title - Artist)
     let appleFormatCount = 0;
     let standardFormatCount = 0;
-    
+
     for (const sample of sampleLines.slice(0, Math.min(10, sampleLines.length))) {
       const match = sample.match(/#EXTINF:[^,]*,(.+)/);
       if (match) {
@@ -1175,27 +1189,17 @@ export function parseM3UFile(content: string, fileName: string): ExternalPlaylis
         if (dashIndex > 0) {
           const beforeDash = info.substring(0, dashIndex).trim();
           const afterDash = info.substring(dashIndex + 3).trim();
-          
-          // Check for Apple format indicators:
-          // - After dash is short and simple (likely artist name)
-          // - Before dash has special chars (common in song titles)
-          const afterDashSimple = !/[(\[{]/.test(afterDash) && afterDash.length < 50;
-          const beforeDashComplex = /[(\[{]/.test(beforeDash);
-          
-          if (afterDashSimple && beforeDashComplex) {
-            appleFormatCount++;
-          } else if (!afterDashSimple || afterDash.length > 50) {
-            // Likely standard format (Artist - Title)
-            standardFormatCount++;
-          }
+          const pairFormat = detectPairFormat(beforeDash, afterDash);
+          if (pairFormat === true) appleFormatCount++;
+          else if (pairFormat === false) standardFormatCount++;
         }
       }
     }
-    
-    // Use Apple format if majority of samples indicate it
-    useAppleFormat = appleFormatCount > standardFormatCount;
+
+    // Use Apple format as the default if majority of samples indicate it
+    useAppleFormatDefault = appleFormatCount > standardFormatCount;
     debugLog(`[parseM3UFile] Format detection - Apple: ${appleFormatCount}, Standard: ${standardFormatCount}`);
-    debugLog(`[parseM3UFile] Detected format: ${useAppleFormat ? 'Apple (Title - Artist)' : 'Standard (Artist - Title)'}`);
+    debugLog(`[parseM3UFile] Detected default format: ${useAppleFormatDefault ? 'Apple (Title - Artist)' : 'Standard (Artist - Title)'}`);
   }
   
   for (let i = 0; i < lines.length; i++) {
@@ -1221,7 +1225,8 @@ export function parseM3UFile(content: string, fileName: string): ExternalPlaylis
         if (dashIndex > 0) {
           const part1 = info.substring(0, dashIndex).trim();
           const part2 = info.substring(dashIndex + 3).trim();
-          
+          const useAppleFormat = detectPairFormat(part1, part2) ?? useAppleFormatDefault;
+
           if (useAppleFormat) {
             // Apple format: Title - Artist
             currentTitle = part1;
@@ -1264,7 +1269,8 @@ export function parseM3UFile(content: string, fileName: string): ExternalPlaylis
         if (dashIndex > 0) {
           const part1 = nameWithoutExt.substring(0, dashIndex).trim();
           const part2 = nameWithoutExt.substring(dashIndex + 3).trim();
-          
+          const useAppleFormat = detectPairFormat(part1, part2) ?? useAppleFormatDefault;
+
           if (useAppleFormat) {
             // Apple format: Title - Artist
             tracks.push({

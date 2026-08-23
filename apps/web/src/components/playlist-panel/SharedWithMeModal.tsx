@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useEscapeKey } from '../../hooks/useEscapeKey';
+import { Modal } from '../Modal';
 import '../../pages/SharePlaylistsPage.css';
 
 interface SharedPlaylist {
@@ -18,8 +18,6 @@ export function SharedWithMeModal({ onClose }: { onClose: () => void }) {
   const [sharedPlaylists, setSharedPlaylists] = useState<SharedPlaylist[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  useEscapeKey(true, onClose);
 
   useEffect(() => {
     (async () => {
@@ -41,8 +39,7 @@ export function SharedWithMeModal({ onClose }: { onClose: () => void }) {
   }, []);
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '560px' }}>
+    <Modal onClose={onClose} contentStyle={{ maxWidth: '560px' }}>
         <h2>Shared With Me</h2>
         <p className="share-description">Playlists other Playlist Lab users have shared with you.</p>
 
@@ -73,7 +70,6 @@ export function SharedWithMeModal({ onClose }: { onClose: () => void }) {
         <div className="modal-actions">
           <button className="btn btn-secondary" onClick={onClose}>Close</button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

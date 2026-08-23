@@ -1,4 +1,5 @@
 import { type FC, useState, useEffect } from 'react';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import './EditTemplateModal.css';
 
 interface MixTemplateConfiguration {
@@ -157,6 +158,8 @@ export const EditTemplateModal: FC<EditTemplateModalProps> = ({
     }
   };
 
+  useEscapeKey(!isSaving, onClose);
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -167,15 +170,11 @@ export const EditTemplateModal: FC<EditTemplateModalProps> = ({
           handleSave();
         }
       }
-      // Escape to close
-      if (e.key === 'Escape' && !isSaving) {
-        onClose();
-      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [name, isSaving, onClose]);
+  }, [name, isSaving]);
 
   // Focus trap
   useEffect(() => {

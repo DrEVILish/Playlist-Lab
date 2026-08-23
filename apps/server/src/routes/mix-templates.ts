@@ -15,9 +15,10 @@ import { requireAuth } from '../middleware/auth';
 import { createValidationError, createInternalError, createNotFoundError, createForbiddenError } from '../middleware/error-handler';
 import { logger } from '../utils/logger';
 import { MixService } from '../services/mixes';
-import { PlexClient } from '../services/plex';
+import { PlexClient, PlexTrack } from '../services/plex';
 import type { DatabaseService } from '../database/database';
 import { mixGenerationSessions } from './mixes';
+import { mapBatched, PLEX_LOOKUP_BATCH_SIZE } from '../utils/batch';
 
 const router = Router();
 const mixService = new MixService();
@@ -523,47 +524,55 @@ async function generateMixFromTemplate(
         ? Math.min(artistEvenSplit, config.maxTracksPerArtist)
         : artistEvenSplit;
 
-      for (const artistId of config.artistIds || []) {
+      // Each artist's track fetch is independent - batch them instead of
+      // going one at a time, then merge sequentially in original artist
+      // order so the result (which artists' tracks win once trackCount is
+      // hit) is identical to the old sequential version, just faster.
+      const artistIdsToFetch: string[] = config.artistIds || [];
+      const artistFetches = await mapBatched(artistIdsToFetch, PLEX_LOOKUP_BATCH_SIZE, async (artistId) => {
         try {
-          // Retry network operations for fetching artist tracks
           const tracks = await retryNetworkOperation(
-            () => plex.getArtistPopularTracks(
-              libraryId,
-              artistId,
-              perArtistLimit
-            ),
+            () => plex.getArtistPopularTracks(libraryId, artistId, perArtistLimit),
             `Fetch tracks for artist ${artistId}`
           );
-
-          if (tracks.length === 0) {
-            missingArtists.push(artistId);
-            warnings.push(`No tracks found for artist: ${artistId}`);
-            logger.warn('Artist not found or has no tracks', { artistId, templateId: template.id });
-            continue;
-          }
-
-          // Get artist name from first track
-          const artistName = tracks[0]?.grandparentTitle || artistId;
-          foundArtists.push(artistName);
-
-          let addedForArtist = 0;
-          for (const track of tracks) {
-            if (addedForArtist >= perArtistLimit) break;
-            if (!addedKeys.has(track.ratingKey) && trackKeys.length < config.trackCount) {
-              trackKeys.push(track.ratingKey);
-              addedKeys.add(track.ratingKey);
-              addedForArtist++;
-            }
-          }
+          return { artistId, tracks, error: null as any };
         } catch (error: any) {
+          return { artistId, tracks: [] as PlexTrack[], error };
+        }
+      });
+
+      for (const { artistId, tracks, error } of artistFetches) {
+        if (error) {
           missingArtists.push(artistId);
-          const errorMsg = error.message?.includes('unreachable') 
+          const errorMsg = error.message?.includes('unreachable')
             ? 'Plex server is unreachable. Please check your server connection.'
             : error.message?.includes('token')
             ? 'Invalid Plex authentication. Please reconnect your Plex account.'
             : `Failed to fetch artist tracks: ${error.message}`;
           warnings.push(`Artist ${artistId}: ${errorMsg}`);
           logger.warn('Failed to get tracks for artist', { artistId, error: error.message });
+          continue;
+        }
+
+        if (tracks.length === 0) {
+          missingArtists.push(artistId);
+          warnings.push(`No tracks found for artist: ${artistId}`);
+          logger.warn('Artist not found or has no tracks', { artistId, templateId: template.id });
+          continue;
+        }
+
+        // Get artist name from first track
+        const artistName = tracks[0]?.grandparentTitle || artistId;
+        foundArtists.push(artistName);
+
+        let addedForArtist = 0;
+        for (const track of tracks) {
+          if (addedForArtist >= perArtistLimit) break;
+          if (!addedKeys.has(track.ratingKey) && trackKeys.length < config.trackCount) {
+            trackKeys.push(track.ratingKey);
+            addedKeys.add(track.ratingKey);
+            addedForArtist++;
+          }
         }
       }
 
@@ -599,43 +608,54 @@ async function generateMixFromTemplate(
         ? config.maxTracksPerAlbum
         : Infinity;
 
-      for (const albumId of config.albumIds || []) {
+      // Each album's track fetch is independent - batch them instead of
+      // going one at a time, then merge sequentially in original album
+      // order so the result is identical to the old sequential version.
+      const albumIdsToFetch: string[] = config.albumIds || [];
+      const albumFetches = await mapBatched(albumIdsToFetch, PLEX_LOOKUP_BATCH_SIZE, async (albumId) => {
         try {
-          // Retry network operations for fetching album tracks
           const tracks = await retryNetworkOperation(
             () => plex.getAlbumTracks(albumId),
             `Fetch tracks for album ${albumId}`
           );
-
-          if (tracks.length === 0) {
-            missingAlbums.push(albumId);
-            warnings.push(`No tracks found for album: ${albumId}`);
-            logger.warn('Album not found or has no tracks', { albumId, templateId: template.id });
-            continue;
-          }
-
-          // Get album name from first track
-          const albumName = tracks[0]?.parentTitle || albumId;
-          foundAlbums.push(albumName);
-
-          let addedForAlbum = 0;
-          for (const track of tracks) {
-            if (addedForAlbum >= perAlbumLimit) break;
-            if (!addedKeys.has(track.ratingKey) && trackKeys.length < config.trackCount) {
-              trackKeys.push(track.ratingKey);
-              addedKeys.add(track.ratingKey);
-              addedForAlbum++;
-            }
-          }
+          return { albumId, tracks, error: null as any };
         } catch (error: any) {
+          return { albumId, tracks: [] as PlexTrack[], error };
+        }
+      });
+
+      for (const { albumId, tracks, error } of albumFetches) {
+        if (error) {
           missingAlbums.push(albumId);
-          const errorMsg = error.message?.includes('unreachable') 
+          const errorMsg = error.message?.includes('unreachable')
             ? 'Plex server is unreachable. Please check your server connection.'
             : error.message?.includes('token')
             ? 'Invalid Plex authentication. Please reconnect your Plex account.'
             : `Failed to fetch album tracks: ${error.message}`;
           warnings.push(`Album ${albumId}: ${errorMsg}`);
           logger.warn('Failed to get tracks for album', { albumId, error: error.message });
+          continue;
+        }
+
+        if (tracks.length === 0) {
+          missingAlbums.push(albumId);
+          warnings.push(`No tracks found for album: ${albumId}`);
+          logger.warn('Album not found or has no tracks', { albumId, templateId: template.id });
+          continue;
+        }
+
+        // Get album name from first track
+        const albumName = tracks[0]?.parentTitle || albumId;
+        foundAlbums.push(albumName);
+
+        let addedForAlbum = 0;
+        for (const track of tracks) {
+          if (addedForAlbum >= perAlbumLimit) break;
+          if (!addedKeys.has(track.ratingKey) && trackKeys.length < config.trackCount) {
+            trackKeys.push(track.ratingKey);
+            addedKeys.add(track.ratingKey);
+            addedForAlbum++;
+          }
         }
       }
 

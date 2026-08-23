@@ -25,7 +25,7 @@ interface BackupData {
 }
 
 export const BackupRestorePage: FC = () => {
-  const { apiClient } = useApp();
+  const { apiClient, refreshPlaylists } = useApp();
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [selectedPlaylists, setSelectedPlaylists] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
@@ -36,6 +36,8 @@ export const BackupRestorePage: FC = () => {
   // Restore state
   const [restoreData, setRestoreData] = useState<BackupData | null>(null);
   const [selectedRestorePlaylists, setSelectedRestorePlaylists] = useState<Set<number>>(new Set());
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [restoreResults, setRestoreResults] = useState<Array<{ name: string; matched: number; total: number; error?: string }> | null>(null);
 
   useEffect(() => {
     loadPlaylists();
@@ -163,15 +165,57 @@ export const BackupRestorePage: FC = () => {
     });
   };
 
-  // NOTE: Restoring a backup means re-creating playlists from title/artist/album
-  // text and matching each track against the Plex library from scratch - the same
-  // kind of fuzzy library-wide search + match/confirm flow the playlist import
-  // feature implements (see apps/server/src/routes/import.ts, ~2000 lines with
-  // session/progress/queue handling). There is no lightweight server endpoint to
-  // pair this with (unlike the settings-only /api/migrate/desktop restore), so a
-  // real implementation is a substantial feature in its own right rather than a
-  // small fix. Restore is intentionally disabled below - the file upload/parse/
-  // selection UI is kept so users can still inspect what a backup contains.
+  // Restoring re-creates each selected playlist by matching its backed-up
+  // title/artist/album text against the Plex library from scratch - the
+  // same matching engine every other import path uses (POST /api/import/match,
+  // a thin wrapper around services/matching.ts's matchPlaylist), then
+  // creates the playlist via the existing POST /api/import/confirm endpoint
+  // (the same one the regular import flow's review step calls). Restored
+  // playlists are always created fresh rather than overwriting a same-named
+  // existing playlist, so restore can never destroy existing data.
+  const handleRestore = async () => {
+    if (!restoreData || selectedRestorePlaylists.size === 0) return;
+
+    setIsRestoring(true);
+    setError(null);
+    setRestoreResults(null);
+
+    const indices = Array.from(selectedRestorePlaylists);
+    const results: Array<{ name: string; matched: number; total: number; error?: string }> = [];
+
+    for (let i = 0; i < indices.length; i++) {
+      const playlist = restoreData.playlists[indices[i]];
+      setStatusMessage(`Restoring "${playlist.title}" (${i + 1}/${indices.length})...`);
+
+      try {
+        const { matched } = await apiClient.matchTracks(playlist.tracks);
+        const matchedCount = matched.filter(t => t.matched).length;
+
+        if (matchedCount === 0) {
+          results.push({ name: playlist.title, matched: 0, total: playlist.tracks.length, error: 'None of these tracks were found in your Plex library' });
+          continue;
+        }
+
+        const unmatched = matched.filter(t => !t.matched).map(t => ({ title: t.title, artist: t.artist, album: t.album }));
+        await apiClient.confirmImport({
+          playlistName: playlist.title,
+          source: 'backup-restore',
+          tracks: matched,
+          saveMissingTracks: unmatched.length > 0,
+          missingTracks: unmatched,
+        });
+
+        results.push({ name: playlist.title, matched: matchedCount, total: playlist.tracks.length });
+      } catch (err: any) {
+        results.push({ name: playlist.title, matched: 0, total: playlist.tracks.length, error: err.message || 'Failed to restore' });
+      }
+    }
+
+    setStatusMessage('');
+    setRestoreResults(results);
+    setIsRestoring(false);
+    await refreshPlaylists();
+  };
 
   const formatDuration = (ms: number) => {
     const minutes = Math.floor(ms / 60000);
@@ -208,60 +252,77 @@ export const BackupRestorePage: FC = () => {
             Backup from {new Date(restoreData.exportDate).toLocaleDateString()} • {restoreData.playlists.length} playlist(s)
           </p>
           <p className="backup-description">
-            Restoring playlists from a backup is not supported yet. You can still inspect the
-            contents of this backup file below.
+            Each selected playlist is re-created by matching its tracks against your Plex library.
+            Restoring never overwrites an existing playlist - if a same-named playlist already
+            exists, a new one is created alongside it.
           </p>
 
           <div className="backup-actions">
             <button
               className="btn btn-secondary btn-small"
               onClick={() => setSelectedRestorePlaylists(new Set(restoreData.playlists.map((_, i) => i)))}
+              disabled={isRestoring}
             >
               Select All
             </button>
             <button
               className="btn btn-secondary btn-small"
               onClick={() => setSelectedRestorePlaylists(new Set())}
+              disabled={isRestoring}
             >
               Select None
             </button>
             <button
               className="btn btn-secondary btn-small"
-              onClick={() => setRestoreData(null)}
+              onClick={() => { setRestoreData(null); setRestoreResults(null); }}
+              disabled={isRestoring}
             >
               Cancel
             </button>
           </div>
-          
+
           <div className="backup-list">
-            {restoreData.playlists.map((playlist, index) => (
-              <label key={index} className="backup-item">
-                <input
-                  type="checkbox"
-                  checked={selectedRestorePlaylists.has(index)}
-                  onChange={() => toggleRestorePlaylist(index)}
-                />
-                <div className="backup-item-info">
-                  <span className="backup-item-name">{playlist.title}</span>
-                  <span className="backup-item-meta">{playlist.tracks.length} tracks</span>
-                </div>
-              </label>
-            ))}
+            {restoreData.playlists.map((playlist, index) => {
+              const result = restoreResults?.[index];
+              return (
+                <label key={index} className="backup-item">
+                  <input
+                    type="checkbox"
+                    checked={selectedRestorePlaylists.has(index)}
+                    onChange={() => toggleRestorePlaylist(index)}
+                    disabled={isRestoring}
+                  />
+                  <div className="backup-item-info">
+                    <span className="backup-item-name">{playlist.title}</span>
+                    <span className="backup-item-meta">
+                      {playlist.tracks.length} tracks
+                      {result && (
+                        result.error
+                          ? ` • ⚠ ${result.error}`
+                          : ` • ✓ restored, ${result.matched}/${result.total} tracks matched`
+                      )}
+                    </span>
+                  </div>
+                </label>
+              );
+            })}
           </div>
-          
+
           <button
             className="btn btn-primary btn-full"
-            disabled
-            title="Restore is not implemented yet"
+            onClick={handleRestore}
+            disabled={selectedRestorePlaylists.size === 0 || isRestoring}
           >
-            Restore Not Yet Supported
+            {isRestoring ? 'Restoring...' : `Restore ${selectedRestorePlaylists.size} Playlist(s)`}
           </button>
         </div>
       ) : (
         <div className="backup-card">
           <h2>Restore from Backup</h2>
           <p className="backup-description">
-            Select a backup file to restore playlists
+            Select a backup file to restore playlists. Each playlist's tracks are re-matched
+            against your Plex library - tracks no longer in your library are added to the
+            missing-tracks list, same as any other import.
           </p>
           <label className="btn btn-secondary file-input-label">
             📁 Select Backup File

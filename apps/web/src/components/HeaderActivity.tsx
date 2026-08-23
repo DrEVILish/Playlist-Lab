@@ -1,7 +1,7 @@
 import { FC, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { QueuePage } from '../pages/QueuePage';
-import { useEscapeKey } from '../hooks/useEscapeKey';
+import { Modal } from './Modal';
 import './HeaderActivity.css';
 
 interface QueueStatus {
@@ -40,33 +40,37 @@ export const HeaderActivity: FC = () => {
   useEffect(() => {
     const poll = async () => {
       try {
-        const [queueRes, completedRes, retryRes] = await Promise.all([
-          fetch('/api/import/queue', { credentials: 'include' }),
-          fetch('/api/import/queue/completed', { credentials: 'include' }),
-          fetch('/api/missing/retry-status', { credentials: 'include' }),
-        ]);
-        if (queueRes.ok) {
-          const data = await queueRes.json();
-          setStatus(data.processing || (data.queued && data.queued.length > 0) ? data : null);
+        // While the queue modal is open, QueuePage polls /api/import/queue
+        // and /api/import/queue/completed itself (see pages/QueuePage.tsx) -
+        // skip them here rather than fetching the same two endpoints twice.
+        const fetches: Promise<Response>[] = [fetch('/api/missing/retry-status', { credentials: 'include' })];
+        if (!showQueueModal) {
+          fetches.push(
+            fetch('/api/import/queue', { credentials: 'include' }),
+            fetch('/api/import/queue/completed', { credentials: 'include' }),
+          );
         }
-        if (completedRes.ok) {
-          const data = await completedRes.json();
-          setReviewCount((data.completed || []).length);
-        }
+        const [retryRes, queueRes, completedRes] = await Promise.all(fetches);
         if (retryRes.ok) {
           const data = await retryRes.json();
           setRetryStatus(data.active || null);
+        }
+        if (queueRes?.ok) {
+          const data = await queueRes.json();
+          setStatus(data.processing || (data.queued && data.queued.length > 0) ? data : null);
+        }
+        if (completedRes?.ok) {
+          const data = await completedRes.json();
+          setReviewCount((data.completed || []).length);
         }
       } catch {
         // Silently fail - server might be restarting
       }
     };
     poll();
-    const interval = setInterval(poll, 3000);
+    const interval = setInterval(poll, 8000);
     return () => clearInterval(interval);
-  }, []);
-
-  useEscapeKey(showQueueModal, () => setShowQueueModal(false));
+  }, [showQueueModal]);
 
   const processing = status?.processing;
   const queuedCount = status?.queued?.length || 0;
@@ -129,14 +133,12 @@ export const HeaderActivity: FC = () => {
       )}
 
       {showQueueModal && createPortal(
-        <div className="modal-overlay" onClick={() => setShowQueueModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '95vw', width: '1200px', maxHeight: '90vh', overflow: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
-              <button className="btn btn-secondary btn-small" onClick={() => setShowQueueModal(false)}>Close</button>
-            </div>
-            <QueuePage />
+        <Modal onClose={() => setShowQueueModal(false)} contentStyle={{ maxWidth: '95vw', width: '1200px', maxHeight: '90vh', overflow: 'auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
+            <button className="btn btn-secondary btn-small" onClick={() => setShowQueueModal(false)}>Close</button>
           </div>
-        </div>,
+          <QueuePage />
+        </Modal>,
         document.body
       )}
     </>

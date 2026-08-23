@@ -2,12 +2,14 @@ import type { FC } from 'react';
 import { useState, useEffect, useRef } from 'react';
 import type { TargetInfo, TargetConfig } from '../../pages/CrossImportPage';
 import { ServiceIcon } from './ServiceIcon';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
 interface Props {
   onTargetSelected: (target: TargetInfo, config: TargetConfig) => void;
 }
 
 export const TargetStep: FC<Props> = ({ onTargetSelected }) => {
+  const confirmDialog = useConfirm();
   const [targets, setTargets] = useState<TargetInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +72,7 @@ export const TargetStep: FC<Props> = ({ onTargetSelected }) => {
 
   const handleDisconnect = async (target: TargetInfo, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card click
-    if (!confirm(`Disconnect from ${target.name}? You'll need to reconnect to use it.`)) return;
+    if (!await confirmDialog(`Disconnect from ${target.name}? You'll need to reconnect to use it.`)) return;
     
     try {
       const res = await fetch(`/api/cross-import/oauth/${target.id}`, {

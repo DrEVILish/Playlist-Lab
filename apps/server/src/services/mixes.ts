@@ -11,6 +11,7 @@
 import { PlexClient, PlexTrack } from './plex';
 import { LastFmService } from './lastfm';
 import { logger } from '../utils/logger';
+import { mapBatched, PLEX_LOOKUP_BATCH_SIZE } from '../utils/batch';
 
 export interface MixSettings {
   weeklyMix: {
@@ -98,20 +99,20 @@ export class MixService {
       return { trackKeys: [], trackCount: 0 };
     }
 
-    // Find these artists in the library and get their popular tracks
+    // Find these artists in the library and get their popular tracks. Each
+    // artist's lookup is independent, so run them batched rather than one
+    // at a time; merge in original (most-played-first) order afterward so
+    // the result is identical to the old sequential version, just faster.
     const allTracks: string[] = [];
     const addedKeys = new Set<string>();
 
-    for (const artistName of topArtists) {
+    const perArtistTracks = await mapBatched(topArtists, PLEX_LOOKUP_BATCH_SIZE, async (artistName) => {
       const artist = await plex.searchArtist(libraryId, artistName);
-      if (!artist) continue;
+      if (!artist) return [];
+      return plex.getArtistPopularTracks(libraryId, artist.ratingKey, settings.tracksPerArtist);
+    });
 
-      const tracks = await plex.getArtistPopularTracks(
-        libraryId,
-        artist.ratingKey,
-        settings.tracksPerArtist
-      );
-
+    for (const tracks of perArtistTracks) {
       for (const track of tracks) {
         if (!addedKeys.has(track.ratingKey)) {
           allTracks.push(track.ratingKey);
@@ -151,17 +152,23 @@ export class MixService {
       }
     }
 
-    // 2. For each seed track, get related tracks (similar/same artist)
+    // 2. For each seed track, get related tracks (similar/same artist).
+    // Each seed's lookup is independent, so batch them rather than going
+    // one at a time - but still check the target-reached exit between
+    // batches (instead of only per-item) so a small recentTracks/
+    // relatedTracks setting doesn't pointlessly look up every seed.
     const relatedPerSeed = Math.ceil(settings.relatedTracks / Math.max(seedTracks.length, 1));
-    for (const seed of seedTracks) {
-      if (mixTracks.length >= settings.recentTracks + settings.relatedTracks) break;
+    const dailyMixTarget = settings.recentTracks + settings.relatedTracks;
+    for (let i = 0; i < seedTracks.length && mixTracks.length < dailyMixTarget; i += PLEX_LOOKUP_BATCH_SIZE) {
+      const batch = seedTracks.slice(i, i + PLEX_LOOKUP_BATCH_SIZE);
+      const batchRelated = await Promise.all(batch.map(seed => plex.getSimilarTracks(seed.ratingKey, relatedPerSeed)));
 
-      const related = await plex.getSimilarTracks(seed.ratingKey, relatedPerSeed);
-
-      for (const track of related) {
-        if (!addedKeys.has(track.ratingKey)) {
-          mixTracks.push(track.ratingKey);
-          addedKeys.add(track.ratingKey);
+      for (const related of batchRelated) {
+        for (const track of related) {
+          if (!addedKeys.has(track.ratingKey)) {
+            mixTracks.push(track.ratingKey);
+            addedKeys.add(track.ratingKey);
+          }
         }
       }
     }
@@ -197,12 +204,15 @@ export class MixService {
   ): Promise<MixResult> {
     const plex = this.createPlexClient(serverUrl, plexToken);
 
-    // Fetch a larger pool of tracks not played in X days
+    // Fetch a larger pool of tracks not played in X days, including tracks that
+    // were never played at all - a forgotten, untouched track is exactly what
+    // this mix is about, not something to exclude.
     const poolSize = settings.trackCount * 10;
     const allTracks = await plex.getStalePlayedTracks(
       libraryId,
       settings.daysAgo,
-      poolSize
+      poolSize,
+      true
     );
 
     if (allTracks.length === 0) {
@@ -400,38 +410,39 @@ export class MixService {
       
       const allPopularTracks: PlexTrack[] = [];
       const popularTracksPerArtist = settings.popularTracksPerArtist || Math.max(3, Math.ceil(settings.trackCount / settings.artistNames!.length));
-      
+
+      // Each artist's lookup is independent - batch them instead of going
+      // one at a time (with up to a few dozen artists this used to mean
+      // dozens of sequential Plex round trips on an interactive request).
+      // Progress is emitted per batch rather than per artist.
+      const artistNames = settings.artistNames!;
       let processed = 0;
-      for (const artistName of settings.artistNames!) {
-        try {
-          // Search for the artist in Plex
-          const plexArtist = await plex.searchArtist(libraryId, artistName);
-          if (!plexArtist) {
-            logger.warn('[Artist Filter] Artist not found in library', { artistName });
-            continue;
+      for (let i = 0; i < artistNames.length; i += PLEX_LOOKUP_BATCH_SIZE) {
+        const batch = artistNames.slice(i, i + PLEX_LOOKUP_BATCH_SIZE);
+        const batchTracks = await Promise.all(batch.map(async (artistName) => {
+          try {
+            const plexArtist = await plex.searchArtist(libraryId, artistName);
+            if (!plexArtist) {
+              logger.warn('[Artist Filter] Artist not found in library', { artistName });
+              return [];
+            }
+            return await plex.getArtistPopularTracks(libraryId, plexArtist.ratingKey, popularTracksPerArtist);
+          } catch (error) {
+            logger.warn('[Artist Filter] Failed to fetch tracks for artist', { artistName, error });
+            return [];
           }
-          
-          // Get popular tracks from this artist
-          const popularTracks = await plex.getArtistPopularTracks(
-            libraryId,
-            plexArtist.ratingKey,
-            popularTracksPerArtist
-          );
-          allPopularTracks.push(...popularTracks);
-          
-          processed++;
-          progressEmitter?.emit('progress', {
-            type: 'progress',
-            stage: 'fetching_artists',
-            message: `Processed ${processed}/${settings.artistNames!.length} artists...`,
-            progress: 10 + (processed / settings.artistNames!.length) * 70
-          });
-        } catch (error) {
-          logger.warn('[Artist Filter] Failed to fetch tracks for artist', { artistName, error });
-          continue;
-        }
+        }));
+        for (const popularTracks of batchTracks) allPopularTracks.push(...popularTracks);
+
+        processed += batch.length;
+        progressEmitter?.emit('progress', {
+          type: 'progress',
+          stage: 'fetching_artists',
+          message: `Processed ${processed}/${artistNames.length} artists...`,
+          progress: 10 + (processed / artistNames.length) * 70
+        });
       }
-      
+
       tracks = allPopularTracks;
       logger.info('[Artist Filter] Fetched tracks from specified artists', {
         artistCount: settings.artistNames!.length,
@@ -469,32 +480,35 @@ export class MixService {
         progress: 20
       });
       
-      // Match Last.fm artists to Plex library
+      // Match Last.fm artists to Plex library. Each lookup is independent,
+      // so batch them - but still check the maxArtists exit between
+      // batches (not just per-item) so a small maxArtists setting doesn't
+      // pointlessly look up every Last.fm artist returned.
       const matchedArtistKeys = new Set<string>();
       let matchedCount = 0;
-      
-      for (const lastfmArtist of lastfmArtists) {
-        if (matchedArtistKeys.size >= maxArtists) break;
-        
-        try {
-          const plexArtist = await plex.searchArtist(libraryId, lastfmArtist.name);
+
+      for (let i = 0; i < lastfmArtists.length && matchedArtistKeys.size < maxArtists; i += PLEX_LOOKUP_BATCH_SIZE) {
+        const batch = lastfmArtists.slice(i, i + PLEX_LOOKUP_BATCH_SIZE);
+        const batchArtists = await Promise.all(batch.map(async (lastfmArtist) => {
+          try {
+            return await plex.searchArtist(libraryId, lastfmArtist.name);
+          } catch (error) {
+            return null;
+          }
+        }));
+
+        for (const plexArtist of batchArtists) {
           if (plexArtist) {
             matchedArtistKeys.add(plexArtist.ratingKey);
             matchedCount++;
-            
-            if (matchedCount % 5 === 0) {
-              progressEmitter?.emit('progress', {
-                type: 'progress',
-                stage: 'matching_artists',
-                message: `Matched ${matchedCount}/${lastfmArtists.length} artists...`,
-                progress: 20 + (matchedCount / lastfmArtists.length) * 20
-              });
-            }
           }
-        } catch (error) {
-          // Skip artists that fail to match
-          continue;
         }
+        progressEmitter?.emit('progress', {
+          type: 'progress',
+          stage: 'matching_artists',
+          message: `Matched ${matchedCount}/${lastfmArtists.length} artists...`,
+          progress: 20 + (matchedCount / lastfmArtists.length) * 20
+        });
       }
       
       logger.info('[Last.fm] Matched artists in library', { 
@@ -514,33 +528,30 @@ export class MixService {
         progress: 40
       });
 
-      // Get popular tracks from each matched artist
+      // Get popular tracks from each matched artist - independent lookups, batched.
       const popularTracksPerArtist = settings.popularTracksPerArtist || Math.max(3, Math.ceil(settings.trackCount / matchedArtistKeys.size));
       const allPopularTracks: PlexTrack[] = [];
 
+      const artistKeys = Array.from(matchedArtistKeys);
       let processed = 0;
-      for (const artistKey of Array.from(matchedArtistKeys)) {
-        try {
-          const popularTracks = await plex.getArtistPopularTracks(
-            libraryId,
-            artistKey,
-            popularTracksPerArtist
-          );
-          allPopularTracks.push(...popularTracks);
-          
-          processed++;
-          if (processed % 10 === 0) {
-            progressEmitter?.emit('progress', {
-              type: 'progress',
-              stage: 'fetching_popular',
-              message: `Processed ${processed}/${matchedArtistKeys.size} artists...`,
-              progress: 40 + (processed / matchedArtistKeys.size) * 40
-            });
+      for (let i = 0; i < artistKeys.length; i += PLEX_LOOKUP_BATCH_SIZE) {
+        const batch = artistKeys.slice(i, i + PLEX_LOOKUP_BATCH_SIZE);
+        const batchTracks = await Promise.all(batch.map(async (artistKey) => {
+          try {
+            return await plex.getArtistPopularTracks(libraryId, artistKey, popularTracksPerArtist);
+          } catch (error) {
+            return [];
           }
-        } catch (error) {
-          // Skip artists that fail
-          continue;
-        }
+        }));
+        for (const popularTracks of batchTracks) allPopularTracks.push(...popularTracks);
+
+        processed += batch.length;
+        progressEmitter?.emit('progress', {
+          type: 'progress',
+          stage: 'fetching_popular',
+          message: `Processed ${processed}/${matchedArtistKeys.size} artists...`,
+          progress: 40 + (processed / matchedArtistKeys.size) * 40
+        });
       }
 
       tracks = allPopularTracks;
@@ -1037,37 +1048,34 @@ export class MixService {
   ): Promise<MixResult> {
     const plex = this.createPlexClient(serverUrl, plexToken);
 
-    const allTracks: PlexTrack[] = [];
-
-    // For each seed artist, get similar artists and their tracks
-    for (const artistKey of settings.seedArtistKeys) {
+    // Each seed artist's work (hub lookup, then its similar artists' track
+    // lookups) is independent of every other seed artist's - batch across
+    // seed artists, and batch the similar-artist lookups within each seed
+    // too, instead of a fully sequential O(seeds x similarArtists) chain.
+    const perSeedTracks = await mapBatched(settings.seedArtistKeys, PLEX_LOOKUP_BATCH_SIZE, async (artistKey) => {
       try {
-        // Get related hubs for this artist
         const hubs = await plex.getRelatedHubs(artistKey);
-        
+
         // Find "Similar Artists" or "Fans Also Like" hub
-        const similarHub = hubs.find((h: any) => 
-          h.title?.toLowerCase().includes('similar') || 
+        const similarHub = hubs.find((h: any) =>
+          h.title?.toLowerCase().includes('similar') ||
           h.title?.toLowerCase().includes('fans also like')
         );
 
-        if (similarHub?.Metadata) {
-          const similarArtists = similarHub.Metadata.slice(0, settings.maxSimilarArtists);
-          
-          // Get popular tracks from each similar artist
-          for (const artist of similarArtists) {
-            const tracks = await plex.getArtistPopularTracks(
-              libraryId,
-              artist.ratingKey,
-              settings.tracksPerArtist
-            );
-            allTracks.push(...tracks);
-          }
-        }
+        if (!similarHub?.Metadata) return [];
+
+        const similarArtists = similarHub.Metadata.slice(0, settings.maxSimilarArtists);
+        const perArtistTracks = await mapBatched(similarArtists, PLEX_LOOKUP_BATCH_SIZE, (artist: any) =>
+          plex.getArtistPopularTracks(libraryId, artist.ratingKey, settings.tracksPerArtist)
+        );
+        return perArtistTracks.flat();
       } catch (error: any) {
         logger.error(`[Mixes] Failed to get similar artists for ${artistKey}`, { error: error?.message || error });
+        return [];
       }
-    }
+    });
+
+    const allTracks: PlexTrack[] = perSeedTracks.flat();
 
     // Remove duplicates and shuffle
     const uniqueTracks = new Map<string, PlexTrack>();

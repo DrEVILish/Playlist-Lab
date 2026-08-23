@@ -9,6 +9,7 @@
 import { DatabaseService } from '../database/database';
 import { logger } from '../utils/logger';
 import { importPlaylist } from './import';
+import { dedupeByPlexRatingKey } from './matching';
 import { MixService } from './mixes';
 import { PlexClient } from './plex';
 import type { Schedule } from '../database/types';
@@ -158,7 +159,7 @@ async function executePlaylistRefreshSchedules(
 
       // Create new playlist with refreshed tracks
       // Filter out tracks without valid plexRatingKey and build proper URIs
-      const matchedWithKeys = result.matched.filter((t: any) => t.matched && t.plexRatingKey);
+      const matchedWithKeys = dedupeByPlexRatingKey(result.matched.filter((t: any) => t.matched && t.plexRatingKey));
       
       // Get server client ID for building track URIs
       const serverClientId = server.server_client_id || 'playlist-lab-server';

@@ -1,18 +1,28 @@
 import type { FC, ReactNode } from 'react';
-import { Fragment, useState, useEffect, useMemo, useRef } from 'react';
+import { Fragment, useState, useEffect, useMemo, Suspense, lazy } from 'react';
 import { useApp } from '../contexts/AppContext';
+import type { Playlist } from '../contexts/AppContext';
 import type { Schedule, MissingTrack } from '@playlist-lab/shared';
-import { PlaylistEditor } from '../components/playlist-panel/PlaylistEditor';
+import { Modal } from '../components/Modal';
 import { ShareModal } from '../components/playlist-panel/ShareModal';
-import { ExportModal } from '../components/playlist-panel/ExportModal';
 import { ScheduleModal } from '../components/playlist-panel/ScheduleModal';
 import { MissingTracksPanel } from '../components/playlist-panel/MissingTracksPanel';
-import { SharedWithMeModal } from '../components/playlist-panel/SharedWithMeModal';
-import { BackupRestorePage } from './BackupRestorePage';
 import { getNextRunTimestamp, getNextRunRelative, getNextRunDate } from '../utils/scheduleTime';
-import { useEscapeKey } from '../hooks/useEscapeKey';
+import { usePopover } from '../hooks/usePopover';
+import { useConfirm } from '../contexts/ConfirmContext';
+import { useToast } from '../contexts/ToastContext';
 import { EditIcon, ShareIcon, ExportIcon, ReimportIcon, BackupIcon, DeleteIcon, FilterIcon, SmartIcon } from '../components/icons';
 import './PlaylistsPage.css';
+
+// Lazy-loaded: PlaylistsPage is the always-shown landing page, so anything
+// it statically imports ships in the initial bundle regardless of whether
+// it's ever opened. PlaylistEditor (776 lines) and ExportModal (which pulls
+// in the whole cross-import YouTube-export wizard, ~2,300 lines across its
+// step components) are only needed after a per-row Edit/Export click.
+const PlaylistEditor = lazy(() => import('../components/playlist-panel/PlaylistEditor').then(m => ({ default: m.PlaylistEditor })));
+const ExportModal = lazy(() => import('../components/playlist-panel/ExportModal').then(m => ({ default: m.ExportModal })));
+
+const ModalFallback = () => <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading...</div>;
 
 interface FilterOption { value: string; label: string }
 
@@ -21,27 +31,15 @@ interface FilterOption { value: string; label: string }
  * Escape both close it, and the button that opens it is highlighted
  * whenever a non-default option is selected. */
 const FilterMenu: FC<{ options: FilterOption[]; value: string; onChange: (v: string) => void }> = ({ options, value, onChange }) => {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLSpanElement>(null);
+  const { open, toggle, close, ref } = usePopover<HTMLSpanElement>();
   const active = value !== options[0]?.value;
-
-  useEscapeKey(open, () => setOpen(false));
-
-  useEffect(() => {
-    if (!open) return;
-    const onClickOutside = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onClickOutside);
-    return () => document.removeEventListener('mousedown', onClickOutside);
-  }, [open]);
 
   return (
     <span className="th-filter" ref={ref}>
       <button
         type="button"
         className={`th-filter-btn ${active ? 'active' : ''}`}
-        onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
+        onClick={(e) => { e.stopPropagation(); toggle(); }}
         title="Filter"
       >
         <FilterIcon />
@@ -53,7 +51,7 @@ const FilterMenu: FC<{ options: FilterOption[]; value: string; onChange: (v: str
               key={opt.value}
               type="button"
               className={`th-filter-option ${value === opt.value ? 'active' : ''}`}
-              onClick={() => { onChange(opt.value); setOpen(false); }}
+              onClick={() => { onChange(opt.value); close(); }}
             >
               {opt.label}
             </button>
@@ -64,31 +62,55 @@ const FilterMenu: FC<{ options: FilterOption[]; value: string; onChange: (v: str
   );
 };
 
-/** Popover filter with min/max number inputs, for the Tracks and Duration
- * columns. Shares the open/close-on-outside-click/Escape behavior with
- * FilterMenu above but needs free-form inputs instead of a fixed option list. */
-const RangeFilterMenu: FC<{ unit: string; min: string; max: string; onChange: (min: string, max: string) => void }> = ({ unit, min, max, onChange }) => {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLSpanElement>(null);
-  const active = min !== '' || max !== '';
-
-  useEscapeKey(open, () => setOpen(false));
-
-  useEffect(() => {
-    if (!open) return;
-    const onClickOutside = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onClickOutside);
-    return () => document.removeEventListener('mousedown', onClickOutside);
-  }, [open]);
+/** Popover filter with a single text input, for the Playlist column's
+ * name search. Shares the open/close-on-outside-click/Escape behavior with
+ * FilterMenu above but needs a free-form input instead of a fixed option list. */
+const SearchFilterMenu: FC<{ value: string; onChange: (v: string) => void }> = ({ value, onChange }) => {
+  const { open, toggle, ref } = usePopover<HTMLSpanElement>();
+  const active = value !== '';
 
   return (
     <span className="th-filter" ref={ref}>
       <button
         type="button"
         className={`th-filter-btn ${active ? 'active' : ''}`}
-        onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
+        onClick={(e) => { e.stopPropagation(); toggle(); }}
+        title="Search"
+      >
+        <FilterIcon />
+      </button>
+      {open && (
+        <div className="th-filter-menu" onClick={(e) => e.stopPropagation()}>
+          <input
+            type="text"
+            autoFocus
+            placeholder="Search playlists..."
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            style={{ padding: '0.375rem 0.5rem', borderRadius: '4px', border: '1px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text-primary)', width: '180px' }}
+          />
+          {active && (
+            <button type="button" className="th-filter-option" onClick={() => onChange('')}>Clear</button>
+          )}
+        </div>
+      )}
+    </span>
+  );
+};
+
+/** Popover filter with min/max number inputs, for the Tracks and Duration
+ * columns. Shares the open/close-on-outside-click/Escape behavior with
+ * FilterMenu above but needs free-form inputs instead of a fixed option list. */
+const RangeFilterMenu: FC<{ unit: string; min: string; max: string; onChange: (min: string, max: string) => void }> = ({ unit, min, max, onChange }) => {
+  const { open, toggle, ref } = usePopover<HTMLSpanElement>();
+  const active = min !== '' || max !== '';
+
+  return (
+    <span className="th-filter" ref={ref}>
+      <button
+        type="button"
+        className={`th-filter-btn ${active ? 'active' : ''}`}
+        onClick={(e) => { e.stopPropagation(); toggle(); }}
         title="Filter"
       >
         <FilterIcon />
@@ -138,25 +160,14 @@ const SortableHeader: FC<{
   </th>
 );
 
-interface Playlist {
-  id: string;
-  dbId?: number;
-  name: string;
-  source: string;
-  sourceUrl?: string;
-  trackCount: number;
-  duration: number;
-  smart?: boolean;
-  composite?: string;
-}
-
 type SortKey = 'name' | 'tracks' | 'duration' | 'missing' | 'schedule' | 'nextRun' | 'lastRun';
 type SortDir = 'asc' | 'desc';
 type Modal = { type: 'edit' | 'share' | 'export' | 'schedule'; playlist: Playlist } | null;
 
 export const PlaylistsPage: FC = () => {
-  const { apiClient, schedules, server, playlists: contextPlaylists, isLoading, refreshPlaylists } = useApp();
-  const playlists = contextPlaylists as unknown as Playlist[];
+  const { apiClient, schedules, server, playlists, isLoading, refreshPlaylists } = useApp();
+  const confirmDialog = useConfirm();
+  const toast = useToast();
   const [error, setError] = useState<string | null>(null);
   const [missingByDbId, setMissingByDbId] = useState<Record<number, MissingTrack[]>>({});
   const [expandedMissingFor, setExpandedMissingFor] = useState<number | null>(null);
@@ -167,8 +178,6 @@ export const PlaylistsPage: FC = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [reimportingId, setReimportingId] = useState<string | null>(null);
   const [backingUpId, setBackingUpId] = useState<string | null>(null);
-  const [showBackupAll, setShowBackupAll] = useState(false);
-  const [showSharedWithMe, setShowSharedWithMe] = useState(false);
   const [showAttentionOnly, setShowAttentionOnly] = useState(false);
   const [runningExecutions, setRunningExecutions] = useState<any[]>([]);
   const [recentExecutions, setRecentExecutions] = useState<any[]>([]);
@@ -182,9 +191,9 @@ export const PlaylistsPage: FC = () => {
   const [durationMax, setDurationMax] = useState(''); // minutes
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-
-  useEscapeKey(modal?.type === 'edit', () => setModal(null));
-  useEscapeKey(showBackupAll, () => setShowBackupAll(false));
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isBulkBackingUp, setIsBulkBackingUp] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const loadMissingTracks = async () => {
     try {
@@ -234,12 +243,20 @@ export const PlaylistsPage: FC = () => {
 
   // Deep link from elsewhere in the app (e.g. a schedule's "View missing
   // tracks" link): /playlists?missingFor=<dbId> expands that row's panel.
+  // /playlists?scheduleFor=<dbId> opens the schedule modal for that row
+  // (used by Generate Mixes' "Schedule" link on a freshly created playlist).
   useEffect(() => {
     if (playlists.length === 0) return;
     const params = new URLSearchParams(window.location.search);
     const missingFor = params.get('missingFor');
+    const scheduleFor = params.get('scheduleFor');
     if (missingFor) {
       setExpandedMissingFor(parseInt(missingFor, 10));
+      window.history.replaceState({}, '', '/');
+    }
+    if (scheduleFor) {
+      const playlist = playlists.find(p => p.dbId === parseInt(scheduleFor, 10));
+      if (playlist) setModal({ type: 'schedule', playlist });
       window.history.replaceState({}, '', '/');
     }
   }, [playlists]);
@@ -269,7 +286,7 @@ export const PlaylistsPage: FC = () => {
   const isReimportable = (playlist: Playlist) => !!playlist.dbId && !!playlist.source && !NON_REIMPORTABLE_SOURCES.includes(playlist.source);
 
   const handleDelete = async (playlist: Playlist) => {
-    if (!confirm(`Delete "${playlist.name}" from Plex? This cannot be undone.`)) return;
+    if (!await confirmDialog(`Delete "${playlist.name}" from Plex? This cannot be undone.`)) return;
     setDeletingId(playlist.id);
     setError(null);
     try {
@@ -279,6 +296,67 @@ export const PlaylistsPage: FC = () => {
       setError(err.message || 'Failed to delete playlist');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkBackup = async () => {
+    if (selectedIds.size === 0) return;
+    setIsBulkBackingUp(true);
+    setError(null);
+    try {
+      const selected = playlists.filter(p => selectedIds.has(p.id));
+      const backupPlaylists = await Promise.all(selected.map(async (p) => {
+        const response = await apiClient.getPlaylistTracks(p.id);
+        return {
+          title: p.name,
+          tracks: (response.tracks || []).map((t: any) => ({
+            title: t.title,
+            artist: t.artist || t.grandparentTitle || 'Unknown',
+            album: t.album || t.parentTitle,
+          })),
+          backupDate: new Date().toISOString(),
+        };
+      }));
+
+      const blob = new Blob([JSON.stringify({ version: 1, exportDate: new Date().toISOString(), serverName: 'Plex Server', playlists: backupPlaylists }, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `plex-playlists-backup-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Backed up ${backupPlaylists.length} playlist(s)`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to back up selected playlists');
+    } finally {
+      setIsBulkBackingUp(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!await confirmDialog(`Delete ${selectedIds.size} playlist(s) from Plex? This cannot be undone.`)) return;
+    setIsBulkDeleting(true);
+    setError(null);
+    try {
+      const ids = Array.from(selectedIds);
+      const results = await Promise.allSettled(ids.map(id => apiClient.deletePlaylistByPlexId(id)));
+      const failed = results.filter(r => r.status === 'rejected').length;
+      setSelectedIds(new Set());
+      await refreshPlaylists();
+      if (failed > 0) toast.error(`Failed to delete ${failed} of ${ids.length} playlist(s)`);
+      else toast.success(`Deleted ${ids.length} playlist(s)`);
+    } finally {
+      setIsBulkDeleting(false);
     }
   };
 
@@ -418,10 +496,10 @@ export const PlaylistsPage: FC = () => {
     if (smartFilter !== 'all') {
       filtered = filtered.filter(p => smartFilter === 'smart' ? !!p.smart : !p.smart);
     }
-    if (tracksMin !== '') filtered = filtered.filter(p => p.trackCount >= Number(tracksMin));
-    if (tracksMax !== '') filtered = filtered.filter(p => p.trackCount <= Number(tracksMax));
-    if (durationMin !== '') filtered = filtered.filter(p => p.duration >= Number(durationMin) * 60000);
-    if (durationMax !== '') filtered = filtered.filter(p => p.duration <= Number(durationMax) * 60000);
+    if (tracksMin !== '') filtered = filtered.filter(p => (p.trackCount ?? 0) >= Number(tracksMin));
+    if (tracksMax !== '') filtered = filtered.filter(p => (p.trackCount ?? 0) <= Number(tracksMax));
+    if (durationMin !== '') filtered = filtered.filter(p => (p.duration ?? 0) >= Number(durationMin) * 60000);
+    if (durationMax !== '') filtered = filtered.filter(p => (p.duration ?? 0) <= Number(durationMax) * 60000);
 
     const sorted = [...filtered].sort((a, b) => {
       let cmp = 0;
@@ -471,6 +549,15 @@ export const PlaylistsPage: FC = () => {
   }, [search, showAttentionOnly, sourceFilter, missingFilter, scheduleFilter, smartFilter, tracksMin, tracksMax, durationMin, durationMax, sortKey, sortDir]);
 
   const totalPages = Math.max(1, Math.ceil(filteredSorted.length / pageSize));
+
+  // Keep the current page in range whenever totalPages shrinks - e.g.
+  // switching to a larger page size while on a later page, or a filter
+  // narrowing the result set - so the table never renders an out-of-range
+  // (empty) slice while "Page N of M" and the row count disagree.
+  useEffect(() => {
+    setPage(p => Math.min(p, totalPages));
+  }, [totalPages]);
+
   const pagedPlaylists = useMemo(
     () => filteredSorted.slice((page - 1) * pageSize, page * pageSize),
     [filteredSorted, page, pageSize]
@@ -478,21 +565,6 @@ export const PlaylistsPage: FC = () => {
 
   return (
     <div className="page-container">
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-        <h1 className="page-title">Playlists</h1>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <input
-            type="text"
-            placeholder="Search playlists..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{ padding: '0.5rem 0.75rem', borderRadius: '4px', border: '1px solid var(--border)', backgroundColor: 'var(--surface)', color: 'var(--text-primary)', width: '220px' }}
-          />
-          <button className="btn btn-secondary" onClick={() => setShowSharedWithMe(true)}>Shared With Me</button>
-          <button className="btn btn-secondary" onClick={() => setShowBackupAll(true)}>Backup / Restore</button>
-        </div>
-      </div>
-
       <div className="playlists-stats">
         <div className="playlists-stat">
           <span className="playlists-stat-value">{stats.total}</span>
@@ -524,6 +596,21 @@ export const PlaylistsPage: FC = () => {
         </div>
       )}
 
+      {selectedIds.size > 0 && (
+        <div className="bulk-actions-bar">
+          <span className="bulk-actions-count">{selectedIds.size} selected</span>
+          <button className="btn btn-secondary btn-small" onClick={handleBulkBackup} disabled={isBulkBackingUp || isBulkDeleting}>
+            {isBulkBackingUp ? 'Backing up...' : 'Backup Selected'}
+          </button>
+          <button className="btn btn-secondary btn-small" onClick={handleBulkDelete} disabled={isBulkBackingUp || isBulkDeleting} style={{ color: 'var(--error)' }}>
+            {isBulkDeleting ? 'Deleting...' : 'Delete Selected'}
+          </button>
+          <button className="btn btn-secondary btn-small" onClick={() => setSelectedIds(new Set())} disabled={isBulkBackingUp || isBulkDeleting}>
+            Clear Selection
+          </button>
+        </div>
+      )}
+
       {isLoading ? (
         <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>Loading playlists...</div>
       ) : filteredSorted.length === 0 ? (
@@ -533,13 +620,38 @@ export const PlaylistsPage: FC = () => {
           <table className="playlists-table">
             <thead>
               <tr>
+                <th className="col-select">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all playlists on this page"
+                    checked={pagedPlaylists.length > 0 && pagedPlaylists.every(p => selectedIds.has(p.id))}
+                    ref={(el) => {
+                      if (el) el.indeterminate = pagedPlaylists.some(p => selectedIds.has(p.id)) && !pagedPlaylists.every(p => selectedIds.has(p.id));
+                    }}
+                    onChange={(e) => {
+                      setSelectedIds(prev => {
+                        const next = new Set(prev);
+                        for (const p of pagedPlaylists) {
+                          if (e.target.checked) next.add(p.id);
+                          else next.delete(p.id);
+                        }
+                        return next;
+                      });
+                    }}
+                  />
+                </th>
                 <SortableHeader
                   label="Playlist"
                   sortKeyName="name"
                   currentSortKey={sortKey}
                   currentSortDir={sortDir}
                   onSort={toggleSort}
-                  filter={<FilterMenu options={smartFilterOptions} value={smartFilter} onChange={setSmartFilter} />}
+                  filter={
+                    <span style={{ display: 'flex', gap: '0.25rem' }}>
+                      <SearchFilterMenu value={search} onChange={setSearch} />
+                      <FilterMenu options={smartFilterOptions} value={smartFilter} onChange={setSmartFilter} />
+                    </span>
+                  }
                 />
                 <th>
                   <div className="th-with-filter">
@@ -595,6 +707,14 @@ export const PlaylistsPage: FC = () => {
                 return (
                   <Fragment key={playlist.id}>
                     <tr className={needsAttention(playlist) ? 'row-attention' : ''}>
+                      <td className="col-select">
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${playlist.name}`}
+                          checked={selectedIds.has(playlist.id)}
+                          onChange={() => toggleSelected(playlist.id)}
+                        />
+                      </td>
                       <td>
                         <div className="playlist-name-cell">
                           <div className="playlist-cover">
@@ -623,8 +743,8 @@ export const PlaylistsPage: FC = () => {
                           <span className="playlist-source-label">{sourceLabel}</span>
                         ) : '—'}
                       </td>
-                      <td>{playlist.trackCount}</td>
-                      <td>{formatDuration(playlist.duration)}</td>
+                      <td>{playlist.trackCount ?? 0}</td>
+                      <td>{formatDuration(playlist.duration ?? 0)}</td>
                       <td>
                         {missingTracks.length > 0 ? (
                           <button
@@ -661,22 +781,22 @@ export const PlaylistsPage: FC = () => {
                       </td>
                       <td className="col-actions">
                         <div className="row-actions">
-                          <button className="icon-btn" onClick={() => setModal({ type: 'edit', playlist })} title="Edit tracks"><EditIcon /></button>
-                          <button className="icon-btn" onClick={() => setModal({ type: 'share', playlist })} title="Share with Plex friends"><ShareIcon /></button>
-                          <button className="icon-btn" onClick={() => setModal({ type: 'export', playlist })} title="Export to file or YouTube"><ExportIcon /></button>
+                          <button className="icon-btn" onClick={() => setModal({ type: 'edit', playlist })} title="Edit tracks" aria-label={`Edit tracks in ${playlist.name}`}><EditIcon /></button>
+                          <button className="icon-btn" onClick={() => setModal({ type: 'share', playlist })} title="Share with Plex friends" aria-label={`Share ${playlist.name} with Plex friends`}><ShareIcon /></button>
+                          <button className="icon-btn" onClick={() => setModal({ type: 'export', playlist })} title="Export to file or YouTube" aria-label={`Export ${playlist.name} to file or YouTube`}><ExportIcon /></button>
                           {isReimportable(playlist) && (
-                            <button className="icon-btn" onClick={() => handleReimport(playlist)} disabled={reimportingId === playlist.id} title="Re-fetch this playlist from its original source now">
+                            <button className="icon-btn" onClick={() => handleReimport(playlist)} disabled={reimportingId === playlist.id} title="Re-fetch this playlist from its original source now" aria-label={`Re-import ${playlist.name} from its source`}>
                               <ReimportIcon />
                             </button>
                           )}
-                          <button className="icon-btn" onClick={() => handleQuickBackup(playlist)} disabled={backingUpId === playlist.id} title="Download a JSON backup of this playlist"><BackupIcon /></button>
-                          <button className="icon-btn icon-btn-danger" onClick={() => handleDelete(playlist)} disabled={deletingId === playlist.id} title="Delete from Plex"><DeleteIcon /></button>
+                          <button className="icon-btn" onClick={() => handleQuickBackup(playlist)} disabled={backingUpId === playlist.id} title="Download a JSON backup of this playlist" aria-label={`Download a backup of ${playlist.name}`}><BackupIcon /></button>
+                          <button className="icon-btn icon-btn-danger" onClick={() => handleDelete(playlist)} disabled={deletingId === playlist.id} title="Delete from Plex" aria-label={`Delete ${playlist.name} from Plex`}><DeleteIcon /></button>
                         </div>
                       </td>
                     </tr>
                     {isExpanded && playlist.dbId && (
                       <tr>
-                        <td colSpan={9} style={{ padding: 0 }}>
+                        <td colSpan={10} style={{ padding: 0 }}>
                           <MissingTracksPanel
                             playlistId={playlist.dbId}
                             tracks={missingTracks}
@@ -708,14 +828,14 @@ export const PlaylistsPage: FC = () => {
       )}
 
       {modal?.type === 'edit' && (
-        <div className="modal-overlay" onClick={() => setModal(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '95vw', width: '1100px', maxHeight: '90vh', overflow: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
-              <button className="btn btn-secondary btn-small" onClick={() => setModal(null)}>Close</button>
-            </div>
-            <PlaylistEditor playlist={modal.playlist} onPlaylistUpdated={refreshPlaylists} />
+        <Modal onClose={() => setModal(null)} contentStyle={{ maxWidth: '95vw', width: '1100px', maxHeight: '90vh', overflow: 'auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
+            <button className="btn btn-secondary btn-small" onClick={() => setModal(null)}>Close</button>
           </div>
-        </div>
+          <Suspense fallback={<ModalFallback />}>
+            <PlaylistEditor playlist={{ ...modal.playlist, trackCount: modal.playlist.trackCount ?? 0, duration: modal.playlist.duration ?? 0 }} onPlaylistUpdated={refreshPlaylists} />
+          </Suspense>
+        </Modal>
       )}
 
       {modal?.type === 'share' && (
@@ -723,7 +843,9 @@ export const PlaylistsPage: FC = () => {
       )}
 
       {modal?.type === 'export' && (
-        <ExportModal playlistId={modal.playlist.id} playlistName={modal.playlist.name} trackCount={modal.playlist.trackCount} onClose={() => setModal(null)} />
+        <Suspense fallback={<ModalFallback />}>
+          <ExportModal playlistId={modal.playlist.id} playlistName={modal.playlist.name} trackCount={modal.playlist.trackCount} onClose={() => setModal(null)} />
+        </Suspense>
       )}
 
       {modal?.type === 'schedule' && modal.playlist.dbId && (
@@ -735,18 +857,6 @@ export const PlaylistsPage: FC = () => {
         />
       )}
 
-      {showSharedWithMe && <SharedWithMeModal onClose={() => setShowSharedWithMe(false)} />}
-
-      {showBackupAll && (
-        <div className="modal-overlay" onClick={() => setShowBackupAll(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '900px', width: '95vw', maxHeight: '90vh', overflow: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
-              <button className="btn btn-secondary btn-small" onClick={() => setShowBackupAll(false)}>Close</button>
-            </div>
-            <BackupRestorePage />
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -244,6 +244,11 @@
   background-color: var(--surface-hover);
 }
 
+.export-format-item:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
 .export-format-item.active {
   background: linear-gradient(135deg, rgba(91, 155, 213, 0.15) 0%, rgba(74, 158, 168, 0.1) 100%);
   border: 1px solid rgba(91, 155, 213, 0.2);

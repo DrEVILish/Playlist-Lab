@@ -1,4 +1,5 @@
 import { type FC, useEffect } from 'react';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import './DeleteTemplateDialog.css';
 
 interface DeleteTemplateDialogProps {
@@ -14,6 +15,8 @@ export const DeleteTemplateDialog: FC<DeleteTemplateDialogProps> = ({
   onCancel,
   isDeleting,
 }) => {
+  useEscapeKey(!isDeleting, onCancel);
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -22,16 +25,11 @@ export const DeleteTemplateDialog: FC<DeleteTemplateDialogProps> = ({
         e.preventDefault();
         onConfirm();
       }
-      // Escape to cancel
-      if (e.key === 'Escape' && !isDeleting) {
-        e.preventDefault();
-        onCancel();
-      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDeleting, onConfirm, onCancel]);
+  }, [isDeleting, onConfirm]);
 
   // Focus trap
   useEffect(() => {

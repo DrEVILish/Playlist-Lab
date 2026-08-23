@@ -28,7 +28,6 @@ console.log(`Updating all package.json files to version ${version}...`);
 
 // List of all package.json files to update
 const packageFiles = [
-  'package.json',
   'apps/server/package.json',
   'apps/web/package.json',
   'apps/desktop/package.json',

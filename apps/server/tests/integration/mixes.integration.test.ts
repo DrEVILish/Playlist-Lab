@@ -196,11 +196,14 @@ describe('Mix Generation Integration Tests', () => {
       settings
     );
 
-    // Verify stale tracks were fetched
+    // Verify stale tracks were fetched, including never-played tracks (Time
+    // Capsule's whole point is surfacing forgotten music, including tracks with
+    // no play history at all)
     expect(mockGetStalePlayedTracks).toHaveBeenCalledWith(
       mockLibraryId,
       settings.daysAgo,
-      expect.any(Number)
+      expect.any(Number),
+      true
     );
 
     // Verify result respects track count

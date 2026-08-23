@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useEscapeKey } from '../../hooks/useEscapeKey';
+import { Modal } from '../Modal';
 import '../../pages/SharePlaylistsPage.css';
 
 interface PlexFriend {
@@ -21,8 +21,6 @@ export function ShareModal({ playlistId, playlistName, onClose }: { playlistId: 
   const [error, setError] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   const [shareSuccess, setShareSuccess] = useState<string | null>(null);
-
-  useEscapeKey(true, onClose);
 
   useEffect(() => {
     const loadFriends = async () => {
@@ -89,8 +87,7 @@ export function ShareModal({ playlistId, playlistName, onClose }: { playlistId: 
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose}>
         <h2>Share Playlist</h2>
         <p>Share "{playlistName}" with:</p>
 
@@ -143,7 +140,6 @@ export function ShareModal({ playlistId, playlistName, onClose }: { playlistId: 
             {sharing ? 'Sharing...' : `Share with ${selectedFriends.size} friend${selectedFriends.size !== 1 ? 's' : ''}`}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

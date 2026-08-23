@@ -17,6 +17,16 @@ import { debugLog } from '../utils/debug-logger';
 // Add stealth plugin to avoid bot detection
 puppeteer.use(StealthPlugin());
 
+// A page whose CSS selectors stop matching (source site redesign) still evaluates
+// successfully and just produces an empty tracks array - without this, that comes
+// out looking identical to "the playlist really is empty," so callers (and users)
+// have no way to tell a broken scraper from an empty playlist.
+function assertTracksScraped(tracks: unknown[], sourceLabel: string): void {
+  if (tracks.length === 0) {
+    throw new Error(`${sourceLabel} found 0 tracks. The playlist may be empty/private, or the page structure may have changed and the scraper needs updating.`);
+  }
+}
+
 // Shared browser instance for better performance
 let browserInstance: any = null;
 
@@ -263,7 +273,8 @@ export async function scrapeAppleMusicWithBrowser(url: string, progressEmitter?:
     logger.info(`[Apple Music Browser] First image: src=${result.firstImageSrc}, alt=${result.firstImageAlt}`);
     logger.info(`[Apple Music Browser] Cover URL extracted: ${result.coverUrl || 'NONE - NO COVER URL FOUND'}`);
     logger.info(`[Apple Music Browser] Found ${result.tracks.length} tracks`);
-    
+    assertTracksScraped(result.tracks, '[Apple Music Browser]');
+
     // If no cover URL found, log page HTML for debugging
     if (!result.coverUrl) {
       const html = await page.content();
@@ -517,10 +528,11 @@ export async function scrapeYouTubeMusicWithBrowser(url: string, progressEmitter
       playlistName: result.name
     });
     
-    await page.close();
-    
     logger.info(`[YouTube Music Browser] Found ${result.tracks.length} tracks`);
-    
+    assertTracksScraped(result.tracks, '[YouTube Music Browser]');
+
+    await page.close();
+
     const match = url.match(/[?&]list=([a-zA-Z0-9_-]+)/);
     const playlistId = match ? match[1] : 'unknown';
     
@@ -617,10 +629,11 @@ export async function scrapeTidalWithBrowser(url: string, progressEmitter?: Even
       currentTrackName: `Found ${result.tracks.length} tracks`
     });
     
-    await page.close();
-    
     logger.info(`[Tidal Browser] Found ${result.tracks.length} tracks`);
-    
+    assertTracksScraped(result.tracks, '[Tidal Browser]');
+
+    await page.close();
+
     const match = url.match(/playlist\/([a-f0-9-]+)/i);
     const playlistId = match ? match[1] : 'unknown';
     
@@ -691,10 +704,11 @@ export async function scrapeAmazonMusicWithBrowser(url: string, progressEmitter?
       currentTrackName: `Found ${result.tracks.length} tracks`
     });
     
-    await page.close();
-    
     logger.info(`[Amazon Music Browser] Found ${result.tracks.length} tracks`);
-    
+    assertTracksScraped(result.tracks, '[Amazon Music Browser]');
+
+    await page.close();
+
     const match = url.match(/playlists\/([A-Z0-9]+)/i);
     const playlistId = match ? match[1] : 'unknown';
     
@@ -765,10 +779,11 @@ export async function scrapeQobuzWithBrowser(url: string, progressEmitter?: Even
       currentTrackName: `Found ${result.tracks.length} tracks`
     });
     
-    await page.close();
-    
     logger.info(`[Qobuz Browser] Found ${result.tracks.length} tracks`);
-    
+    assertTracksScraped(result.tracks, '[Qobuz Browser]');
+
+    await page.close();
+
     const match = url.match(/playlist\/([0-9]+)/i);
     const playlistId = match ? match[1] : 'unknown';
     
@@ -978,6 +993,7 @@ export async function scrapeAriaChartWithBrowser(url: string, progressEmitter?: 
     if (tracks.length > 0) {
       logger.info(`[ARIA Browser] Sample tracks: ${JSON.stringify(tracks.slice(0, 3))}, total: ${tracks.length}`);
     }
+    assertTracksScraped(tracks, '[ARIA Browser]');
 
     progressEmitter?.emit('progress', {
       type: 'progress',
@@ -1317,6 +1333,7 @@ export async function scrapeSpotifyWithBrowser(url: string, progressEmitter?: Ev
     const tracks = Array.from(allTracks.values());
     
     logger.info(`[Spotify Browser] Successfully scraped ${tracks.length} tracks from ${playlistName}`);
+    assertTracksScraped(tracks, '[Spotify Browser]');
     progressEmitter?.emit('progress', {
       type: 'progress',
       phase: 'scraping',

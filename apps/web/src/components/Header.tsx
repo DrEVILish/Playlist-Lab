@@ -1,13 +1,27 @@
 import type { FC } from 'react';
-import { useState } from 'react';
+import { useState, Suspense, lazy } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { MobileNav } from './MobileNav';
 import { HeaderActivity } from './HeaderActivity';
-import { ImportPage } from '../pages/ImportPage';
-import { GenerateMixesPage } from '../pages/GenerateMixesPage';
-import { useEscapeKey } from '../hooks/useEscapeKey';
+import { StatusReportsModal } from './StatusReportsModal';
+import { Modal } from './Modal';
+import { SharedWithMeModal } from './playlist-panel/SharedWithMeModal';
+import { useApp } from '../contexts/AppContext';
+import { useConfirm } from '../contexts/ConfirmContext';
+import { useToast } from '../contexts/ToastContext';
 import './Header.css';
+
+// Lazy-loaded: the Header (and therefore these buttons) is mounted on every
+// authenticated page, but ImportPage/GenerateMixesPage/BackupRestorePage are
+// large and usually opened well after initial load - splitting them into
+// their own chunks keeps the landing page from paying for code most
+// sessions never touch.
+const ImportPage = lazy(() => import('../pages/ImportPage').then(m => ({ default: m.ImportPage })));
+const GenerateMixesPage = lazy(() => import('../pages/GenerateMixesPage').then(m => ({ default: m.GenerateMixesPage })));
+const BackupRestorePage = lazy(() => import('../pages/BackupRestorePage').then(m => ({ default: m.BackupRestorePage })));
+
+const ModalFallback = () => <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading...</div>;
 
 interface HeaderProps {
   user?: { plexUsername: string; plexThumb?: string } | null;
@@ -15,11 +29,23 @@ interface HeaderProps {
 }
 
 export const Header: FC<HeaderProps> = ({ user, onLogout }) => {
+  const { updateInfo, isUpdating, installUpdate } = useApp();
+  const confirmDialog = useConfirm();
+  const toast = useToast();
   const [showImport, setShowImport] = useState(false);
   const [showGenerate, setShowGenerate] = useState(false);
+  const [showBackup, setShowBackup] = useState(false);
+  const [showSharedWithMe, setShowSharedWithMe] = useState(false);
+  const [showStatus, setShowStatus] = useState(false);
 
-  useEscapeKey(showImport, () => setShowImport(false));
-  useEscapeKey(showGenerate, () => setShowGenerate(false));
+  const handleUpdate = async () => {
+    if (!await confirmDialog(`Update to version ${updateInfo?.latestVersion}?\n\nThe application will restart automatically.`, { title: 'Update Playlist Lab?', confirmLabel: 'Update', danger: false })) return;
+    try {
+      await installUpdate();
+    } catch (err) {
+      toast.error(`Update failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  };
 
   return (
     <header className="header">
@@ -34,6 +60,19 @@ export const Header: FC<HeaderProps> = ({ user, onLogout }) => {
             <nav className="header-actions">
               <button className="btn btn-secondary btn-small" onClick={() => setShowImport(true)}>Import</button>
               <button className="btn btn-secondary btn-small" onClick={() => setShowGenerate(true)}>Generate</button>
+              <button className="btn btn-secondary btn-small" onClick={() => setShowSharedWithMe(true)}>Shared With Me</button>
+              <button className="btn btn-secondary btn-small" onClick={() => setShowBackup(true)}>Backup / Restore</button>
+              <button className="btn btn-secondary btn-small" onClick={() => setShowStatus(true)}>Status</button>
+              {updateInfo?.updateAvailable && (
+                <button
+                  className="btn btn-primary btn-small"
+                  onClick={handleUpdate}
+                  disabled={isUpdating}
+                  title={`Update to v${updateInfo.latestVersion}`}
+                >
+                  {isUpdating ? 'Updating...' : 'Update Available'}
+                </button>
+              )}
             </nav>
           )}
         </div>
@@ -65,26 +104,42 @@ export const Header: FC<HeaderProps> = ({ user, onLogout }) => {
       </div>
 
       {showImport && createPortal(
-        <div className="modal-overlay" onClick={() => setShowImport(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '95vw', width: '1200px', maxHeight: '90vh', overflow: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
-              <button className="btn btn-secondary btn-small" onClick={() => setShowImport(false)}>Close</button>
-            </div>
-            <ImportPage />
+        <Modal onClose={() => setShowImport(false)} contentStyle={{ maxWidth: '95vw', width: '1200px', maxHeight: '90vh', overflow: 'auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
+            <button className="btn btn-secondary btn-small" onClick={() => setShowImport(false)}>Close</button>
           </div>
-        </div>,
+          <Suspense fallback={<ModalFallback />}><ImportPage /></Suspense>
+        </Modal>,
         document.body
       )}
 
       {showGenerate && createPortal(
-        <div className="modal-overlay" onClick={() => setShowGenerate(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '95vw', width: '1200px', maxHeight: '90vh', overflow: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
-              <button className="btn btn-secondary btn-small" onClick={() => setShowGenerate(false)}>Close</button>
-            </div>
-            <GenerateMixesPage />
+        <Modal onClose={() => setShowGenerate(false)} contentStyle={{ maxWidth: '95vw', width: '1200px', maxHeight: '90vh', overflow: 'auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
+            <button className="btn btn-secondary btn-small" onClick={() => setShowGenerate(false)}>Close</button>
           </div>
-        </div>,
+          <Suspense fallback={<ModalFallback />}><GenerateMixesPage onNavigateAway={() => setShowGenerate(false)} /></Suspense>
+        </Modal>,
+        document.body
+      )}
+
+      {showBackup && createPortal(
+        <Modal onClose={() => setShowBackup(false)} contentStyle={{ maxWidth: '900px', width: '95vw', maxHeight: '90vh', overflow: 'auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
+            <button className="btn btn-secondary btn-small" onClick={() => setShowBackup(false)}>Close</button>
+          </div>
+          <Suspense fallback={<ModalFallback />}><BackupRestorePage /></Suspense>
+        </Modal>,
+        document.body
+      )}
+
+      {showSharedWithMe && createPortal(
+        <SharedWithMeModal onClose={() => setShowSharedWithMe(false)} />,
+        document.body
+      )}
+
+      {showStatus && createPortal(
+        <StatusReportsModal onClose={() => setShowStatus(false)} />,
         document.body
       )}
     </header>

@@ -23,6 +23,20 @@ export interface MatchedTrack {
   score?: number;
 }
 
+// A gate/scoring false-positive (see titlesMatch/artistsMatch above) can resolve two
+// distinct source tracks to the same Plex track. Callers building a playlist's track
+// URI list should run their matched tracks through this first so that doesn't turn
+// into a silent duplicate in the playlist.
+export function dedupeByPlexRatingKey<T extends { plexRatingKey?: string }>(tracks: T[]): T[] {
+  const seen = new Set<string>();
+  return tracks.filter(t => {
+    if (!t.plexRatingKey) return true;
+    if (seen.has(t.plexRatingKey)) return false;
+    seen.add(t.plexRatingKey);
+    return true;
+  });
+}
+
 let currentMatchingSettings: MatchingSettings;
 
 export async function matchPlaylist(
@@ -264,15 +278,15 @@ async function findBestMatch(
       const trackArtistMatches = trackArtist && artistsMatch(track.artist, trackArtist);
       
       // Also check if any individual artist from a multi-artist string matches
-      const sourceArtists = track.artist.split(/\s*[,&\/]\s*/).map(a => a.trim()).filter(Boolean);
+      const sourceArtists = track.artist.split(MULTI_ARTIST_SEPARATOR_PATTERN).map(a => a.trim()).filter(Boolean);
       const anyArtistMatches = sourceArtists.length > 1 && sourceArtists.some(a => {
         const cleanA = normalizeForComparison(a);
         const cleanAlbum = normalizeForComparison(albumArtist);
         const cleanTrack = normalizeForComparison(trackArtist);
-        return (cleanAlbum && (cleanA === cleanAlbum || cleanAlbum.includes(cleanA) || cleanA.includes(cleanAlbum))) ||
-               (cleanTrack && (cleanA === cleanTrack || cleanTrack.includes(cleanA) || cleanA.includes(cleanTrack)));
+        return (cleanAlbum && (cleanA === cleanAlbum || containsWholeWord(cleanAlbum, cleanA) || containsWholeWord(cleanA, cleanAlbum))) ||
+               (cleanTrack && (cleanA === cleanTrack || containsWholeWord(cleanTrack, cleanA) || containsWholeWord(cleanA, cleanTrack)));
       });
-      
+
       // Check if this is a "Various Artists" compilation
       const albumArtistLower = albumArtist.toLowerCase();
       const albumNameLower = albumName.toLowerCase();
@@ -376,13 +390,13 @@ export function scorePlexCandidate(sourceTitle: string, sourceArtist: string, re
 
   const albumArtistMatches = !!albumArtist && artistsMatch(sourceArtist, albumArtist);
   const trackArtistMatches = !!trackArtist && artistsMatch(sourceArtist, trackArtist);
-  const sourceArtists = sourceArtist.split(/\s*[,&\/]\s*/).map(a => a.trim()).filter(Boolean);
+  const sourceArtists = sourceArtist.split(MULTI_ARTIST_SEPARATOR_PATTERN).map(a => a.trim()).filter(Boolean);
   const anyArtistMatches = sourceArtists.length > 1 && sourceArtists.some(a => {
     const cleanA = normalizeForComparison(a);
     const cleanAlbum = normalizeForComparison(albumArtist);
     const cleanTrack = normalizeForComparison(trackArtist);
-    return (cleanAlbum && (cleanA === cleanAlbum || cleanAlbum.includes(cleanA) || cleanA.includes(cleanAlbum))) ||
-           (cleanTrack && (cleanA === cleanTrack || cleanTrack.includes(cleanA) || cleanA.includes(cleanTrack)));
+    return (cleanAlbum && (cleanA === cleanAlbum || containsWholeWord(cleanAlbum, cleanA) || containsWholeWord(cleanA, cleanAlbum))) ||
+           (cleanTrack && (cleanA === cleanTrack || containsWholeWord(cleanTrack, cleanA) || containsWholeWord(cleanA, cleanTrack)));
   });
 
   const albumArtistLower = albumArtist.toLowerCase();
@@ -409,8 +423,12 @@ export function scorePlexCandidate(sourceTitle: string, sourceArtist: string, re
   if (allowTitleOnlyMatch && !trackArtistMatches && !anyArtistMatches) score -= 20;
   if (!hasReRecordedIndicator(sourceTitle) && hasReRecordedIndicator(plexTitle)) score -= 50;
   if (!hasSpeedModifiedIndicator(sourceTitle) && hasSpeedModifiedIndicator(plexTitle)) score -= 50;
-  if (!hasRemixIndicator(sourceTitle) && hasRemixIndicator(plexTitle)) score -= 30;
-  if (!hasAlternateVersionIndicator(sourceTitle) && hasAlternateVersionIndicator(plexTitle)) score -= 35;
+  // REMIX_KEYWORDS and ALTERNATE_VERSION_KEYWORDS overlap (e.g. "acoustic", "live"),
+  // so a title can trip both indicators at once - apply only the larger penalty
+  // rather than stacking them.
+  const remixPenalty = (!hasRemixIndicator(sourceTitle) && hasRemixIndicator(plexTitle)) ? 30 : 0;
+  const alternateVersionPenalty = (!hasAlternateVersionIndicator(sourceTitle) && hasAlternateVersionIndicator(plexTitle)) ? 35 : 0;
+  score -= Math.max(remixPenalty, alternateVersionPenalty);
   if (!hasDemoIndicator(sourceTitle) && hasDemoIndicator(plexTitle)) score -= 35;
   if (hasRemasterIndicator(plexTitle) && !hasRemixIndicator(plexTitle)) score += 5;
 
@@ -560,15 +578,20 @@ function cleanTrackTitle(title: string): string {
   return cleaned.replace(/\s+/g, ' ').trim() || title;
 }
 
+// Shared by cleanArtistName() (which keeps only the first credited artist) and the
+// multi-artist fallback checks in findBestMatch()/scorePlexCandidate() (which check
+// every credited artist individually) - both need to agree on what counts as a
+// separator between artists, including the word "and" and not just &/,//.
+const MULTI_ARTIST_SEPARATOR_PATTERN = /\s*(?:&|,|\/|\band\b)\s*/i;
+
 function cleanArtistName(artist: string): string {
   if (!artist) return '';
   let cleaned = artist;
-  
+
   // Always use first artist only when there are multiple artists
   // Handle various separators: &, and, ,, /
-  const multiArtistPattern = /\s*(?:&|,|\/|\band\b)\s*/i;
-  if (multiArtistPattern.test(cleaned)) {
-    cleaned = cleaned.split(multiArtistPattern)[0].trim();
+  if (MULTI_ARTIST_SEPARATOR_PATTERN.test(cleaned)) {
+    cleaned = cleaned.split(MULTI_ARTIST_SEPARATOR_PATTERN)[0].trim();
   }
   
   if (currentMatchingSettings.ignoreFeaturedArtists) {
@@ -597,12 +620,28 @@ function normalizeForComparison(str: string): string {
     .replace(/\s+/g, ' ').trim();
 }
 
+// normalizeForComparison() only ever leaves [a-z0-9\s] behind, so the containment
+// checks below can safely use \b word-boundary regexes with no escaping needed.
+// Plain .includes() would let a short title like "Time" match "Sometimes" (as a
+// mid-word substring) whenever the artist also happened to match - a silent
+// high-confidence wrong match, not just a low-scoring one.
+function containsWholeWord(haystack: string, needle: string): boolean {
+  if (!haystack || !needle) return false;
+  if (new RegExp(`\\b${needle}\\b`).test(haystack)) return true;
+  // Falls back to a prefix/suffix check (still anchored, unlike plain .includes())
+  // so a needle that's whole-word everywhere except at one edge - e.g. "believin"
+  // vs "believing" (contraction expansion only fires when the source title has
+  // the apostrophe Plex's copy dropped) or "ac" vs "acdc" (the multi-artist
+  // splitter treats "AC/DC"'s slash as a separator) - still matches.
+  return haystack.startsWith(needle) || haystack.endsWith(needle);
+}
+
 function titlesMatch(sourceTitle: string, plexTitle: string): boolean {
   const cleanSource = normalizeForComparison(cleanTrackTitle(sourceTitle));
   const cleanPlex = normalizeForComparison(cleanTrackTitle(plexTitle));
   if (cleanSource === cleanPlex) return true;
   if (cleanSource.replace(/\s+/g, '') === cleanPlex.replace(/\s+/g, '')) return true;
-  if (cleanSource.includes(cleanPlex) || cleanPlex.includes(cleanSource)) return true;
+  if (containsWholeWord(cleanSource, cleanPlex) || containsWholeWord(cleanPlex, cleanSource)) return true;
   return false;
 }
 
@@ -610,7 +649,7 @@ function artistsMatch(sourceArtist: string, plexArtist: string): boolean {
   const cleanSource = normalizeForComparison(cleanArtistName(sourceArtist));
   const cleanPlex = normalizeForComparison(cleanArtistName(plexArtist));
   if (cleanSource === cleanPlex) return true;
-  if (cleanSource.includes(cleanPlex) || cleanPlex.includes(cleanSource)) return true;
+  if (containsWholeWord(cleanSource, cleanPlex) || containsWholeWord(cleanPlex, cleanSource)) return true;
   return false;
 }
 
@@ -658,19 +697,19 @@ function calculateMatchScore(sourceTitle: string, sourceArtist: string, plexTitl
   let titleScore = 0;
   if (cleanSourceTitle === cleanPlexTitle) {
     titleScore = 100;
-  } else if (cleanSourceTitle.includes(cleanPlexTitle) || cleanPlexTitle.includes(cleanSourceTitle)) {
+  } else if (containsWholeWord(cleanSourceTitle, cleanPlexTitle) || containsWholeWord(cleanPlexTitle, cleanSourceTitle)) {
     titleScore = 90;
   } else {
     const sourceWords = cleanSourceTitle.split(/\s+/);
     const plexWords = cleanPlexTitle.split(/\s+/);
-    const matches = sourceWords.filter(w => plexWords.some(pw => pw.includes(w) || w.includes(pw))).length;
+    const matches = sourceWords.filter(w => plexWords.some(pw => pw === w)).length;
     titleScore = Math.round((matches / Math.max(sourceWords.length, plexWords.length)) * 80);
   }
-  
+
   let artistScore = 0;
   if (cleanSourceArtist === cleanPlexArtist) {
     artistScore = 100;
-  } else if (cleanSourceArtist.includes(cleanPlexArtist) || cleanPlexArtist.includes(cleanSourceArtist)) {
+  } else if (containsWholeWord(cleanSourceArtist, cleanPlexArtist) || containsWholeWord(cleanPlexArtist, cleanSourceArtist)) {
     artistScore = 90;
   } else {
     artistScore = 70;

@@ -4,7 +4,7 @@ import { requireAuth } from '../middleware/auth';
 import { createValidationError, createInternalError, createNotFoundError, createForbiddenError } from '../middleware/error-handler';
 import { logger } from '../utils/logger';
 import { PlexService } from '../services/plex';
-import { matchPlaylist } from '../services/matching';
+import { matchPlaylist, dedupeByPlexRatingKey } from '../services/matching';
 import type { DatabaseService } from '../database/database';
 import type { MissingTrack } from '../database/types';
 
@@ -20,7 +20,12 @@ const router = Router();
 // client polls GET /api/missing to watch the list shrink as tracks resolve,
 // and GET /api/missing/retry-status for live current/total progress (shown
 // as a progress pill in the header).
-interface RetryProgress { current: number; total: number }
+// `error` is set (and the entry left in place, not deleted) when a batch
+// throws - e.g. a revoked Plex token or an unreachable server - so a client
+// still polling retry-status finds out the batch actually failed instead of
+// just seeing it vanish and assuming everything genuinely stayed missing.
+// A user's next POST /retry treats an errored entry as idle and clears it.
+interface RetryProgress { current: number; total: number; error?: string }
 const activeRetries = new Map<number, RetryProgress>();
 
 // A retry requested while one is already running for that user doesn't get
@@ -123,6 +128,12 @@ router.post('/retry', requireAuth, async (req: Request, res: Response, next: Nex
     // Get user settings
     const settings = db.getUserSettings(userId);
 
+    // An entry with `error` set is a finished (failed) batch nobody's polled
+    // away yet, not a live one - treat it as idle so this request starts a
+    // fresh attempt instead of queuing behind a batch that already ended.
+    const existing = activeRetries.get(userId);
+    if (existing?.error) activeRetries.delete(userId);
+
     if (activeRetries.has(userId)) {
       let queue = pendingRetries.get(userId);
       if (!queue) {
@@ -164,11 +175,15 @@ router.get('/retry-status', requireAuth, (req: Request, res: Response) => {
 
 /**
  * Runs one retry batch, then - if more tracks were queued while it ran -
- * immediately starts another batch for those, re-reading them fresh from
- * the DB first since some may have resolved via other means (e.g. a manual
- * rematch) while this chain was running. activeRetries only clears once the
- * whole chain is idle, so the header progress indicator and the "already
- * running" queue check both see one continuous operation.
+ * immediately runs another batch for those, re-reading them fresh from the
+ * DB first since some may have resolved via other means (e.g. a manual
+ * rematch) while this chain was running. Loops instead of recursing so a
+ * single try/catch wraps the whole chain and guarantees a thrown batch
+ * (e.g. a revoked Plex token or an unreachable server) can't leave a stuck
+ * activeRetries entry that blocks every future retry for this user until
+ * the server restarts. On failure the entry is left in place with `error`
+ * set (not deleted) so a client polling retry-status sees the failure
+ * instead of the batch just vanishing.
  */
 async function startRetryChain(
   userId: number,
@@ -180,23 +195,32 @@ async function startRetryChain(
 ): Promise<void> {
   activeRetries.set(userId, { current: 0, total: tracksToRetry.length });
 
-  await runRetryInBackground(userId, db, user, userServer, tracksToRetry, settings);
+  try {
+    let batch = tracksToRetry;
+    while (batch.length > 0) {
+      await runRetryInBackground(userId, db, user, userServer, batch, settings);
 
-  const queue = pendingRetries.get(userId);
-  pendingRetries.delete(userId);
+      const queue = pendingRetries.get(userId);
+      pendingRetries.delete(userId);
+      if (!queue || queue.size === 0) break;
 
-  if (queue && queue.size > 0) {
-    // Re-check against the current missing list so tracks already resolved
-    // (by this run or anything else) don't get retried again.
-    const stillMissingIds = new Set(db.getUserMissingTracks(userId).map(t => t.id));
-    const nextBatch = Array.from(queue.values()).filter(t => stillMissingIds.has(t.id));
-    if (nextBatch.length > 0) {
-      await startRetryChain(userId, db, user, userServer, nextBatch, settings);
-      return;
+      // Re-check against the current missing list so tracks already
+      // resolved (by this run or anything else) don't get retried again.
+      const stillMissingIds = new Set(db.getUserMissingTracks(userId).map(t => t.id));
+      batch = Array.from(queue.values()).filter(t => stillMissingIds.has(t.id));
+      if (batch.length > 0) activeRetries.set(userId, { current: 0, total: batch.length });
     }
+    activeRetries.delete(userId);
+  } catch (error: any) {
+    logger.error('Missing-track retry chain failed', { error: error.message, userId });
+    const progress = activeRetries.get(userId);
+    activeRetries.set(userId, {
+      current: progress?.current ?? 0,
+      total: progress?.total ?? tracksToRetry.length,
+      error: error.message || 'Retry failed',
+    });
+    pendingRetries.delete(userId);
   }
-
-  activeRetries.delete(userId);
 }
 
 /**
@@ -356,7 +380,13 @@ async function runRetryInBackground(
       stillMissing,
     });
   } catch (error: any) {
+    // Per-track failures above (e.g. one Plex add-to-playlist call failing)
+    // are caught individually and don't reach here - this only catches a
+    // failure that aborts the whole batch (matchPlaylist() throwing on a
+    // revoked token or unreachable server). Rethrown so startRetryChain can
+    // record it as this batch's error instead of it just going quiet.
     logger.error('[Missing Retry] Background retry failed', { error: error.message, userId });
+    throw error;
   }
 }
 
@@ -491,8 +521,7 @@ router.post('/save', requireAuth, async (req: Request, res: Response, next: Next
         const { PlexClient } = await import('../services/plex');
         const plexClient = new PlexClient(serverRow.server_url, userRow.plex_token);
 
-        const trackUris = matchedTracks
-          .filter((t: any) => t.plexRatingKey)
+        const trackUris = dedupeByPlexRatingKey(matchedTracks.filter((t: any) => t.plexRatingKey))
           .map((t: any) => `server://${serverRow.server_client_id}/com.plexapp.plugins.library/library/metadata/${t.plexRatingKey}`);
 
         if (trackUris.length > 0) {

@@ -1,4 +1,5 @@
 import { type FC, useState, useEffect } from 'react';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import './SaveTemplateModal.css';
 
 interface SaveTemplateModalProps {
@@ -17,6 +18,8 @@ export const SaveTemplateModal: FC<SaveTemplateModalProps> = ({ onClose, onSave,
     name?: string;
   }>({});
 
+  useEscapeKey(!isSaving, onClose);
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -26,10 +29,6 @@ export const SaveTemplateModal: FC<SaveTemplateModalProps> = ({ onClose, onSave,
         if (name.trim() && !isSaving) {
           handleSave();
         }
-      }
-      // Escape to close
-      if (e.key === 'Escape' && !isSaving) {
-        onClose();
       }
       // Enter to save (when not in textarea)
       if (e.key === 'Enter' && !isSaving && e.target instanceof HTMLInputElement) {
@@ -42,7 +41,7 @@ export const SaveTemplateModal: FC<SaveTemplateModalProps> = ({ onClose, onSave,
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [name, isSaving, onClose]);
+  }, [name, isSaving]);
 
   // Focus trap
   useEffect(() => {

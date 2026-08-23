@@ -309,11 +309,13 @@ describe('Mix Generation Property Tests', () => {
             settings
           );
 
-          // Verify staleness check was called with correct parameters
+          // Verify staleness check was called with correct parameters, including
+          // never-played tracks
           expect(mockGetStalePlayedTracks).toHaveBeenCalledWith(
             mockLibraryId,
             settings.daysAgo,
-            expect.any(Number)
+            expect.any(Number),
+            true
           );
 
           // Count tracks per artist in result
