@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
-import { useConfirm } from '../../contexts/ConfirmContext';
+import { useConfirm, usePrompt } from '../../contexts/ConfirmContext';
 import { useToast } from '../../contexts/ToastContext';
+import { waitForRetryCompletion } from '../../utils/retryCompletion';
+import type { PlaylistSortKey } from '@playlist-lab/shared';
 import '../../pages/EditPlaylistsPage.css';
 
 export interface EditablePlaylist {
@@ -11,6 +13,16 @@ export interface EditablePlaylist {
   trackCount: number;
   duration: number;
   composite?: string;
+  /** This playlist's local row id, when it was imported by this app rather
+   * than just read from Plex - missing tracks are recorded against it, so
+   * the "replace what's missing" action is only offered when it's known. */
+  dbId?: number;
+  /** Plex's own last-modified timestamp for this playlist. Shuffle/sort/
+   * dedupe/split/merge now run through the server's action queue instead of
+   * completing within their request, so this (once the caller keeps it
+   * fresh from a re-fetched playlists list) is what tells the open editor
+   * its tracks changed underneath it and it should reload them. */
+  updatedAt?: number;
 }
 
 interface Track {
@@ -36,6 +48,7 @@ interface Track {
 export function PlaylistEditor({ playlist, onPlaylistUpdated }: { playlist: EditablePlaylist; onPlaylistUpdated?: () => void }) {
   const { apiClient, server } = useApp();
   const confirmDialog = useConfirm();
+  const promptDialog = usePrompt();
   const toast = useToast();
   const [tracks, setTracks] = useState<Track[]>([]);
   const [tracksLoading, setTracksLoading] = useState(false);
@@ -50,6 +63,12 @@ export function PlaylistEditor({ playlist, onPlaylistUpdated }: { playlist: Edit
   const [selectedTracks, setSelectedTracks] = useState<Set<string>>(new Set());
   const [selectedForRemoval, setSelectedForRemoval] = useState<Set<number>>(new Set());
   const [removingTracks, setRemovingTracks] = useState(false);
+  const [isShuffling, setIsShuffling] = useState(false);
+  const [isSorting, setIsSorting] = useState(false);
+  const [isDeduping, setIsDeduping] = useState(false);
+  const [isSplitting, setIsSplitting] = useState(false);
+  const [missingCount, setMissingCount] = useState(0);
+  const [isReplacingSimilar, setIsReplacingSimilar] = useState(false);
   const [currentlyPlaying, setCurrentlyPlaying] = useState<string | null>(null);
   const [audioElement] = useState(() => new Audio());
   const [coverUrl, setCoverUrl] = useState(playlist.composite);
@@ -69,12 +88,13 @@ export function PlaylistEditor({ playlist, onPlaylistUpdated }: { playlist: Edit
 
   useEffect(() => {
     loadTracks();
+    loadMissingCount();
     return () => {
       audioElement.pause();
       audioElement.src = '';
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playlist.id]);
+  }, [playlist.id, playlist.updatedAt]);
 
   useEffect(() => {
     if (shouldRestoreScroll.current && tracks.length > 0) {
@@ -149,6 +169,128 @@ export function PlaylistEditor({ playlist, onPlaylistUpdated }: { playlist: Edit
     }
   };
 
+  // Shuffle/sort/dedupe/split now run through the server's shared action
+  // queue instead of finishing within the request - the result shows up in
+  // the notification bell, and the track list refreshes on its own once
+  // playlist.updatedAt changes (see the loadTracks effect above).
+  const handleShuffle = async () => {
+    setIsShuffling(true);
+    try {
+      const { position } = await apiClient.shufflePlaylist(playlist.id);
+      toast.success(position > 0 ? `Queued - position ${position} in queue` : 'Shuffling...');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to shuffle playlist');
+    } finally {
+      setIsShuffling(false);
+    }
+  };
+
+  const loadMissingCount = async () => {
+    if (!playlist.dbId) return;
+    try {
+      const { missingTracks } = await apiClient.getMissingTracks();
+      setMissingCount(missingTracks.find(g => g.playlistId === playlist.dbId)?.tracks.length ?? 0);
+    } catch {
+      // Non-critical - the button just stays hidden if this fails.
+    }
+  };
+
+  /**
+   * Fills this playlist's unmatched slots with sonically similar tracks
+   * from the library. Retries Plex matching first: a track can easily have
+   * been added to the library since it was marked missing, and the real
+   * track is always better than a stand-in, so only whatever is still
+   * genuinely missing afterward gets replaced.
+   */
+  const handleReplaceMissingWithSimilar = async () => {
+    if (!playlist.dbId) return;
+    setIsReplacingSimilar(true);
+    try {
+      const retryResponse = await apiClient.retryMissingTracks(playlist.dbId);
+      if (retryResponse.started) await waitForRetryCompletion(apiClient);
+
+      const { missingTracks } = await apiClient.getMissingTracks();
+      const stillMissing = missingTracks.find(g => g.playlistId === playlist.dbId)?.tracks ?? [];
+
+      let replaced = 0;
+      for (const track of stillMissing) {
+        try {
+          await apiClient.replaceSimilarMissingTrack(track.id);
+          replaced++;
+        } catch {
+          // Per-track failure - keep going with the rest, summarized below.
+        }
+      }
+
+      if (stillMissing.length === 0) {
+        toast.success('Retry matched every remaining track in your Plex library - nothing left to replace.');
+      } else if (replaced === stillMissing.length) {
+        toast.success(`Replaced ${replaced} missing track(s) with sonically similar matches.`);
+      } else {
+        toast.error(`Replaced ${replaced} of ${stillMissing.length} missing track(s) - no similar match found for the rest.`);
+      }
+
+      await loadTracks();
+      await loadMissingCount();
+      onPlaylistUpdated?.();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to replace missing tracks');
+    } finally {
+      setIsReplacingSimilar(false);
+    }
+  };
+
+  const handleSort = async (value: string) => {
+    if (!value) return;
+    const [by, direction] = value.split(':') as [PlaylistSortKey, 'asc' | 'desc'];
+    setIsSorting(true);
+    try {
+      const { position } = await apiClient.sortPlaylist(playlist.id, by, direction);
+      toast.success(position > 0 ? `Queued - position ${position} in queue` : 'Sorting...');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to sort playlist');
+    } finally {
+      setIsSorting(false);
+    }
+  };
+
+  const handleRemoveDuplicates = async () => {
+    setIsDeduping(true);
+    try {
+      const { position } = await apiClient.dedupePlaylist(playlist.id);
+      toast.success(position > 0 ? `Queued - position ${position} in queue` : 'Removing duplicates...');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to remove duplicates');
+    } finally {
+      setIsDeduping(false);
+    }
+  };
+
+  const handleSplitSelected = async () => {
+    if (selectedForRemoval.size === 0) return;
+    const name = await promptDialog(`Moving ${selectedForRemoval.size} selected track(s) into a new playlist.`, {
+      title: 'Split into new playlist',
+      input: { placeholder: 'Name for the new playlist', label: 'New playlist name' },
+      confirmLabel: 'Split',
+    });
+    if (!name) return;
+
+    const trackIds = tracks
+      .filter(t => t.playlistItemID !== undefined && selectedForRemoval.has(t.playlistItemID))
+      .map(t => t.ratingKey);
+
+    setIsSplitting(true);
+    try {
+      const { position } = await apiClient.splitPlaylist(playlist.id, [{ name, trackIds }]);
+      setSelectedForRemoval(new Set());
+      toast.success(position > 0 ? `Queued - position ${position} in queue` : `Creating "${name}"...`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to split playlist');
+    } finally {
+      setIsSplitting(false);
+    }
+  };
+
   const handleRemoveTrack = async (playlistItemId: number) => {
     if (!await confirmDialog('Remove this track from the playlist?')) return;
     try {
@@ -201,6 +343,37 @@ export function PlaylistEditor({ playlist, onPlaylistUpdated }: { playlist: Edit
       setTracks(originalTracks);
     }
     setDraggedIndex(null);
+  };
+
+  // Native HTML5 drag-and-drop (above) never fires on touch devices, so the
+  // drag handle is hidden on mobile (see .col-drag in EditPlaylistsPage.css)
+  // and these buttons are shown in its place there - same end result
+  // (move one track, persist the new position after it) via a tap instead.
+  const moveTrack = async (index: number, direction: -1 | 1) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= tracks.length) return;
+    const originalTracks = [...tracks];
+    const newTracks = [...tracks];
+    const [moved] = newTracks.splice(index, 1);
+    newTracks.splice(targetIndex, 0, moved);
+    setTracks(newTracks);
+    try {
+      if (!moved.playlistItemID) return;
+      const afterIndex = targetIndex - 1;
+      const afterTrackId = afterIndex < 0 ? '0' : newTracks[afterIndex].playlistItemID?.toString() || '0';
+
+      const response = await fetch(`/api/playlists/${playlist.id}/tracks/${moved.playlistItemID}/move`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ afterId: afterTrackId }),
+      });
+
+      if (!response.ok) throw new Error(`Failed to reorder tracks: ${response.status} ${response.statusText}`);
+    } catch (err: any) {
+      toast.error(`Failed to reorder tracks: ${err.message}`);
+      setTracks(originalTracks);
+    }
   };
 
   const handlePlayTrack = (track: Track) => {
@@ -500,7 +673,7 @@ export function PlaylistEditor({ playlist, onPlaylistUpdated }: { playlist: Edit
               <img
                 src={getCoverUrl(coverUrl) || ''}
                 alt={playlist.name}
-                className="playlist-cover"
+                className="playlist-cover-image"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                   const placeholder = e.currentTarget.parentElement?.querySelector('.playlist-cover-placeholder');
@@ -545,10 +718,43 @@ export function PlaylistEditor({ playlist, onPlaylistUpdated }: { playlist: Edit
             <button className="btn-secondary" onClick={handleSelectDuplicates} title="Select all duplicate tracks (same song appearing multiple times)">
               Select Duplicates
             </button>
-            {selectedForRemoval.size > 0 && (
-              <button className="btn-secondary" onClick={handleRemoveSelected} disabled={removingTracks} style={{ color: '#ef4444' }}>
-                {removingTracks ? 'Removing...' : `Remove Selected (${selectedForRemoval.size})`}
+            <button className="btn-secondary" onClick={handleShuffle} disabled={isShuffling || tracks.length < 2} title="Randomize this playlist's track order">
+              {isShuffling ? 'Shuffling...' : 'Shuffle'}
+            </button>
+            <select
+              className="btn-secondary"
+              value=""
+              onChange={(e) => { handleSort(e.target.value); e.target.value = ''; }}
+              disabled={isSorting || tracks.length < 2}
+              aria-label="Sort playlist"
+              title="Reorder this playlist"
+            >
+              <option value="">{isSorting ? 'Sorting...' : 'Sort by...'}</option>
+              <option value="title:asc">Title (A-Z)</option>
+              <option value="artist:asc">Artist (A-Z)</option>
+              <option value="album:asc">Album (A-Z)</option>
+              <option value="year:asc">Year (oldest first)</option>
+              <option value="year:desc">Year (newest first)</option>
+              <option value="duration:asc">Duration (shortest first)</option>
+              <option value="duration:desc">Duration (longest first)</option>
+            </select>
+            <button className="btn-secondary" onClick={handleRemoveDuplicates} disabled={isDeduping || tracks.length < 2} title="Remove repeats of the same track, keeping the first of each">
+              {isDeduping ? 'Removing...' : 'Remove Duplicates'}
+            </button>
+            {missingCount > 0 && (
+              <button className="btn-secondary" onClick={handleReplaceMissingWithSimilar} disabled={isReplacingSimilar} title="Retry matching, then fill whatever is still missing with sonically similar tracks from your library">
+                {isReplacingSimilar ? 'Replacing...' : `Replace ${missingCount} Missing w/ Similar`}
               </button>
+            )}
+            {selectedForRemoval.size > 0 && (
+              <>
+                <button className="btn-secondary" onClick={handleRemoveSelected} disabled={removingTracks} style={{ color: '#ef4444' }}>
+                  {removingTracks ? 'Removing...' : `Remove Selected (${selectedForRemoval.size})`}
+                </button>
+                <button className="btn-secondary" onClick={handleSplitSelected} disabled={isSplitting} title="Copy the selected tracks into a new playlist">
+                  {isSplitting ? 'Splitting...' : `Split Selected (${selectedForRemoval.size})`}
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -622,6 +828,22 @@ export function PlaylistEditor({ playlist, onPlaylistUpdated }: { playlist: Edit
                   </td>
                   <td className="col-drag">
                     <span className="drag-handle">☰</span>
+                    <span className="track-move-buttons">
+                      <button
+                        className="track-move-btn"
+                        onClick={(e) => { e.stopPropagation(); moveTrack(index, -1); }}
+                        disabled={index === 0}
+                        title="Move up"
+                        aria-label={`Move ${track.title} up`}
+                      >▲</button>
+                      <button
+                        className="track-move-btn"
+                        onClick={(e) => { e.stopPropagation(); moveTrack(index, 1); }}
+                        disabled={index === tracks.length - 1}
+                        title="Move down"
+                        aria-label={`Move ${track.title} down`}
+                      >▼</button>
+                    </span>
                   </td>
                   <td className="col-number">{index + 1}</td>
                   <td className="col-title">{track.title}</td>

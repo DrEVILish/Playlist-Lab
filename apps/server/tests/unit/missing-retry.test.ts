@@ -38,6 +38,17 @@ jest.mock('../../src/services/matching', () => ({
     });
     return matchResult;
   }),
+  buildRememberedMatchMap: jest.fn(() => new Map()),
+  rememberMatches: jest.fn(),
+  // The route adds a matched track back to its Plex playlist through this
+  // shared helper, which also clears the missing_tracks row on success.
+  // Stubbed so these tests stay about the retry chain rather than Plex
+  // playlist mechanics, but it still performs that row removal - it's the
+  // observable outcome the tests assert a completed retry produces.
+  insertMatchedTrackIntoPlaylist: jest.fn(async (db: any, _plex: any, _server: any, original: any) => {
+    db.removeMissingTrack(original.id);
+    return true;
+  }),
 }));
 
 jest.mock('../../src/services/plex', () => ({
@@ -46,6 +57,7 @@ jest.mock('../../src/services/plex', () => ({
     addToPlaylist: jest.fn().mockResolvedValue(undefined),
     getPlaylistTracks: jest.fn().mockResolvedValue([]),
   })),
+  resolvePlexToken: jest.fn((user: any, server: any) => server?.access_token || user?.plex_token),
 }));
 
 function createTestDatabase(): Database.Database {

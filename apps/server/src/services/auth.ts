@@ -203,7 +203,7 @@ export class AuthService {
    * Poll for PIN authentication completion
    * Returns the PIN with authToken if user has authorized, null otherwise
    */
-  async pollAuth(pinId: number, code: string): Promise<PlexPin> {
+  async pollAuth(pinId: number, code: string): Promise<PlexPin | null> {
     try {
       const response = await axios.get<PlexPin>(
         `${PLEX_API_BASE}/pins/${pinId}`,
@@ -220,6 +220,11 @@ export class AuthService {
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error)) {
+        // Plex answers 404 for a PIN that has expired (they last ~15 min) or
+        // was already consumed. That's a normal end state for a poll loop,
+        // not a server fault - report it as expired so the caller can offer a
+        // fresh PIN instead of retrying a dead one for another nine minutes.
+        if (error.response?.status === 404) return null;
         throw new Error(`Failed to poll Plex auth: ${error.message}`);
       }
       throw error;
@@ -364,6 +369,43 @@ export class AuthService {
           throw new Error('Invalid or expired Plex token');
         }
         throw new Error(`Failed to get home users: ${error.message}`);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Get the account IDs of the admin's Plex friends (the people they share
+   * their server with).
+   *
+   * plex.tv's v2 /friends endpoint now answers 410 Gone, so this reads the
+   * still-supported XML list at /api/users. That list contains friends and
+   * full-account Plex Home members, but *not* managed/restricted home users
+   * - getHomeUsers is what covers those, so callers need both.
+   */
+  async getFriends(authToken: string): Promise<Array<{ id: number }>> {
+    try {
+      const response = await axios.get('https://plex.tv/api/users', {
+        headers: {
+          'Accept': 'application/xml',
+          'X-Plex-Token': authToken,
+          'X-Plex-Client-Identifier': this.clientId,
+        },
+        responseType: 'text',
+        timeout: 10000,
+      });
+
+      // ponytail: regex over the id attribute instead of adding an XML
+      // parser dependency for one field. Switch to a parser if we ever need
+      // more than the ids.
+      return [...String(response.data).matchAll(/<User\s+id="(\d+)"/g)]
+        .map((m) => ({ id: Number(m[1]) }));
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          throw new Error('Invalid or expired Plex token');
+        }
+        throw new Error(`Failed to get friends: ${error.message}`);
       }
       throw error;
     }

@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS user_servers (
   server_url TEXT NOT NULL,
   library_id TEXT,
   library_name TEXT,
+  access_token TEXT,  -- Server-specific token from Plex resources; NULL means use the account token
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
@@ -185,6 +186,25 @@ CREATE INDEX IF NOT EXISTS idx_playlist_shares_shared_with ON playlist_shares(sh
 -- Index for finding shares by owner
 CREATE INDEX IF NOT EXISTS idx_playlist_shares_owner ON playlist_shares(owner_user_id);
 
+-- Manual matches table
+-- Remembers a user's explicit "use this Plex track" choice for a source
+-- track (title/artist/album), so future imports/retries reuse it instead of
+-- re-running the fuzzy search for the same track every time.
+CREATE TABLE IF NOT EXISTS manual_matches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  artist TEXT NOT NULL,
+  album TEXT,
+  plex_rating_key TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_manual_matches_user_id ON manual_matches(user_id);
+CREATE INDEX IF NOT EXISTS idx_manual_matches_lookup ON manual_matches(user_id, title, artist);
+
 -- Cross-import jobs table
 -- Stores completed and in-progress cross-playlist import operations
 CREATE TABLE IF NOT EXISTS cross_import_jobs (
@@ -324,3 +344,26 @@ CREATE TABLE IF NOT EXISTS favorite_playlists (
 
 CREATE INDEX IF NOT EXISTS idx_favorite_playlists_user_id ON favorite_playlists(user_id);
 
+
+-- Deemix downloads table
+-- One row per download queued with deemix-server, kept only while it is in
+-- flight. deemix's own queue survives a restart of this server, but the
+-- poller that mirrors its progress into a notification - and, crucially, the
+-- link back to the missing_tracks row the download was queued for - lived
+-- only in memory. A restart mid-download therefore left the file arriving in
+-- the library with nothing left to reconcile it, so the track stayed
+-- "missing" forever unless the user happened to hit Retry. These rows let
+-- those pollers be restarted on boot, and are deleted as soon as a download
+-- reaches a terminal state.
+CREATE TABLE IF NOT EXISTS deemix_downloads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  uuid TEXT NOT NULL,           -- deemix's own queue id, `${type}_${id}_${bitrate}`
+  missing_track_id INTEGER,     -- NULL for admin bulk downloads, which have no single missing row to reconcile back to
+  title TEXT NOT NULL,
+  detail TEXT,
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_deemix_downloads_user_id ON deemix_downloads(user_id);

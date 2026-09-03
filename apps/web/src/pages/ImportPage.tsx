@@ -1,8 +1,10 @@
 import type { FC } from 'react';
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../contexts/AppContext';
 import type { MatchedTrack } from '@playlist-lab/shared';
 import { ImportFromPlexHome } from '../components/ImportFromPlexHome';
+import { Modal, modalCloseButtonStyle } from '../components/Modal';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { useToast } from '../contexts/ToastContext';
 
@@ -29,12 +31,19 @@ interface PopularPlaylist {
 export const ImportPage: FC = () => {
   const { apiClient, refreshPlaylists, refreshMissingTracksCount, settings } = useApp();
   const toast = useToast();
+  const navigate = useNavigate();
   const [activeSource, setActiveSource] = useState<ImportSource>(() => {
     const saved = localStorage.getItem('selectedCountry');
     return saved === 'AU' ? 'aria' : 'deezer';
   });
   const [url, setUrl] = useState('');
   const [username, setUsername] = useState('');
+  // The identifier actually used to scrape the current import - captured from
+  // handleImport()'s urlToImport/username, since many callers (chart/popular
+  // buttons) pass the URL directly as a handleImport() argument without ever
+  // writing it into `url`/`username` state, which confirm/save-missing used
+  // to read from directly and would see stale or empty values.
+  const [importedSourceIdentifier, setImportedSourceIdentifier] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiTrackCount, setAiTrackCount] = useState(25);
@@ -59,6 +68,9 @@ export const ImportPage: FC = () => {
   const [scheduleOverwriteExisting, setScheduleOverwriteExisting] = useState<boolean>(false);
   const [scheduleOverwriteCover, setScheduleOverwriteCover] = useState<boolean>(false);
   const [scheduleRunTime, setScheduleRunTime] = useState<string>('09:00');
+  // Ticked in the Import modal to also create a recurring schedule, instead
+  // of a one-time import - unticked (the default) just imports once.
+  const [scheduleEnabled, setScheduleEnabled] = useState<boolean>(false);
   const [spotifyProfilePlaylists, setSpotifyProfilePlaylists] = useState<PopularPlaylist[]>([]);
   const [isLoadingSpotifyProfile, setIsLoadingSpotifyProfile] = useState(false);
   const [spotifyProfileName, setSpotifyProfileName] = useState('');
@@ -75,21 +87,6 @@ export const ImportPage: FC = () => {
   const [selectedCountry, setSelectedCountry] = useState<string>('US');
   const [dynamicPlaylists, setDynamicPlaylists] = useState<PopularPlaylist[]>([]);
   const [isLoadingDynamicPlaylists, setIsLoadingDynamicPlaylists] = useState(false);
-  const [importProgress, setImportProgress] = useState<{
-    show: boolean;
-    playlistName: string;
-    source: string;
-    currentTrack: number;
-    totalTracks: number;
-    currentTrackName: string;
-    phase: 'scraping' | 'matching' | 'complete';
-    coverUrl?: string;
-  } | null>(null);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [currentEventSource, setCurrentEventSource] = useState<EventSource | null>(null);
-  const [userCancelled, setUserCancelled] = useState(false);
-  const [pollInterval, setPollInterval] = useState<number | null>(null);
-  
   // Review screen state
   const [editableTracks, setEditableTracks] = useState<MatchedTrack[]>([]);
   const [showUnmatchedOnly, setShowUnmatchedOnly] = useState(false);
@@ -620,469 +617,97 @@ export const ImportPage: FC = () => {
     }
   };
 
-  const handleCancelImport = async () => {
-    console.log('[ImportPage] Cancel button clicked', { sessionId: currentSessionId, hasEventSource: !!currentEventSource, hasPollInterval: !!pollInterval });
-    
-    // Mark as user-cancelled to prevent error message
-    setUserCancelled(true);
-    
-    // Close SSE connection first
-    if (currentEventSource) {
-      currentEventSource.close();
-      setCurrentEventSource(null);
-    }
-    
-    // Clear polling interval if it exists
-    if (pollInterval) {
-      console.log('[ImportPage] Clearing polling interval');
-      clearInterval(pollInterval);
-      setPollInterval(null);
-    }
-    
-    // Reset state immediately (don't wait for server response)
-    const sessionToCancel = currentSessionId;
-    setCurrentSessionId(null);
-    setImportProgress(null);
-    setIsImporting(false);
-    console.log('[ImportPage] Import cancelled, state reset');
-    
-    // Call cancel endpoint (fire and forget)
-    if (sessionToCancel) {
-      try {
-        await fetch(`/api/import/cancel/${sessionToCancel}`, {
-          method: 'POST',
-          credentials: 'include',
-        });
-        console.log('[ImportPage] Cancel request sent to server');
-      } catch (err) {
-        console.error('Failed to cancel import:', err);
-      }
-    }
-    
-    // Reset user cancelled flag after a short delay
-    setTimeout(() => setUserCancelled(false), 1000);
-  };
-
-  const handleImport = async (importUrl?: string) => {
+  // Every import (URL paste, chart/popular click, file upload, AI
+  // generation) is now a fire-and-forget background job: the server scrapes,
+  // matches, and creates the Plex playlist automatically, and progress shows
+  // up in the notification bell (see runNewImportAndFinalize's docs in
+  // services/import.ts) - no full-screen progress overlay, no "review
+  // matches, then confirm" step.
+  const handleImport = async (importUrl?: string, customName?: string) => {
     setError(null);
-    setImportResult(null);
-    setPlaylistCreated(false);
-    setCreatedPlaylistId(null);
     setIsImporting(true);
 
     // Use provided URL or fall back to state
     const urlToImport = importUrl || url;
-    
-    console.log('[ImportPage] Import URL:', urlToImport);
-    console.log('[ImportPage] Active source:', activeSource);
-    
-    // Generate session ID for progress tracking
+    setImportedSourceIdentifier(activeSource === 'listenbrainz' ? username : urlToImport);
+
+    // Required by the server's import-queue (job id), even though nothing
+    // on the client listens for its progress anymore.
     const sessionId = `import-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    setCurrentSessionId(sessionId);
-    console.log('[ImportPage] Starting import with sessionId:', sessionId);
-
-    // Set up SSE connection for progress
-    console.log('[ImportPage] Creating EventSource...');
-    // Use Vite proxy (configured for SSE in vite.config.ts)
-    const eventSource = new EventSource(`/api/import/progress/${sessionId}`);
-    setCurrentEventSource(eventSource);
-    console.log('[ImportPage] SSE connection established');
-    
-    // Add polling fallback in case SSE doesn't work
-    const startPolling = () => {
-      const interval = setInterval(async () => {
-        try {
-          const response = await fetch(`/api/import/status/${sessionId}`, {
-            credentials: 'include'
-          });
-          const data = await response.json();
-          
-          if (data.type === 'progress') {
-            handleProgressUpdate(data);
-          } else if (data.type === 'complete') {
-            clearInterval(interval);
-            setPollInterval(null);
-            
-            // Close SSE if still open
-            if (eventSource.readyState !== EventSource.CLOSED) {
-              eventSource.close();
-            }
-            setCurrentEventSource(null);
-            setCurrentSessionId(null);
-            
-            if (data.matched && Array.isArray(data.matched)) {
-              setImportProgress({
-                show: true,
-                playlistName: data.playlistName || playlistNameForProgress,
-                source: currentSource?.name || activeSource,
-                currentTrack: data.matchedCount || 0,
-                totalTracks: data.totalCount || 0,
-                currentTrackName: `Complete: ${data.matchedCount || 0} matched`,
-                phase: 'complete',
-                coverUrl: data.coverUrl || coverUrlForProgress,
-              });
-              setTimeout(() => {
-                setImportProgress(null);
-                setImportResult(data);
-                setPlaylistName(data.playlistName);
-                setEditableTracks([...data.matched, ...(data.unmatched || [])]);
-                setIsImporting(false);
-              }, 1000);
-            } else {
-              setError('Import failed: Invalid response from server');
-              setIsImporting(false);
-              setImportProgress(null);
-            }
-          } else if (data.type === 'error') {
-            clearInterval(interval);
-            setPollInterval(null);
-            if (eventSource.readyState !== EventSource.CLOSED) {
-              eventSource.close();
-            }
-            setCurrentEventSource(null);
-            setCurrentSessionId(null);
-            if (!userCancelled) {
-              setError(data.message || 'Import failed');
-            }
-            setIsImporting(false);
-            setImportProgress(null);
-          }
-          // 'waiting' means no progress yet (still scraping) — keep polling
-        } catch (err) {
-          console.error('[ImportPage] Polling error:', err);
-        }
-      }, 500); // Poll every 500ms
-      setPollInterval(interval);
-    };
-    
-    // Start polling alongside SSE as a reliable fallback
-    startPolling();
-    
-    const handleProgressUpdate = (data: any) => {
-      
-      // Update playlist name if provided
-      if (data.playlistName) {
-        playlistNameForProgress = data.playlistName;
-      }
-      
-      // Update cover URL if provided
-      if (data.coverUrl) {
-        coverUrlForProgress = data.coverUrl;
-      }
-      
-      const finalCoverUrl = data.coverUrl || coverUrlForProgress;
-      
-      const newProgress = {
-        show: true,
-        playlistName: data.playlistName || playlistNameForProgress,
-        source: currentSource?.name || activeSource,
-        currentTrack: data.current,
-        totalTracks: data.total,
-        currentTrackName: data.currentTrackName || '',
-        phase: data.phase,
-        coverUrl: finalCoverUrl,
-      };
-      setImportProgress(newProgress);
-    };
-    
-    // Wait a moment for SSE connection to establish
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    let playlistNameForProgress = 'Playlist';
-    let coverUrlForProgress: string | undefined = undefined;
-  
-    eventSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      
-      if (data.type === 'progress') {
-        handleProgressUpdate(data);
-      } else if (data.type === 'complete') {
-        // Validate data structure
-        if (!data.matched || !Array.isArray(data.matched)) {
-          console.error('[ImportPage] Invalid complete data structure:', data);
-          setError('Import failed: Invalid response from server');
-          setIsImporting(false);
-          setImportProgress(null);
-          eventSource.close();
-          setCurrentEventSource(null);
-          setCurrentSessionId(null);
-          return;
-        }
-        
-        eventSource.close();
-        setCurrentEventSource(null);
-        setCurrentSessionId(null);
-        if (pollInterval) {
-          clearInterval(pollInterval);
-          setPollInterval(null);
-        }
-        
-        // Show completion briefly
-        setImportProgress({
-          show: true,
-          playlistName: data.playlistName || playlistNameForProgress,
-          source: currentSource?.name || activeSource,
-          currentTrack: data.matchedCount || 0,
-          totalTracks: data.totalCount || 0,
-          currentTrackName: `Complete: ${data.matchedCount || 0} matched`,
-          phase: 'complete',
-          coverUrl: data.coverUrl || coverUrlForProgress,
-        });
-
-        // Small delay to show completion
-        setTimeout(() => {
-          setImportProgress(null);
-          
-          // Show review screen
-          setImportResult(data);
-          setPlaylistName(data.playlistName);
-          setEditableTracks([...data.matched, ...(data.unmatched || [])]);
-          setIsImporting(false);
-        }, 1000);
-      } else if (data.type === 'error') {
-        eventSource.close();
-        setCurrentEventSource(null);
-        // Only show error if not user-cancelled
-        if (!userCancelled) {
-          setError(data.message || 'Import failed');
-        }
-        setIsImporting(false);
-        setImportProgress(null);
-        setCurrentSessionId(null);
-      }
-    };
-    
-    eventSource.onerror = () => {
-      // SSE errors are expected — polling fallback is already running
-    };
 
     try {
-      let result: ImportResult | undefined;
-
       if (activeSource === 'ai') {
-        playlistNameForProgress = 'AI Generated Playlist';
-        
-        // Show initial progress for AI generation
-        setImportProgress({
-          show: true,
-          playlistName: playlistNameForProgress,
-          source: 'AI',
-          currentTrack: 0,
-          totalTracks: aiTrackCount,
-          currentTrackName: 'Generating playlist...',
-          phase: 'scraping',
-          coverUrl: undefined,
-        });
-
-        // AI generation - call AI endpoint
         const response = await fetch('/api/import/ai', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ prompt: aiPrompt, trackCount: aiTrackCount, grokApiKey: geminiApiKey, sessionId }),
+          body: JSON.stringify({ prompt: aiPrompt, trackCount: aiTrackCount, grokApiKey: geminiApiKey }),
         });
         if (!response.ok) {
-          const errorData = await response.json();
+          const errorData = await response.json().catch(() => ({}));
           const errorMessage = errorData.error?.message || 'AI generation failed';
-          
-          if (errorMessage.includes('No library selected')) {
-            throw new Error('Please go to Settings and select a music library before using AI generation.');
-          }
-          
-          throw new Error(errorMessage);
+          throw new Error(errorMessage.includes('No library selected')
+            ? 'Please go to Settings and select a music library before using AI generation.'
+            : errorMessage);
         }
-        result = await response.json();
-      } else {
-        // For regular imports, use a generic name initially
-        // We'll update it when we get the actual name from the server
-        if (activeSource === 'listenbrainz') {
-          playlistNameForProgress = username || 'ListenBrainz Playlist';
-        } else {
-          // Use source name as default
-          playlistNameForProgress = `${currentSource?.name || activeSource} Playlist`;
-        }
-        
-        // Show initial progress - will be updated by backend events
-        setImportProgress({
-          show: true,
-          playlistName: playlistNameForProgress,
-          source: currentSource?.name || activeSource,
-          currentTrack: 0,
-          totalTracks: 0,
-          currentTrackName: 'Starting import...',
-          phase: 'scraping',
-          coverUrl: undefined,
+        return;
+      }
+
+      if (activeSource === 'file') {
+        if (!file) throw new Error('Please select a file');
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await fetch('/api/import/file', {
+          method: 'POST',
+          credentials: 'include',
+          body: formData,
         });
-
-        // Make direct fetch call with sessionId
-        let endpoint = '';
-        let body: any = { sessionId };
-        
-        switch (activeSource) {
-          case 'spotify':
-            endpoint = '/api/import/spotify';
-            body.url = urlToImport;
-            break;
-          case 'deezer':
-            endpoint = '/api/import/deezer';
-            body.url = urlToImport;
-            break;
-          case 'apple':
-            endpoint = '/api/import/apple';
-            body.url = urlToImport;
-            break;
-          case 'tidal':
-            endpoint = '/api/import/tidal';
-            body.url = urlToImport;
-            break;
-          case 'youtube':
-            endpoint = '/api/import/youtube';
-            body.url = urlToImport;
-            break;
-          case 'amazon':
-            endpoint = '/api/import/amazon';
-            body.url = urlToImport;
-            break;
-          case 'qobuz':
-            endpoint = '/api/import/qobuz';
-            body.url = urlToImport;
-            break;
-          case 'aria':
-            endpoint = '/api/import/aria';
-            body.url = urlToImport;
-            break;
-          case 'billboard':
-            endpoint = '/api/import/billboard';
-            body.url = urlToImport;
-            break;
-          case 'lastfm':
-            endpoint = '/api/import/lastfm';
-            body.url = urlToImport;
-            break;
-          case 'listenbrainz':
-            endpoint = '/api/import/listenbrainz';
-            body.username = username;
-            break;
-          case 'file':
-            if (!file) throw new Error('Please select a file');
-            // File upload needs FormData
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('sessionId', sessionId);
-            const fileResponse = await fetch('/api/import/file', {
-              method: 'POST',
-              credentials: 'include',
-              body: formData,
-            });
-            if (!fileResponse.ok) {
-              const errorData = await fileResponse.json();
-              throw new Error(errorData.error?.message || errorData.error || 'File import failed');
-            }
-            result = await fileResponse.json();
-            break;
-          default:
-            throw new Error('Invalid source');
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error?.message || errorData.error || 'File import failed');
         }
-        
-        if (activeSource !== 'file') {
-          const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify(body),
-          });
-          
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error?.message || errorData.error || 'Import failed');
-          }
-          
-          // When using SSE (sessionId provided), the POST just starts the import
-          // The actual result will come via the SSE 'complete' event
-          const responseData = await response.json();
-          console.log('[ImportPage] Import started:', responseData);
-          
-          // Check if import was queued
-          if (responseData.queued) {
-            // Import is queued, hide progress modal and let queue status show it
-            setImportProgress(null);
-            setIsImporting(false);
-            
-            // Close SSE and polling since we'll reconnect when it starts processing
-            if (eventSource.readyState !== EventSource.CLOSED) {
-              eventSource.close();
-            }
-            setCurrentEventSource(null);
-            if (pollInterval) {
-              clearInterval(pollInterval);
-              setPollInterval(null);
-            }
-            
-            // Show a brief success message
-            const position = responseData.position || 0;
-            const message = position === 0 
-              ? 'Import started' 
-              : `Import queued (position ${position})`;
-            
-            // You could show a toast notification here if you have one
-            console.log('[ImportPage] ' + message);
-            
-            return;
-          }
-          
-          // Don't set result here - it will come via SSE complete event
-          // Just return to let the SSE handler take over
-          return;
-        }
+        return;
       }
 
-      // This code only runs for AI imports or file imports (non-SSE)
-      // For SSE imports, we return early above
-
-      // Ensure result is defined and has required properties
-      if (!result) {
-        throw new Error('Import failed: No result returned');
+      let endpoint = '';
+      const body: any = { sessionId };
+      if (customName?.trim()) body.customName = customName.trim();
+      switch (activeSource) {
+        case 'spotify': endpoint = '/api/import/spotify'; body.url = urlToImport; break;
+        case 'deezer': endpoint = '/api/import/deezer'; body.url = urlToImport; break;
+        case 'apple': endpoint = '/api/import/apple'; body.url = urlToImport; break;
+        case 'tidal': endpoint = '/api/import/tidal'; body.url = urlToImport; break;
+        case 'youtube': endpoint = '/api/import/youtube'; body.url = urlToImport; break;
+        case 'amazon': endpoint = '/api/import/amazon'; body.url = urlToImport; break;
+        case 'qobuz': endpoint = '/api/import/qobuz'; body.url = urlToImport; break;
+        case 'aria': endpoint = '/api/import/aria'; body.url = urlToImport; break;
+        case 'billboard': endpoint = '/api/import/billboard'; body.url = urlToImport; break;
+        case 'lastfm': endpoint = '/api/import/lastfm'; body.url = urlToImport; break;
+        case 'listenbrainz': endpoint = '/api/import/listenbrainz'; body.username = username; break;
+        default: throw new Error('Invalid source');
       }
-      
-      if (!result.matched || !Array.isArray(result.matched)) {
-        console.error('[ImportPage] Invalid result structure:', result);
-        throw new Error('Import failed: Invalid response from server');
-      }
 
-      // Close SSE connection
-      eventSource.close();
-      setCurrentEventSource(null);
-      setCurrentSessionId(null);
-      
-      // Show completion briefly
-      setImportProgress({
-        show: true,
-        playlistName: result.playlistName,
-        source: currentSource?.name || activeSource,
-        currentTrack: result.matched.length,
-        totalTracks: result.matched.length + (result.unmatched?.length || 0),
-        currentTrackName: `Complete: ${result.matched.length} matched`,
-        phase: 'complete',
-        coverUrl: result.coverUrl,
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body),
       });
-
-      // Small delay to show completion
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      setImportProgress(null);
-      
-      // Show review screen instead of auto-creating
-      setImportResult(result);
-      setPlaylistName(result.playlistName);
-      setEditableTracks([...result.matched, ...result.unmatched]);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || errorData.error || 'Import failed');
+      }
+      const responseData = await response.json();
+      // Only worth saying when the import is NOT starting now: a job that
+      // starts immediately posts its own live notification, but one sitting
+      // in the queue has nothing to show until it gets its turn, so without
+      // this the button would look like it did nothing.
+      const position = responseData.position || 0;
+      if (position > 0) {
+        toast.success(`Import queued — ${position} ahead of it`);
+      }
     } catch (err) {
       console.error('[ImportPage] Import error:', err);
-      if (currentEventSource) {
-        currentEventSource.close();
-        setCurrentEventSource(null);
-      }
-      setCurrentSessionId(null);
-      setImportProgress(null);
       setError(err instanceof Error ? err.message : 'Import failed');
     } finally {
       setIsImporting(false);
@@ -1135,7 +760,11 @@ export const ImportPage: FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ query: rematchQuery }),
+        body: JSON.stringify({
+          query: rematchQuery,
+          originalTitle: rematchTrack?.track.title,
+          originalArtist: rematchTrack?.track.artist,
+        }),
       });
 
       if (!response.ok) {
@@ -1166,6 +795,7 @@ export const ImportPage: FC = () => {
       plexCodec: result.codec,
       plexBitrate: result.bitrate,
       score: 100, // Manual match gets 100% score
+      manuallyMatched: true,
     };
 
     setEditableTracks(updatedTracks);
@@ -1192,6 +822,17 @@ export const ImportPage: FC = () => {
 
   const handleDragEnd = () => {
     setDraggedIndex(null);
+  };
+
+  // Native HTML5 drag-and-drop (above) never fires on touch devices - this
+  // gives mobile a tap-to-move equivalent instead of losing reordering.
+  const moveTrack = (index: number, direction: -1 | 1) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= editableTracks.length) return;
+    const updatedTracks = [...editableTracks];
+    const [moved] = updatedTracks.splice(index, 1);
+    updatedTracks.splice(targetIndex, 0, moved);
+    setEditableTracks(updatedTracks);
   };
 
   // Export missing tracks
@@ -1251,7 +892,7 @@ export const ImportPage: FC = () => {
           await apiClient.saveMissingTracks({
             playlistName: missingPlaylistName || 'Imported Playlist',
             source: activeSource === 'ai' ? 'ai' : activeSource,
-            sourceUrl: activeSource === 'ai' ? `AI: ${aiPrompt}` : (url || username),
+            sourceUrl: activeSource === 'ai' ? `AI: ${aiPrompt}` : importedSourceIdentifier,
             tracks: unmatchedTracks.map(t => ({
               title: t.title,
               artist: t.artist,
@@ -1271,8 +912,11 @@ export const ImportPage: FC = () => {
         await refreshPlaylists();
         await refreshMissingTracksCount();
 
-        // Navigate to Missing Tracks page
-        window.location.href = '/missing';
+        // Missing tracks now live inline on Home (MissingTracksPanel), not a
+        // dedicated /missing route - navigate there instead of hard-reloading
+        // into a route that no longer exists.
+        toast.success(`Saved — ${unmatchedTracks.length} track${unmatchedTracks.length === 1 ? '' : 's'} added to Missing Tracks`);
+        navigate('/');
       } catch (error: any) {
         console.error('Failed to save missing tracks:', error);
         toast.error(`Failed to save missing tracks: ${error.message || 'Unknown error'}`);
@@ -1295,7 +939,7 @@ export const ImportPage: FC = () => {
       const result = await apiClient.confirmImport({
         playlistName,
         source: activeSource === 'ai' ? 'ai' : activeSource,
-        sourceUrl: activeSource === 'ai' ? `AI: ${aiPrompt}` : (url || username),
+        sourceUrl: activeSource === 'ai' ? `AI: ${aiPrompt}` : importedSourceIdentifier,
         tracks: matchedTracks,
         overwriteExisting,
         keepExistingCover: overwriteExisting ? keepExistingCover : undefined,
@@ -1380,20 +1024,73 @@ export const ImportPage: FC = () => {
     }
   };
 
+  // Opens the single "Import" modal for a chart/popular/favorite/search
+  // entry - lets the user rename the playlist before importing, and
+  // optionally tick "Set up a recurring schedule" instead of a one-time
+  // import.
   const handleSchedule = (playlist: PopularPlaylist) => {
     setSchedulePlaylist(playlist);
     setSchedulePlaylistName(playlist.name); // Set default playlist name
     setScheduleOverwriteExisting(false); // Reset overwrite option
     setScheduleOverwriteCover(false); // Reset cover art option
     setScheduleRunTime('09:00'); // Reset run time
+    setScheduleEnabled(false); // Default to a one-time import
+  };
+
+  // The main "Import Playlist" button (URL/username paste, not AI or file
+  // upload) also opens the same modal, rather than importing immediately -
+  // one "Import" entry point everywhere, name-editable, with the schedule
+  // tick available. Opens immediately with whatever name is already known
+  // rather than awaiting the Spotify preview fetch first - that scrape can
+  // take several seconds, and blocking modal-open on it made the button look
+  // unresponsive. The preview name (when needed) fills in afterwards.
+  const openImportModal = () => {
+    if (activeSource === 'listenbrainz') {
+      handleSchedule({ name: username, url: username });
+      return;
+    }
+
+    const trimmedUrl = url.trim();
+    const name = playlistName;
+    handleSchedule({ name, url: trimmedUrl });
+
+    if (!name && activeSource === 'spotify') {
+      // Name only - asking /preview for this scraped the whole playlist and
+      // left the field on "Fetching name…" for 30s or more.
+      fetch('/api/import/playlist-name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ url: trimmedUrl }),
+        signal: AbortSignal.timeout(15000),
+      })
+        .then(response => response.ok ? response.json() : null)
+        .then(data => {
+          if (!data?.name) return;
+          // Only backfill if the user hasn't already typed their own name.
+          setSchedulePlaylistName(prev => prev || data.name);
+          setSchedulePlaylist(prev => (prev && !prev.name ? { ...prev, name: data.name } : prev));
+        })
+        .catch(() => { /* Leave blank - server falls back to the scraped name */ });
+    }
   };
 
   const handleScheduleConfirm = async () => {
     if (!schedulePlaylist) return;
-    
+
+    // Unticked: just a normal one-time import under the chosen name, via the
+    // same fire-and-forget path every other Import button uses.
+    if (!scheduleEnabled) {
+      const playlist = schedulePlaylist;
+      const name = schedulePlaylistName;
+      setSchedulePlaylist(null);
+      await handleImport(playlist.url, name);
+      return;
+    }
+
     setIsImporting(true);
     setError(null);
-    
+
     try {
       // Create schedule for chart import
       const response = await fetch('/api/schedules', {
@@ -1410,20 +1107,32 @@ export const ImportPage: FC = () => {
             chartUrl: schedulePlaylist.url,
             autoImport: true,
             playlistName: schedulePlaylistName || schedulePlaylist.name,
-            overwriteExisting: scheduleOverwriteExisting,
+            // The import modal's "replace existing" tick maps onto the same
+            // two modes the schedule editor offers.
+            updateMode: scheduleOverwriteExisting ? 'replace' : 'accumulate',
             overwriteCover: scheduleOverwriteCover,
             run_time: scheduleRunTime,
           },
         }),
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: { message: 'Failed to create schedule' } }));
         throw new Error(errorData.error?.message || 'Failed to create schedule');
       }
-      
-      // Navigate to schedules page
-      window.location.href = '/';
+
+      toast.success('Schedule created');
+
+      // The schedule's first run waits for its chosen run_time (default
+      // 09:00), which could be many hours away - also fire the same
+      // one-time import every other Import button uses (it shows its own
+      // toast) so the playlist shows up right now instead of the user
+      // seeing nothing happen until that time comes around.
+      const playlist = schedulePlaylist;
+      const name = schedulePlaylistName;
+      setSchedulePlaylist(null);
+      await handleImport(playlist.url, name);
+      navigate('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create schedule');
     } finally {
@@ -1693,19 +1402,11 @@ export const ImportPage: FC = () => {
                         <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto' }}>
                           <button
                             className="btn btn-primary btn-small"
-                            onClick={() => handlePopularClick(playlist)}
-                            disabled={isImporting}
-                            style={{ flex: 1 }}
-                          >
-                            Import
-                          </button>
-                          <button
-                            className="btn btn-secondary btn-small"
                             onClick={() => handleSchedule(playlist)}
                             disabled={isImporting}
                             style={{ flex: 1 }}
                           >
-                            Schedule
+                            Import
                           </button>
                           <button
                             className="btn btn-secondary btn-small"
@@ -1943,7 +1644,7 @@ export const ImportPage: FC = () => {
               <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
                 <button
                   className="btn btn-primary"
-                  onClick={() => handleImport()}
+                  onClick={() => ['ai', 'file'].includes(activeSource) ? handleImport() : openImportModal()}
                   disabled={isImporting || (!url && !username && !file && !aiPrompt) || (activeSource === 'ai' && !hasGeminiApiKey && !geminiApiKey)}
                   style={{ flex: 2 }}
                 >
@@ -1972,45 +1673,17 @@ export const ImportPage: FC = () => {
                       onClick={async () => {
                         // Use preview name if available, otherwise fetch it first
                         let name = playlistName;
-                        if (!name) {
-                          const playlistId = url.match(/playlist\/([a-zA-Z0-9]+)/)?.[1];
-                          name = `Spotify Playlist ${playlistId || ''}`.trim();
-                          // Try to fetch the actual name
-                          try {
-                            const response = await fetch('/api/import/preview', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              credentials: 'include',
-                              body: JSON.stringify({ source: 'spotify', url: url.trim() }),
-                            });
-                            if (response.ok) {
-                              const data = await response.json();
-                              if (data.name) name = data.name;
-                            }
-                          } catch { /* Use fallback name */ }
-                        }
-                        handleSchedule({ name, url: url.trim() });
-                      }}
-                      disabled={isImporting}
-                      style={{ flex: 1, minWidth: '80px' }}
-                    >
-                      Schedule
-                    </button>
-                    <button
-                      className="btn btn-secondary"
-                      onClick={async () => {
-                        // Use preview name if available, otherwise fetch it first
-                        let name = playlistName;
                         const playlistId = url.match(/playlist\/([a-zA-Z0-9]+)/)?.[1];
                         if (!name) {
                           name = `Spotify Playlist ${playlistId || ''}`.trim();
                           // Try to fetch the actual name
                           try {
-                            const response = await fetch('/api/import/preview', {
+                            const response = await fetch('/api/import/playlist-name', {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
                               credentials: 'include',
-                              body: JSON.stringify({ source: 'spotify', url: url.trim() }),
+                              body: JSON.stringify({ url: url.trim() }),
+                              signal: AbortSignal.timeout(15000),
                             });
                             if (response.ok) {
                               const data = await response.json();
@@ -2077,19 +1750,11 @@ export const ImportPage: FC = () => {
                       </button>
                       <button
                         className="btn btn-primary btn-small"
-                        onClick={() => handlePopularClick(playlist)}
-                        disabled={isImporting}
-                        style={{ flex: 1, minWidth: '60px' }}
-                      >
-                        Import
-                      </button>
-                      <button
-                        className="btn btn-secondary btn-small"
                         onClick={() => handleSchedule(playlist)}
                         disabled={isImporting}
                         style={{ flex: 1, minWidth: '70px' }}
                       >
-                        Schedule
+                        Import
                       </button>
                     </div>
                   </div>
@@ -2115,8 +1780,7 @@ export const ImportPage: FC = () => {
                     </select>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button className="btn btn-primary btn-small" onClick={() => handleImport(ariaTop50Date === 'latest' ? `https://www.aria.com.au/charts/singles-chart` : `https://www.aria.com.au/charts/singles-chart/${ariaTop50Date}`)} disabled={isImporting} style={{ flex: 1 }}>Import</button>
-                    <button className="btn btn-secondary btn-small" onClick={() => handleSchedule({ name: ariaTop50Date === 'latest' ? `ARIA Top 50 Singles - Latest` : `ARIA Top 50 Singles - ${ariaTop50Date}`, url: ariaTop50Date === 'latest' ? `https://www.aria.com.au/charts/singles-chart` : `https://www.aria.com.au/charts/singles-chart/${ariaTop50Date}` })} disabled={isImporting} style={{ flex: 1 }}>Schedule</button>
+                    <button className="btn btn-primary btn-small" onClick={() => handleSchedule({ name: ariaTop50Date === 'latest' ? `ARIA Top 50 Singles - Latest` : `ARIA Top 50 Singles - ${ariaTop50Date}`, url: ariaTop50Date === 'latest' ? `https://www.aria.com.au/charts/singles-chart` : `https://www.aria.com.au/charts/singles-chart/${ariaTop50Date}` })} disabled={isImporting} style={{ flex: 1 }}>Import</button>
                   </div>
                 </div>
 
@@ -2132,8 +1796,7 @@ export const ImportPage: FC = () => {
                     </select>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button className="btn btn-primary btn-small" onClick={() => handleImport(ariaAustralianDate === 'latest' ? `https://www.aria.com.au/charts/australian-artist-singles-chart` : `https://www.aria.com.au/charts/australian-artist-singles-chart/${ariaAustralianDate}`)} disabled={isImporting} style={{ flex: 1 }}>Import</button>
-                    <button className="btn btn-secondary btn-small" onClick={() => handleSchedule({ name: ariaAustralianDate === 'latest' ? `ARIA Australian Singles - Latest` : `ARIA Australian Singles - ${ariaAustralianDate}`, url: ariaAustralianDate === 'latest' ? `https://www.aria.com.au/charts/australian-artist-singles-chart` : `https://www.aria.com.au/charts/australian-artist-singles-chart/${ariaAustralianDate}` })} disabled={isImporting} style={{ flex: 1 }}>Schedule</button>
+                    <button className="btn btn-primary btn-small" onClick={() => handleSchedule({ name: ariaAustralianDate === 'latest' ? `ARIA Australian Singles - Latest` : `ARIA Australian Singles - ${ariaAustralianDate}`, url: ariaAustralianDate === 'latest' ? `https://www.aria.com.au/charts/australian-artist-singles-chart` : `https://www.aria.com.au/charts/australian-artist-singles-chart/${ariaAustralianDate}` })} disabled={isImporting} style={{ flex: 1 }}>Import</button>
                   </div>
                 </div>
 
@@ -2149,8 +1812,7 @@ export const ImportPage: FC = () => {
                     </select>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button className="btn btn-primary btn-small" onClick={() => handleImport(ariaReplayDate === 'latest' ? `https://www.aria.com.au/charts/catalogue-singles-chart` : `https://www.aria.com.au/charts/catalogue-singles-chart/${ariaReplayDate}`)} disabled={isImporting} style={{ flex: 1 }}>Import</button>
-                    <button className="btn btn-secondary btn-small" onClick={() => handleSchedule({ name: ariaReplayDate === 'latest' ? `ARIA On Replay Singles - Latest` : `ARIA On Replay Singles - ${ariaReplayDate}`, url: ariaReplayDate === 'latest' ? `https://www.aria.com.au/charts/catalogue-singles-chart` : `https://www.aria.com.au/charts/catalogue-singles-chart/${ariaReplayDate}` })} disabled={isImporting} style={{ flex: 1 }}>Schedule</button>
+                    <button className="btn btn-primary btn-small" onClick={() => handleSchedule({ name: ariaReplayDate === 'latest' ? `ARIA On Replay Singles - Latest` : `ARIA On Replay Singles - ${ariaReplayDate}`, url: ariaReplayDate === 'latest' ? `https://www.aria.com.au/charts/catalogue-singles-chart` : `https://www.aria.com.au/charts/catalogue-singles-chart/${ariaReplayDate}` })} disabled={isImporting} style={{ flex: 1 }}>Import</button>
                   </div>
                 </div>
 
@@ -2165,8 +1827,7 @@ export const ImportPage: FC = () => {
                     </select>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button className="btn btn-primary btn-small" onClick={() => handleImport(`https://www.aria.com.au/charts/new-music-singles-chart/${ariaNewMusicDate}`)} disabled={isImporting} style={{ flex: 1 }}>Import</button>
-                    <button className="btn btn-secondary btn-small" onClick={() => handleSchedule({ name: `ARIA New Music Singles - ${ariaNewMusicDate}`, url: `https://www.aria.com.au/charts/new-music-singles-chart/${ariaNewMusicDate}` })} disabled={isImporting} style={{ flex: 1 }}>Schedule</button>
+                    <button className="btn btn-primary btn-small" onClick={() => handleSchedule({ name: `ARIA New Music Singles - ${ariaNewMusicDate}`, url: `https://www.aria.com.au/charts/new-music-singles-chart/${ariaNewMusicDate}` })} disabled={isImporting} style={{ flex: 1 }}>Import</button>
                   </div>
                 </div>
 
@@ -2181,8 +1842,7 @@ export const ImportPage: FC = () => {
                     </select>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button className="btn btn-primary btn-small" onClick={() => handleImport(`https://www.aria.com.au/charts/hip-hop-r-and-b-singles-chart/${ariaHipHopDate}`)} disabled={isImporting} style={{ flex: 1 }}>Import</button>
-                    <button className="btn btn-secondary btn-small" onClick={() => handleSchedule({ name: `ARIA Hip Hop R&B Singles - ${ariaHipHopDate}`, url: `https://www.aria.com.au/charts/hip-hop-r-and-b-singles-chart/${ariaHipHopDate}` })} disabled={isImporting} style={{ flex: 1 }}>Schedule</button>
+                    <button className="btn btn-primary btn-small" onClick={() => handleSchedule({ name: `ARIA Hip Hop R&B Singles - ${ariaHipHopDate}`, url: `https://www.aria.com.au/charts/hip-hop-r-and-b-singles-chart/${ariaHipHopDate}` })} disabled={isImporting} style={{ flex: 1 }}>Import</button>
                   </div>
                 </div>
 
@@ -2198,8 +1858,7 @@ export const ImportPage: FC = () => {
                     </select>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button className="btn btn-primary btn-small" onClick={() => handleImport(ariaDanceDate === 'latest' ? `https://www.aria.com.au/charts/dance-singles-chart` : `https://www.aria.com.au/charts/dance-singles-chart/${ariaDanceDate}`)} disabled={isImporting} style={{ flex: 1 }}>Import</button>
-                    <button className="btn btn-secondary btn-small" onClick={() => handleSchedule({ name: ariaDanceDate === 'latest' ? `ARIA Dance Singles - Latest` : `ARIA Dance Singles - ${ariaDanceDate}`, url: ariaDanceDate === 'latest' ? `https://www.aria.com.au/charts/dance-singles-chart` : `https://www.aria.com.au/charts/dance-singles-chart/${ariaDanceDate}` })} disabled={isImporting} style={{ flex: 1 }}>Schedule</button>
+                    <button className="btn btn-primary btn-small" onClick={() => handleSchedule({ name: ariaDanceDate === 'latest' ? `ARIA Dance Singles - Latest` : `ARIA Dance Singles - ${ariaDanceDate}`, url: ariaDanceDate === 'latest' ? `https://www.aria.com.au/charts/dance-singles-chart` : `https://www.aria.com.au/charts/dance-singles-chart/${ariaDanceDate}` })} disabled={isImporting} style={{ flex: 1 }}>Import</button>
                   </div>
                 </div>
 
@@ -2215,8 +1874,7 @@ export const ImportPage: FC = () => {
                     </select>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button className="btn btn-primary btn-small" onClick={() => handleImport(ariaClubDate === 'latest' ? `https://www.aria.com.au/charts/club-tracks-chart` : `https://www.aria.com.au/charts/club-tracks-chart/${ariaClubDate}`)} disabled={isImporting} style={{ flex: 1 }}>Import</button>
-                    <button className="btn btn-secondary btn-small" onClick={() => handleSchedule({ name: ariaClubDate === 'latest' ? `ARIA Club Tracks - Latest` : `ARIA Club Tracks - ${ariaClubDate}`, url: ariaClubDate === 'latest' ? `https://www.aria.com.au/charts/club-tracks-chart` : `https://www.aria.com.au/charts/club-tracks-chart/${ariaClubDate}` })} disabled={isImporting} style={{ flex: 1 }}>Schedule</button>
+                    <button className="btn btn-primary btn-small" onClick={() => handleSchedule({ name: ariaClubDate === 'latest' ? `ARIA Club Tracks - Latest` : `ARIA Club Tracks - ${ariaClubDate}`, url: ariaClubDate === 'latest' ? `https://www.aria.com.au/charts/club-tracks-chart` : `https://www.aria.com.au/charts/club-tracks-chart/${ariaClubDate}` })} disabled={isImporting} style={{ flex: 1 }}>Import</button>
                   </div>
                 </div>
 
@@ -2233,8 +1891,7 @@ export const ImportPage: FC = () => {
                     </select>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button className="btn btn-primary btn-small" onClick={() => handleImport(`https://www.aria.com.au/charts/${ariaTop100Year}/singles-chart`)} disabled={isImporting} style={{ flex: 1 }}>Import</button>
-                    <button className="btn btn-secondary btn-small" onClick={() => handleSchedule({ name: `ARIA Top 100 Singles ${ariaTop100Year}`, url: `https://www.aria.com.au/charts/${ariaTop100Year}/singles-chart` })} disabled={isImporting} style={{ flex: 1 }}>Schedule</button>
+                    <button className="btn btn-primary btn-small" onClick={() => handleSchedule({ name: `ARIA Top 100 Singles ${ariaTop100Year}`, url: `https://www.aria.com.au/charts/${ariaTop100Year}/singles-chart` })} disabled={isImporting} style={{ flex: 1 }}>Import</button>
                   </div>
                 </div>
               </div>
@@ -2278,14 +1935,6 @@ export const ImportPage: FC = () => {
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button 
                       className="btn btn-primary btn-small" 
-                      onClick={() => handleImport(billboardDate === 'latest' ? `https://www.billboard.com/charts/hot-100/` : `https://www.billboard.com/charts/hot-100/${billboardDate}/`)} 
-                      disabled={isImporting} 
-                      style={{ flex: 1 }}
-                    >
-                      Import
-                    </button>
-                    <button 
-                      className="btn btn-secondary btn-small" 
                       onClick={() => handleSchedule({ 
                         name: billboardDate === 'latest' ? `Billboard Hot 100 - Latest` : `Billboard Hot 100 - ${formatDateDMY(billboardDate)}`, 
                         url: billboardDate === 'latest' ? `https://www.billboard.com/charts/hot-100/` : `https://www.billboard.com/charts/hot-100/${billboardDate}/`
@@ -2293,7 +1942,7 @@ export const ImportPage: FC = () => {
                       disabled={isImporting} 
                       style={{ flex: 1 }}
                     >
-                      Schedule
+                      Import
                     </button>
                   </div>
                 </div>
@@ -2328,22 +1977,14 @@ export const ImportPage: FC = () => {
                     </button>
                     <button 
                       className="btn btn-primary btn-small" 
-                      onClick={() => handleImport('https://www.last.fm/charts/top-tracks')} 
-                      disabled={isImporting} 
-                      style={{ flex: 1 }}
-                    >
-                      Import
-                    </button>
-                    <button 
-                      className="btn btn-secondary btn-small" 
                       onClick={() => handleSchedule({ 
                         name: 'Last.fm Top Tracks', 
-                        url: 'https://www.last.fm/charts/top-tracks' 
+                        url: 'https://www.last.fm/charts/top-tracks'
                       })} 
                       disabled={isImporting} 
                       style={{ flex: 1 }}
                     >
-                      Schedule
+                      Import
                     </button>
                   </div>
                 </div>
@@ -2370,22 +2011,14 @@ export const ImportPage: FC = () => {
                     </button>
                     <button 
                       className="btn btn-primary btn-small" 
-                      onClick={() => handleImport('https://www.last.fm/charts/top-artists')} 
-                      disabled={isImporting} 
-                      style={{ flex: 1 }}
-                    >
-                      Import
-                    </button>
-                    <button 
-                      className="btn btn-secondary btn-small" 
                       onClick={() => handleSchedule({ 
                         name: 'Last.fm Top Artists', 
-                        url: 'https://www.last.fm/charts/top-artists' 
+                        url: 'https://www.last.fm/charts/top-artists'
                       })} 
                       disabled={isImporting} 
                       style={{ flex: 1 }}
                     >
-                      Schedule
+                      Import
                     </button>
                   </div>
                 </div>
@@ -2412,22 +2045,14 @@ export const ImportPage: FC = () => {
                     </button>
                     <button 
                       className="btn btn-primary btn-small" 
-                      onClick={() => handleImport('https://www.last.fm/charts/top-tags')} 
-                      disabled={isImporting} 
-                      style={{ flex: 1 }}
-                    >
-                      Import
-                    </button>
-                    <button 
-                      className="btn btn-secondary btn-small" 
                       onClick={() => handleSchedule({ 
                         name: 'Last.fm Top Tags', 
-                        url: 'https://www.last.fm/charts/top-tags' 
+                        url: 'https://www.last.fm/charts/top-tags'
                       })} 
                       disabled={isImporting} 
                       style={{ flex: 1 }}
                     >
-                      Schedule
+                      Import
                     </button>
                   </div>
                 </div>
@@ -2454,22 +2079,14 @@ export const ImportPage: FC = () => {
                     </button>
                     <button 
                       className="btn btn-primary btn-small" 
-                      onClick={() => handleImport('https://www.last.fm/tag/rock')} 
-                      disabled={isImporting} 
-                      style={{ flex: 1 }}
-                    >
-                      Import
-                    </button>
-                    <button 
-                      className="btn btn-secondary btn-small" 
                       onClick={() => handleSchedule({ 
                         name: 'Last.fm Top Rock', 
-                        url: 'https://www.last.fm/tag/rock' 
+                        url: 'https://www.last.fm/tag/rock'
                       })} 
                       disabled={isImporting} 
                       style={{ flex: 1 }}
                     >
-                      Schedule
+                      Import
                     </button>
                   </div>
                 </div>
@@ -2496,22 +2113,14 @@ export const ImportPage: FC = () => {
                     </button>
                     <button 
                       className="btn btn-primary btn-small" 
-                      onClick={() => handleImport('https://www.last.fm/tag/pop')} 
-                      disabled={isImporting} 
-                      style={{ flex: 1 }}
-                    >
-                      Import
-                    </button>
-                    <button 
-                      className="btn btn-secondary btn-small" 
                       onClick={() => handleSchedule({ 
                         name: 'Last.fm Top Pop', 
-                        url: 'https://www.last.fm/tag/pop' 
+                        url: 'https://www.last.fm/tag/pop'
                       })} 
                       disabled={isImporting} 
                       style={{ flex: 1 }}
                     >
-                      Schedule
+                      Import
                     </button>
                   </div>
                 </div>
@@ -2538,22 +2147,14 @@ export const ImportPage: FC = () => {
                     </button>
                     <button 
                       className="btn btn-primary btn-small" 
-                      onClick={() => handleImport('https://www.last.fm/tag/electronic')} 
-                      disabled={isImporting} 
-                      style={{ flex: 1 }}
-                    >
-                      Import
-                    </button>
-                    <button 
-                      className="btn btn-secondary btn-small" 
                       onClick={() => handleSchedule({ 
                         name: 'Last.fm Top Electronic', 
-                        url: 'https://www.last.fm/tag/electronic' 
+                        url: 'https://www.last.fm/tag/electronic'
                       })} 
                       disabled={isImporting} 
                       style={{ flex: 1 }}
                     >
-                      Schedule
+                      Import
                     </button>
                   </div>
                 </div>
@@ -2580,22 +2181,14 @@ export const ImportPage: FC = () => {
                     </button>
                     <button 
                       className="btn btn-primary btn-small" 
-                      onClick={() => handleImport('https://www.last.fm/tag/hip hop')} 
-                      disabled={isImporting} 
-                      style={{ flex: 1 }}
-                    >
-                      Import
-                    </button>
-                    <button 
-                      className="btn btn-secondary btn-small" 
                       onClick={() => handleSchedule({ 
                         name: 'Last.fm Top Hip Hop', 
-                        url: 'https://www.last.fm/tag/hip hop' 
+                        url: 'https://www.last.fm/tag/hip hop'
                       })} 
                       disabled={isImporting} 
                       style={{ flex: 1 }}
                     >
-                      Schedule
+                      Import
                     </button>
                   </div>
                 </div>
@@ -2622,22 +2215,14 @@ export const ImportPage: FC = () => {
                     </button>
                     <button 
                       className="btn btn-primary btn-small" 
-                      onClick={() => handleImport('https://www.last.fm/tag/indie')} 
-                      disabled={isImporting} 
-                      style={{ flex: 1 }}
-                    >
-                      Import
-                    </button>
-                    <button 
-                      className="btn btn-secondary btn-small" 
                       onClick={() => handleSchedule({ 
                         name: 'Last.fm Top Indie', 
-                        url: 'https://www.last.fm/tag/indie' 
+                        url: 'https://www.last.fm/tag/indie'
                       })} 
                       disabled={isImporting} 
                       style={{ flex: 1 }}
                     >
-                      Schedule
+                      Import
                     </button>
                   </div>
                 </div>
@@ -2664,22 +2249,14 @@ export const ImportPage: FC = () => {
                     </button>
                     <button 
                       className="btn btn-primary btn-small" 
-                      onClick={() => handleImport('https://www.last.fm/tag/metal')} 
-                      disabled={isImporting} 
-                      style={{ flex: 1 }}
-                    >
-                      Import
-                    </button>
-                    <button 
-                      className="btn btn-secondary btn-small" 
                       onClick={() => handleSchedule({ 
                         name: 'Last.fm Top Metal', 
-                        url: 'https://www.last.fm/tag/metal' 
+                        url: 'https://www.last.fm/tag/metal'
                       })} 
                       disabled={isImporting} 
                       style={{ flex: 1 }}
                     >
-                      Schedule
+                      Import
                     </button>
                   </div>
                 </div>
@@ -2706,22 +2283,14 @@ export const ImportPage: FC = () => {
                     </button>
                     <button 
                       className="btn btn-primary btn-small" 
-                      onClick={() => handleImport('https://www.last.fm/tag/jazz')} 
-                      disabled={isImporting} 
-                      style={{ flex: 1 }}
-                    >
-                      Import
-                    </button>
-                    <button 
-                      className="btn btn-secondary btn-small" 
                       onClick={() => handleSchedule({ 
                         name: 'Last.fm Top Jazz', 
-                        url: 'https://www.last.fm/tag/jazz' 
+                        url: 'https://www.last.fm/tag/jazz'
                       })} 
                       disabled={isImporting} 
                       style={{ flex: 1 }}
                     >
-                      Schedule
+                      Import
                     </button>
                   </div>
                 </div>
@@ -2748,22 +2317,14 @@ export const ImportPage: FC = () => {
                     </button>
                     <button 
                       className="btn btn-primary btn-small" 
-                      onClick={() => handleImport('https://www.last.fm/tag/classical')} 
-                      disabled={isImporting} 
-                      style={{ flex: 1 }}
-                    >
-                      Import
-                    </button>
-                    <button 
-                      className="btn btn-secondary btn-small" 
                       onClick={() => handleSchedule({ 
                         name: 'Last.fm Top Classical', 
-                        url: 'https://www.last.fm/tag/classical' 
+                        url: 'https://www.last.fm/tag/classical'
                       })} 
                       disabled={isImporting} 
                       style={{ flex: 1 }}
                     >
-                      Schedule
+                      Import
                     </button>
                   </div>
                 </div>
@@ -2855,19 +2416,11 @@ export const ImportPage: FC = () => {
                             </button>
                             <button
                               className="btn btn-primary btn-small"
-                              onClick={() => handlePopularClick(playlist)}
-                              disabled={isImporting}
-                              style={{ flex: 1, minWidth: '60px' }}
-                            >
-                              Import
-                            </button>
-                            <button
-                              className="btn btn-secondary btn-small"
                               onClick={() => handleSchedule(playlist)}
                               disabled={isImporting}
                               style={{ flex: 1, minWidth: '70px' }}
                             >
-                              Schedule
+                              Import
                             </button>
                           </div>
                         </div>
@@ -2990,19 +2543,11 @@ export const ImportPage: FC = () => {
                               </button>
                               <button
                                 className="btn btn-primary btn-small"
-                                onClick={() => handlePopularClick(playlist)}
-                                disabled={isImporting}
-                                style={{ flex: 1, minWidth: '60px' }}
-                              >
-                                Import
-                              </button>
-                              <button
-                                className="btn btn-secondary btn-small"
                                 onClick={() => handleSchedule(playlist)}
                                 disabled={isImporting}
                                 style={{ flex: 1, minWidth: '70px' }}
                               >
-                                Schedule
+                                Import
                               </button>
                             </div>
                           </div>
@@ -3180,7 +2725,23 @@ export const ImportPage: FC = () => {
                         }}
                       >
                         <td style={{ padding: '0.75rem', textAlign: 'center', color: 'var(--text-secondary)', cursor: 'grab' }}>
-                          ⋮⋮
+                          <span className="track-drag-handle">⋮⋮</span>
+                          <span className="track-move-buttons" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              className="track-move-btn"
+                              onClick={() => moveTrack(originalIndex, -1)}
+                              disabled={originalIndex === 0}
+                              title="Move up"
+                              aria-label="Move track up"
+                            >▲</button>
+                            <button
+                              className="track-move-btn"
+                              onClick={() => moveTrack(originalIndex, 1)}
+                              disabled={originalIndex === editableTracks.length - 1}
+                              title="Move down"
+                              aria-label="Move track down"
+                            >▼</button>
+                          </span>
                         </td>
                         <td style={{ padding: '0.75rem', color: 'var(--text-secondary)' }}>{originalIndex + 1}</td>
                         <td style={{ padding: '0.75rem' }}>
@@ -3335,11 +2896,12 @@ export const ImportPage: FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <h2 style={{ margin: 0 }}>{previewPlaylist.name}</h2>
               <button
-                className="btn btn-secondary btn-small"
                 onClick={() => {
                   setPreviewPlaylist(null);
                   setPreviewTracks(null);
                 }}
+                title="Close"
+                style={modalCloseButtonStyle}
               >
                 ✕
               </button>
@@ -3418,172 +2980,6 @@ export const ImportPage: FC = () => {
         </div>
       )}
 
-      {/* Import Progress Modal */}
-      {importProgress && importProgress.show && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.85)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 2000,
-          padding: '1rem',
-        }}>
-          <div style={{
-            width: '400px',
-            backgroundColor: '#1a1a1a',
-            borderRadius: '12px',
-            padding: '2.5rem 2rem',
-            textAlign: 'center',
-            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-          }}>
-            {/* Playlist artwork */}
-            <div style={{
-              width: '120px',
-              height: '120px',
-              margin: '0 auto 1.5rem',
-              borderRadius: '12px',
-              backgroundColor: '#2a2a2a',
-              backgroundImage: importProgress.coverUrl 
-                ? `url(${importProgress.coverUrl})` 
-                : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '3.5rem',
-              boxShadow: '0 8px 24px rgba(102, 126, 234, 0.3)',
-            }}>
-              {!importProgress.coverUrl && '🎵'}
-            </div>
-
-            {/* Playlist name */}
-            <h2 style={{ 
-              margin: '0 0 0.5rem 0',
-              fontSize: '1.5rem',
-              fontWeight: 600,
-              color: '#ffffff',
-              letterSpacing: '-0.02em',
-            }}>
-              {importProgress.playlistName}
-            </h2>
-            
-            {/* Source label */}
-            <div style={{ 
-              fontSize: '0.813rem', 
-              color: '#888888', 
-              marginBottom: '1.5rem',
-              fontWeight: 400,
-            }}>
-              from {importProgress.source}
-            </div>
-
-            {/* Track count - prominent display */}
-            {importProgress.totalTracks > 0 && (
-              <div style={{ 
-                fontSize: '1.125rem', 
-                fontWeight: 500, 
-                marginBottom: '0.75rem',
-                color: '#ffffff',
-              }}>
-                {importProgress.currentTrack} / {importProgress.totalTracks} tracks
-              </div>
-            )}
-
-            {/* Current track name or status */}
-            <div style={{ 
-              fontSize: '0.875rem', 
-              fontWeight: 400,
-              color: '#aaaaaa',
-              minHeight: '1.25rem',
-              marginBottom: '1.5rem',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              padding: '0 1rem',
-            }}>
-              {importProgress.phase === 'scraping' && (importProgress.currentTrackName || 'Fetching playlist...')}
-              {importProgress.phase === 'matching' && (importProgress.currentTrackName || 'Matching tracks...')}
-              {importProgress.phase === 'complete' && (importProgress.currentTrackName || 'Complete!')}
-            </div>
-
-            {/* Progress indicator - spinning or progress bar */}
-            {importProgress.phase !== 'complete' && (
-              <div style={{
-                width: '100%',
-                height: '4px',
-                backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                borderRadius: '2px',
-                overflow: 'hidden',
-                marginBottom: '1.5rem',
-              }}>
-                {importProgress.totalTracks > 0 ? (
-                  // Progress bar when we have total
-                  <div style={{
-                    width: `${(importProgress.currentTrack / importProgress.totalTracks) * 100}%`,
-                    height: '100%',
-                    backgroundColor: '#667eea',
-                    transition: 'width 0.3s ease',
-                  }} />
-                ) : (
-                  // Indeterminate progress when fetching
-                  <div style={{
-                    width: '30%',
-                    height: '100%',
-                    backgroundColor: '#667eea',
-                    animation: 'progress-indeterminate 1.5s ease-in-out infinite',
-                  }} />
-                )}
-              </div>
-            )}
-            
-            {/* Cancel button */}
-            {importProgress.phase !== 'complete' && (
-              <button
-                onClick={handleCancelImport}
-                style={{ 
-                  width: '100%',
-                  padding: '0.75rem',
-                  fontSize: '0.938rem',
-                  fontWeight: 500,
-                  color: '#ffffff',
-                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.15)',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
-                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.25)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
-                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
-                }}
-              >
-                Cancel
-              </button>
-            )}
-          </div>
-          
-          {/* Add CSS animation for indeterminate progress */}
-          <style>{`
-            @keyframes progress-indeterminate {
-              0% { transform: translateX(-100%); }
-              50% { transform: translateX(350%); }
-              100% { transform: translateX(-100%); }
-            }
-          `}</style>
-        </div>
-      )}
-
       {/* Manual Rematch Modal */}
       {rematchTrack && (
         <div style={{
@@ -3612,8 +3008,9 @@ export const ImportPage: FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <h2 style={{ margin: 0 }}>Manual Rematch</h2>
               <button
-                className="btn btn-secondary btn-small"
                 onClick={handleCloseRematch}
+                title="Close"
+                style={modalCloseButtonStyle}
               >
                 ✕
               </button>
@@ -3676,6 +3073,7 @@ export const ImportPage: FC = () => {
                       position: 'sticky',
                       top: 0,
                     }}>
+                      <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 600, width: '80px' }} title="The same score a real import would compute for this candidate">Match</th>
                       <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 600 }}>Title</th>
                       <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 600 }}>Artist</th>
                       <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 600 }}>Album</th>
@@ -3693,6 +3091,24 @@ export const ImportPage: FC = () => {
                           backgroundColor: idx % 2 === 0 ? 'transparent' : 'rgba(255, 255, 255, 0.02)',
                         }}
                       >
+                        <td style={{ padding: '0.75rem' }}>
+                          {result.matchScore !== undefined ? (
+                            <span
+                              title={result.matched ? 'Would auto-match at your current settings' : "Below your minimum match score - won't auto-match"}
+                              style={{
+                                display: 'inline-block',
+                                padding: '0.125rem 0.5rem',
+                                borderRadius: '4px',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                color: result.matched ? 'var(--success)' : (result.matchScore >= 50 ? 'var(--warning)' : 'var(--error)'),
+                                backgroundColor: result.matched ? 'rgba(102, 187, 106, 0.1)' : (result.matchScore >= 50 ? 'rgba(255, 167, 38, 0.1)' : 'rgba(239, 83, 80, 0.1)'),
+                              }}
+                            >
+                              {Math.round(result.matchScore)}%
+                            </span>
+                          ) : '-'}
+                        </td>
                         <td style={{ padding: '0.75rem', fontWeight: 500 }}>{result.title}</td>
                         <td style={{ padding: '0.75rem', color: 'var(--text-secondary)' }}>{result.artist}</td>
                         <td style={{ padding: '0.75rem', color: 'var(--text-secondary)' }}>{result.album || '-'}</td>
@@ -3751,227 +3167,156 @@ export const ImportPage: FC = () => {
 
       {/* Schedule Modal */}
       {schedulePlaylist && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.7)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          padding: '1rem',
-        }}>
-          <div className="card" style={{
-            maxWidth: '500px',
-            width: '100%',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h2 style={{ margin: 0 }}>Schedule Playlist</h2>
+        <Modal onClose={() => setSchedulePlaylist(null)} contentStyle={{ maxWidth: '460px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <h2 style={{ margin: 0, fontSize: '1.15rem' }}>Import Playlist</h2>
               <button
-                className="btn btn-secondary btn-small"
                 onClick={() => setSchedulePlaylist(null)}
+                title="Close"
+                style={modalCloseButtonStyle}
               >
                 ✕
               </button>
             </div>
 
-            <div style={{ marginBottom: '1rem' }}>
-              <div style={{ fontWeight: 500, marginBottom: '0.5rem' }}>{schedulePlaylist.name}</div>
-              {schedulePlaylist.description && (
-                <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                  {schedulePlaylist.description}
-                </div>
-              )}
-            </div>
+            {schedulePlaylist.description && (
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                {schedulePlaylist.description}
+              </div>
+            )}
 
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: 500 }}>
                 Playlist Name in Plex
               </label>
               <input
                 type="text"
                 value={schedulePlaylistName}
                 onChange={(e) => setSchedulePlaylistName(e.target.value)}
-                placeholder="Enter playlist name"
+                placeholder={schedulePlaylist.name || 'Fetching name…'}
                 style={{
                   width: '100%',
-                  padding: '0.75rem',
+                  padding: '0.5rem',
                   border: '1px solid var(--border)',
                   borderRadius: '4px',
                   backgroundColor: 'var(--surface)',
                   color: 'var(--text-primary)',
-                  fontSize: '1rem',
+                  fontSize: '0.9rem',
                 }}
               />
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                This will be the name of the playlist saved to Plex
-              </div>
             </div>
 
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{
-                display: 'flex',
-                alignItems: 'center',
-                padding: '0.75rem',
-                border: '1px solid var(--border)',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                backgroundColor: 'var(--surface)',
-              }}>
-                <input
-                  type="checkbox"
-                  checked={scheduleOverwriteExisting}
-                  onChange={(e) => setScheduleOverwriteExisting(e.target.checked)}
-                  style={{ marginRight: '0.75rem' }}
-                />
-                <div>
-                  <div style={{ fontWeight: 500 }}>Overwrite existing playlist</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                    If a playlist with the same name exists in Plex, it will be replaced
-                  </div>
-                </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.75rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}
+                title="Leave unticked to just import once. Tick to keep this playlist refreshed automatically.">
+                <input type="checkbox" checked={scheduleEnabled} onChange={(e) => setScheduleEnabled(e.target.checked)} />
+                Set up a recurring schedule
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}
+                title="If a playlist with the same name exists in Plex, it will be replaced">
+                <input type="checkbox" checked={scheduleOverwriteExisting} onChange={(e) => setScheduleOverwriteExisting(e.target.checked)} />
+                Overwrite existing playlist
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}
+                title="Replace the playlist cover art with the imported playlist's artwork">
+                <input type="checkbox" checked={scheduleOverwriteCover} onChange={(e) => setScheduleOverwriteCover(e.target.checked)} />
+                Overwrite cover art
               </label>
             </div>
 
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{
-                display: 'flex',
-                alignItems: 'center',
-                padding: '0.75rem',
-                border: '1px solid var(--border)',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                backgroundColor: 'var(--surface)',
-              }}>
-                <input
-                  type="checkbox"
-                  checked={scheduleOverwriteCover}
-                  onChange={(e) => setScheduleOverwriteCover(e.target.checked)}
-                  style={{ marginRight: '0.75rem' }}
-                />
-                <div>
-                  <div style={{ fontWeight: 500 }}>Overwrite cover art</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                    Replace the playlist cover art with the imported playlist's artwork
-                  </div>
-                </div>
-              </label>
-            </div>
-
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
-                Update Frequency
-              </label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {[
-                  { value: 'daily', label: 'Daily' },
-                  { value: 'weekly', label: 'Weekly' },
-                  { value: 'fortnightly', label: 'Fortnightly (Every 2 weeks)' },
-                  { value: 'monthly', label: 'Monthly' },
-                  { value: 'custom', label: 'Custom' },
-                ].map(option => (
-                  <label
-                    key={option.value}
+            {scheduleEnabled && (
+              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: 500 }}>
+                    Frequency
+                  </label>
+                  <select
+                    value={scheduleFrequency}
+                    onChange={(e) => setScheduleFrequency(e.target.value as any)}
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      padding: '0.75rem',
+                      width: '100%',
+                      padding: '0.5rem',
                       border: '1px solid var(--border)',
                       borderRadius: '4px',
-                      cursor: 'pointer',
-                      backgroundColor: scheduleFrequency === option.value ? 'var(--surface-hover)' : 'transparent',
+                      backgroundColor: 'var(--surface)',
+                      color: 'var(--text-primary)',
+                      fontSize: '0.9rem',
                     }}
                   >
-                    <input
-                      type="radio"
-                      name="frequency"
-                      value={option.value}
-                      checked={scheduleFrequency === option.value}
-                      onChange={(e) => setScheduleFrequency(e.target.value as any)}
-                      style={{ marginRight: '0.75rem' }}
-                    />
-                    {option.label}
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="fortnightly">Fortnightly</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </div>
+
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: 500 }}>
+                    Start Date
                   </label>
-                ))}
-              </div>
-            </div>
+                  <input
+                    type="date"
+                    value={scheduleStartDate || new Date().toISOString().split('T')[0]}
+                    onChange={(e) => setScheduleStartDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    style={{
+                      width: '100%',
+                      padding: '0.5rem',
+                      border: '1px solid var(--border)',
+                      borderRadius: '4px',
+                      backgroundColor: 'var(--surface)',
+                      color: 'var(--text-primary)',
+                      fontSize: '0.9rem',
+                    }}
+                  />
+                </div>
 
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
-                Start Date
-              </label>
-              <input
-                type="date"
-                value={scheduleStartDate || new Date().toISOString().split('T')[0]}
-                onChange={(e) => setScheduleStartDate(e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  border: '1px solid var(--border)',
-                  borderRadius: '4px',
-                  backgroundColor: 'var(--surface)',
-                  color: 'var(--text-primary)',
-                  fontSize: '1rem',
-                }}
-              />
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                First update will occur on this date
+                <div style={{ flex: 1 }} title="Schedules are checked every 10 minutes">
+                  <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: 500 }}>
+                    Run Time
+                  </label>
+                  <select
+                    value={scheduleRunTime}
+                    onChange={(e) => setScheduleRunTime(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '0.5rem',
+                      border: '1px solid var(--border)',
+                      borderRadius: '4px',
+                      backgroundColor: 'var(--surface)',
+                      color: 'var(--text-primary)',
+                      fontSize: '0.9rem',
+                    }}
+                  >
+                    {Array.from({ length: 144 }, (_, i) => {
+                      const hour = Math.floor(i / 6);
+                      const minute = (i % 6) * 10;
+                      const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+                      return <option key={timeStr} value={timeStr}>{timeStr}</option>;
+                    })}
+                  </select>
+                </div>
               </div>
-            </div>
+            )}
 
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
-                Run Time
-              </label>
-              <select
-                value={scheduleRunTime}
-                onChange={(e) => setScheduleRunTime(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  border: '1px solid var(--border)',
-                  borderRadius: '4px',
-                  backgroundColor: 'var(--surface)',
-                  color: 'var(--text-primary)',
-                  fontSize: '1rem',
-                }}
-              >
-                {Array.from({ length: 144 }, (_, i) => {
-                  const hour = Math.floor(i / 6);
-                  const minute = (i % 6) * 10;
-                  const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-                  return <option key={timeStr} value={timeStr}>{timeStr}</option>;
-                })}
-              </select>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                Schedules are checked every 10 minutes
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button
-                className="btn btn-primary"
-                onClick={handleScheduleConfirm}
-                disabled={isImporting}
-                style={{ flex: 1 }}
-              >
-                {isImporting ? 'Creating...' : 'Create Schedule'}
-              </button>
+            <div className="modal-actions" style={{ marginTop: '1rem' }}>
               <button
                 className="btn btn-secondary"
                 onClick={() => setSchedulePlaylist(null)}
                 disabled={isImporting}
-                style={{ flex: 1 }}
               >
                 Cancel
               </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleScheduleConfirm}
+                disabled={isImporting}
+              >
+                {isImporting ? (scheduleEnabled ? 'Creating...' : 'Importing...') : (scheduleEnabled ? 'Create Schedule' : 'Import')}
+              </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Playlist Name Edit Modal for Missing Tracks Save */}

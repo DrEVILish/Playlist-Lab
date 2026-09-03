@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import type { Schedule } from '@playlist-lab/shared';
 import { getNextRunDate } from '../../utils/scheduleTime';
-import { Modal } from '../Modal';
+import { Modal, modalCloseButtonStyle } from '../Modal';
 import { useConfirm } from '../../contexts/ConfirmContext';
 
 /**
@@ -28,7 +28,11 @@ export function ScheduleModal({
   const [frequency, setFrequency] = useState<'daily' | 'weekly' | 'fortnightly' | 'monthly'>(schedule?.frequency ?? 'weekly');
   const [startDate, setStartDate] = useState(schedule?.startDate ?? new Date().toISOString().split('T')[0]);
   const [runTime, setRunTime] = useState(schedule?.config?.run_time ?? '');
-  const [overwriteExisting, setOverwriteExisting] = useState(schedule?.config?.overwriteExisting ?? true);
+  // Older schedules only stored the overwriteExisting boolean; true always
+  // meant replace, and false meant "don't touch what's there".
+  const [updateMode, setUpdateMode] = useState<'replace' | 'accumulate'>(
+    schedule?.config?.updateMode ?? (schedule?.config?.overwriteExisting === false ? 'accumulate' : 'replace')
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +49,7 @@ export function ScheduleModal({
     setIsSaving(true);
     setError(null);
     try {
-      const config = { overwriteExisting, run_time: runTime || undefined };
+      const config = { updateMode, run_time: runTime || undefined };
       if (schedule) {
         await apiClient.updateSchedule(schedule.id, { frequency, startDate, config } as any);
       } else {
@@ -93,25 +97,28 @@ export function ScheduleModal({
   };
 
   return (
-    <Modal onClose={onClose} contentStyle={{ maxWidth: '520px' }}>
-        <h2>{schedule ? 'Manage Schedule' : 'Create Schedule'} — {playlistName}</h2>
+    <Modal onClose={onClose} contentStyle={{ maxWidth: '460px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+          <h2 style={{ margin: 0, fontSize: '1.15rem' }}>{schedule ? 'Manage Schedule' : 'Create Schedule'} — {playlistName}</h2>
+          <button onClick={onClose} title="Close" style={modalCloseButtonStyle}>✕</button>
+        </div>
 
         {error && <div className="error-message">{error}</div>}
 
         {schedule && (
-          <div style={{ marginBottom: '1rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+          <div style={{ marginBottom: '0.75rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
             <div>Next run: {getNextRunDate(schedule)}</div>
             {schedule.lastRun && <div>Last run: {new Date(schedule.lastRun * 1000).toLocaleString()}</div>}
           </div>
         )}
 
-        <div style={{ display: 'grid', gap: '1rem' }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Frequency</label>
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: 500 }}>Frequency</label>
             <select
               value={frequency}
               onChange={(e) => setFrequency(e.target.value as any)}
-              style={{ width: '100%', padding: '0.75rem', border: '1px solid var(--border-color)', borderRadius: '4px', backgroundColor: 'var(--surface)', color: 'var(--text-primary)' }}
+              style={{ width: '100%', padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: '4px', backgroundColor: 'var(--surface)', color: 'var(--text-primary)', fontSize: '0.9rem' }}
             >
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
@@ -120,24 +127,24 @@ export function ScheduleModal({
             </select>
           </div>
 
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Start Date</label>
+          <div style={{ flex: 1 }}>
+            <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: 500 }}>Start Date</label>
             <input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              style={{ width: '100%', padding: '0.75rem', border: '1px solid var(--border-color)', borderRadius: '4px', backgroundColor: 'var(--surface)', color: 'var(--text-primary)' }}
+              style={{ width: '100%', padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: '4px', backgroundColor: 'var(--surface)', color: 'var(--text-primary)', fontSize: '0.9rem' }}
             />
           </div>
 
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Run Time (optional)</label>
+          <div style={{ flex: 1 }} title="Leave blank to run on the next 10-minute check after the start date">
+            <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: 500 }}>Run Time</label>
             <select
               value={runTime}
               onChange={(e) => setRunTime(e.target.value)}
-              style={{ width: '100%', padding: '0.75rem', border: '1px solid var(--border-color)', borderRadius: '4px', backgroundColor: 'var(--surface)', color: 'var(--text-primary)' }}
+              style={{ width: '100%', padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: '4px', backgroundColor: 'var(--surface)', color: 'var(--text-primary)', fontSize: '0.9rem' }}
             >
-              <option value="">Any time (next 10-minute check)</option>
+              <option value="">Any time</option>
               {Array.from({ length: 144 }, (_, i) => {
                 const hour = Math.floor(i / 6);
                 const minute = (i % 6) * 10;
@@ -146,22 +153,37 @@ export function ScheduleModal({
               })}
             </select>
           </div>
+        </div>
 
-          <label style={{ display: 'flex', alignItems: 'center', padding: '0.75rem', border: '1px solid var(--border-color)', borderRadius: '4px', cursor: 'pointer', backgroundColor: 'var(--surface)' }}>
-            <input type="checkbox" checked={overwriteExisting} onChange={(e) => setOverwriteExisting(e.target.checked)} style={{ marginRight: '0.75rem' }} />
-            <div>
-              <div style={{ fontWeight: 500 }}>Overwrite existing playlist</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                If a playlist with the same name exists in Plex, it will be replaced on each run
-              </div>
-            </div>
-          </label>
+        <div style={{ marginBottom: '0.75rem' }}>
+          <div style={{ fontSize: '0.8rem', fontWeight: 500, marginBottom: '0.4rem' }}>When the source changes</div>
+          <div style={{ display: 'grid', gap: '0.4rem' }}>
+            {([
+              ['replace', 'Replace', 'The playlist mirrors the source. Tracks that drop out of the source are removed.'],
+              ['accumulate', 'Accumulate', 'New tracks are added and nothing is ever removed - a weekly chart becomes a running archive.'],
+            ] as const).map(([value, label, description]) => (
+              <label key={value} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name="schedule-update-mode"
+                  value={value}
+                  checked={updateMode === value}
+                  onChange={() => setUpdateMode(value)}
+                  style={{ marginTop: '0.2rem' }}
+                />
+                <span>
+                  <span style={{ fontWeight: 500 }}>{label}</span>
+                  <span style={{ display: 'block', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{description}</span>
+                </span>
+              </label>
+            ))}
+          </div>
         </div>
 
         {schedule && history && history.length > 0 && (
-          <div style={{ marginTop: '1rem' }}>
-            <div style={{ fontWeight: 500, marginBottom: '0.5rem' }}>Recent runs</div>
-            <div style={{ display: 'grid', gap: '0.5rem', maxHeight: '150px', overflowY: 'auto' }}>
+          <div style={{ marginBottom: '0.75rem' }}>
+            <div style={{ fontSize: '0.8rem', fontWeight: 500, marginBottom: '0.4rem' }}>Recent runs</div>
+            <div style={{ display: 'grid', gap: '0.4rem', maxHeight: '150px', overflowY: 'auto' }}>
               {history.map((execution) => (
                 <div key={execution.id} style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between' }}>
                   <span>{new Date(execution.startedAt * 1000).toLocaleString()}</span>
@@ -174,7 +196,7 @@ export function ScheduleModal({
           </div>
         )}
 
-        <div className="modal-actions" style={{ marginTop: '1.5rem' }}>
+        <div className="modal-actions" style={{ marginTop: '1rem' }}>
           {schedule && (
             <>
               <button className="btn btn-secondary" onClick={handleRunNow}>Run Now</button>

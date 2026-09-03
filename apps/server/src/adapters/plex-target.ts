@@ -8,7 +8,7 @@
 
 import { TargetAdapter, TargetConfig, TrackInfo, MatchResult, ServiceMeta } from './types';
 import { PlexClient } from '../services/plex';
-import { matchPlaylist, MatchedTrack } from '../services/matching';
+import { matchPlaylist, MatchedTrack, buildRememberedMatchMap, rememberMatches } from '../services/matching';
 import { logger } from '../utils/logger';
 
 /** Default matching settings used when none are stored for the user */
@@ -93,7 +93,9 @@ export const plexTargetAdapter: TargetAdapter = {
       sourceTrack: { title: query, artist: '' },
       targetTrackId: track.ratingKey,
       targetTitle: track.title,
-      targetArtist: track.grandparentTitle ?? '',
+      // originalTitle is the real per-track artist; grandparentTitle is just the
+      // album/folder artist and can be wrong for compilations/soundtracks.
+      targetArtist: track.originalTitle || track.grandparentTitle || '',
       targetAlbum: track.parentTitle ?? undefined,
       confidence: 100,
       matched: true,
@@ -143,6 +145,13 @@ export const plexTargetAdapter: TargetAdapter = {
       libraryId,
     });
 
+    let rememberedMatches;
+    try {
+      rememberedMatches = buildRememberedMatchMap(db.getUserManualMatches?.(userId) ?? []);
+    } catch {
+      // fall back to no remembered matches
+    }
+
     const matched = await matchPlaylist(
       externalTracks,
       serverUrl,
@@ -152,8 +161,13 @@ export const plexTargetAdapter: TargetAdapter = {
       progressEmitter,
       undefined,
       undefined,
-      isCancelled
+      isCancelled,
+      rememberedMatches
     );
+
+    // Same learn step as an ordinary import - a cross-import's matches are
+    // real playlist contents, so a rerun should reuse them.
+    if (db.recordManualMatch && db.getUserManualMatches) rememberMatches(db as any, userId, matched);
 
     return matched.map(toMatchResult);
   },

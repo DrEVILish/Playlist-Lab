@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { createValidationError, createInternalError } from '../middleware/error-handler';
 import { logger } from '../utils/logger';
-import { PlexService } from '../services/plex';
+import { PlexService, resolvePlexToken } from '../services/plex';
 
 const router = Router();
 
@@ -41,7 +41,7 @@ router.get('/', requireAuth, async (req: Request, res: Response, next: NextFunct
     const combinedQuery = searchTerms.join(' ');
 
     // Search Plex using the searchTrack method with proper parameters
-    const plexService = new PlexService(userServer.server_url, user.plex_token);
+    const plexService = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
     const searchResults = await plexService.searchTrack(
       combinedQuery,
       userServer.library_id || undefined,
@@ -91,7 +91,7 @@ router.get('/tracks', requireAuth, async (req: Request, res: Response, next: Nex
     }
 
     // Search Plex for tracks
-    const plexService = new PlexService(userServer.server_url, user.plex_token);
+    const plexService = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
     const searchResults = await plexService.searchTrack(
       query,
       userServer.library_id || undefined
@@ -136,7 +136,7 @@ router.get('/artists', requireAuth, async (req: Request, res: Response, next: Ne
     }
 
     // Search Plex for artists directly in the library
-    const plexService = new PlexService(userServer.server_url, user.plex_token);
+    const plexService = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
     
     // Get all artists matching the query using Plex's search
     const artists = await plexService.searchArtists(userServer.library_id, query);

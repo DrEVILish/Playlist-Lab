@@ -12,10 +12,11 @@ interface Props {
   onStartOver: () => void;
 }
 
+// Runs through the server's shared action queue now instead of finishing
+// within the request - the real playlist-creation result shows up later in
+// the notification bell (top right), not synchronously here.
 interface ExecuteResult {
-  playlistId: string;
-  name: string;
-  trackCount: number;
+  position: number;
 }
 
 export const ConfirmationStep: FC<Props> = ({
@@ -92,9 +93,11 @@ export const ConfirmationStep: FC<Props> = ({
   return (
     <div className="confirmation-container">
       <div className="confirmation-icon">✅</div>
-      <h2 className="confirmation-title">Playlist created!</h2>
+      <h2 className="confirmation-title">Queued for import</h2>
       <p className="confirmation-subtitle">
-        "{result?.name}" was added to {target.name} with {result?.trackCount} track{result?.trackCount !== 1 ? 's' : ''}.
+        {result && result.position > 0
+          ? `Creating "${playlistName}" on ${target.name} - position ${result.position} in queue. Check the notification bell (top right) for the result.`
+          : `Creating "${playlistName}" on ${target.name} - check the notification bell (top right) for the result.`}
       </p>
       <button className="btn btn-primary" onClick={onStartOver}>
         Start another import

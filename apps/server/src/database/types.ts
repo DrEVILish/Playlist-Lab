@@ -30,6 +30,12 @@ export interface UserServer {
   server_url: string;
   library_id?: string;
   library_name?: string;
+  // Server-specific access token from Plex's /api/resources listing. Differs
+  // from users.plex_token (the account token) for servers shared with this
+  // user rather than owned by them - Plex rejects the account token against
+  // those. Null falls back to the account token, which is correct for
+  // owned servers (and for rows saved before this column existed).
+  access_token?: string | null;
 }
 
 /**
@@ -178,6 +184,21 @@ export interface MissingTrack {
 }
 
 /**
+ * Manual match record from the manual_matches table - a user's remembered
+ * "use this Plex track" choice for a source track.
+ */
+export interface ManualMatch {
+  id: number;
+  user_id: number;
+  title: string;
+  artist: string;
+  album?: string;
+  plex_rating_key: string;
+  created_at: number;
+  updated_at: number;
+}
+
+/**
  * External track data structure
  */
 export interface ExternalTrack {
@@ -271,9 +292,10 @@ export interface DatabaseStats {
  * Missing track statistics for admin view
  */
 export interface MissingTrackStat {
-  track: string;
+  title: string;
   artist: string;
   count: number;
+  addedAt: number;
 }
 
 /**
@@ -347,4 +369,19 @@ export interface MixTemplateInput {
   description?: string;
   mix_type: string;
   configuration: MixTemplateConfiguration;
+}
+
+/**
+ * An in-flight deemix download, persisted only so its progress poller and
+ * its link back to a missing track survive a server restart (see the
+ * deemix_downloads table in schema.sql).
+ */
+export interface DeemixDownload {
+  id: number;
+  user_id: number;
+  uuid: string;
+  missing_track_id?: number | null;
+  title: string;
+  detail?: string | null;
+  created_at: number;
 }

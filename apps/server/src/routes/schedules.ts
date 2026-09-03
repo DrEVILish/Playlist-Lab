@@ -29,7 +29,7 @@ router.use(requireAuth);
  * callers transforming a whole list should batch-fetch once and pass it in
  * (see GET / below) rather than triggering one query per schedule.
  */
-function transformSchedule(dbSchedule: any, db: DatabaseService, playlistsById?: Map<number, Playlist>): any {
+export function transformSchedule(dbSchedule: any, db: DatabaseService, playlistsById?: Map<number, Playlist>): any {
   const config = dbSchedule.config ? (typeof dbSchedule.config === 'string' ? JSON.parse(dbSchedule.config) : dbSchedule.config) : undefined;
 
   let source: string | undefined = config?.chartSource;
@@ -179,7 +179,7 @@ router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.session.userId!;
     const db = req.dbService!;
-    const scheduleId = parseInt(req.params.id, 10);
+    const scheduleId = parseInt((req.params as Record<string, string>).id, 10);
     const { frequency, start_date, startDate, config } = req.body;
 
     console.log('Update schedule request:', {
@@ -288,7 +288,7 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
   try {
     const userId = req.session.userId!;
     const db = req.dbService!;
-    const scheduleId = parseInt(req.params.id, 10);
+    const scheduleId = parseInt((req.params as Record<string, string>).id, 10);
 
     if (isNaN(scheduleId)) {
       return next(createValidationError('Invalid schedule ID'));
@@ -340,7 +340,7 @@ router.get('/:id/executions', async (req: Request, res: Response, next: NextFunc
   try {
     const userId = req.session.userId!;
     const db = req.dbService!;
-    const scheduleId = parseInt(req.params.id, 10);
+    const scheduleId = parseInt((req.params as Record<string, string>).id, 10);
     const limit = parseInt(req.query.limit as string) || 10;
 
     if (isNaN(scheduleId)) {
@@ -462,7 +462,7 @@ router.delete('/executions/:id', async (req: Request, res: Response, next: NextF
   try {
     const userId = req.session.userId!;
     const db = req.dbService!;
-    const executionId = parseInt(req.params.id, 10);
+    const executionId = parseInt((req.params as Record<string, string>).id, 10);
 
     if (isNaN(executionId)) {
       return next(createValidationError('Invalid execution ID'));
@@ -515,7 +515,7 @@ router.post('/:id/run', async (req: Request, res: Response, next: NextFunction) 
   try {
     const userId = req.session.userId!;
     const db = req.dbService!;
-    const scheduleId = parseInt(req.params.id, 10);
+    const scheduleId = parseInt((req.params as Record<string, string>).id, 10);
 
     if (isNaN(scheduleId)) {
       return next(createValidationError('Invalid schedule ID'));
@@ -588,16 +588,31 @@ router.post('/run-all', async (req: Request, res: Response, next: NextFunction):
 
     // Import the schedule checker job function
     const { runSingleSchedule } = await import('../services/schedule-checker-job');
-    
-    // Run all schedules asynchronously (don't wait for completion)
-    let triggered = 0;
-    for (const schedule of schedules) {
-      runSingleSchedule(db, schedule).catch((error: any) => {
-        logger.error('Failed to execute schedule', { scheduleId: schedule.id, error: error.message });
-      });
-      triggered++;
-    }
 
+    // Run schedules in the background with bounded concurrency - each one
+    // does real, sequential Plex/matching work, so firing all of them at
+    // once (no cap) hammers Plex and pegs the CPU with matching for however
+    // many schedules the user has, which is what was freezing the server
+    // and the UI on "Run All Schedules".
+    const RUN_ALL_CONCURRENCY = 3;
+    let nextIndex = 0;
+    async function worker(): Promise<void> {
+      while (nextIndex < schedules.length) {
+        const schedule = schedules[nextIndex++];
+        try {
+          await runSingleSchedule(db, schedule);
+        } catch (error: any) {
+          logger.error('Failed to execute schedule', { scheduleId: schedule.id, error: error.message });
+        }
+      }
+    }
+    Promise.all(
+      Array.from({ length: Math.min(RUN_ALL_CONCURRENCY, schedules.length) }, worker)
+    ).catch((error: any) => {
+      logger.error('Run-all schedule worker pool failed unexpectedly', { error: error.message });
+    });
+
+    const triggered = schedules.length;
     res.json({
       success: true,
       message: `Started execution of ${triggered} schedule(s)`,

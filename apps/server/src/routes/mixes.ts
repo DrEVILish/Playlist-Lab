@@ -12,7 +12,7 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { MixService, MixSettings } from '../services/mixes';
-import { PlexClient } from '../services/plex';
+import { PlexClient, resolvePlexToken } from '../services/plex';
 import { DatabaseService } from '../database/database';
 import { requireAuth } from '../middleware/auth';
 import { createValidationError, createInternalError } from '../middleware/error-handler';
@@ -33,7 +33,7 @@ router.use(requireAuth);
  * Server-Sent Events endpoint for mix generation progress
  */
 router.get('/progress/:sessionId', (req: Request, res: Response) => {
-  const { sessionId } = req.params;
+  const { sessionId } = req.params as Record<string, string>;
   
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -180,7 +180,7 @@ router.post('/weekly', async (req: Request, res: Response, next: NextFunction) =
     // Generate mix
     const result = await mixService.generateWeeklyMix(
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       mixSettings.weeklyMix
     );
@@ -198,7 +198,7 @@ router.post('/weekly', async (req: Request, res: Response, next: NextFunction) =
       playlistName,
       result.trackKeys,
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       userServer.server_client_id,
       userId,
@@ -241,7 +241,7 @@ router.post('/daily', async (req: Request, res: Response, next: NextFunction) =>
     // Generate mix
     const result = await mixService.generateDailyMix(
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       mixSettings.dailyMix
     );
@@ -259,7 +259,7 @@ router.post('/daily', async (req: Request, res: Response, next: NextFunction) =>
       playlistName,
       result.trackKeys,
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       userServer.server_client_id,
       userId,
@@ -302,7 +302,7 @@ router.post('/timecapsule', async (req: Request, res: Response, next: NextFuncti
     // Generate mix
     const result = await mixService.generateTimeCapsule(
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       mixSettings.timeCapsule
     );
@@ -320,7 +320,7 @@ router.post('/timecapsule', async (req: Request, res: Response, next: NextFuncti
       playlistName,
       result.trackKeys,
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       userServer.server_client_id,
       userId,
@@ -363,7 +363,7 @@ router.post('/newmusic', async (req: Request, res: Response, next: NextFunction)
     // Generate mix
     const result = await mixService.generateNewMusicMix(
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       mixSettings.newMusic
     );
@@ -381,7 +381,7 @@ router.post('/newmusic', async (req: Request, res: Response, next: NextFunction)
       playlistName,
       result.trackKeys,
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       userServer.server_client_id,
       userId,
@@ -437,7 +437,7 @@ router.post('/custom', async (req: Request, res: Response, next: NextFunction) =
       case 'weekly':
         result = await mixService.generateWeeklyMix(
           userServer.server_url,
-          user.plex_token,
+          resolvePlexToken(user, userServer),
           userServer.library_id!,
           settings
         );
@@ -446,7 +446,7 @@ router.post('/custom', async (req: Request, res: Response, next: NextFunction) =
       case 'daily':
         result = await mixService.generateDailyMix(
           userServer.server_url,
-          user.plex_token,
+          resolvePlexToken(user, userServer),
           userServer.library_id!,
           settings
         );
@@ -455,7 +455,7 @@ router.post('/custom', async (req: Request, res: Response, next: NextFunction) =
       case 'timecapsule':
         result = await mixService.generateTimeCapsule(
           userServer.server_url,
-          user.plex_token,
+          resolvePlexToken(user, userServer),
           userServer.library_id!,
           settings
         );
@@ -464,7 +464,7 @@ router.post('/custom', async (req: Request, res: Response, next: NextFunction) =
       case 'newmusic':
         result = await mixService.generateNewMusicMix(
           userServer.server_url,
-          user.plex_token,
+          resolvePlexToken(user, userServer),
           userServer.library_id!,
           settings
         );
@@ -485,7 +485,7 @@ router.post('/custom', async (req: Request, res: Response, next: NextFunction) =
       finalPlaylistName,
       result.trackKeys,
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       userServer.server_client_id,
       userId,
@@ -545,7 +545,7 @@ router.post('/custom-advanced', async (req: Request, res: Response, next: NextFu
     // Generate mix with custom filters
     const result = await mixService.generateCustomMix(
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       {
         trackCount,
@@ -581,7 +581,7 @@ router.post('/custom-advanced', async (req: Request, res: Response, next: NextFu
       name,
       result.trackKeys,
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       userServer.server_client_id,
       userId,
@@ -652,7 +652,7 @@ router.post('/sonic', async (req: Request, res: Response, next: NextFunction) =>
     // Generate sonic mix
     const result = await mixService.generateSonicMix(
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       {
         seedTrackKey,
@@ -676,7 +676,7 @@ router.post('/sonic', async (req: Request, res: Response, next: NextFunction) =>
       name,
       result.trackKeys,
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       userServer.server_client_id,
       userId,
@@ -714,7 +714,7 @@ router.get('/metadata/genres', async (req: Request, res: Response, next: NextFun
       return next(createInternalError('User not found'));
     }
 
-    const plex = new PlexClient(userServer.server_url, user.plex_token);
+    const plex = new PlexClient(userServer.server_url, resolvePlexToken(user, userServer));
     const genres = await plex.getLibraryGenres(userServer.library_id!);
 
     res.json({ genres });
@@ -739,7 +739,7 @@ router.get('/metadata/moods', async (req: Request, res: Response, next: NextFunc
       return next(createInternalError('User not found'));
     }
 
-    const plex = new PlexClient(userServer.server_url, user.plex_token);
+    const plex = new PlexClient(userServer.server_url, resolvePlexToken(user, userServer));
     const moods = await plex.getLibraryMoods(userServer.library_id!);
 
     res.json({ moods });
@@ -764,7 +764,7 @@ router.get('/metadata/styles', async (req: Request, res: Response, next: NextFun
       return next(createInternalError('User not found'));
     }
 
-    const plex = new PlexClient(userServer.server_url, user.plex_token);
+    const plex = new PlexClient(userServer.server_url, resolvePlexToken(user, userServer));
     const styles = await plex.getLibraryStyles(userServer.library_id!);
 
     res.json({ styles });
@@ -789,7 +789,7 @@ router.get('/metadata/collections', async (req: Request, res: Response, next: Ne
       return next(createInternalError('User not found'));
     }
 
-    const plex = new PlexClient(userServer.server_url, user.plex_token);
+    const plex = new PlexClient(userServer.server_url, resolvePlexToken(user, userServer));
     const collections = await plex.getLibraryCollections(userServer.library_id!);
 
     res.json({ collections });
@@ -819,7 +819,7 @@ router.post('/all', async (req: Request, res: Response, next: NextFunction) => {
     // Generate all mixes
     const results = await mixService.generateAllMixes(
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       mixSettings
     );
@@ -832,7 +832,7 @@ router.post('/all', async (req: Request, res: Response, next: NextFunction) => {
         'Your Weekly Mix',
         results.weekly.trackKeys,
         userServer.server_url,
-        user.plex_token,
+        resolvePlexToken(user, userServer),
         userServer.library_id!,
         userServer.server_client_id,
         userId,
@@ -847,7 +847,7 @@ router.post('/all', async (req: Request, res: Response, next: NextFunction) => {
         'Daily Mix',
         results.daily.trackKeys,
         userServer.server_url,
-        user.plex_token,
+        resolvePlexToken(user, userServer),
         userServer.library_id!,
         userServer.server_client_id,
         userId,
@@ -862,7 +862,7 @@ router.post('/all', async (req: Request, res: Response, next: NextFunction) => {
         'Time Capsule',
         results.timeCapsule.trackKeys,
         userServer.server_url,
-        user.plex_token,
+        resolvePlexToken(user, userServer),
         userServer.library_id!,
         userServer.server_client_id,
         userId,
@@ -877,7 +877,7 @@ router.post('/all', async (req: Request, res: Response, next: NextFunction) => {
         'New Music Mix',
         results.newMusic.trackKeys,
         userServer.server_url,
-        user.plex_token,
+        resolvePlexToken(user, userServer),
         userServer.library_id!,
         userServer.server_client_id,
         userId,
@@ -922,7 +922,7 @@ router.post('/deep-cuts', async (req: Request, res: Response, next: NextFunction
 
     const result = await mixService.generateDeepCutsMix(
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       { trackCount, maxPlayCount, excludePopularThreshold }
     );
@@ -939,7 +939,7 @@ router.post('/deep-cuts', async (req: Request, res: Response, next: NextFunction
       playlistName,
       result.trackKeys,
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       userServer.server_client_id,
       userId,
@@ -986,7 +986,7 @@ router.post('/artist-discovery', async (req: Request, res: Response, next: NextF
 
     const result = await mixService.generateArtistDiscoveryMix(
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       { seedArtistKeys: [seedArtistKey], tracksPerArtist, maxSimilarArtists: trackCount }
     );
@@ -1003,7 +1003,7 @@ router.post('/artist-discovery', async (req: Request, res: Response, next: NextF
       playlistName,
       result.trackKeys,
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       userServer.server_client_id,
       userId,
@@ -1050,7 +1050,7 @@ router.post('/mood', async (req: Request, res: Response, next: NextFunction) => 
 
     const result = await mixService.generateMoodMix(
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       { moods, trackCount, useSonicAnalysis }
     );
@@ -1067,7 +1067,7 @@ router.post('/mood', async (req: Request, res: Response, next: NextFunction) => 
       playlistName,
       result.trackKeys,
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       userServer.server_client_id,
       userId,
@@ -1114,7 +1114,7 @@ router.post('/era', async (req: Request, res: Response, next: NextFunction) => {
 
     const result = await mixService.generateEraMix(
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       { startYear, endYear, trackCount }
     );
@@ -1131,7 +1131,7 @@ router.post('/era', async (req: Request, res: Response, next: NextFunction) => {
       playlistName,
       result.trackKeys,
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       userServer.server_client_id,
       userId,
@@ -1178,7 +1178,7 @@ router.post('/genre-evolution', async (req: Request, res: Response, next: NextFu
 
     const result = await mixService.generateGenreEvolutionMix(
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       { genre, trackCount, tracksPerDecade }
     );
@@ -1195,7 +1195,7 @@ router.post('/genre-evolution', async (req: Request, res: Response, next: NextFu
       playlistName,
       result.trackKeys,
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       userServer.server_client_id,
       userId,
@@ -1242,7 +1242,7 @@ router.post('/artist-journey', async (req: Request, res: Response, next: NextFun
 
     const result = await mixService.generateArtistJourneyMix(
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       { artistKey, tracksPerAlbum }
     );
@@ -1259,7 +1259,7 @@ router.post('/artist-journey', async (req: Request, res: Response, next: NextFun
       playlistName,
       result.trackKeys,
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       userServer.server_client_id,
       userId,
@@ -1302,7 +1302,7 @@ router.post('/workout', async (req: Request, res: Response, next: NextFunction) 
 
     const result = await mixService.generateWorkoutMix(
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       { trackCount, warmupTracks, peakTracks, cooldownTracks }
     );
@@ -1319,7 +1319,7 @@ router.post('/workout', async (req: Request, res: Response, next: NextFunction) 
       playlistName,
       result.trackKeys,
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       userServer.server_client_id,
       userId,
@@ -1362,7 +1362,7 @@ router.post('/forgotten-favorites', async (req: Request, res: Response, next: Ne
 
     const result = await mixService.generateForgottenFavoritesMix(
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       { trackCount, minPlayCount, notPlayedInDays: notPlayedDays }
     );
@@ -1379,7 +1379,7 @@ router.post('/forgotten-favorites', async (req: Request, res: Response, next: Ne
       playlistName,
       result.trackKeys,
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       userServer.server_client_id,
       userId,
@@ -1426,7 +1426,7 @@ router.post('/genre-blend', async (req: Request, res: Response, next: NextFuncti
 
     const result = await mixService.generateGenreBlendMix(
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       { genres, trackCount, requireAllGenres: minGenres > 1 }
     );
@@ -1443,7 +1443,7 @@ router.post('/genre-blend', async (req: Request, res: Response, next: NextFuncti
       playlistName,
       result.trackKeys,
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       userServer.server_client_id,
       userId,

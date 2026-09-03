@@ -53,6 +53,14 @@ describe('Mix Templates - Error Scenarios', () => {
     // Authenticated app
     authenticatedApp = express();
     authenticatedApp.use(express.json());
+    // Express 5 leaves req.body as undefined (not {}) when no parser matched
+    // the request's Content-Type - mirrors the same guard index.ts installs
+    // on the real app, since these Content-Type error tests exist specifically
+    // to exercise that path.
+    authenticatedApp.use((req, _res, next) => {
+      if (req.body === undefined) req.body = {};
+      next();
+    });
     authenticatedApp.use(session({
       secret: 'test-secret',
       resave: false,

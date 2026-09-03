@@ -9,15 +9,11 @@
 
 .layout-main {
   flex: 1;
-  padding: 0.625rem 0.875rem;
+  padding: 0;
   background: linear-gradient(180deg, var(--background) 0%, var(--background-elevated) 100%);
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
-}
-
-@media (max-width: 768px) {
-  .layout-main { padding: 0.75rem; }
 }

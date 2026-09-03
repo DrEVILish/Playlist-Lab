@@ -39,8 +39,6 @@ export const MatchingStep: FC<Props> = ({
 
   const sessionId = sessionIdRef.current;
 
-  console.log('[MatchingStep] Current progress state:', progress);
-
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
@@ -58,10 +56,7 @@ export const MatchingStep: FC<Props> = ({
   }, []);
 
   const startMatching = async () => {
-    console.log('[MatchingStep] Starting matching with sessionId:', sessionId);
-    
     // Start matching FIRST
-    console.log('[MatchingStep] Sending match request...');
     try {
       const res = await fetch('/api/cross-import/match', {
         method: 'POST',
@@ -77,13 +72,11 @@ export const MatchingStep: FC<Props> = ({
           allowStatic,
         }),
       });
-      console.log('[MatchingStep] Match request response:', res.status, res.ok);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         console.error('[MatchingStep] Match request failed:', data);
         throw new Error(data.error?.message || `Matching failed (${res.status})`);
       }
-      console.log('[MatchingStep] Match request successful');
     } catch (err: any) {
       console.error('[MatchingStep] Match request error:', err);
       if (!cancelled) {
@@ -93,25 +86,19 @@ export const MatchingStep: FC<Props> = ({
     }
     
     // NOW set up SSE connection and polling
-    console.log('[MatchingStep] Creating EventSource...');
     const eventSource = new EventSource(`/api/cross-import/match/progress/${sessionId}`);
     eventSourceRef.current = eventSource;
-    console.log('[MatchingStep] SSE connection established');
-    
+
     // Add polling fallback (same as ImportPage)
     const startPolling = () => {
-      console.log('[MatchingStep] Starting polling...');
-      
       const doPoll = async () => {
         try {
           const response = await fetch(`/api/cross-import/match/status/${sessionId}`, {
             credentials: 'include'
           });
           const data = await response.json();
-          console.log('[MatchingStep] Poll response:', data);
-          
+
           if (data.type === 'progress') {
-            console.log('[MatchingStep] Updating progress from poll:', data);
             setProgress({
               phase: data.phase,
               current: data.current,
@@ -153,9 +140,7 @@ export const MatchingStep: FC<Props> = ({
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        console.log('[MatchingStep] SSE event received:', data);
         if (data.type === 'progress') {
-          console.log('[MatchingStep] Updating progress from SSE:', data);
           setProgress({
             phase: data.phase,
             current: data.current,
@@ -182,8 +167,7 @@ export const MatchingStep: FC<Props> = ({
     };
     
     eventSource.onerror = (error) => {
-      console.error('[MatchingStep] SSE error:', error);
-      console.log('[MatchingStep] SSE readyState:', eventSource.readyState);
+      console.error('[MatchingStep] SSE error:', error, 'readyState:', eventSource.readyState);
       // SSE errors are expected — polling fallback is already running
     };
   };
@@ -237,7 +221,8 @@ export const MatchingStep: FC<Props> = ({
         padding: '1rem',
       }}>
         <div style={{
-          width: '400px',
+          width: '100%',
+          maxWidth: '400px',
           backgroundColor: '#1a1a1a',
           borderRadius: '12px',
           padding: '2.5rem 2rem',

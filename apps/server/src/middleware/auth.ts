@@ -7,6 +7,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { DatabaseService } from '../database/database';
+import { logger } from '../utils/logger';
 
 /**
  * Extend Express Request to include user and session data
@@ -56,20 +57,18 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     }
   }
 
-  // Skip verbose logging for frequently polled endpoints
-  const isPolling = req.path.startsWith('/status/') || req.path.startsWith('/progress/') || req.path === '/queue' || req.path.startsWith('/queue/');
-  
-  if (!isPolling) {
-    console.log(`[Auth] Checking authentication for ${req.method} ${req.path}`);
-    console.log(`[Auth] Session ID: ${req.sessionID?.substring(0, 10)}...`);
-    console.log(`[Auth] Session userId: ${req.session.userId || 'none'}`);
-    console.log(`[Auth] Cookie header: ${req.headers.cookie ? 'present' : 'missing'}`);
-  }
-  
   if (!req.session.userId) {
-    if (!isPolling) {
-      console.log('[Auth] No userId in session, returning 401');
-    }
+    // Every request used to log four console.log lines here regardless of
+    // outcome - outside winston, so no level could turn them off, and one of
+    // them printed a prefix of the session id, which is the credential
+    // itself. The only part with debugging value is why a request was
+    // rejected, which is what's left: whether a cookie arrived at all
+    // separates "not logged in" from "cookie sent but session gone".
+    logger.debug('[Auth] Rejected unauthenticated request', {
+      method: req.method,
+      path: req.path,
+      hadCookie: !!req.headers.cookie,
+    });
     res.status(401).json({
       error: {
         code: 'AUTH_REQUIRED',
@@ -97,10 +96,10 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   
   if (!user) {
     // Session references non-existent user, clear it
-    console.log(`[Auth] User ${req.session.userId} not found in database, destroying session`);
+    logger.warn('[Auth] Session references a user that no longer exists, destroying it', { userId: req.session.userId });
     req.session.destroy((err) => {
       if (err) {
-        console.error('Error destroying invalid session:', err);
+        logger.error('[Auth] Failed to destroy invalid session', { error: err.message });
       }
     });
 
@@ -125,7 +124,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 
   // Check if user is enabled (admins always pass)
   if (!req.dbService.isAdmin(user.id) && !req.dbService.isUserEnabled(user.id)) {
-    console.log(`[Auth] User ${user.id} is disabled`);
+    logger.warn('[Auth] Rejected disabled user', { userId: user.id });
     res.status(403).json({
       error: {
         code: 'USER_DISABLED',
@@ -136,9 +135,6 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     return;
   }
 
-  if (!isPolling) {
-    console.log(`[Auth] Authentication successful for user ${user.id} (${user.plex_username})`);
-  }
   next();
 }
 

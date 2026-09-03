@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Modal } from '../Modal';
+import { Modal, modalCloseButtonStyle } from '../Modal';
 import '../../pages/SharePlaylistsPage.css';
 
 interface SharedPlaylist {
@@ -40,7 +40,10 @@ export function SharedWithMeModal({ onClose }: { onClose: () => void }) {
 
   return (
     <Modal onClose={onClose} contentStyle={{ maxWidth: '560px' }}>
-        <h2>Shared With Me</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ margin: 0 }}>Shared With Me</h2>
+          <button onClick={onClose} title="Close" style={modalCloseButtonStyle}>✕</button>
+        </div>
         <p className="share-description">Playlists other Playlist Lab users have shared with you.</p>
 
         {error && <div className="error-message">{error}</div>}

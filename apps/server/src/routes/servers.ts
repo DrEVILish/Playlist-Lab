@@ -3,7 +3,7 @@ import { requireAuth } from '../middleware/auth';
 import { createValidationError, createInternalError, createNotFoundError, createAuthError } from '../middleware/error-handler';
 import { logger } from '../utils/logger';
 import { AuthService } from '../services/auth';
-import { PlexService, PlexAuthError } from '../services/plex';
+import { PlexService, PlexAuthError, resolvePlexToken } from '../services/plex';
 
 const router = Router();
 const authService = new AuthService(
@@ -65,7 +65,10 @@ router.get('/', requireAuth, async (req: Request, res: Response, next: NextFunct
     const servers = plexServers.map(s => ({
       name: s.name,
       clientId: s.clientIdentifier,
-      url: authService.getBestServerUrl(s)
+      url: authService.getBestServerUrl(s),
+      // Only needed (and only differs from the account token) for servers
+      // this user doesn't own - see resolvePlexToken for why.
+      accessToken: s.owned ? undefined : s.accessToken
     }));
     
     logger.info('Successfully fetched Plex servers', { userId, serverCount: servers.length });
@@ -91,7 +94,7 @@ router.post('/select', requireAuth, async (req: Request, res: Response, next: Ne
   try {
     const userId = req.session.userId!;
     const db = req.dbService!;
-    const { serverName, serverClientId, serverUrl, libraryId, libraryName } = req.body;
+    const { serverName, serverClientId, serverUrl, libraryId, libraryName, accessToken } = req.body;
 
     if (!serverName || !serverClientId || !serverUrl) {
       return next(createValidationError('serverName, serverClientId, and serverUrl are required'));
@@ -104,7 +107,8 @@ router.post('/select', requireAuth, async (req: Request, res: Response, next: Ne
       serverClientId,
       serverUrl,
       libraryId,
-      libraryName
+      libraryName,
+      accessToken
     );
 
     logger.info('Server selected', { userId, serverName, libraryId });
@@ -145,7 +149,7 @@ router.get('/libraries', requireAuth, async (req: Request, res: Response, next: 
     });
 
     // Fetch libraries from Plex
-    const plexService = new PlexService(userServer.server_url, user.plex_token);
+    const plexService = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
     const libraries = await plexService.getLibraries();
     
     logger.info('Libraries fetched successfully', { 
@@ -202,7 +206,7 @@ router.get('/library-folders', requireAuth, async (req: Request, res: Response, 
     });
 
     // Fetch library folders from Plex
-    const plexService = new PlexService(userServer.server_url, user.plex_token);
+    const plexService = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
     const folders = await plexService.getLibraryFolders(userServer.library_id);
     
     logger.info('Library folders fetched successfully', { 
@@ -262,7 +266,7 @@ router.post('/scan-library', requireAuth, async (req: Request, res: Response, ne
     });
 
     // Trigger library scan
-    const plexService = new PlexService(userServer.server_url, user.plex_token);
+    const plexService = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
     await plexService.scanLibrary(userServer.library_id, path);
     
     const message = path 

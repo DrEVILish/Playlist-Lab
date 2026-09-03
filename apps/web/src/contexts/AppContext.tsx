@@ -137,6 +137,24 @@ interface AppProviderProps {
   children: ReactNode;
 }
 
+// Same reasoning as the shared APIClient's own timeout: these endpoints are
+// Plex-backed, and while Plex is unresponsive the server may hold a request
+// open long enough that the UI is left with neither data nor an error to
+// render. Bounding them means a stalled backend degrades to an empty list
+// the page can show, rather than a spinner that never resolves.
+const API_TIMEOUT_MS = 30000;
+const apiFetch = async (input: string, init: RequestInit = {}) => {
+  const response = await fetch(input, { credentials: 'include', signal: AbortSignal.timeout(API_TIMEOUT_MS), ...init });
+  // A 401 here means either the session or the stored Plex token stopped
+  // working, and both are fixed by signing in again. Without this the callers
+  // just fall back to empty state, so an expired Plex token looked exactly
+  // like an empty library - AuthContext already listens for this event.
+  if (response.status === 401) {
+    window.dispatchEvent(new Event('auth:session-expired'));
+  }
+  return response;
+};
+
 export const AppProvider: FC<AppProviderProps> = ({ children }) => {
   const { isAuthenticated } = useAuth();
   const [state, setState] = useState<AppState>({
@@ -184,7 +202,7 @@ export const AppProvider: FC<AppProviderProps> = ({ children }) => {
     let initialVersion = '';
     const checkVersion = async () => {
       try {
-        const res = await fetch('/api/version', { credentials: 'include' });
+        const res = await apiFetch('/api/version', { credentials: 'include' });
         if (!res.ok) return;
         const data = await res.json();
         if (!initialVersion) {
@@ -200,7 +218,7 @@ export const AppProvider: FC<AppProviderProps> = ({ children }) => {
 
     const checkForUpdates = async () => {
       try {
-        const res = await fetch('/api/update/check', { credentials: 'include' });
+        const res = await apiFetch('/api/update/check', { credentials: 'include' });
         if (!res.ok) return;
         const data = await res.json();
         setState((prev) => ({ ...prev, updateInfo: data }));
@@ -222,7 +240,7 @@ export const AppProvider: FC<AppProviderProps> = ({ children }) => {
   const installUpdate = async () => {
     setState((prev) => ({ ...prev, isUpdating: true }));
     try {
-      const res = await fetch('/api/update/install', { method: 'POST', credentials: 'include' });
+      const res = await apiFetch('/api/update/install', { method: 'POST', credentials: 'include' });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || 'Unknown error');
@@ -245,7 +263,7 @@ export const AppProvider: FC<AppProviderProps> = ({ children }) => {
 
   const updateSettings = async (settings: Partial<UserSettings>) => {
     try {
-      const response = await fetch('/api/settings', {
+      const response = await apiFetch('/api/settings', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -269,7 +287,7 @@ export const AppProvider: FC<AppProviderProps> = ({ children }) => {
 
   const refreshPlaylists = async () => {
     try {
-      const response = await fetch('/api/playlists', {
+      const response = await apiFetch('/api/playlists', {
         credentials: 'include',
       });
 
@@ -290,7 +308,7 @@ export const AppProvider: FC<AppProviderProps> = ({ children }) => {
 
   const refreshSchedules = async () => {
     try {
-      const response = await fetch('/api/schedules', {
+      const response = await apiFetch('/api/schedules', {
         credentials: 'include',
       });
 
@@ -311,7 +329,7 @@ export const AppProvider: FC<AppProviderProps> = ({ children }) => {
 
   const refreshMissingTracksCount = async () => {
     try {
-      const response = await fetch('/api/missing', {
+      const response = await apiFetch('/api/missing', {
         credentials: 'include',
       });
 
@@ -335,7 +353,7 @@ export const AppProvider: FC<AppProviderProps> = ({ children }) => {
 
   const refreshSettings = async () => {
     try {
-      const response = await fetch('/api/settings', {
+      const response = await apiFetch('/api/settings', {
         credentials: 'include',
       });
       if (response.ok) {
@@ -356,8 +374,8 @@ export const AppProvider: FC<AppProviderProps> = ({ children }) => {
     try {
       // Fetch server and settings first (these are critical for routing)
       const [serverResponse, settingsResponse] = await Promise.all([
-        fetch('/api/servers/current', { credentials: 'include' }),
-        fetch('/api/settings', { credentials: 'include' })
+        apiFetch('/api/servers/current', { credentials: 'include' }),
+        apiFetch('/api/settings', { credentials: 'include' })
       ]);
 
       let serverData = null;

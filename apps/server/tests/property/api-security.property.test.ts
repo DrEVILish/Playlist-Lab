@@ -62,7 +62,7 @@ describe('API Security Property Tests', () => {
           async (endpoint, method) => {
             // Setup a protected route
             const router = express.Router();
-            router.all('*', requireAuth, (_req: Request, res: Response) => {
+            router.all('/*splat', requireAuth, (_req: Request, res: Response) => {
               res.json({ success: true });
             });
             app.use('/api', router);

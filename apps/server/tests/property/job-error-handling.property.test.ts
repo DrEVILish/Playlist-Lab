@@ -117,7 +117,12 @@ describe('Job Error Handling Property Tests', () => {
       ),
       { numRuns: 30 } // Reduced runs since this involves timing
     );
-  }, 90000); // Increased timeout for this test
+  // This property drives the real scheduler through many fast-check runs and
+  // takes ~75s on its own, so a 90s budget left nothing spare - once enough
+  // suites ran alongside it, contention alone pushed it over and it failed
+  // consistently. The work itself has not grown; the allowance was just too
+  // tight to absorb a loaded machine.
+  }, 240000);
 
   /**
    * Additional test: Verify scheduler continues after multiple consecutive errors

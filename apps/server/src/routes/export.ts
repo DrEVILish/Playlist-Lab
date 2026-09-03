@@ -1,13 +1,84 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { requireAuth } from '../middleware/auth';
-import { createValidationError, createInternalError } from '../middleware/error-handler';
+import { createValidationError, createInternalError, createNotFoundError } from '../middleware/error-handler';
 import { logger } from '../utils/logger';
-import { PlexClient } from '../services/plex';
+import { PlexClient, resolvePlexToken } from '../services/plex';
+import { updateNotification } from '../services/job-notifications';
+import { enqueueAction } from '../services/action-queue';
 
 const router = Router();
 
 // All export routes require authentication
 router.use(requireAuth);
+
+// originalTitle is the real per-track artist; grandparentTitle is just the
+// album/folder artist and can be wrong for compilations/soundtracks.
+function getTrackArtist(track: any): string {
+  return track.originalTitle || track.grandparentTitle || 'Unknown Artist';
+}
+
+// Export is two Plex reads + in-memory string building, not a Plex write or
+// external API call - its cost doesn't scale with concurrent users the way
+// the queue's other actions do, so only genuinely large exports (which take
+// long enough to be worth not blocking on) go through the action queue.
+// Below this, export stays fully synchronous - same request/response as
+// always, no client changes.
+const EXPORT_QUEUE_THRESHOLD = 2000;
+
+interface ExportedFile {
+  filename: string;
+  contentType: string;
+  content: string;
+}
+
+function buildExportContent(tracks: any[], playlistTitle: string, format: string, pathType: string): ExportedFile {
+  let content: string;
+  let contentType: string;
+  let extension: string;
+
+  switch (format) {
+    case 'm3u':
+      content = generateM3U(tracks, playlistTitle, pathType === 'relative');
+      contentType = 'audio/x-mpegurl';
+      extension = 'm3u';
+      break;
+    case 'm3u8':
+      content = generateM3U8(tracks, playlistTitle, pathType === 'relative');
+      contentType = 'application/vnd.apple.mpegurl';
+      extension = 'm3u8';
+      break;
+    case 'pls':
+      content = generatePLS(tracks, playlistTitle);
+      contentType = 'audio/x-scpls';
+      extension = 'pls';
+      break;
+    case 'xspf':
+      content = generateXSPF(tracks, playlistTitle);
+      contentType = 'application/xspf+xml';
+      extension = 'xspf';
+      break;
+    case 'csv':
+      content = generateCSV(tracks);
+      contentType = 'text/csv';
+      extension = 'csv';
+      break;
+    case 'txt':
+      content = generateTXT(tracks);
+      contentType = 'text/plain';
+      extension = 'txt';
+      break;
+    default:
+      throw new Error('Unsupported format');
+  }
+
+  return { filename: `${sanitizeFilename(playlistTitle)}.${extension}`, contentType, content };
+}
+
+// Finished exports queued above the threshold, held just long enough for the
+// client to fetch them via GET /export/:jobId/download - same in-memory,
+// lost-on-restart tradeoff as the rest of the action queue.
+const pendingExports = new Map<string, ExportedFile>();
+const EXPORT_RESULT_TTL_MS = 10 * 60 * 1000;
 
 /**
  * POST /api/playlists/export
@@ -34,13 +105,13 @@ router.post('/export', async (req: Request, res: Response, next: NextFunction) =
       return next(createValidationError('User not found'));
     }
 
-    const { plex_token: plexToken } = userRow;
-    if (!plexToken) {
+    const { plex_token: accountToken } = userRow;
+    if (!accountToken) {
       return next(createValidationError('No Plex token found'));
     }
 
     // Get user's server configuration
-    const serverRow = (db as any).db.prepare('SELECT server_url FROM user_servers WHERE user_id = ? LIMIT 1').get(userId);
+    const serverRow = (db as any).db.prepare('SELECT server_url, access_token FROM user_servers WHERE user_id = ? LIMIT 1').get(userId);
     if (!serverRow) {
       return next(createValidationError('No Plex server configured'));
     }
@@ -48,7 +119,7 @@ router.post('/export', async (req: Request, res: Response, next: NextFunction) =
     const { server_url: serverUrl } = serverRow;
 
     // Create Plex client
-    const plexClient = new PlexClient(serverUrl, plexToken);
+    const plexClient = new PlexClient(serverUrl, resolvePlexToken({ plex_token: accountToken }, serverRow));
 
     // Get playlist details
     const playlistDetails = await plexClient.getPlaylistDetails(playlistId);
@@ -56,53 +127,32 @@ router.post('/export', async (req: Request, res: Response, next: NextFunction) =
       return next(createValidationError('Playlist not found'));
     }
 
+    if ((playlistDetails.leafCount || 0) > EXPORT_QUEUE_THRESHOLD) {
+      const { jobId, position } = enqueueAction(userId, `Export: ${playlistDetails.title}`, async (notificationId) => {
+        try {
+          const tracks = await plexClient.getPlaylistTracks(playlistId);
+          const file = buildExportContent(tracks, playlistDetails.title, format, pathType);
+          pendingExports.set(notificationId, file);
+          setTimeout(() => pendingExports.delete(notificationId), EXPORT_RESULT_TTL_MS);
+          logger.info(`Exported playlist: ${playlistDetails.title} (${tracks.length} tracks) to ${format}`);
+          updateNotification(userId, notificationId, { status: 'success', detail: `Ready to download - ${file.filename}` });
+        } catch (error: any) {
+          logger.error('Failed to export playlist', { error: error.message, userId });
+          updateNotification(userId, notificationId, { status: 'error', detail: error.message || 'Failed to export playlist' });
+        }
+      });
+      res.status(202).json({ queued: true, jobId, position });
+      return;
+    }
+
     // Get playlist tracks
     const tracks = await plexClient.getPlaylistTracks(playlistId);
 
     logger.info(`Exporting playlist: ${playlistDetails.title} (${tracks.length} tracks) to ${format}`);
 
-    // Generate the export content based on format
-    let content: string;
-    let contentType: string;
-    let extension: string;
-
-    switch (format) {
-      case 'm3u':
-        content = generateM3U(tracks, playlistDetails.title, pathType === 'relative');
-        contentType = 'audio/x-mpegurl';
-        extension = 'm3u';
-        break;
-      case 'm3u8':
-        content = generateM3U8(tracks, playlistDetails.title, pathType === 'relative');
-        contentType = 'application/vnd.apple.mpegurl';
-        extension = 'm3u8';
-        break;
-      case 'pls':
-        content = generatePLS(tracks, playlistDetails.title);
-        contentType = 'audio/x-scpls';
-        extension = 'pls';
-        break;
-      case 'xspf':
-        content = generateXSPF(tracks, playlistDetails.title);
-        contentType = 'application/xspf+xml';
-        extension = 'xspf';
-        break;
-      case 'csv':
-        content = generateCSV(tracks);
-        contentType = 'text/csv';
-        extension = 'csv';
-        break;
-      case 'txt':
-        content = generateTXT(tracks);
-        contentType = 'text/plain';
-        extension = 'txt';
-        break;
-      default:
-        return next(createValidationError('Unsupported format'));
-    }
+    const { filename, contentType, content } = buildExportContent(tracks, playlistDetails.title, format, pathType);
 
     // Send the file
-    const filename = `${sanitizeFilename(playlistDetails.title)}.${extension}`;
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(content);
@@ -114,6 +164,25 @@ router.post('/export', async (req: Request, res: Response, next: NextFunction) =
 });
 
 /**
+ * GET /api/playlists/export/:jobId/download
+ * Fetches the file generated by a queued export (see EXPORT_QUEUE_THRESHOLD
+ * above) once its notification reports success. `jobId` is that
+ * notification's id, scoped to no one but the requester by virtue of only
+ * ever being handed back to the user who queued the export in the first
+ * place - it's never exposed to other users.
+ */
+router.get('/export/:jobId/download', (req: Request, res: Response, next: NextFunction) => {
+  const file = pendingExports.get((req.params as Record<string, string>).jobId);
+  if (!file) {
+    return next(createNotFoundError('Export not found or already downloaded - it may have expired, try exporting again'));
+  }
+  pendingExports.delete((req.params as Record<string, string>).jobId);
+  res.setHeader('Content-Type', file.contentType);
+  res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+  res.send(file.content);
+});
+
+/**
  * Generate M3U format
  */
 function generateM3U(tracks: any[], playlistName: string, relative: boolean): string {
@@ -122,7 +191,7 @@ function generateM3U(tracks: any[], playlistName: string, relative: boolean): st
 
   for (const track of tracks) {
     const duration = Math.floor((track.duration || 0) / 1000);
-    const artist = track.grandparentTitle || 'Unknown Artist';
+    const artist = getTrackArtist(track);
     const title = track.title || 'Unknown Track';
     const filePath = getTrackPath(track, relative);
 
@@ -152,7 +221,7 @@ function generatePLS(tracks: any[], playlistName: string): string {
   tracks.forEach((track, index) => {
     const num = index + 1;
     const filePath = getTrackPath(track, false);
-    const title = `${track.grandparentTitle || 'Unknown'} - ${track.title || 'Unknown'}`;
+    const title = `${getTrackArtist(track)} - ${track.title || 'Unknown'}`;
     const duration = Math.floor((track.duration || 0) / 1000);
 
     content += `File${num}=${filePath}\n`;
@@ -176,7 +245,7 @@ function generateXSPF(tracks: any[], playlistName: string): string {
   for (const track of tracks) {
     const filePath = getTrackPath(track, false);
     const title = track.title || 'Unknown Track';
-    const artist = track.grandparentTitle || 'Unknown Artist';
+    const artist = getTrackArtist(track);
     const album = track.parentTitle || 'Unknown Album';
     const duration = track.duration || 0;
 
@@ -205,7 +274,7 @@ function generateCSV(tracks: any[]): string {
 
   for (const track of tracks) {
     const title = escapeCSV(track.title || 'Unknown Track');
-    const artist = escapeCSV(track.grandparentTitle || 'Unknown Artist');
+    const artist = escapeCSV(getTrackArtist(track));
     const album = escapeCSV(track.parentTitle || 'Unknown Album');
     const duration = formatDuration(track.duration || 0);
     const filePath = escapeCSV(getTrackPath(track, false));
@@ -223,7 +292,7 @@ function generateCSV(tracks: any[]): string {
  */
 function generateTXT(tracks: any[]): string {
   return tracks
-    .map(track => `${track.grandparentTitle || 'Unknown Artist'} - ${track.title || 'Unknown Track'}`)
+    .map(track => `${getTrackArtist(track)} - ${track.title || 'Unknown Track'}`)
     .join('\n') + '\n';
 }
 

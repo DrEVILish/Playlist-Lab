@@ -26,7 +26,6 @@ module.exports = {
   },
   moduleNameMapper: {
     '^@playlist-lab/shared$': '<rootDir>/../../packages/shared/src',
-    '^fast-check$': path.resolve(__dirname, 'node_modules/fast-check/lib/fast-check.js'),
   },
   testTimeout: 30000,
 };

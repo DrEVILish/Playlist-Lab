@@ -63,20 +63,24 @@ import https from 'https';
 import { logger } from './utils/logger';
 import { sessionStore } from './middleware/session-store';
 import { errorHandler } from './middleware/error-handler';
-import { attachDatabase } from './middleware/auth';
+import { attachDatabase, requireAuth, requireAdmin } from './middleware/auth';
 import { DatabaseService, getDatabase } from './database';
 import { JobScheduler } from './services/jobs';
 import { importQueue } from './services/import-queue';
-import { importPlaylist, ImportOptions } from './services/import';
+import { importPlaylist, ImportOptions, finalizeImportResult } from './services/import';
+import { addNotification, updateNotification } from './services/job-notifications';
 import { EventEmitter } from 'events';
 import { runDailyScraperJob } from './services/scraper-job';
 import { runScheduleCheckerJob } from './services/schedule-checker-job';
 import { runCacheCleanupJob } from './services/cache-cleanup-job';
+import { resumeDeemixDownloads, checkDeemixArlAndNotifyAdmins } from './services/deemix';
+import { closeBrowser } from './services/browser-scrapers';
 import authRoutes from './routes/auth';
 import serversRoutes from './routes/servers';
 import settingsRoutes from './routes/settings';
 import playlistsRoutes from './routes/playlists';
 import missingRoutes from './routes/missing';
+import notificationsRoutes from './routes/notifications';
 import adminRoutes from './routes/admin';
 import migrateRoutes from './routes/migrate';
 import importRoutes, { importSessions, cancelledSessions, progressState } from './routes/import';
@@ -114,6 +118,11 @@ const dbService = new DatabaseService(db);
 // Security middleware
 // Disable CSP in production when HTTPS is not enabled to avoid upgrade-insecure-requests issues
 app.use(helmet({
+  // helmet defaults to COOP 'same-origin', which severs window.opener when
+  // the Plex sign-in popup navigates back to our /auth/callback page - the
+  // popup then can't tell the login page it's done or close itself, so it
+  // just sat there showing the login screen again.
+  crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
   contentSecurityPolicy: (NODE_ENV === 'production' && process.env.ENABLE_HTTPS === 'true') ? {
     directives: {
       defaultSrc: ["'self'"],
@@ -136,9 +145,14 @@ app.use(cors({
   credentials: true,
 }));
 
-// Compression middleware - skip SSE endpoints (compression buffers responses)
+// Compression middleware - never compress SSE, because the compressor holds
+// bytes back until it has a worthwhile block to emit, so events arrive late
+// or not at all. Keyed off the response content type rather than a list of
+// URLs: every stream sets text/event-stream, so this covers the ones that
+// exist and any added later without anyone having to remember this filter.
 app.use(compression({
   filter: (req, res) => {
+    if (res.getHeader('Content-Type') === 'text/event-stream') return false;
     if (req.url?.includes('/import/progress/')) return false;
     return compression.filter(req, res);
   }
@@ -166,6 +180,17 @@ app.use('/api/', limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Express 5's body parsers leave req.body as undefined when no parser
+// matched the request's Content-Type, where Express 4 always left it as {}.
+// Route handlers throughout this app destructure req.body directly
+// (`const { name } = req.body`) expecting that old default - without this,
+// a request with a missing/wrong Content-Type throws a TypeError before it
+// ever reaches a route's own validation, turning an expected 400 into a 500.
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  if (req.body === undefined) req.body = {};
+  next();
+});
+
 // Session middleware
 const trustProxy = process.env.TRUST_PROXY === 'true';
 if (trustProxy) {
@@ -178,9 +203,17 @@ if (trustProxy) {
 const useSecureCookies = process.env.COOKIE_SECURE === 'true' || 
   (process.env.ENABLE_HTTPS === 'true' && NODE_ENV === 'production');
 
+const sessionSecret = process.env.SESSION_SECRET || 'dev-secret-change-in-production';
+if (!process.env.SESSION_SECRET) {
+  // This string is public (checked into source), so anyone who reads it can
+  // forge a signed session cookie for any user ID against a server still
+  // running on the fallback - only acceptable for local/dev use.
+  logger.warn('SESSION_SECRET is not set - using the built-in default. Anyone who knows this default can forge login sessions. Set SESSION_SECRET in .env before exposing this server beyond localhost.');
+}
+
 app.use(session({
   store: sessionStore,
-  secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
+  secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
   name: 'playlist-lab.sid',
@@ -197,27 +230,45 @@ app.use(session({
 // Attach database service to all requests
 app.use(attachDatabase(dbService));
 
-// Debug middleware to log session info
-app.use((req: Request, _res: Response, next: NextFunction) => {
-  if (req.path.startsWith('/api/auth')) {
-    console.log(`[Session Debug] ${req.method} ${req.path}`);
-    console.log(`[Session Debug] Cookie header: ${req.headers.cookie || 'none'}`);
-    console.log(`[Session Debug] Session ID: ${req.sessionID || 'none'}`);
-    console.log(`[Session Debug] Session data:`, req.session);
-  }
-  next();
-});
+// Debug middleware to log session info (dev only - the cookie header IS the
+// session credential, so this must never run where stdout/logs could be
+// read by anyone other than the session's own owner)
+if (NODE_ENV === 'development') {
+  app.use((req: Request, _res: Response, next: NextFunction) => {
+    if (req.path.startsWith('/api/auth')) {
+      console.log(`[Session Debug] ${req.method} ${req.path}`);
+      console.log(`[Session Debug] Cookie header present: ${!!req.headers.cookie}`);
+      console.log(`[Session Debug] Session ID: ${req.sessionID || 'none'}`);
+      console.log(`[Session Debug] Session userId: ${req.session.userId ?? 'none'}`);
+    }
+    next();
+  });
+}
 
-// Request logging middleware (skip noisy polling endpoints)
-app.use((req: Request, _res: Response, next: NextFunction) => {
-  if (!req.path.includes('/import/status/') && 
-      !req.path.includes('/import/progress/') && 
-      !req.path.includes('/import/queue')) {
-    logger.info(`${req.method} ${req.path}`, {
-      ip: req.ip,
-      userAgent: req.get('user-agent'),
-    });
-  }
+// Request logging. This used to fire on the way *in*, at info, with the
+// caller's IP and user-agent - a line per request that recorded nothing you
+// couldn't already infer, and which was the single largest contributor to
+// log volume once anything polled. Logging on the way *out* instead costs
+// the same one line but carries what debugging actually needs: the status
+// code and how long it took. A request that hangs for 60s on an
+// unresponsive Plex is invisible in the old form and obvious in this one.
+const SLOW_REQUEST_MS = 1000;
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const startedAt = Date.now();
+  // Captured now, not in the finish handler: Express rewrites req.url to be
+  // relative to whichever router matched, so by the time the response
+  // finishes, "GET /api/playlists" has become the useless "GET /".
+  const path = req.path;
+  res.on('finish', () => {
+    const durationMs = Date.now() - startedAt;
+    // Only the requests worth looking at get promoted out of debug: anything
+    // that failed, and anything slow enough for a user to notice.
+    const interesting = res.statusCode >= 400 || durationMs >= SLOW_REQUEST_MS;
+    const message = `${req.method} ${path} ${res.statusCode} ${durationMs}ms`;
+    const meta = { status: res.statusCode, durationMs };
+    if (interesting) logger.info(message, meta);
+    else logger.debug(message, meta);
+  });
   next();
 });
 
@@ -488,8 +539,10 @@ app.get('/api/update/check', async (_req: Request, res: Response): Promise<void>
   }
 });
 
-// Trigger update endpoint
-app.post('/api/update/install', async (_req: Request, res: Response): Promise<void> => {
+// Trigger update endpoint. Admin-only: this downloads a GitHub release over
+// the running install and restarts the service, so it must not be reachable
+// by an ordinary (or unauthenticated) user.
+app.post('/api/update/install', requireAuth, requireAdmin, async (_req: Request, res: Response): Promise<void> => {
   logger.info('[Update] Install request received');
   try {
     const https = require('https');
@@ -743,6 +796,7 @@ app.use('/api/config', configRoutes);
 app.use('/api/playlists', playlistsRoutes);
 app.use('/api/playlists', exportRoutes); // Export routes under /api/playlists/export
 app.use('/api/missing', missingRoutes);
+app.use('/api/notifications', notificationsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/migrate', migrateRoutes);
 app.use('/api/import', importRoutes);
@@ -766,7 +820,7 @@ if (NODE_ENV === 'production') {
   // Use WEB_APP_PATH environment variable if set, otherwise use relative path
   const webAppPath = process.env.WEB_APP_PATH || path.join(__dirname, '..', '..', 'web', 'dist');
   logger.info(`Serving static files from: ${webAppPath}`);
-  
+
   // Check if the path exists
   const fs = require('fs');
   if (!fs.existsSync(webAppPath)) {
@@ -775,7 +829,7 @@ if (NODE_ENV === 'production') {
     logger.error(`Tried paths: ${webAppPath}`);
   } else {
     logger.info(`Web app path exists, serving static files`);
-    
+
     // Serve static assets (JS, CSS, images) - these have content-hashed filenames from Vite
     // so they can be cached long-term. index.html is handled separately below.
     app.use(express.static(webAppPath, {
@@ -785,7 +839,7 @@ if (NODE_ENV === 'production') {
     
     // Serve index.html with no-cache headers for all non-API routes (SPA fallback)
     // This ensures the browser always gets the latest HTML which references the new hashed assets
-    app.get('*', (req: Request, res: Response, next: NextFunction): void => {
+    app.get('{/*splat}', (req: Request, res: Response, next: NextFunction): void => {
       // Skip API routes
       if (req.path.startsWith('/api/')) {
         next();
@@ -803,7 +857,7 @@ if (NODE_ENV === 'production') {
 }
 
 // 404 handler for API routes
-app.use('/api/*', (_req: Request, res: Response) => {
+app.use('/api{/*splat}', (_req: Request, res: Response) => {
   res.status(404).json({
     error: {
       code: 'NOT_FOUND',
@@ -823,9 +877,6 @@ app.use(errorHandler);
 // polling (/api/import/status/:sessionId) endpoints read from. Previously
 // this module declared its own separate copies, which meant progress/complete
 // events emitted here were written into maps nobody was listening on.
-
-// Initialize import queue with database
-importQueue.initialize(db);
 
 // Connect queue-level cancellation to the shared cancelledSessions set.
 // ImportQueue.cancelJob() marks the job cancelled in the DB and emits
@@ -851,12 +902,12 @@ importQueue.setHandler(async (job) => {
   }
 
   const { plex_token: plexToken } = userRow;
-  const serverRow = (dbService as any).db.prepare('SELECT server_url, library_id FROM user_servers WHERE user_id = ? LIMIT 1').get(job.userId);
+  const serverRow = (dbService as any).db.prepare('SELECT server_url, library_id, server_client_id FROM user_servers WHERE user_id = ? LIMIT 1').get(job.userId);
   if (!serverRow) {
     throw new Error('No Plex server configured');
   }
 
-  const { server_url: serverUrl, library_id: libraryId } = serverRow;
+  const { server_url: serverUrl, library_id: libraryId, server_client_id: serverClientId } = serverRow;
 
   const options: ImportOptions = {
     userId: job.userId,
@@ -865,6 +916,18 @@ importQueue.setHandler(async (job) => {
     libraryId,
     customName: job.playlistName,
   };
+
+  // Tracked in the notification bell so an import queued from any trigger
+  // (chart click, favorited playlist, paste-a-URL) is visible and finishes
+  // without the user needing to come back and manually confirm it, the same
+  // way reimportPlaylistNow() already works for the "Reimport" row action.
+  const notification = addNotification(job.userId, {
+    type: 'import',
+    title: job.playlistName || `${job.source} import`,
+    detail: 'Starting...',
+    status: 'in-progress',
+    progress: 0,
+  });
 
   // Get or create progress emitter
   let progressEmitter = importSessions.get(job.sessionId);
@@ -880,19 +943,23 @@ importQueue.setHandler(async (job) => {
         job.playlistName = data.playlistName;
         // Update database with playlist name
         (dbService as any).db.prepare(`
-          UPDATE import_queue 
+          UPDATE import_queue
           SET playlist_name = ?
           WHERE session_id = ?
         `).run(data.playlistName, job.sessionId);
+        updateNotification(job.userId, notification.id, { title: data.playlistName });
       }
       // Update progress in database
       if (data.current !== undefined && data.total !== undefined) {
         (dbService as any).db.prepare(`
-          UPDATE import_queue 
+          UPDATE import_queue
           SET progress = ?, total = ?
           WHERE session_id = ?
         `).run(data.current, data.total, job.sessionId);
       }
+      const detail = data.phase === 'matching' ? 'Matching tracks with your Plex library...' : (data.currentTrackName || 'Fetching tracks...');
+      const progress = data.total ? Math.round(((data.current || 0) / data.total) * 100) : undefined;
+      updateNotification(job.userId, notification.id, { detail, progress });
     });
     progressEmitter.on('complete', (data: any) => {
       progressState.set(job.sessionId, { type: 'complete', ...data });
@@ -919,22 +986,66 @@ importQueue.setHandler(async (job) => {
       job.playlistName = result.playlistName;
     }
 
+    // Auto-finalize: create the Plex playlist from the match results
+    // immediately rather than waiting for a manual review-and-confirm click
+    // from the Queue page. Existing-playlist overwrite isn't offered here -
+    // ponytail: always creates fresh rather than overwriting a same-named
+    // playlist, since threading that per-import choice through requires a
+    // new import_queue column (add one if this needs to be configurable).
+    await finalizeImportResult(
+      dbService,
+      job.source,
+      job.url,
+      { id: job.userId, plex_token: plexToken },
+      { server_url: serverUrl, server_client_id: serverClientId, library_id: libraryId },
+      result
+    );
+    updateNotification(job.userId, notification.id, {
+      title: result.playlistName,
+      status: 'success',
+      progress: 100,
+      detail: `Matched ${result.matchedCount} of ${result.totalCount}`,
+    });
+
     progressEmitter.emit('complete', result);
-    
+
     // Cleanup after a delay
     setTimeout(() => {
       importSessions.delete(job.sessionId);
       progressState.delete(job.sessionId);
       cancelledSessions.delete(job.sessionId);
     }, 60000); // Keep for 1 minute after completion
-    
+
+    // The Queue page's "Completed" list exists for jobs that finished
+    // matching but weren't saved yet, offering a manual review-and-confirm
+    // step. Since finalizeImportResult() above already created and saved the
+    // playlist, leaving this job's row behind would let that page "confirm"
+    // it a second time and create a duplicate Plex playlist - remove it from
+    // the queue table right away instead. processNext() marks this row
+    // 'completed' with a fresh UPDATE right after this handler returns, so
+    // the delete has to happen after a tick or that UPDATE would recreate a
+    // reviewable row.
+    setImmediate(() => {
+      (dbService as any).db.prepare(`DELETE FROM import_queue WHERE session_id = ?`).run(job.sessionId);
+    });
+
     // Return result so it can be stored in completed jobs
     return result;
   } catch (error: any) {
+    updateNotification(job.userId, notification.id, { status: 'error', detail: error.message || 'Import failed' });
     progressEmitter.emit('error', { message: error.message || 'Import failed' });
     throw error;
   }
 });
+
+// Only now that a handler is registered can the queue safely resume any
+// jobs left 'queued'/'processing' from before a restart - initialize() below
+// loads those and, if any exist, immediately calls processNext() itself.
+// That used to run before setHandler() above, so a restart with jobs still
+// in the queue would hit processNext()'s "No handler set for import queue"
+// guard and silently skip them until the next unrelated import happened to
+// retrigger processing.
+importQueue.initialize(db);
 
 // Initialize job scheduler
 const jobScheduler = new JobScheduler(dbService);
@@ -967,6 +1078,19 @@ jobScheduler.registerJob({
   enabled: process.env.ENABLE_CACHE_CLEANUP !== 'false',
 });
 
+// The Deezer ARL deemix logs in with expires every few months. Checking it
+// on a schedule (and notifying admins on failure) is what turns that from
+// "downloads have been silently failing for a week" into something someone
+// is actually told about.
+jobScheduler.registerJob({
+  name: 'deemix-arl-check',
+  schedule: process.env.DEEMIX_ARL_CHECK_SCHEDULE || '0 4 * * *', // 4:00 AM daily
+  handler: async () => {
+    await checkDeemixArlAndNotifyAdmins(dbService);
+  },
+  enabled: process.env.ENABLE_DEEMIX_ARL_CHECK !== 'false',
+});
+
 // Start background jobs
 if (NODE_ENV === 'production' || process.env.ENABLE_JOBS === 'true') {
   jobScheduler.start();
@@ -974,6 +1098,17 @@ if (NODE_ENV === 'production' || process.env.ENABLE_JOBS === 'true') {
 } else {
   logger.info('Background jobs disabled in development mode');
 }
+
+// deemix keeps downloading across a restart of this server, but the pollers
+// watching those downloads - and the link back to the missing track each one
+// was for - only lived in memory, so a restart left the arriving files with
+// nothing to reconcile them and the tracks permanently "missing". Pick them
+// back up. Also re-test the ARL now rather than waiting for the daily job,
+// so the admin page has a real answer to show immediately.
+resumeDeemixDownloads(dbService);
+checkDeemixArlAndNotifyAdmins(dbService).catch(error => {
+  logger.warn('Startup deemix ARL check failed', { error: error.message });
+});
 
 const HOST = process.env.HOST || '0.0.0.0';
 const HTTPS_PORT = parseInt(process.env.HTTPS_PORT || '3443', 10);
@@ -1060,6 +1195,10 @@ if (process.env.ENABLE_HTTPS === 'true') {
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM signal received: closing servers');
   await jobScheduler.stop();
+  // Puppeteer's shared browser instance (browser-scrapers.ts) was never
+  // closed anywhere - a restart just orphaned whatever pages/renderers were
+  // open at the time instead of cleaning them up.
+  await closeBrowser().catch(() => {});
   server.close(() => {
     logger.info('HTTP server closed');
     if (httpsServer) {
@@ -1076,6 +1215,7 @@ process.on('SIGTERM', async () => {
 process.on('SIGINT', async () => {
   logger.info('SIGINT signal received: closing servers');
   await jobScheduler.stop();
+  await closeBrowser().catch(() => {});
   server.close(() => {
     logger.info('HTTP server closed');
     if (httpsServer) {

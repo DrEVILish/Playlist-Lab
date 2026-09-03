@@ -1,10 +1,10 @@
-import type { FC } from 'react';
+import type { FC, ReactElement } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useApp } from '../contexts/AppContext';
 
 interface ProtectedRouteProps {
-  children: JSX.Element;
+  children: ReactElement;
 }
 
 export const ProtectedRoute: FC<ProtectedRouteProps> = ({ children }) => {

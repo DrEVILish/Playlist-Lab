@@ -19,8 +19,26 @@ declare module 'express-session' {
 }
 
 /**
+ * Pick a display name for a Plex account.
+ *
+ * Managed (restricted) Plex Home users have no username - plex.tv returns
+ * null/"" for them and only fills in `title`. plex_username is NOT NULL, so
+ * passing that straight through made those logins fail with a constraint
+ * error, which is why home users could not sign in.
+ */
+function plexDisplayName(userInfo: any): string {
+  return (
+    userInfo.username ||
+    userInfo.title ||
+    userInfo.friendlyName ||
+    userInfo.email ||
+    `plex-${userInfo.id}`
+  );
+}
+
+/**
  * Handle user login: create/update user, auto-admin first user,
- * check Plex Home membership, auto-assign server config
+ * check Plex Home / friend membership, auto-assign server config
  */
 async function handleUserLogin(
   db: any,
@@ -39,6 +57,9 @@ async function handleUserLogin(
   } else {
     db.updateUserLogin(user.id);
     db.updateUserToken(user.id, authToken);
+    // Refresh name/avatar on every login so accounts created before we had a
+    // usable name (or renamed since) heal themselves instead of staying blank.
+    db.updateUserProfile(user.id, username, thumb);
     logger.info('User logged in', { plexUserId, username });
   }
 
@@ -49,56 +70,74 @@ async function handleUserLogin(
     logger.info('First user auto-promoted to admin', { userId: user.id, username });
   }
 
-  // Re-verify Plex Home membership for every non-admin login, not just the
-  // first one. If an admin later removes a managed user from Plex Home,
-  // this ensures that user is disabled on their next login rather than
-  // retaining access indefinitely (membership was previously only checked
-  // once, at account creation).
+  // Re-verify access for every non-admin login, not just the first one.
+  // Approved = a member of the admin's Plex Home (including managed users)
+  // or one of the admin's Plex friends. Re-checking on each login means a
+  // user removed from Plex Home is disabled on their next login rather than
+  // retaining access indefinitely.
   if (!db.isAdmin(user.id)) {
     const admin = db.getFirstAdmin();
     if (admin) {
       try {
-        const homeUsers = await authService.getHomeUsers(admin.plex_token);
-        const isHomeUser = homeUsers.some(
-          (hu: any) => hu.id.toString() === plexUserId
-        );
+        // Two lists because neither covers everyone: /home/users has managed
+        // users but no friends, /api/users has friends but no managed users.
+        const [homeUsers, friends] = await Promise.all([
+          authService.getHomeUsers(admin.plex_token),
+          authService.getFriends(admin.plex_token).catch((err) => {
+            logger.warn('Failed to fetch Plex friends, falling back to Plex Home only', {
+              error: err instanceof Error ? err.message : err,
+            });
+            return [];
+          }),
+        ]);
 
-        if (isHomeUser) {
-          if (isNewUser) {
-            // Auto-assign admin's server config to this managed user
+        const approvedIds = new Set(
+          [...(homeUsers ?? []), ...(friends ?? [])].map((u: any) => u.id.toString())
+        );
+        const isApproved = approvedIds.has(plexUserId);
+
+        if (isApproved) {
+          // Give them the admin's server config if they have none yet. Keyed
+          // off "has no server" rather than "is new" so a user who was
+          // created before the admin configured a server still gets one.
+          if (!db.getUserServer(user.id)) {
             db.copyServerConfig(admin.id, user.id);
-            logger.info('Plex Home user auto-assigned server config', {
+            logger.info('Approved Plex user auto-assigned server config', {
               userId: user.id,
               username,
               adminId: admin.id,
             });
           }
           // Re-enable in case they were previously disabled and have since
-          // been (re-)added to Plex Home.
+          // been (re-)added to Plex Home or friends.
           if (!db.isUserEnabled(user.id)) {
             db.enableUser(user.id);
-            logger.info('Plex Home user re-enabled after membership re-verification', {
+            logger.info('User re-enabled after Plex membership re-verification', {
               userId: user.id,
               username,
             });
           }
-        } else {
-          // Not a Plex Home member — disable (whether newly created or
-          // previously enabled and since removed from Plex Home).
-          if (db.isUserEnabled(user.id)) {
-            db.disableUser(user.id);
-            logger.info('Non-home user disabled', {
-              userId: user.id,
-              username,
-              isNewUser,
-            });
-          }
+        } else if (db.isUserEnabled(user.id)) {
+          // Neither a Plex Home member nor a friend - disable (whether newly
+          // created or previously enabled and since removed).
+          db.disableUser(user.id);
+          logger.info('User disabled: not in Plex Home and not a friend', {
+            userId: user.id,
+            username,
+            isNewUser,
+          });
         }
       } catch (err) {
-        logger.warn('Failed to check Plex Home membership, allowing existing access state', {
+        logger.error('Failed to verify Plex Home/friend membership', {
           error: err instanceof Error ? err.message : err,
           userId: user.id,
         });
+        // A brand-new account can't be verified, so don't hand it access on
+        // the strength of a failed lookup - leave it for the admin to
+        // approve. Existing users keep whatever state they already had.
+        if (isNewUser && db.isUserEnabled(user.id)) {
+          db.disableUser(user.id);
+        }
       }
     }
   }
@@ -149,6 +188,10 @@ router.post('/poll', async (req: Request, res: Response, next: NextFunction) => 
 
     const pin = await authService.pollAuth(pinId, code);
 
+    if (!pin) {
+      return res.json({ authenticated: false, expired: true });
+    }
+
     if (!pin.authToken) {
       return res.json({ authenticated: false });
     }
@@ -160,12 +203,16 @@ router.post('/poll', async (req: Request, res: Response, next: NextFunction) => 
     const { user, enabled } = await handleUserLogin(
       db,
       userInfo.id.toString(),
-      userInfo.username,
+      plexDisplayName(userInfo),
       pin.authToken,
       userInfo.thumb
     );
 
     if (!enabled) {
+      // Logged at error level, not warn: this is a rejected access attempt an
+      // admin needs to see, and the log level is routinely turned down to
+      // error-only - at warn it was written nowhere at all.
+      logger.error('Login denied: user not approved', { userId: user.id, plexUserId: user.plex_user_id, username: userInfo.username, displayName: plexDisplayName(userInfo), email: userInfo.email });
       return res.json({
         authenticated: false,
         denied: true,
@@ -266,12 +313,13 @@ router.post('/token', async (req: Request, res: Response, next: NextFunction) =>
     const { user, enabled } = await handleUserLogin(
       db,
       userInfo.id.toString(),
-      userInfo.username,
+      plexDisplayName(userInfo),
       token,
       userInfo.thumb
     );
 
     if (!enabled) {
+      logger.error('Login denied: user not approved', { userId: user.id, plexUserId: user.plex_user_id, username: userInfo.username, displayName: plexDisplayName(userInfo), email: userInfo.email });
       return res.json({
         success: false,
         denied: true,
@@ -367,26 +415,6 @@ router.get('/me', requireAuth, (req: Request, res: Response, next: NextFunction)
     logger.error('Failed to get user info', { error });
     next(createInternalError('Failed to retrieve user information'));
   }
-});
-
-/**
- * GET /api/auth/debug-session
- * Debug endpoint to check session state (development only)
- */
-router.get('/debug-session', (req: Request, res: Response) => {
-  res.json({
-    sessionID: req.sessionID,
-    sessionData: {
-      userId: req.session.userId,
-      plexUserId: req.session.plexUserId,
-      cookie: req.session.cookie,
-    },
-    headers: {
-      cookie: req.headers.cookie,
-      userAgent: req.headers['user-agent'],
-    },
-    timestamp: new Date().toISOString(),
-  });
 });
 
 export default router;

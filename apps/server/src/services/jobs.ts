@@ -8,7 +8,7 @@
  * - Graceful shutdown handling
  */
 
-import cron from 'node-cron';
+import cron, { ScheduledTask } from 'node-cron';
 import { logger } from '../utils/logger';
 import { DatabaseService } from '../database/database';
 
@@ -20,7 +20,7 @@ export interface JobConfig {
 }
 
 export class JobScheduler {
-  private jobs: Map<string, cron.ScheduledTask> = new Map();
+  private jobs: Map<string, ScheduledTask> = new Map();
   private isShuttingDown = false;
 
   constructor(_db: DatabaseService) {
@@ -48,13 +48,16 @@ export class JobScheduler {
           return;
         }
 
-        logger.info(`Starting job: ${config.name}`);
+        // Debug: cron jobs tick on a timer whether or not there is work, so
+        // the bookkeeping pair is pure volume. The handler still logs at info
+        // when a run actually does something, and failures stay at error.
+        logger.debug(`Starting job: ${config.name}`);
         const startTime = Date.now();
 
         try {
           await config.handler();
           const duration = Date.now() - startTime;
-          logger.info(`Job ${config.name} completed successfully`, { duration });
+          logger.debug(`Job ${config.name} completed successfully`, { duration });
         } catch (error: any) {
           logger.error(`Job ${config.name} failed`, { 
             error: error.message,
@@ -62,9 +65,12 @@ export class JobScheduler {
           });
           // Continue with next scheduled run despite error
         }
-      }, {
-        scheduled: false, // Don't start immediately
       });
+      // node-cron v4 dropped the `scheduled: false` option - schedule()
+      // now always starts the task immediately, so stopping it right back
+      // here is what keeps registration and starting (this.start(), below)
+      // separate steps the way this class's callers expect.
+      task.stop();
 
       this.jobs.set(config.name, task);
       logger.info(`Registered job: ${config.name} with schedule: ${config.schedule}`);

@@ -73,7 +73,7 @@ describe('Database Schema Property Tests', () => {
             fc.record({
               scheduleType: fc.constantFrom('playlist_refresh', 'mix_generation'),
               frequency: fc.constantFrom('daily', 'weekly', 'fortnightly', 'monthly'),
-              startDate: fc.date().map(d => d.toISOString().split('T')[0]),
+              startDate: fc.date({ noInvalidDate: true }).map(d => d.toISOString().split('T')[0]),
               config: fc.option(fc.jsonValue(), { nil: undefined }),
             }),
             { minLength: 0, maxLength: 3 }

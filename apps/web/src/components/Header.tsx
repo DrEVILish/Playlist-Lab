@@ -3,13 +3,11 @@ import { useState, Suspense, lazy } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { MobileNav } from './MobileNav';
-import { HeaderActivity } from './HeaderActivity';
+import { NotificationCenter } from './NotificationCenter';
+import { HeaderActions } from './HeaderActions';
 import { StatusReportsModal } from './StatusReportsModal';
-import { Modal } from './Modal';
+import { Modal, embeddedPageCloseButtonStyle } from './Modal';
 import { SharedWithMeModal } from './playlist-panel/SharedWithMeModal';
-import { useApp } from '../contexts/AppContext';
-import { useConfirm } from '../contexts/ConfirmContext';
-import { useToast } from '../contexts/ToastContext';
 import './Header.css';
 
 // Lazy-loaded: the Header (and therefore these buttons) is mounted on every
@@ -29,29 +27,17 @@ interface HeaderProps {
 }
 
 export const Header: FC<HeaderProps> = ({ user, onLogout }) => {
-  const { updateInfo, isUpdating, installUpdate } = useApp();
-  const confirmDialog = useConfirm();
-  const toast = useToast();
   const [showImport, setShowImport] = useState(false);
   const [showGenerate, setShowGenerate] = useState(false);
   const [showBackup, setShowBackup] = useState(false);
   const [showSharedWithMe, setShowSharedWithMe] = useState(false);
   const [showStatus, setShowStatus] = useState(false);
 
-  const handleUpdate = async () => {
-    if (!await confirmDialog(`Update to version ${updateInfo?.latestVersion}?\n\nThe application will restart automatically.`, { title: 'Update Playlist Lab?', confirmLabel: 'Update', danger: false })) return;
-    try {
-      await installUpdate();
-    } catch (err) {
-      toast.error(`Update failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    }
-  };
-
   return (
     <header className="header">
       <div className="header-content">
         <div className="header-left">
-          <MobileNav />
+          <MobileNav user={user} onLogout={onLogout} />
           <Link to="/" className="header-logo">
             <img src="/logo.svg" alt="Playlist Lab" className="header-logo-icon" />
             <h1><span className="logo-playlist">Playlist </span><span className="logo-lab">Lab</span></h1>
@@ -63,23 +49,14 @@ export const Header: FC<HeaderProps> = ({ user, onLogout }) => {
               <button className="btn btn-secondary btn-small" onClick={() => setShowSharedWithMe(true)}>Shared With Me</button>
               <button className="btn btn-secondary btn-small" onClick={() => setShowBackup(true)}>Backup / Restore</button>
               <button className="btn btn-secondary btn-small" onClick={() => setShowStatus(true)}>Status</button>
-              {updateInfo?.updateAvailable && (
-                <button
-                  className="btn btn-primary btn-small"
-                  onClick={handleUpdate}
-                  disabled={isUpdating}
-                  title={`Update to v${updateInfo.latestVersion}`}
-                >
-                  {isUpdating ? 'Updating...' : 'Update Available'}
-                </button>
-              )}
             </nav>
           )}
         </div>
 
         {user && (
           <div className="header-user">
-            <HeaderActivity />
+            <HeaderActions />
+            <NotificationCenter />
             {user.plexThumb && (
               <img
                 src={user.plexThumb}
@@ -104,30 +81,24 @@ export const Header: FC<HeaderProps> = ({ user, onLogout }) => {
       </div>
 
       {showImport && createPortal(
-        <Modal onClose={() => setShowImport(false)} contentStyle={{ maxWidth: '95vw', width: '1200px', maxHeight: '90vh', overflow: 'auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
-            <button className="btn btn-secondary btn-small" onClick={() => setShowImport(false)}>Close</button>
-          </div>
+        <Modal onClose={() => setShowImport(false)} contentStyle={{ maxWidth: '95vw', width: '1200px', maxHeight: '90vh', overflow: 'auto', position: 'relative' }}>
+          <button onClick={() => setShowImport(false)} title="Close" style={embeddedPageCloseButtonStyle}>✕</button>
           <Suspense fallback={<ModalFallback />}><ImportPage /></Suspense>
         </Modal>,
         document.body
       )}
 
       {showGenerate && createPortal(
-        <Modal onClose={() => setShowGenerate(false)} contentStyle={{ maxWidth: '95vw', width: '1200px', maxHeight: '90vh', overflow: 'auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
-            <button className="btn btn-secondary btn-small" onClick={() => setShowGenerate(false)}>Close</button>
-          </div>
+        <Modal onClose={() => setShowGenerate(false)} contentStyle={{ maxWidth: '95vw', width: '1200px', maxHeight: '90vh', overflow: 'auto', position: 'relative' }}>
+          <button onClick={() => setShowGenerate(false)} title="Close" style={embeddedPageCloseButtonStyle}>✕</button>
           <Suspense fallback={<ModalFallback />}><GenerateMixesPage onNavigateAway={() => setShowGenerate(false)} /></Suspense>
         </Modal>,
         document.body
       )}
 
       {showBackup && createPortal(
-        <Modal onClose={() => setShowBackup(false)} contentStyle={{ maxWidth: '900px', width: '95vw', maxHeight: '90vh', overflow: 'auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
-            <button className="btn btn-secondary btn-small" onClick={() => setShowBackup(false)}>Close</button>
-          </div>
+        <Modal onClose={() => setShowBackup(false)} contentStyle={{ maxWidth: '900px', width: '95vw', maxHeight: '90vh', overflow: 'auto', position: 'relative' }}>
+          <button onClick={() => setShowBackup(false)} title="Close" style={embeddedPageCloseButtonStyle}>✕</button>
           <Suspense fallback={<ModalFallback />}><BackupRestorePage /></Suspense>
         </Modal>,
         document.body

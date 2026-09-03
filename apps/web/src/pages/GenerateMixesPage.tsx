@@ -10,7 +10,7 @@ import { QuickMixSettingsModal } from '../components/QuickMixSettingsModal';
 import { SaveTemplateModal } from '../components/SaveTemplateModal';
 import { TemplateList, type MixTemplate } from '../components/TemplateList';
 import { EditTemplateModal } from '../components/EditTemplateModal';
-import { Modal } from '../components/Modal';
+import { Modal, modalCloseButtonStyle } from '../components/Modal';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import './GenerateMixesPage.css';
@@ -38,7 +38,7 @@ const ScheduleFrequencyModal: FC<{
   <Modal onClose={onCancel} ariaLabel="Schedule Mix" contentStyle={{ maxWidth: '500px' }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
       <h2 style={{ margin: 0 }}>Schedule Mix</h2>
-      <button className="btn btn-secondary btn-small" onClick={onCancel} aria-label="Close">✕</button>
+      <button onClick={onCancel} title="Close" style={modalCloseButtonStyle}>✕</button>
     </div>
 
     <div style={{ marginBottom: '1.5rem' }}>{summary}</div>
@@ -867,8 +867,8 @@ export const GenerateMixesPage: FC<{ onNavigateAway?: () => void }> = ({ onNavig
             <div className="generated-playlists-list">
               {mixSchedules.map(schedule => (
                 <div key={schedule.id} className="generated-playlist-item">
-                  <div className="playlist-info">
-                    <div className="playlist-name">
+                  <div className="generated-playlist-info">
+                    <div className="generated-playlist-name">
                       {schedule.config?.mixName || schedule.config?.templateName || 'Mix'}
                     </div>
                     <div className="playlist-status">
@@ -907,8 +907,8 @@ export const GenerateMixesPage: FC<{ onNavigateAway?: () => void }> = ({ onNavig
             <div className="generated-playlists-list">
               {generatedPlaylists.map(playlist => (
                 <div key={playlist.id} className="generated-playlist-item">
-                  <div className="playlist-info">
-                    <div className="playlist-name">{playlist.name}</div>
+                  <div className="generated-playlist-info">
+                    <div className="generated-playlist-name">{playlist.name}</div>
                     <div className="playlist-status">Created successfully • {playlist.trackCount} tracks</div>
                   </div>
                   <div className="playlist-actions">

@@ -28,11 +28,15 @@ jest.mock('../../src/services/import', () => ({
 }));
 
 jest.mock('../../src/services/plex', () => ({
+  resolvePlexToken: jest.fn((user: any, server: any) => server?.access_token || user?.plex_token),
   PlexClient: jest.fn().mockImplementation(() => ({
     getPlaylists: jest.fn().mockResolvedValue([]),
     deletePlaylist: jest.fn().mockResolvedValue(undefined),
     createPlaylist: jest.fn().mockResolvedValue({ ratingKey: 'new-rk' }),
     uploadPlaylistPoster: jest.fn().mockResolvedValue(undefined),
+    getPlaylistTracks: jest.fn().mockResolvedValue([]),
+    removeFromPlaylist: jest.fn().mockResolvedValue(undefined),
+    addToPlaylist: jest.fn().mockResolvedValue(undefined),
   })),
 }));
 

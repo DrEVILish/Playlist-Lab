@@ -9,6 +9,7 @@
 import axios, { AxiosInstance } from 'axios';
 import https from 'https';
 import { logger } from '../utils/logger';
+import { plexLimiter } from './task-queues';
 
 /**
  * Thrown when Plex rejects the stored auth token (revoked, expired, or
@@ -17,6 +18,9 @@ import { logger } from '../utils/logger';
  */
 export class PlexAuthError extends Error {
   code = 'PLEX_AUTH_INVALID';
+  // Read by the error-handler middleware, so any route that passes this
+  // straight to next() answers 401 (re-login) rather than a generic 500.
+  statusCode = 401;
 
   constructor(message: string = 'Invalid or expired Plex token') {
     super(message);
@@ -24,6 +28,24 @@ export class PlexAuthError extends Error {
     // Maintain proper prototype chain when compiled down (extends Error across targets)
     Object.setPrototypeOf(this, PlexAuthError.prototype);
   }
+}
+
+/**
+ * Picks the right token to authenticate directly against a user's selected
+ * Plex Media Server. For servers a user owns, their plex.tv account token
+ * works fine - but for servers merely *shared* with them (a friend's server,
+ * or one they access as a Plex Home/managed user), Plex requires the
+ * server-specific access token from the /api/resources listing instead; the
+ * account token gets a 401 from that PMS even though it's perfectly valid.
+ * Using the wrong one here is what used to send shared-server users into an
+ * unbreakable re-login loop, since re-authenticating with Plex only ever
+ * refreshes the account token, never the server-specific one.
+ */
+export function resolvePlexToken(
+  user: { plex_token: string },
+  userServer: { access_token?: string | null } | null | undefined
+): string {
+  return userServer?.access_token || user.plex_token;
 }
 
 /**
@@ -107,6 +129,50 @@ export interface PlexTrack {
       container: string;
     }>;
   }>;
+}
+
+// Plex track objects carry a lot of fields matching.ts never reads (thumb/art
+// URLs, summary text, view/rating history, Mood/Style/Collection/Label tag
+// lists). Artist catalog fetches below can return thousands of these at
+// once, so stripping the unused weight before anything gets held in memory
+// (cached or just passed around a batch) is the cheapest way to cut that
+// footprint - ratingKey/title/originalTitle/grandparentTitle/parentTitle are
+// what matching.ts actually scores against, Media is kept because the
+// winning match's codec/bitrate is read from it.
+function slimTrack(t: PlexTrack): PlexTrack {
+  return {
+    ratingKey: t.ratingKey,
+    key: t.key,
+    parentRatingKey: t.parentRatingKey,
+    grandparentRatingKey: t.grandparentRatingKey,
+    guid: t.guid,
+    parentGuid: '',
+    grandparentGuid: '',
+    type: t.type,
+    title: t.title,
+    originalTitle: t.originalTitle,
+    grandparentKey: t.grandparentKey,
+    parentKey: t.parentKey,
+    grandparentTitle: t.grandparentTitle,
+    parentTitle: t.parentTitle,
+    summary: '',
+    index: t.index,
+    parentIndex: t.parentIndex,
+    ratingCount: 0,
+    thumb: '',
+    art: '',
+    parentThumb: '',
+    grandparentThumb: '',
+    grandparentArt: '',
+    duration: t.duration,
+    addedAt: t.addedAt,
+    updatedAt: t.updatedAt,
+    year: t.year,
+    parentYear: t.parentYear,
+    Genre: t.Genre,
+    librarySectionID: t.librarySectionID,
+    Media: t.Media,
+  };
 }
 
 /**
@@ -206,7 +272,60 @@ export class PlexClient {
   private clientId: string;
   private productName: string;
   private searchCache: Map<string, { results: PlexTrack[]; timestamp: number }> = new Map();
+  // Keyed by artistKey alone (not by track title like searchCache), so a
+  // missing-tracks retry with many tracks from the same artist fetches that
+  // artist's full catalog once instead of once per track - this was the
+  // actual driver behind multi-GB memory spikes on large retry batches.
+  private artistTracksCache: Map<string, { tracks: PlexTrack[]; timestamp: number }> = new Map();
+  // Resolving an artist name to its library entity is the first step of every
+  // artist-first search, and findPlexCandidates() runs several search tiers
+  // per track that each differ only in punctuation - so the same lookup gets
+  // repeated a handful of times per track. Caching it (negative results
+  // included, which is the expensive case: an artist the library doesn't have
+  // makes every tier pay for the same empty answer) removes those round
+  // trips. Keyed by the searched name rather than the resolved entity,
+  // because a miss has no entity to key on.
+  private artistLookupCache: Map<string, { artists: any[]; timestamp: number }> = new Map();
+  // When a Plex server stops answering, every request to it costs the full
+  // 60s timeout - and the direct-IP retry below doubles that to 120s. A page
+  // that makes a handful of Plex calls then hangs for minutes instead of
+  // failing, which is what made the whole UI feel dead whenever Plex was
+  // busy. After a connection-level failure the server is treated as down for
+  // a short cooldown and further calls fail immediately, so one request pays
+  // the timeout and the rest return at once with something the UI can show.
+  // Static because a PlexClient is constructed per request in several routes,
+  // so per-instance state would never survive long enough to help.
+  // ponytail: a plain cooldown, not a half-open probe - the first call after
+  // it expires is the probe. Add proper half-open state if a busy server ends
+  // up flapping in and out of the cooldown.
+  private static unreachableUntil: Map<string, number> = new Map();
+  private static readonly UNREACHABLE_COOLDOWN_MS = 30000;
+  // Covers any real artist comfortably (a prolific one runs to a few
+  // thousand tracks) while keeping a pathological compilation artist from
+  // being pulled in full on every search.
+  private static readonly MAX_ARTIST_CATALOG = 3000;
+
+  /** Thrown instead of waiting on a server known to be down. Carries a
+   * distinct name so callers/routes can tell it from a genuine Plex error. */
+  static isUnreachableError(error: any): boolean {
+    return error?.code === 'PLEX_UNREACHABLE';
+  }
   private readonly CACHE_TTL = 300000; // 5 minutes
+  // Hard cap on cache entries so memory can't grow unbounded within one TTL
+  // window even under heavy single-pass churn (the old code only swept
+  // TTL-expired entries once size passed 1000, which never fires if every
+  // entry is still fresh). FIFO eviction (oldest inserted, not oldest used) -
+  // good enough here since entries are cheap to refetch; upgrade to real LRU
+  // if hit rate ever matters more than this.
+  private static readonly MAX_CACHE_ENTRIES = 500;
+
+  private static capCache<V>(cache: Map<string, V>, max: number): void {
+    while (cache.size > max) {
+      const oldestKey = cache.keys().next().value;
+      if (oldestKey === undefined) break;
+      cache.delete(oldestKey);
+    }
+  }
 
   constructor(
     serverUrl: string,
@@ -242,15 +361,78 @@ export class PlexClient {
       ...(httpsAgent ? { httpsAgent } : {})
     });
 
+    // Registered first so it wraps outermost: axios runs request interceptors
+    // in registration order and response interceptors in reverse, so this
+    // acquires a global Plex-call slot before anything else touches the
+    // request and releases it last, after every other interceptor below
+    // (including the direct-IP retry, which issues its own fresh request and
+    // so acquires/releases its own slot in turn). Bounds total concurrent
+    // Plex HTTP calls app-wide, no matter which feature made them - see
+    // task-queues.ts.
+    this.client.interceptors.request.use(async (config) => {
+      await plexLimiter.acquire();
+      return config;
+    });
+    this.client.interceptors.response.use(
+      (response) => {
+        plexLimiter.release();
+        return response;
+      },
+      (error) => {
+        plexLimiter.release();
+        return Promise.reject(error);
+      }
+    );
+
     // Interceptor: log outgoing URL and prevent axios from re-encoding server:// URIs
     this.client.interceptors.request.use((config) => {
+      const downUntil = PlexClient.unreachableUntil.get(this.serverUrl) ?? 0;
+      if (Date.now() < downUntil) {
+        const error: any = new Error('Plex server is not responding');
+        error.code = 'PLEX_UNREACHABLE';
+        throw error;
+      }
       // Build the full URL for logging
       const fullUrl = `${config.baseURL || ''}${config.url || ''}`;
       if (fullUrl.includes('playlist')) {
-        logger.info('Plex outgoing request', { method: config.method, url: fullUrl });
+        logger.debug('Plex outgoing request', { method: config.method, url: fullUrl });
       }
       return config;
     });
+
+    // Connection-level failures open the cooldown; any success closes it.
+    this.client.interceptors.response.use(
+      (response) => {
+        if (PlexClient.unreachableUntil.delete(this.serverUrl)) {
+          logger.info('[Plex] Server is responding again', { serverUrl: this.serverUrl });
+        }
+        return response;
+      },
+      (error) => {
+        // Every Plex request routes through here, so an expired/invalid token
+        // is translated once instead of in each of the ~15 methods that catch
+        // it individually. getTracksWithAdvancedFilters was one that didn't,
+        // and its raw axios error reached the user as a 500 reading "Request
+        // failed with status code 401" - useless for the one action that
+        // actually fixes it, reconnecting the Plex account.
+        if (error.response?.status === 401) {
+          return Promise.reject(new PlexAuthError('Invalid Plex token'));
+        }
+
+        const isConnectionFailure = !error.response && error.code !== 'PLEX_UNREACHABLE';
+        if (isConnectionFailure && !PlexClient.unreachableUntil.has(this.serverUrl)) {
+          logger.warn('[Plex] Server unreachable, failing fast for a cooldown instead of waiting on every call', {
+            serverUrl: this.serverUrl,
+            error: error.message,
+            cooldownMs: PlexClient.UNREACHABLE_COOLDOWN_MS,
+          });
+        }
+        if (isConnectionFailure) {
+          PlexClient.unreachableUntil.set(this.serverUrl, Date.now() + PlexClient.UNREACHABLE_COOLDOWN_MS);
+        }
+        return Promise.reject(error);
+      }
+    );
 
     // Response interceptor: retry with direct IP if .plex.direct DNS fails or times out
     if (directIpUrl && httpsAgent) {
@@ -274,7 +456,14 @@ export class PlexClient {
           error.config._retriedWithDirectIp = true;
           error.config.baseURL = directIpUrl;
           error.config.httpsAgent = httpsAgent;
-          return axios(error.config);
+          // This retry goes through bare axios, so it bypasses the
+          // interceptors above - including the one that clears the
+          // unreachable cooldown on success. Clear it here too, or a server
+          // that is only ever reachable on its direct IP would be re-marked
+          // as down by every first attempt and never recover.
+          const retried = await axios(error.config);
+          PlexClient.unreachableUntil.delete(this.serverUrl);
+          return retried;
         }
         
         throw error;
@@ -293,7 +482,7 @@ export class PlexClient {
         // Check cache first
         const cached = this.searchCache.get(cacheKey);
         if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
-          logger.info(`[Plex] Cache hit for: ${cacheKey}`);
+          logger.debug(`[Plex] Cache hit for: ${cacheKey}`);
           return cached.results;
         }
 
@@ -302,37 +491,92 @@ export class PlexClient {
         if (libraryId && artist && title) {
           // OPTIMIZED STRATEGY: Search by artist first, then filter tracks
           // This is much more efficient than searching for short track names
-          logger.info(`[Plex] Using artist-first search: library=${libraryId}, artist="${artist}", title="${title}"`);
+          logger.debug(`[Plex] Using artist-first search: library=${libraryId}, artist="${artist}", title="${title}"`);
           
           try {
             // Step 1: Find the artist
-            const artistResponse = await this.client.get<PlexMediaContainer>(
-              `/library/sections/${libraryId}/all`,
-              { 
-                params: { 
-                  type: 8, // Artist type
-                  'artist.title': artist
-                } 
-              }
-            );
-            
-            const artists = artistResponse.data.MediaContainer.Metadata || [];
-            logger.info(`[Plex] Found ${artists.length} matching artists for "${artist}"`);
+            const artistLookupKey = `${libraryId}|${artist.toLowerCase()}`;
+            const cachedLookup = this.artistLookupCache.get(artistLookupKey);
+            let artists: any[];
+            if (cachedLookup && Date.now() - cachedLookup.timestamp < this.CACHE_TTL) {
+              artists = cachedLookup.artists;
+              logger.debug(`[Plex] Artist lookup cache hit for "${artist}": ${artists.length} matches`);
+            } else {
+              const artistResponse = await this.client.get<PlexMediaContainer>(
+                `/library/sections/${libraryId}/all`,
+                {
+                  params: {
+                    type: 8, // Artist type
+                    'artist.title': artist
+                  }
+                }
+              );
+              artists = artistResponse.data.MediaContainer.Metadata || [];
+              this.artistLookupCache.set(artistLookupKey, { artists, timestamp: Date.now() });
+              PlexClient.capCache(this.artistLookupCache, PlexClient.MAX_CACHE_ENTRIES);
+              logger.debug(`[Plex] Found ${artists.length} matching artists for "${artist}"`);
+            }
             
             if (artists.length > 0) {
               // Step 2: Get tracks from the first matching artist
               const artistKey = artists[0].ratingKey;
               const artistName = artists[0].title;
-              logger.info(`[Plex] Fetching tracks from artist: ${artistName} (${artistKey})`);
-              
-              // Get all tracks by this artist (grandchildren endpoint)
-              const tracksResponse = await this.client.get<PlexMediaContainer>(
-                `/library/metadata/${artistKey}/allLeaves`,
-                { params: { type: 10 } } // Type 10 = tracks
-              );
-              
-              const artistTracks = tracksResponse.data.MediaContainer.Metadata || [];
-              logger.info(`[Plex] Artist has ${artistTracks.length} total tracks`);
+              const artistCacheKey = `${libraryId}|${artistKey}`;
+
+              // A retry batch commonly has several tracks from the same
+              // artist - reuse that artist's full catalog instead of
+              // refetching it (and holding a duplicate copy) per track.
+              const cachedArtist = this.artistTracksCache.get(artistCacheKey);
+              let artistTracks: PlexTrack[];
+              if (cachedArtist && Date.now() - cachedArtist.timestamp < this.CACHE_TTL) {
+                logger.debug(`[Plex] Artist catalog cache hit: ${artistName} (${artistKey})`);
+                artistTracks = cachedArtist.tracks;
+              } else {
+                logger.debug(`[Plex] Fetching tracks from artist: ${artistName} (${artistKey})`);
+
+                // Every track by this artist (grandchildren endpoint), because
+                // the title filter below is done here rather than by Plex -
+                // that's what lets it tolerate punctuation and spelling
+                // differences a server-side substring filter would miss.
+                // Bounded because the cost of this call scales with the
+                // artist, not the query: an ordinary artist is a few hundred
+                // tracks, but the "Various Artists" entity a big compilation
+                // library accumulates can be tens of thousands, and pulling
+                // that per search is what makes a huge library crawl.
+                const tracksResponse = await this.client.get<PlexMediaContainer>(
+                  `/library/metadata/${artistKey}/allLeaves`,
+                  {
+                    params: { type: 10 }, // Type 10 = tracks
+                    // As a header, not a query param: the client sets a
+                    // default X-Plex-Container-Size of 50 for every request,
+                    // and that header wins over a param of the same name -
+                    // passing it as a param silently capped this at 50 and
+                    // cut most of an artist's catalog out of matching.
+                    headers: {
+                      'X-Plex-Container-Start': '0',
+                      'X-Plex-Container-Size': String(PlexClient.MAX_ARTIST_CATALOG),
+                    },
+                  }
+                );
+
+                const container = tracksResponse.data.MediaContainer;
+                artistTracks = (container.Metadata || []).map(slimTrack);
+                const totalForArtist = (container as any).totalSize ?? artistTracks.length;
+                if (totalForArtist > artistTracks.length) {
+                  // Logged at warn because it silently caps what can be
+                  // matched: a track past the cut-off looks identical to a
+                  // track the library doesn't have, and this is the only
+                  // place that difference is visible.
+                  logger.warn('[Plex] Artist catalog truncated, later tracks are not searchable by this route', {
+                    artist: artistName,
+                    fetched: artistTracks.length,
+                    total: totalForArtist,
+                  });
+                }
+                logger.debug(`[Plex] Artist has ${artistTracks.length} tracks (of ${totalForArtist})`);
+                this.artistTracksCache.set(artistCacheKey, { tracks: artistTracks, timestamp: Date.now() });
+                PlexClient.capCache(this.artistTracksCache, PlexClient.MAX_CACHE_ENTRIES);
+              }
               
               // Step 3: Filter tracks by title
               const normalizeTitle = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -346,12 +590,12 @@ export class PlexClient {
                        normalizedSearchTitle.includes(normalizedTrackTitle);
               });
               
-              logger.info(`[Plex] Filtered to ${tracks.length} tracks matching title "${title}"`);
+              logger.debug(`[Plex] Filtered to ${tracks.length} tracks matching title "${title}"`);
             }
             
             // If no results from artist-first search, fall back to direct filter
             if (tracks.length === 0) {
-              logger.info(`[Plex] Artist-first search found nothing, trying direct filter`);
+              logger.debug(`[Plex] Artist-first search found nothing, trying direct filter`);
               const response = await this.client.get<PlexMediaContainer>(
                 `/library/sections/${libraryId}/all`,
                 { 
@@ -363,14 +607,14 @@ export class PlexClient {
                 }
               );
               tracks = response.data.MediaContainer.Metadata || [];
-              logger.info(`[Plex] Direct filter returned ${tracks.length} tracks`);
+              logger.debug(`[Plex] Direct filter returned ${tracks.length} tracks`);
             }
             
             // If still no results, try searching by track title + track-level artist (originalTitle).
             // This handles cases where the source artist is the track artist, not the album artist
             // (e.g. soundtracks, compilations, singles where track artist ≠ album artist).
             if (tracks.length === 0) {
-              logger.info(`[Plex] Direct filter found nothing, trying track-level artist search`);
+              logger.debug(`[Plex] Direct filter found nothing, trying track-level artist search`);
               try {
                 const trackArtistResponse = await this.client.get<PlexMediaContainer>(
                   `/library/sections/${libraryId}/all`,
@@ -383,16 +627,16 @@ export class PlexClient {
                   }
                 );
                 tracks = trackArtistResponse.data.MediaContainer.Metadata || [];
-                logger.info(`[Plex] Track-level artist filter returned ${tracks.length} tracks`);
+                logger.debug(`[Plex] Track-level artist filter returned ${tracks.length} tracks`);
               } catch (err: any) {
                 // track.originalTitle filter may not be supported in all Plex versions
-                logger.info(`[Plex] Track-level artist filter not supported: ${err.message}, falling back to title-only search`);
+                logger.debug(`[Plex] Track-level artist filter not supported: ${err.message}, falling back to title-only search`);
               }
             }
             
             // If still no results, fall back to title-only search and filter by any artist field
             if (tracks.length === 0) {
-              logger.info(`[Plex] Trying title-only search, filtering by track artist (originalTitle) and album artist (grandparentTitle)`);
+              logger.debug(`[Plex] Trying title-only search, filtering by track artist (originalTitle) and album artist (grandparentTitle)`);
               const trackSearchResponse = await this.client.get<PlexMediaContainer>(
                 `/library/sections/${libraryId}/all`,
                 { 
@@ -404,7 +648,7 @@ export class PlexClient {
               );
               
               const allTracks = trackSearchResponse.data.MediaContainer.Metadata || [];
-              logger.info(`[Plex] Found ${allTracks.length} tracks with title "${title}"`);
+              logger.debug(`[Plex] Found ${allTracks.length} tracks with title "${title}"`);
 
               // Don't hard-filter these by artist. Compilation/soundtrack album
               // tagging is inconsistent in practice - e.g. album artist set to
@@ -437,9 +681,14 @@ export class PlexClient {
               );
               tracks = ranked.slice(0, 50);
 
-              logger.info(`[Plex] Title-only search returning ${tracks.length} candidates (${allTracks.filter(artistMatches).length} artist-matching) for scoring`);
+              logger.debug(`[Plex] Title-only search returning ${tracks.length} candidates (${allTracks.filter(artistMatches).length} artist-matching) for scoring`);
             }
           } catch (err: any) {
+            // A 401 is the token, not this search strategy - the fallback
+            // below uses the same client and would just 401 again.
+            if (err.response?.status === 401) {
+              throw new PlexAuthError('Invalid Plex token');
+            }
             logger.warn(`[Plex] Artist-first search failed: ${err.message}, falling back to direct filter`);
             // Fallback to original filtered search
             const response = await this.client.get<PlexMediaContainer>(
@@ -453,20 +702,20 @@ export class PlexClient {
               }
             );
             tracks = response.data.MediaContainer.Metadata || [];
-            logger.info(`[Plex] Fallback filtered search returned ${tracks.length} tracks`);
+            logger.debug(`[Plex] Fallback filtered search returned ${tracks.length} tracks`);
           }
         } else if (libraryId && title) {
           // Search by title only
-          logger.info(`[Plex] Using title-only search: library=${libraryId}, title="${title}"`);
+          logger.debug(`[Plex] Using title-only search: library=${libraryId}, title="${title}"`);
           const response = await this.client.get<PlexMediaContainer>(
             `/library/sections/${libraryId}/all`,
             { params: { type: 10, 'track.title': title } }
           );
           tracks = response.data.MediaContainer.Metadata || [];
-          logger.info(`[Plex] Title-only search returned ${tracks.length} tracks`);
+          logger.debug(`[Plex] Title-only search returned ${tracks.length} tracks`);
         } else {
           // Fall back to hub search for combined query
-          logger.info(`[Plex] Using hub search: query="${query}", library=${libraryId || 'all'}`);
+          logger.debug(`[Plex] Using hub search: query="${query}", library=${libraryId || 'all'}`);
           const response = await this.client.get<PlexMediaContainer>('/hubs/search', {
             params: { query: query, limit: 100 }
           });
@@ -474,22 +723,22 @@ export class PlexClient {
           const trackHub = hubs.find((hub: any) => hub.type === 'track');
           const albumHub = hubs.find((hub: any) => hub.type === 'album');
           let allTracks = trackHub?.Metadata || [];
-          logger.info(`[Plex] Hub search returned ${allTracks.length} tracks before filtering`);
+          logger.debug(`[Plex] Hub search returned ${allTracks.length} tracks before filtering`);
           
           // Also get tracks from matching albums
           if (albumHub?.Metadata && albumHub.Metadata.length > 0) {
-            logger.info(`[Plex] Found ${albumHub.Metadata.length} matching albums, fetching their tracks`);
+            logger.debug(`[Plex] Found ${albumHub.Metadata.length} matching albums, fetching their tracks`);
             for (const album of albumHub.Metadata.slice(0, 5)) { // Limit to first 5 albums
               try {
                 const albumTracksResponse = await this.client.get<PlexMediaContainer>(album.key);
                 const albumTracks = albumTracksResponse.data.MediaContainer.Metadata || [];
-                logger.info(`[Plex] Album "${album.title}" has ${albumTracks.length} tracks`);
+                logger.debug(`[Plex] Album "${album.title}" has ${albumTracks.length} tracks`);
                 allTracks = allTracks.concat(albumTracks);
               } catch (err) {
                 logger.warn(`[Plex] Failed to fetch tracks for album ${album.title}`);
               }
             }
-            logger.info(`[Plex] After adding album tracks: ${allTracks.length} total tracks`);
+            logger.debug(`[Plex] After adding album tracks: ${allTracks.length} total tracks`);
           }
           
           // Filter by library if specified
@@ -497,25 +746,18 @@ export class PlexClient {
             // Convert libraryId to number for comparison (Plex returns numbers, we receive strings)
             const libraryIdNum = parseInt(libraryId, 10);
             tracks = allTracks.filter((track: PlexTrack) => track.librarySectionID === libraryIdNum);
-            logger.info(`[Plex] After library filter (${libraryId}): ${tracks.length} tracks`);
+            logger.debug(`[Plex] After library filter (${libraryId}): ${tracks.length} tracks`);
           } else {
             tracks = allTracks;
           }
         }
 
+        tracks = tracks.map(slimTrack);
+
         // Cache the results, but don't cache empty results - the track might be added to the library later
         if (tracks.length > 0) {
           this.searchCache.set(cacheKey, { results: tracks, timestamp: Date.now() });
-        }
-
-        // Clean up old cache entries
-        if (this.searchCache.size > 1000) {
-          const now = Date.now();
-          for (const [key, value] of this.searchCache.entries()) {
-            if (now - value.timestamp > this.CACHE_TTL) {
-              this.searchCache.delete(key);
-            }
-          }
+          PlexClient.capCache(this.searchCache, PlexClient.MAX_CACHE_ENTRIES);
         }
 
         return tracks;
@@ -542,6 +784,10 @@ export class PlexClient {
    */
   clearSearchCache(): void {
     this.searchCache.clear();
+    this.artistTracksCache.clear();
+    // Also cleared here, or a newly-added artist would keep resolving to the
+    // cached "not in this library" answer for the rest of the TTL.
+    this.artistLookupCache.clear();
   }
 
   /**
@@ -925,6 +1171,32 @@ export class PlexClient {
   }
 
   /**
+   * Rename a playlist in Plex itself, not just our own DB record of it -
+   * matches Plex's standard REST pattern for updating a resource's fields
+   * via query params on its own endpoint (the same shape createPlaylist()
+   * uses to set the initial title).
+   */
+  async renamePlaylist(playlistId: string, title: string): Promise<void> {
+    try {
+      await this.client.put(`/playlists/${playlistId}?title=${encodeURIComponent(title)}`, null);
+    } catch (error: any) {
+      if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+        throw new Error('Plex server is unreachable');
+      }
+      if (error.response?.status === 401) {
+        throw new PlexAuthError('Invalid Plex token');
+      }
+      if (error.response?.status === 404) {
+        throw new Error('Playlist not found');
+      }
+      if (error.isAxiosError) {
+        throw new Error(`Failed to rename playlist: ${error.message}`);
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Add tracks to a playlist
    * trackUris should be in format: server://libraryId/item/ratingKey
    */
@@ -1036,6 +1308,31 @@ export class PlexClient {
         throw new Error(`Failed to remove track from playlist: ${error.message}`);
       }
       throw error;
+    }
+  }
+
+  /**
+   * Remove several items from a playlist in one pass. Plex reassigns the
+   * remaining items' playlistItemID after each removal, so a caller that
+   * collected all the IDs up front (the normal "clear and rebuild" pattern)
+   * will reliably 404 on the second item onward if removals are just
+   * awaited one after another and any failure is left to abort the rest -
+   * that used to throw away the remaining removals and skip re-adding the
+   * refreshed tracks entirely. A 404 here almost always just means Plex
+   * already shifted that item out from under the ID we have, so it's
+   * skipped rather than treated as a real failure.
+   */
+  async removeMultipleFromPlaylist(playlistId: string, playlistItemIds: string[]): Promise<void> {
+    for (const playlistItemId of playlistItemIds) {
+      try {
+        await this.removeFromPlaylist(playlistId, playlistItemId);
+      } catch (error: any) {
+        if (error.message === 'Playlist or item not found') {
+          logger.warn('[Plex] Item already gone while bulk-removing from playlist, skipping', { playlistId, playlistItemId });
+          continue;
+        }
+        throw error;
+      }
     }
   }
 
@@ -1958,32 +2255,33 @@ export class PlexClient {
    */
   async getFriends(): Promise<Array<{ username: string; email: string; thumb?: string; friendlyName?: string }>> {
     try {
-      // Get friends from Plex.tv API (not server API)
-      const response = await axios.get('https://plex.tv/api/v2/friends', {
+      // plex.tv/api/v2/friends has been retired (now returns 410 Gone) - /api/users
+      // is the same "users who share your Home/library" list this class already
+      // relies on elsewhere (see getPlaylistForFriend's shared_servers lookup below).
+      const response = await axios.get('https://plex.tv/api/users', {
         headers: {
           'Accept': 'application/json',
           'X-Plex-Token': this.token
         }
       });
 
-      const friends = response.data || [];
-      
-      logger.info('Friends API response', { 
+      const friends = response.data?.MediaContainer?.User || [];
+
+      logger.info('Friends API response', {
         count: friends.length,
         friends: friends.map((f: any) => ({
-          id: f.id,
-          username: f.username,
-          title: f.title,
-          friendlyName: f.friendlyName,
-          email: f.email
+          id: f['@id'],
+          username: f['@username'],
+          title: f['@title'],
+          email: f['@email']
         }))
       });
-      
+
       return friends.map((friend: any) => ({
-        username: friend.username || friend.title,
-        email: friend.email,
-        thumb: friend.thumb,
-        friendlyName: friend.friendlyName || friend.title
+        username: friend['@username'] || friend['@title'],
+        email: friend['@email'],
+        thumb: friend['@thumb'],
+        friendlyName: friend['@title'] || friend['@username']
       }));
     } catch (error: any) {
       logger.error('Failed to get Plex friends', { error: error.message });
@@ -2007,35 +2305,38 @@ export class PlexClient {
     try {
       logger.info('Getting friend playlists', { friendUsername });
       
-      // First, get the friend's ID from the friends API
-      const friendsResponse = await axios.get('https://plex.tv/api/v2/friends', {
+      // First, get the friend's ID from the friends API. plex.tv/api/v2/friends
+      // has been retired (now returns 410 Gone) - /api/users is the same list,
+      // just XML-attribute-shaped JSON (see the shared_servers lookup below,
+      // which already used this endpoint).
+      const friendsResponse = await axios.get('https://plex.tv/api/users', {
         headers: {
           'Accept': 'application/json',
           'X-Plex-Token': this.token
         }
       });
-      
-      const friends = friendsResponse.data || [];
-      const friend = friends.find((f: any) => 
-        f.username === friendUsername || 
-        f.title === friendUsername ||
-        f.username?.toLowerCase() === friendUsername.toLowerCase() ||
-        f.title?.toLowerCase() === friendUsername.toLowerCase()
+
+      const friends = friendsResponse.data?.MediaContainer?.User || [];
+      const friend = friends.find((f: any) =>
+        f['@username'] === friendUsername ||
+        f['@title'] === friendUsername ||
+        f['@username']?.toLowerCase() === friendUsername.toLowerCase() ||
+        f['@title']?.toLowerCase() === friendUsername.toLowerCase()
       );
-      
+
       if (!friend) {
-        const availableFriends = friends.map((f: any) => f.username || f.title);
-        logger.error('Friend not found', { 
-          friendUsername, 
-          availableFriends 
+        const availableFriends = friends.map((f: any) => f['@username'] || f['@title']);
+        logger.error('Friend not found', {
+          friendUsername,
+          availableFriends
         });
         throw new Error(`Friend "${friendUsername}" not found. Available friends: ${availableFriends.join(', ')}`);
       }
-      
-      logger.info('Found friend', { 
-        friendUsername, 
-        friendId: friend.id,
-        friendTitle: friend.title 
+
+      logger.info('Found friend', {
+        friendUsername,
+        friendId: friend['@id'],
+        friendTitle: friend['@title']
       });
       
       // Get the friend's access token from shared_servers
@@ -2064,14 +2365,16 @@ export class PlexClient {
         }))
       });
       
-      // Find a server owned by this friend
-      const friendServer = resources.find((r: any) => 
-        r.ownerId === friend.id && r.provides?.includes('server')
+      // Find a server owned by this friend. /api/users gives friend['@id'] as a
+      // string while /api/v2/resources gives ownerId as a number - compare as
+      // strings so the id still matches.
+      const friendServer = resources.find((r: any) =>
+        String(r.ownerId) === String(friend['@id']) && r.provides?.includes('server')
       );
-      
+
       if (!friendServer) {
-        logger.error('Friend has not shared their server with you', { 
-          friendId: friend.id,
+        logger.error('Friend has not shared their server with you', {
+          friendId: friend['@id'],
           friendUsername,
           note: 'This friend needs to share their Plex server with you to view their playlists'
         });

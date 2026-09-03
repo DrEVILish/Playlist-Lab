@@ -1,84 +1,73 @@
 import { useState, useEffect } from 'react';
-import { Modal } from '../Modal';
+import { Modal, modalCloseButtonStyle } from '../Modal';
+import { useApp } from '../../contexts/AppContext';
 import '../../pages/SharePlaylistsPage.css';
 
-interface PlexFriend {
+interface ShareTarget {
+  id: number;
   username: string;
-  email: string;
   thumb?: string;
-  friendlyName?: string;
 }
 
 /**
- * Share-with-Plex-friends dialog for a single playlist. Extracted from the
- * former standalone Share Playlists page so it can be launched as a row
- * action from the unified playlist control panel.
+ * Share-with-another-Playlist-Lab-user dialog for a single playlist. Copies
+ * the playlist into the target user's own Plex library - a one-time copy,
+ * not a live link, so edits on either side never propagate to the other.
  */
 export function ShareModal({ playlistId, playlistName, onClose }: { playlistId: string; playlistName: string; onClose: () => void }) {
-  const [friends, setFriends] = useState<PlexFriend[]>([]);
-  const [selectedFriends, setSelectedFriends] = useState<Set<string>>(new Set());
-  const [isLoadingFriends, setIsLoadingFriends] = useState(true);
+  const { apiClient } = useApp();
+  const [users, setUsers] = useState<ShareTarget[]>([]);
+  const [selectedUsers, setSelectedUsers] = useState<Set<number>>(new Set());
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   const [shareSuccess, setShareSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadFriends = async () => {
-      setIsLoadingFriends(true);
+    const loadUsers = async () => {
+      setIsLoadingUsers(true);
       setError(null);
       try {
-        const response = await fetch('/api/plex/friends', { credentials: 'include' });
-        if (response.ok) {
-          const data = await response.json();
-          setFriends(data.friends || []);
-        } else {
-          setError('Failed to load Plex friends');
-        }
+        const { users } = await apiClient.getShareTargets();
+        setUsers(users);
       } catch (err: any) {
-        setError(err.message || 'Failed to load Plex friends');
+        setError(err.message || 'Failed to load users');
       } finally {
-        setIsLoadingFriends(false);
+        setIsLoadingUsers(false);
       }
     };
-    loadFriends();
-  }, []);
+    loadUsers();
+  }, [apiClient]);
 
-  const handleToggleFriend = (username: string) => {
-    const newSelected = new Set(selectedFriends);
-    if (newSelected.has(username)) newSelected.delete(username);
-    else newSelected.add(username);
-    setSelectedFriends(newSelected);
+  const handleToggleUser = (id: number) => {
+    const newSelected = new Set(selectedUsers);
+    if (newSelected.has(id)) newSelected.delete(id);
+    else newSelected.add(id);
+    setSelectedUsers(newSelected);
   };
 
   const handleSelectAll = () => {
-    setSelectedFriends(selectedFriends.size === friends.length ? new Set() : new Set(friends.map(f => f.username)));
+    setSelectedUsers(selectedUsers.size === users.length ? new Set() : new Set(users.map(u => u.id)));
   };
 
   const handleShareWithSelected = async () => {
-    if (selectedFriends.size === 0) return;
+    if (selectedUsers.size === 0) return;
     setSharing(true);
     setError(null);
     setShareSuccess(null);
 
     try {
-      const friendsList = Array.from(selectedFriends);
+      const targetIds = Array.from(selectedUsers);
       const results = await Promise.allSettled(
-        friendsList.map(friendUsername =>
-          fetch(`/api/playlists/${playlistId}/share-to-friend`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ friendUsername }),
-          })
-        )
+        targetIds.map(targetUserId => apiClient.sharePlaylist(playlistId, targetUserId))
       );
 
       const successful = results.filter(r => r.status === 'fulfilled').length;
       const failed = results.filter(r => r.status === 'rejected').length;
 
-      if (successful > 0) setShareSuccess(`Shared "${playlistName}" with ${successful} friend${successful > 1 ? 's' : ''}`);
-      if (failed > 0) setError(`Failed to share with ${failed} friend${failed > 1 ? 's' : ''}`);
-      setSelectedFriends(new Set());
+      if (successful > 0) setShareSuccess(`Shared "${playlistName}" with ${successful} user${successful > 1 ? 's' : ''}`);
+      if (failed > 0) setError(`Failed to share with ${failed} user${failed > 1 ? 's' : ''}`);
+      setSelectedUsers(new Set());
     } catch (err: any) {
       setError(err.message || 'Failed to share playlist');
     } finally {
@@ -88,43 +77,46 @@ export function ShareModal({ playlistId, playlistName, onClose }: { playlistId: 
 
   return (
     <Modal onClose={onClose}>
-        <h2>Share Playlist</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ margin: 0 }}>Share Playlist</h2>
+          <button onClick={onClose} title="Close" style={modalCloseButtonStyle}>✕</button>
+        </div>
         <p>Share "{playlistName}" with:</p>
 
         {error && <div className="error-message">{error}</div>}
         {shareSuccess && <div className="success-message">{shareSuccess}</div>}
 
-        {isLoadingFriends ? (
-          <div className="loading">Loading friends...</div>
+        {isLoadingUsers ? (
+          <div className="loading">Loading users...</div>
         ) : (
           <>
-            {friends.length > 1 && (
+            {users.length > 1 && (
               <div className="select-all-container">
                 <label className="checkbox-label">
-                  <input type="checkbox" checked={selectedFriends.size === friends.length} onChange={handleSelectAll} />
+                  <input type="checkbox" checked={selectedUsers.size === users.length} onChange={handleSelectAll} />
                   <span>Select All</span>
                 </label>
               </div>
             )}
 
             <div className="share-target-list">
-              {friends.map(friend => (
-                <label key={friend.username} className="share-target-item checkbox-item">
+              {users.map(user => (
+                <label key={user.id} className="share-target-item checkbox-item">
                   <input
                     type="checkbox"
-                    checked={selectedFriends.has(friend.username)}
-                    onChange={() => handleToggleFriend(friend.username)}
+                    checked={selectedUsers.has(user.id)}
+                    onChange={() => handleToggleUser(user.id)}
                     disabled={sharing}
                   />
-                  {friend.thumb && <img src={friend.thumb} alt={friend.username} className="friend-avatar" />}
-                  <span className="friend-name">{friend.friendlyName || friend.username}</span>
+                  {user.thumb && <img src={user.thumb} alt={user.username} className="friend-avatar" />}
+                  <span className="friend-name">{user.username}</span>
                 </label>
               ))}
             </div>
 
-            {friends.length === 0 && (
+            {users.length === 0 && (
               <div className="empty-state">
-                <p>No Plex friends available to share with. Add friends in your Plex account settings and grant them library access.</p>
+                <p>No other Playlist Lab users on this server yet.</p>
               </div>
             )}
           </>
@@ -135,9 +127,9 @@ export function ShareModal({ playlistId, playlistName, onClose }: { playlistId: 
           <button
             className="btn btn-primary"
             onClick={handleShareWithSelected}
-            disabled={sharing || selectedFriends.size === 0}
+            disabled={sharing || selectedUsers.size === 0}
           >
-            {sharing ? 'Sharing...' : `Share with ${selectedFriends.size} friend${selectedFriends.size !== 1 ? 's' : ''}`}
+            {sharing ? 'Sharing...' : `Share with ${selectedUsers.size} user${selectedUsers.size !== 1 ? 's' : ''}`}
           </button>
         </div>
     </Modal>

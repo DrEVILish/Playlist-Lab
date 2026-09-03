@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { requireAuth } from '../middleware/auth';
-import { PlexClient } from '../services/plex';
+import { PlexClient, resolvePlexToken } from '../services/plex';
 import { createInternalError, createValidationError } from '../middleware/error-handler';
 import { logger } from '../utils/logger';
 
@@ -24,7 +24,7 @@ router.get('/friends', async (req: Request, res: Response, next: NextFunction) =
 
     const plexClient = new PlexClient(
       userServer.server_url,
-      req.user!.plexToken
+      resolvePlexToken({ plex_token: req.user!.plexToken }, userServer)
     );
 
     // Get friends from Plex
@@ -52,7 +52,7 @@ router.get('/server-users', async (req: Request, res: Response, next: NextFuncti
 
     const plexClient = new PlexClient(
       userServer.server_url,
-      req.user!.plexToken
+      resolvePlexToken({ plex_token: req.user!.plexToken }, userServer)
     );
 
     // Get users with library access from Plex
@@ -86,7 +86,7 @@ router.post('/share-playlist', async (req: Request, res: Response, next: NextFun
 
     const plexClient = new PlexClient(
       userServer.server_url,
-      req.user!.plexToken
+      resolvePlexToken({ plex_token: req.user!.plexToken }, userServer)
     );
 
     // Share the playlist on Plex server
@@ -114,7 +114,7 @@ router.post('/share-playlist', async (req: Request, res: Response, next: NextFun
  */
 router.get('/friends/:username/playlists', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { username } = req.params;
+    const { username } = req.params as Record<string, string>;
     logger.info('Getting playlists for friend', { username, userId: req.user!.id });
     
     const db = req.dbService!;
@@ -127,7 +127,7 @@ router.get('/friends/:username/playlists', async (req: Request, res: Response, n
 
     const plexClient = new PlexClient(
       userServer.server_url,
-      req.user!.plexToken
+      resolvePlexToken({ plex_token: req.user!.plexToken }, userServer)
     );
 
     // Get friend's playlists
@@ -167,7 +167,7 @@ router.get('/shared-playlists', async (req: Request, res: Response, next: NextFu
 
     const plexClient = new PlexClient(
       userServer.server_url,
-      req.user!.plexToken
+      resolvePlexToken({ plex_token: req.user!.plexToken }, userServer)
     );
 
     // Get friends list

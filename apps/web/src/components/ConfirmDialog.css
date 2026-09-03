@@ -157,3 +157,32 @@
     flex-direction: column;
   }
 }
+
+.confirm-dialog-input {
+  width: 100%;
+  padding: 0.75rem 0.875rem;
+  background-color: var(--background);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 6px);
+  font-size: 0.9375rem;
+  font-family: inherit;
+  text-align: left;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.confirm-dialog-input::placeholder {
+  color: var(--text-muted);
+}
+
+.confirm-dialog-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(100, 181, 246, 0.2);
+}
+
+.btn-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: none;
+}

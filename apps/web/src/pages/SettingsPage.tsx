@@ -118,6 +118,7 @@ export const SettingsPage: FC = () => {
           serverUrl: selectedServer.url,
           libraryId: selectedServer.libraryId || undefined,
           libraryName: selectedServer.libraryName || undefined,
+          accessToken: selectedServer.accessToken || undefined,
         }),
       });
       if (!response.ok) {
@@ -253,7 +254,7 @@ export const SettingsPage: FC = () => {
   ];
 
   return (
-    <div className="page-container">
+    <div className="page-container settings-page">
       <div className="page-header">
         <h1 className="page-title">Settings</h1>
         {isFirstTimeSetup && (
@@ -696,6 +697,10 @@ interface ServerConfigTabProps {
 
 const ServerConfigTab: FC<ServerConfigTabProps> = ({ apiClient }) => {
   const { version, updateInfo, isUpdating, installUpdate } = useApp();
+  // Installing an update restarts the whole server for every user, so only
+  // an admin is offered it (the API enforces this too). Everyone still sees
+  // the running version.
+  const { user } = useAuth();
   const confirmDialog = useConfirm();
   const toast = useToast();
   const [publicUrl, setPublicUrl] = useState('');
@@ -851,7 +856,7 @@ const ServerConfigTab: FC<ServerConfigTabProps> = ({ apiClient }) => {
           <label className="settings-label">Version</label>
           <p className="settings-hint">
             {version ? `v${version}` : 'Loading...'}
-            {updateInfo?.updateAvailable && (
+            {updateInfo?.updateAvailable && user?.isAdmin && (
               <>
                 {' — '}v{updateInfo.latestVersion} is available.{' '}
                 <button className="btn btn-primary btn-small" onClick={handleUpdate} disabled={isUpdating}>

@@ -1,4 +1,8 @@
-﻿.settings-welcome {
+﻿.settings-page.page-container {
+  padding: 0.875rem;
+}
+
+.settings-welcome {
   padding: 1rem 1.25rem;
   background-color: rgba(91, 155, 213, 0.06);
   border-left: 3px solid var(--primary-color);
@@ -239,12 +243,22 @@
 .settings-slider-row { display: flex; flex-direction: column; gap: 0.35rem; }
 .settings-slider-label { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: var(--text-primary); }
 
-@media (max-width: 640px) {
-  .settings-layout { flex-direction: column; }
+@media (max-width: 768px) {
+  /* Desktop sets align-items: flex-start for the side-by-side sidebar +
+     content layout. In the column layout below, flex-start makes every
+     child (including settings-content, which holds the whole tab body)
+     size to its own content's max-content width instead of stretching to
+     the column - so a single unwrapped long string (a username, a track
+     title) silently widens the entire settings/admin content past the
+     viewport instead of wrapping. */
+  .settings-layout { flex-direction: column; align-items: stretch; }
   .settings-nav { width: 100%; flex-direction: row; flex-wrap: wrap; gap: 4px; }
   .settings-nav-item { flex: 1; min-width: 120px; }
   .settings-nav-desc { display: none; }
   .settings-mix-grid { grid-template-columns: 1fr; }
+  .settings-actions { flex-wrap: wrap; }
+  .settings-section { padding: 1.1rem; }
+  .settings-section-header { margin-bottom: 1.25rem; padding-bottom: 1rem; }
 }
 
 /* Connected Services */

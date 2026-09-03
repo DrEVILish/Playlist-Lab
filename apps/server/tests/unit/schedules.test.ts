@@ -16,6 +16,22 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 
+// run-all's concurrency cap is exercised below by tracking how many mocked
+// runSingleSchedule calls are in flight at once.
+let concurrentCalls = 0;
+let maxConcurrentCalls = 0;
+let completedCalls = 0;
+
+jest.mock('../../src/services/schedule-checker-job', () => ({
+  runSingleSchedule: jest.fn(async () => {
+    concurrentCalls++;
+    maxConcurrentCalls = Math.max(maxConcurrentCalls, concurrentCalls);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    concurrentCalls--;
+    completedCalls++;
+  }),
+}));
+
 /**
  * Create a temporary test database
  */
@@ -384,6 +400,39 @@ describe('Schedule Routes', () => {
 
       expect(response.body.error).toBeDefined();
       expect(response.body.error.message).toContain('Invalid schedule ID');
+    });
+  });
+
+  describe('POST /api/schedules/run-all', () => {
+    it('caps concurrent schedule execution instead of running all at once', async () => {
+      concurrentCalls = 0;
+      maxConcurrentCalls = 0;
+      completedCalls = 0;
+
+      const scheduleCount = 6;
+      for (let i = 0; i < scheduleCount; i++) {
+        dbService.createSchedule(userId, {
+          schedule_type: 'mix_generation',
+          frequency: 'daily',
+          start_date: '2024-01-01',
+          config: { mixTypes: ['weekly'] }
+        });
+      }
+
+      const response = await request(app)
+        .post('/api/schedules/run-all')
+        .expect(200);
+
+      expect(response.body.triggered).toBe(scheduleCount);
+
+      // The response returns before the background work finishes - wait for
+      // all mocked runs to complete.
+      while (completedCalls < scheduleCount) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+
+      expect(maxConcurrentCalls).toBeLessThanOrEqual(3);
+      expect(maxConcurrentCalls).toBeGreaterThan(1);
     });
   });
 });

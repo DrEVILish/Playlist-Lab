@@ -346,10 +346,45 @@
 }
 
 /* Responsive */
+.track-move-buttons {
+  display: none;
+}
+
 @media (max-width: 768px) {
   .import-header { flex-direction: column; align-items: flex-start; gap: 1rem; }
   .source-tabs { gap: 0.375rem; }
   .source-tab { padding: 0.375rem 0.75rem; font-size: 0.75rem; }
   .playlists-grid { grid-template-columns: 1fr; }
   .import-form { padding: 1rem; }
+
+  /* Native HTML5 drag-and-drop doesn't work on touch, so swap the drag
+     handle for tap-to-move buttons instead of just losing reordering. */
+  .track-drag-handle {
+    display: none;
+  }
+
+  .track-move-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .track-move-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 28px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--text-secondary);
+    font-size: 0.625rem;
+    cursor: pointer;
+  }
+
+  .track-move-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
 }

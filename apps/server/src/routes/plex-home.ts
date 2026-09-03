@@ -81,7 +81,7 @@ router.get('/users', async (req: Request, res: Response, next: NextFunction) => 
  */
 router.post('/users/:homeUserId/switch', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { homeUserId } = req.params;
+    const { homeUserId } = req.params as Record<string, string>;
     const userId = req.session.userId!;
     const db = (req.dbService as any).db;
 
@@ -136,7 +136,7 @@ router.post('/users/:homeUserId/switch', async (req: Request, res: Response, nex
  */
 router.get('/users/:homeUserId/playlists', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { homeUserId } = req.params;
+    const { homeUserId } = req.params as Record<string, string>;
     const userId = req.session.userId!;
     const db = (req.dbService as any).db;
 
@@ -146,7 +146,7 @@ router.get('/users/:homeUserId/playlists', async (req: Request, res: Response, n
       return next(createValidationError('No Plex token found'));
     }
 
-    const serverRow = db.prepare('SELECT server_url FROM user_servers WHERE user_id = ? LIMIT 1').get(userId);
+    const serverRow = db.prepare('SELECT server_url, access_token FROM user_servers WHERE user_id = ? LIMIT 1').get(userId);
     if (!serverRow?.server_url) {
       return next(createValidationError('No Plex server configured'));
     }
@@ -186,7 +186,7 @@ router.get('/users/:homeUserId/playlists', async (req: Request, res: Response, n
     });
     
     // Try to use the home user's token first
-    const { PlexClient } = await import('../services/plex');
+    const { PlexClient, resolvePlexToken } = await import('../services/plex');
     let playlists: any[] = [];
     let usedAdminToken = false;
     
@@ -207,7 +207,7 @@ router.get('/users/:homeUserId/playlists', async (req: Request, res: Response, n
       });
       usedAdminToken = true;
       
-      const adminPlexClient = new PlexClient(serverRow.server_url, user.plex_token);
+      const adminPlexClient = new PlexClient(serverRow.server_url, resolvePlexToken(user, serverRow));
       const allPlaylists = await adminPlexClient.getPlaylists();
       playlists = allPlaylists.filter((p: any) => p.playlistType === 'audio');
       
@@ -248,7 +248,7 @@ router.get('/users/:homeUserId/playlists', async (req: Request, res: Response, n
  */
 router.post('/playlists/:playlistId/copy', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { playlistId } = req.params;
+    const { playlistId } = req.params as Record<string, string>;
     const { sourceHomeUserId, targetHomeUserId, newName } = req.body;
     const userId = req.session.userId!;
     const db = (req.dbService as any).db;
@@ -263,12 +263,12 @@ router.post('/playlists/:playlistId/copy', async (req: Request, res: Response, n
       return next(createValidationError('No Plex token found'));
     }
 
-    const serverRow = db.prepare('SELECT server_url, library_id, server_client_id FROM user_servers WHERE user_id = ? LIMIT 1').get(userId);
+    const serverRow = db.prepare('SELECT server_url, library_id, server_client_id, access_token FROM user_servers WHERE user_id = ? LIMIT 1').get(userId);
     if (!serverRow?.server_url) {
       return next(createValidationError('No Plex server configured'));
     }
 
-    const { PlexClient } = await import('../services/plex');
+    const { PlexClient, resolvePlexToken } = await import('../services/plex');
 
     // Get source user's token and playlist
     const sourceResponse = await fetch(`https://plex.tv/api/v2/home/users/${sourceHomeUserId}/switch`, {
@@ -294,7 +294,7 @@ router.post('/playlists/:playlistId/copy', async (req: Request, res: Response, n
     const tracks = await sourcePlexClient.getPlaylistTracks(playlistId);
 
     // Get target user's token (or use current user if not specified)
-    let targetToken = user.plex_token;
+    let targetToken = resolvePlexToken(user, serverRow);
     if (targetHomeUserId && targetHomeUserId !== 'current') {
       const targetResponse = await fetch(`https://plex.tv/api/v2/home/users/${targetHomeUserId}/switch`, {
         method: 'POST',

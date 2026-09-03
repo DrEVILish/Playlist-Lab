@@ -53,3 +53,6 @@ adapterRegistry.registerTarget(qobuzTargetAdapter);
 adapterRegistry.registerTarget(listenbrainzTargetAdapter);
 
 export { adapterRegistry };
+// Re-exported here so callers get it from the same place they get the
+// registry, rather than reaching into an individual adapter module.
+export { invalidateUserPlaylistsCache as invalidateSpotifyUserPlaylistsCache } from './spotify-source';

@@ -22,6 +22,9 @@ jest.mock('../../src/utils/logger', () => ({
     error: jest.fn(),
     debug: jest.fn(),
   },
+  // config/index.ts calls this at module load, so the mock has to carry it or
+  // the whole suite fails to even start.
+  setLogLevel: jest.fn(),
 }));
 
 describe('YouTubeOAuthTargetAdapter', () => {

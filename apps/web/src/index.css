@@ -304,7 +304,7 @@ p {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 0 0 0.75rem 0;
+  padding: 0;
   margin: 0 auto;
   width: 100%;
 }
@@ -458,7 +458,14 @@ select option {
   body { font-size: 16px; }
   .btn { padding: 0.625rem 1rem; font-size: 0.875rem; min-height: 44px; }
   .btn-small { padding: 0.5rem 0.75rem; font-size: 0.8125rem; min-height: 36px; }
-  .input, select, textarea { font-size: 16px; min-height: 44px; padding: 0.625rem 0.75rem; }
+  /* `input`, not `.input` - nothing but a couple of fields actually use that
+     class, so this was silently missing every `.form-input`/`.settings-input`/
+     `.search-input`/etc field in the app (there are many, each defined in its
+     own component's CSS). font-size needs !important because each of those
+     classes sets its own smaller size with higher specificity than a bare
+     element selector - and iOS Safari auto-zooms the whole page on focusing
+     any field under 16px, so this one property has to win unconditionally. */
+  input, select, textarea { font-size: 16px !important; min-height: 44px; padding: 0.625rem 0.75rem; }
   .card { padding: 1rem; border-radius: var(--radius-md); }
   .container { padding: 0 0.75rem; }
   h1 { font-size: 1.5rem; }

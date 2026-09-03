@@ -1,7 +1,7 @@
 import type { FC, CSSProperties } from 'react';
 import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../contexts/AppContext';
-import { Modal } from './Modal';
+import { Modal, modalCloseButtonStyle } from './Modal';
 
 const rowStyle: CSSProperties = { display: 'flex', justifyContent: 'space-between', padding: '0.375rem 0', borderBottom: '1px solid var(--border)' };
 
@@ -77,7 +77,7 @@ export const StatusReportsModal: FC<{ onClose: () => void }> = ({ onClose }) => 
     <Modal onClose={onClose} contentStyle={{ maxWidth: '700px', width: '95vw', maxHeight: '90vh', overflow: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
           <h2 style={{ margin: 0 }}>Status &amp; Reports</h2>
-          <button className="btn btn-secondary btn-small" onClick={onClose}>Close</button>
+          <button onClick={onClose} title="Close" style={modalCloseButtonStyle}>✕</button>
         </div>
 
         {isLoading ? (

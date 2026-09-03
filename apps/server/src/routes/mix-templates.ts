@@ -15,7 +15,7 @@ import { requireAuth } from '../middleware/auth';
 import { createValidationError, createInternalError, createNotFoundError, createForbiddenError } from '../middleware/error-handler';
 import { logger } from '../utils/logger';
 import { MixService } from '../services/mixes';
-import { PlexClient, PlexTrack } from '../services/plex';
+import { PlexClient, PlexTrack, resolvePlexToken } from '../services/plex';
 import type { DatabaseService } from '../database/database';
 import { mixGenerationSessions } from './mixes';
 import { mapBatched, PLEX_LOOKUP_BATCH_SIZE } from '../utils/batch';
@@ -863,7 +863,7 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.session.userId!;
     const db = req.dbService!;
-    const templateId = parseInt(req.params.id, 10);
+    const templateId = parseInt((req.params as Record<string, string>).id, 10);
 
     if (isNaN(templateId)) {
       return next(createValidationError('Invalid template ID. Please provide a valid numeric ID.'));
@@ -886,7 +886,7 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
     res.set('Cache-Control', 'private, max-age=300');
     res.json(template);
   } catch (error: any) {
-    logger.error('Failed to fetch mix template', { error: error.message, stack: error.stack, userId: req.session.userId, templateId: req.params.id });
+    logger.error('Failed to fetch mix template', { error: error.message, stack: error.stack, userId: req.session.userId, templateId: (req.params as Record<string, string>).id });
     
     // Provide user-friendly error message
     if (error.message?.includes('database') || error.code === 'SQLITE_ERROR') {
@@ -1002,7 +1002,7 @@ router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.session.userId!;
     const db = req.dbService!;
-    const templateId = parseInt(req.params.id, 10);
+    const templateId = parseInt((req.params as Record<string, string>).id, 10);
     const { name, description, configuration } = req.body;
 
     if (isNaN(templateId)) {
@@ -1081,7 +1081,7 @@ router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
 
     res.json({ message: 'Template updated successfully' });
   } catch (error: any) {
-    logger.error('Failed to update mix template', { error: error.message, stack: error.stack, userId: req.session.userId, templateId: req.params.id });
+    logger.error('Failed to update mix template', { error: error.message, stack: error.stack, userId: req.session.userId, templateId: (req.params as Record<string, string>).id });
     
     // Provide user-friendly error messages
     if (error.message?.includes('database') || error.code === 'SQLITE_ERROR') {
@@ -1102,7 +1102,7 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
   try {
     const userId = req.session.userId!;
     const db = req.dbService!;
-    const templateId = parseInt(req.params.id, 10);
+    const templateId = parseInt((req.params as Record<string, string>).id, 10);
 
     if (isNaN(templateId)) {
       return next(createValidationError('Invalid template ID'));
@@ -1126,7 +1126,7 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
 
     res.json({ message: 'Template deleted successfully' });
   } catch (error: any) {
-    logger.error('Failed to delete mix template', { error: error.message, stack: error.stack, userId: req.session.userId, templateId: req.params.id });
+    logger.error('Failed to delete mix template', { error: error.message, stack: error.stack, userId: req.session.userId, templateId: (req.params as Record<string, string>).id });
     
     // Provide user-friendly error messages
     if (error.message?.includes('database') || error.code === 'SQLITE_ERROR') {
@@ -1145,7 +1145,7 @@ router.post('/:id/generate', async (req: Request, res: Response, next: NextFunct
   try {
     const userId = req.session.userId!;
     const db = req.dbService!;
-    const templateId = parseInt(req.params.id, 10);
+    const templateId = parseInt((req.params as Record<string, string>).id, 10);
     const { playlistName, sessionId } = req.body;
 
     if (isNaN(templateId)) {
@@ -1241,7 +1241,7 @@ router.post('/:id/generate', async (req: Request, res: Response, next: NextFunct
     const result = await generateMixFromTemplate(
       template,
       userServer.server_url,
-      user.plex_token,
+      resolvePlexToken(user, userServer),
       userServer.library_id!,
       userServer.server_client_id,
       finalPlaylistName,
@@ -1284,7 +1284,7 @@ router.post('/:id/generate', async (req: Request, res: Response, next: NextFunct
       error: error.message, 
       stack: error.stack,
       userId: req.session.userId, 
-      templateId: req.params.id 
+      templateId: (req.params as Record<string, string>).id 
     });
     
     const { sessionId } = req.body;

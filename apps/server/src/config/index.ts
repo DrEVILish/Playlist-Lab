@@ -11,7 +11,7 @@
 import { Request } from 'express';
 import * as path from 'path';
 import * as fs from 'fs';
-import { logger } from '../utils/logger';
+import { logger, setLogLevel } from '../utils/logger';
 
 export interface ServerConfig {
   /** Public-facing URL for OAuth redirects and absolute URLs */
@@ -24,12 +24,24 @@ export interface ServerConfig {
   host: string;
   /** Whether server is behind a reverse proxy */
   trustProxy: boolean;
+  /** ARL session token for the Deezer account deemix-server logs in with */
+  deemixArl: string;
+  /** Base URL of a Lidarr instance, used as a second missing-track acquisition path */
+  lidarrUrl: string;
+  /** Lidarr API key (Settings > General > Security in Lidarr) */
+  lidarrApiKey: string;
+  /** winston log level: error, warn, info, or debug */
+  logLevel: string;
 }
 
 /** Shape of the persisted config file (only user-changeable fields) */
 interface PersistedConfig {
   publicUrl?: string;
   oauthRedirectBase?: string;
+  deemixArl?: string;
+  lidarrUrl?: string;
+  lidarrApiKey?: string;
+  logLevel?: string;
 }
 
 class ConfigService {
@@ -55,7 +67,12 @@ class ConfigService {
       port: parseInt(process.env.PORT || '3001', 10),
       host: process.env.HOST || '0.0.0.0',
       trustProxy: process.env.TRUST_PROXY === 'true',
+      deemixArl: process.env.DEEMIX_ARL || persisted.deemixArl || '',
+      lidarrUrl: (process.env.LIDARR_URL || persisted.lidarrUrl || '').replace(/\/$/, ''),
+      lidarrApiKey: process.env.LIDARR_API_KEY || persisted.lidarrApiKey || '',
+      logLevel: process.env.LOG_LEVEL || persisted.logLevel || 'info',
     };
+    setLogLevel(this._config.logLevel);
 
     logger.info('[Config] Configuration initialized', {
       publicUrl: this._config.publicUrl,
@@ -99,6 +116,10 @@ class ConfigService {
       const data: PersistedConfig = {
         publicUrl: this._config.publicUrl,
         oauthRedirectBase: this._config.oauthRedirectBase,
+        deemixArl: this._config.deemixArl,
+        lidarrUrl: this._config.lidarrUrl,
+        lidarrApiKey: this._config.lidarrApiKey,
+        logLevel: this._config.logLevel,
       };
       const dir = path.dirname(this._configFilePath);
       if (!fs.existsSync(dir)) {
@@ -168,6 +189,7 @@ class ConfigService {
    */
   updateConfig(updates: Partial<ServerConfig>): void {
     this._config = { ...this._config, ...updates };
+    if (updates.logLevel) setLogLevel(updates.logLevel);
     this._saveToFile();
     
     logger.info('[Config] Configuration updated and persisted', {

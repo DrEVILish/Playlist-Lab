@@ -27,6 +27,7 @@ jest.mock('../../src/services/plex', () => ({
   PlexService: jest.fn().mockImplementation(() => ({
     deletePlaylist: deletePlaylistMock,
   })),
+  resolvePlexToken: jest.fn((user: any, server: any) => server?.access_token || user?.plex_token),
 }));
 
 function createTestDatabase(): Database.Database {

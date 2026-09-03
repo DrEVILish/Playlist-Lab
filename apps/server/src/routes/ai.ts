@@ -2,7 +2,11 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { createValidationError, createInternalError, createNotFoundError } from '../middleware/error-handler';
 import { logger } from '../utils/logger';
-import { PlexService } from '../services/plex';
+import { PlexService, resolvePlexToken } from '../services/plex';
+import { finalizeImportResult } from '../services/import';
+import { updateNotification } from '../services/job-notifications';
+import { enqueueAction } from '../services/action-queue';
+import { externalLimiter } from '../services/task-queues';
 import axios from 'axios';
 
 const router = Router();
@@ -66,76 +70,108 @@ router.post('/ai', requireAuth, async (req: Request, res: Response, next: NextFu
     }
 
     // Initialize Plex service
-    const plexService = new PlexService(userServer.server_url, user.plex_token);
+    const plexService = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
 
     logger.info('AI playlist generation started', { userId, prompt, provider: selectedProvider });
 
-    // Use selected AI to extract search queries from the prompt
-    const searchQueries = selectedProvider === 'grok' 
-      ? await getSearchQueriesFromGrok(prompt, apiKey)
-      : await getSearchQueriesFromGemini(prompt, apiKey);
-    logger.info('AI generated search queries', { userId, provider: selectedProvider, queries: searchQueries, queryCount: searchQueries.length });
+    // Queued rather than run immediately: the rest of this (AI calls +
+    // per-query Plex searches + playlist creation) can take a while, and
+    // running an unbounded number of these across users at once is exactly
+    // what the action queue caps. Track it in the notification bell instead
+    // of holding the request open, same as every other import trigger (see
+    // runNewImportAndFinalize's docs in services/import.ts).
+    const { jobId, position } = enqueueAction(userId, 'AI Generated Playlist', async (notificationId) => {
+     try {
+      updateNotification(userId, notificationId, { detail: 'Asking AI for track ideas...', progress: 0 });
+      // Use selected AI to extract search queries from the prompt - external
+      // LLM call, so it shares externalLimiter with scraping/cross-import.
+      const searchQueries = await externalLimiter.run(() => selectedProvider === 'grok'
+        ? getSearchQueriesFromGrok(prompt, apiKey)
+        : getSearchQueriesFromGemini(prompt, apiKey));
+      logger.info('AI generated search queries', { userId, provider: selectedProvider, queries: searchQueries, queryCount: searchQueries.length });
 
-    // Search for tracks matching the queries
-    const allTracks: any[] = [];
-    for (const query of searchQueries.slice(0, 10)) { // Limit to 10 queries
-      try {
-        logger.info('Searching for query', { query, libraryId: userServer.library_id });
-        const tracks = await plexService.searchTrack(query, userServer.library_id);
-        logger.info('Search results', { query, trackCount: tracks.length });
-        allTracks.push(...tracks.slice(0, 5)); // Take top 5 from each search
-      } catch (error) {
-        logger.warn('Failed to search for query', { query, error });
+      updateNotification(userId, notificationId, { detail: 'Searching your Plex library...', progress: 25 });
+
+      // Search for tracks matching the queries
+      const allTracks: any[] = [];
+      for (const query of searchQueries.slice(0, 10)) { // Limit to 10 queries
+        try {
+          logger.info('Searching for query', { query, libraryId: userServer.library_id });
+          const tracks = await plexService.searchTrack(query, userServer.library_id);
+          logger.info('Search results', { query, trackCount: tracks.length });
+          allTracks.push(...tracks.slice(0, 5)); // Take top 5 from each search
+        } catch (error) {
+          logger.warn('Failed to search for query', { query, error });
+        }
       }
-    }
 
-    logger.info('Total tracks found', { totalTracks: allTracks.length });
+      logger.info('Total tracks found', { totalTracks: allTracks.length });
 
-    // Remove duplicates
-    const uniqueTracks = Array.from(
-      new Map(allTracks.map(t => [t.ratingKey, t])).values()
-    );
+      // Remove duplicates
+      const uniqueTracks = Array.from(
+        new Map(allTracks.map(t => [t.ratingKey, t])).values()
+      );
 
-    // Shuffle and limit to requested track count
-    const shuffled = uniqueTracks.sort(() => Math.random() - 0.5).slice(0, validTrackCount);
+      // Shuffle and limit to requested track count
+      const shuffled = uniqueTracks.sort(() => Math.random() - 0.5).slice(0, validTrackCount);
 
-    // Generate playlist name from prompt using selected AI
-    const playlistName = selectedProvider === 'grok'
-      ? await generatePlaylistNameWithGrok(prompt, apiKey)
-      : await generatePlaylistNameWithGemini(prompt, apiKey);
+      // Generate playlist name from prompt using selected AI
+      const playlistName = await externalLimiter.run(() => selectedProvider === 'grok'
+        ? generatePlaylistNameWithGrok(prompt, apiKey)
+        : generatePlaylistNameWithGemini(prompt, apiKey));
+      updateNotification(userId, notificationId, { title: playlistName, detail: 'Creating Plex playlist...', progress: 75 });
 
-    // Format as matched tracks
-    const matched = shuffled.map(track => ({
-      title: track.title,
-      artist: track.grandparentTitle || track.artist || 'Unknown Artist',
-      album: track.parentTitle || track.album,
-      plexRatingKey: track.ratingKey,
-      matchScore: 1.0,
-    }));
+      // Format as matched tracks
+      const matched = shuffled.map(track => ({
+        title: track.title,
+        // originalTitle is the real per-track artist; grandparentTitle is just the
+        // album/folder artist and can be wrong for compilations/soundtracks.
+        artist: track.originalTitle || track.grandparentTitle || 'Unknown Artist',
+        album: track.parentTitle || track.album,
+        matched: true,
+        plexRatingKey: track.ratingKey,
+        score: 100,
+      }));
 
-    logger.info('AI playlist generated', { 
-      userId, 
-      trackCount: matched.length,
-      playlistName 
-    });
+      logger.info('AI playlist generated', { userId, trackCount: matched.length, playlistName });
 
-    res.json({
-      matched,
-      unmatched: [],
-      playlistName,
-    });
+      await finalizeImportResult(
+        db,
+        'ai',
+        `AI: ${prompt}`,
+        { id: userId, plex_token: user.plex_token },
+        userServer,
+        { matched, unmatched: [], playlistName, matchedCount: matched.length, totalCount: matched.length }
+      );
+
+      updateNotification(userId, notificationId, {
+        title: playlistName,
+        status: 'success',
+        progress: 100,
+        detail: `Added ${matched.length} tracks`,
+      });
+     } catch (error: any) {
+      logger.error('Failed to generate AI playlist', { error: error.message, stack: error.stack, userId });
+      const message = (error.response?.status === 401 || error.response?.status === 403)
+        ? 'Invalid API key. Please check your API key and try again.'
+        : (error.message || 'Failed to generate playlist');
+      updateNotification(userId, notificationId, { status: 'error', detail: message });
+     }
+    }, 'import');
+
+    res.json({ success: true, queued: true, jobId, position, message: 'Generating playlist...' });
   } catch (error: any) {
-    logger.error('Failed to generate AI playlist', { 
+    logger.error('Failed to generate AI playlist', {
       error: error.message,
       stack: error.stack,
-      userId: req.session.userId 
+      userId: req.session.userId
     });
-    
+
     // Check if it's an AI API error
     if (error.response?.status === 401 || error.response?.status === 403) {
       return next(createValidationError('Invalid API key. Please check your API key and try again.'));
     }
-    
+
     next(createInternalError('Failed to generate playlist: ' + error.message));
   }
 });

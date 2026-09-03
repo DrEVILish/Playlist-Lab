@@ -80,6 +80,38 @@
 
 .mobile-nav-content { padding: 0.5rem 0; }
 
+/* Pushed to the bottom of the panel by the flex column below. */
+.mobile-nav-footer { margin-top: auto; }
+
+.mobile-nav-user {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.mobile-nav-user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.mobile-nav-user-name {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
+}
+
+.mobile-nav-footer .footer-content { padding: 0 1rem; text-align: center; }
+
 .mobile-nav-link {
   display: block;
   padding: 0.875rem 1rem;
@@ -134,6 +166,7 @@
 
 @media (max-width: 768px) {
   .mobile-nav-toggle { display: block; }
-  .mobile-nav { display: block; }
+  /* flex column so .mobile-nav-footer can margin-top:auto to the bottom */
+  .mobile-nav { display: flex; flex-direction: column; }
   .mobile-nav-overlay { display: block; }
 }

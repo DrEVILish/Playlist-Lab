@@ -37,7 +37,7 @@ const countryNames: Record<string, string> = {
  * GET /api/charts/:source/:country
  */
 router.get('/:source/:country', requireAuth, async (req, res) => {
-  const { source, country } = req.params;
+  const { source, country } = req.params as Record<string, string>;
   const userId = req.session.userId!;
   const db = (req.dbService as any)?.db;
   

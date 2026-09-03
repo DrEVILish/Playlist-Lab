@@ -263,11 +263,11 @@
   border-color: rgba(76, 175, 80, 0.5);
 }
 
-.playlist-info {
+.generated-playlist-info {
   flex: 1;
 }
 
-.playlist-name {
+.generated-playlist-name {
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 0.25rem;

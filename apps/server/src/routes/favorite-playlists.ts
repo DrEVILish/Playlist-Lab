@@ -111,7 +111,7 @@ router.post('/', requireAuth, (req: Request, res: Response): void => {
 router.delete('/:id', requireAuth, (req: Request, res: Response): void => {
   try {
     const userId = (req as any).user.id;
-    const favoriteId = parseInt(req.params.id, 10);
+    const favoriteId = parseInt((req.params as Record<string, string>).id, 10);
 
     if (isNaN(favoriteId)) {
       res.status(400).json({ error: { message: 'Invalid favorite ID' } });

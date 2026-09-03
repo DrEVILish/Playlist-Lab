@@ -2,8 +2,11 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { createValidationError, createInternalError, createNotFoundError, createForbiddenError } from '../middleware/error-handler';
 import { logger } from '../utils/logger';
-import { PlexService } from '../services/plex';
+import { PlexService, PlexAuthError, resolvePlexToken } from '../services/plex';
 import { reimportPlaylistNow } from '../services/import';
+import { updateNotification } from '../services/job-notifications';
+import { enqueueAction } from '../services/action-queue';
+import { plexLimiter } from '../services/task-queues';
 import multer from 'multer';
 import FormData from 'form-data';
 import axios from 'axios';
@@ -48,7 +51,7 @@ router.get('/', requireAuth, async (req: Request, res: Response, next: NextFunct
 
     // Fetch playlists directly from Plex
     try {
-      const plexService = new PlexService(userServer.server_url, user.plex_token);
+      const plexService = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
       const plexPlaylists = await plexService.getPlaylists();
       
       // Filter for audio playlists only
@@ -97,6 +100,11 @@ router.get('/', requireAuth, async (req: Request, res: Response, next: NextFunct
       logger.info('Fetched playlists from Plex', { userId: requestedUserId, count: playlists.length });
       res.json({ playlists });
     } catch (error) {
+      // An expired token is not "you have no playlists" - swallowing it here
+      // shows an empty library and hides the one action that fixes it, so it
+      // goes back as a 401 (PlexAuthError carries the status) while every
+      // other failure still degrades to an empty list rather than a broken UI.
+      if (error instanceof PlexAuthError) return next(error);
       logger.error('Failed to fetch playlists from Plex', { error, userId: requestedUserId });
       // Return empty array instead of error to avoid breaking the UI
       res.json({ playlists: [] });
@@ -145,7 +153,7 @@ router.get('/:id', requireAuth, (req: Request, res: Response, next: NextFunction
   try {
     const userId = req.session.userId!;
     const db = req.dbService!;
-    const playlistId = parseInt(req.params.id, 10);
+    const playlistId = parseInt((req.params as Record<string, string>).id, 10);
 
     if (isNaN(playlistId)) {
       return next(createValidationError('Invalid playlist ID'));
@@ -164,7 +172,7 @@ router.get('/:id', requireAuth, (req: Request, res: Response, next: NextFunction
 
     res.json({ playlist });
   } catch (error) {
-    logger.error('Failed to get playlist', { error, userId: req.session.userId, playlistId: req.params.id });
+    logger.error('Failed to get playlist', { error, userId: req.session.userId, playlistId: (req.params as Record<string, string>).id });
     next(createInternalError('Failed to retrieve playlist'));
   }
 });
@@ -203,7 +211,7 @@ router.post('/', requireAuth, async (req: Request, res: Response, next: NextFunc
     }
 
     // Create playlist in Plex
-    const plexService = new PlexService(userServer.server_url, user.plex_token);
+    const plexService = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
     const libraryUri = `server://${userServer.server_client_id}/com.plexapp.plugins.library/library/sections/${userServer.library_id}`;
     const plexPlaylist = await plexService.createPlaylist(name, libraryUri, trackUris);
 
@@ -229,11 +237,11 @@ router.post('/', requireAuth, async (req: Request, res: Response, next: NextFunc
  * PUT /api/playlists/:id
  * Update playlist
  */
-router.put('/:id', requireAuth, (req: Request, res: Response, next: NextFunction) => {
+router.put('/:id', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.session.userId!;
     const db = req.dbService!;
-    const playlistId = parseInt(req.params.id, 10);
+    const playlistId = parseInt((req.params as Record<string, string>).id, 10);
     const { name, sourceUrl } = req.body;
 
     if (isNaN(playlistId)) {
@@ -241,7 +249,7 @@ router.put('/:id', requireAuth, (req: Request, res: Response, next: NextFunction
     }
 
     const playlist = db.getPlaylistById(playlistId);
-    
+
     if (!playlist) {
       return next(createNotFoundError('Playlist not found'));
     }
@@ -251,23 +259,40 @@ router.put('/:id', requireAuth, (req: Request, res: Response, next: NextFunction
       return next(createForbiddenError('You do not have permission to modify this playlist'));
     }
 
+    const trimmedName = typeof name === 'string' ? name.trim() : undefined;
+    if (trimmedName === '') {
+      return next(createValidationError('Playlist name cannot be empty'));
+    }
+
+    // Rename in Plex itself too, not just our own record of it - otherwise
+    // this app's name would drift from what every actual Plex client shows.
+    if (trimmedName !== undefined && trimmedName !== playlist.name) {
+      const user = db.getUserById(userId);
+      const userServer = db.getUserServer(userId);
+      if (!user || !userServer) {
+        return next(createValidationError('Plex server not configured'));
+      }
+      const plexClient = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
+      await plexClient.renamePlaylist(playlist.plex_playlist_id, trimmedName);
+    }
+
     // Build update object
     const updates: any = { updated_at: Date.now() };
-    if (name !== undefined) updates.name = name;
+    if (trimmedName !== undefined) updates.name = trimmedName;
     if (sourceUrl !== undefined) updates.source_url = sourceUrl;
 
     // Update playlist
     db.updatePlaylist(playlistId, updates);
-    
+
     // Retrieve updated playlist
     const updatedPlaylist = db.getPlaylistById(playlistId);
 
     logger.info('Playlist updated', { userId, playlistId });
 
     res.json({ playlist: updatedPlaylist });
-  } catch (error) {
-    logger.error('Failed to update playlist', { error, userId: req.session.userId, playlistId: req.params.id });
-    next(createInternalError('Failed to update playlist'));
+  } catch (error: any) {
+    logger.error('Failed to update playlist', { error: error.message, stack: error.stack, userId: req.session.userId, playlistId: (req.params as Record<string, string>).id });
+    next(createInternalError(`Failed to update playlist: ${error.message || 'Unknown error'}`));
   }
 });
 
@@ -283,7 +308,7 @@ router.delete('/by-plex-id/:ratingKey', requireAuth, async (req: Request, res: R
   try {
     const userId = req.session.userId!;
     const db = req.dbService!;
-    const { ratingKey } = req.params;
+    const { ratingKey } = req.params as Record<string, string>;
 
     const user = db.getUserById(userId);
     if (!user) {
@@ -295,7 +320,7 @@ router.delete('/by-plex-id/:ratingKey', requireAuth, async (req: Request, res: R
       return next(createValidationError('No server selected. Please select a server first.'));
     }
 
-    const plexService = new PlexService(userServer.server_url, user.plex_token);
+    const plexService = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
     await plexService.deletePlaylist(ratingKey);
 
     const tracked = db.getPlaylistByPlexId(userId, ratingKey);
@@ -312,6 +337,49 @@ router.delete('/by-plex-id/:ratingKey', requireAuth, async (req: Request, res: R
   }
 });
 
+/**
+ * PUT /api/playlists/by-plex-id/:ratingKey
+ * Rename a playlist identified by its Plex ratingKey rather than our
+ * internal numeric id - works for any playlist visible in Plex, including
+ * ones never imported through this app (so there's no numeric id for them;
+ * see GET /api/playlists's dbId field). Updates our tracking row too, if one
+ * happens to exist for it, so the two names don't drift apart.
+ */
+router.put('/by-plex-id/:ratingKey', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.session.userId!;
+    const db = req.dbService!;
+    const { ratingKey } = req.params as Record<string, string>;
+    const { name } = req.body;
+
+    const trimmedName = typeof name === 'string' ? name.trim() : undefined;
+    if (!trimmedName) {
+      return next(createValidationError('Playlist name cannot be empty'));
+    }
+
+    const user = db.getUserById(userId);
+    const userServer = db.getUserServer(userId);
+    if (!user || !userServer) {
+      return next(createValidationError('No server selected. Please select a server first.'));
+    }
+
+    const plexClient = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
+    await plexClient.renamePlaylist(ratingKey, trimmedName);
+
+    const tracked = db.getPlaylistByPlexId(userId, ratingKey);
+    if (tracked) {
+      db.updatePlaylist(tracked.id, { name: trimmedName, updated_at: Date.now() });
+    }
+
+    logger.info('Playlist renamed by Plex ratingKey', { userId, ratingKey, hadDbRecord: !!tracked });
+
+    res.json({ success: true, name: trimmedName });
+  } catch (error: any) {
+    logger.error('Failed to rename playlist by Plex ratingKey', { error: error.message, userId: req.session.userId });
+    next(createInternalError(`Failed to rename playlist: ${error.message || 'Unknown error'}`));
+  }
+});
+
 const NON_REIMPORTABLE_SOURCES = ['plex', 'manual', 'template'];
 
 /**
@@ -324,7 +392,7 @@ router.post('/:id/reimport', requireAuth, async (req: Request, res: Response, ne
   try {
     const userId = req.session.userId!;
     const db = req.dbService!;
-    const playlistId = parseInt(req.params.id, 10);
+    const playlistId = parseInt((req.params as Record<string, string>).id, 10);
 
     if (isNaN(playlistId)) {
       return next(createValidationError('Invalid playlist ID'));
@@ -370,7 +438,7 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response, next: Nex
   try {
     const userId = req.session.userId!;
     const db = req.dbService!;
-    const playlistId = parseInt(req.params.id, 10);
+    const playlistId = parseInt((req.params as Record<string, string>).id, 10);
 
     if (isNaN(playlistId)) {
       return next(createValidationError('Invalid playlist ID'));
@@ -397,7 +465,7 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response, next: Nex
     if (userServer) {
       try {
         // Delete from Plex
-        const plexService = new PlexService(userServer.server_url, user.plex_token);
+        const plexService = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
         await plexService.deletePlaylist(playlist.plex_playlist_id);
       } catch (error) {
         logger.warn('Failed to delete playlist from Plex, continuing with database deletion', { error, playlistId });
@@ -411,7 +479,7 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response, next: Nex
 
     res.json({ success: true });
   } catch (error) {
-    logger.error('Failed to delete playlist', { error, userId: req.session.userId, playlistId: req.params.id });
+    logger.error('Failed to delete playlist', { error, userId: req.session.userId, playlistId: (req.params as Record<string, string>).id });
     next(createInternalError('Failed to delete playlist'));
   }
 });
@@ -424,7 +492,7 @@ router.get('/:id/tracks', requireAuth, async (req: Request, res: Response, next:
   try {
     const userId = req.session.userId!;
     const db = req.dbService!;
-    const playlistId = req.params.id;
+    const playlistId = (req.params as Record<string, string>).id;
 
     // Get user and server info
     const user = db.getUserById(userId);
@@ -438,18 +506,21 @@ router.get('/:id/tracks', requireAuth, async (req: Request, res: Response, next:
     }
 
     // Get tracks from Plex using the playlist ID directly
-    const plexService = new PlexService(userServer.server_url, user.plex_token);
+    const plexService = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
     const plexTracks = await plexService.getPlaylistTracks(playlistId);
 
     // Map tracks to include codec and bitrate from Media array
     const tracks = plexTracks.map(track => {
       const albumArtist = track.grandparentTitle || '';
       const trackArtist = (track as any).originalTitle || '';
-      
-      // For Various Artists compilations, prefer track artist over album artist
-      const isVariousArtists = albumArtist.toLowerCase().includes('various') || 
-                               albumArtist.toLowerCase().includes('compilation');
-      const displayArtist = isVariousArtists && trackArtist ? trackArtist : albumArtist;
+
+      // Album artist is just the library's folder/grouping artist and can be wrong
+      // or unmatchable for this specific track (e.g. "Various Artists", a
+      // soundtrack's composer) - whenever Plex has a distinct per-track artist,
+      // show that instead.
+      const displayArtist = trackArtist && trackArtist.toLowerCase() !== albumArtist.toLowerCase()
+        ? trackArtist
+        : albumArtist;
       
       return {
         ratingKey: track.ratingKey,
@@ -465,7 +536,7 @@ router.get('/:id/tracks', requireAuth, async (req: Request, res: Response, next:
 
     res.json({ tracks });
   } catch (error) {
-    logger.error('Failed to get playlist tracks', { error, userId: req.session.userId, playlistId: req.params.id });
+    logger.error('Failed to get playlist tracks', { error, userId: req.session.userId, playlistId: (req.params as Record<string, string>).id });
     next(createInternalError('Failed to retrieve playlist tracks'));
   }
 });
@@ -478,7 +549,7 @@ router.post('/:id/tracks', requireAuth, async (req: Request, res: Response, next
   try {
     const userId = req.session.userId!;
     const db = req.dbService!;
-    const playlistId = req.params.id; // Keep as string for Plex ID
+    const playlistId = (req.params as Record<string, string>).id; // Keep as string for Plex ID
     const { trackUris } = req.body;
 
     if (!trackUris || !Array.isArray(trackUris) || trackUris.length === 0) {
@@ -497,7 +568,7 @@ router.post('/:id/tracks', requireAuth, async (req: Request, res: Response, next
     }
 
     // Add tracks to Plex playlist using Plex ID directly
-    const plexService = new PlexService(userServer.server_url, user.plex_token);
+    const plexService = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
     await plexService.addToPlaylist(playlistId, trackUris);
 
     // Try to update database record if it exists
@@ -513,7 +584,7 @@ router.post('/:id/tracks', requireAuth, async (req: Request, res: Response, next
 
     res.json({ success: true });
   } catch (error) {
-    logger.error('Failed to add tracks to playlist', { error, userId: req.session.userId, playlistId: req.params.id });
+    logger.error('Failed to add tracks to playlist', { error, userId: req.session.userId, playlistId: (req.params as Record<string, string>).id });
     next(createInternalError('Failed to add tracks to playlist'));
   }
 });
@@ -526,8 +597,8 @@ router.delete('/:id/tracks/:trackId', requireAuth, async (req: Request, res: Res
   try {
     const userId = req.session.userId!;
     const db = req.dbService!;
-    const playlistId = req.params.id; // Keep as string for Plex ID
-    const { trackId } = req.params;
+    const playlistId = (req.params as Record<string, string>).id; // Keep as string for Plex ID
+    const { trackId } = req.params as Record<string, string>;
 
     if (!trackId) {
       return next(createValidationError('trackId is required'));
@@ -545,7 +616,7 @@ router.delete('/:id/tracks/:trackId', requireAuth, async (req: Request, res: Res
     }
 
     // Remove track from Plex playlist using Plex ID directly
-    const plexService = new PlexService(userServer.server_url, user.plex_token);
+    const plexService = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
     await plexService.removeFromPlaylist(playlistId, trackId);
 
     // Try to update database record if it exists
@@ -566,8 +637,8 @@ router.delete('/:id/tracks/:trackId', requireAuth, async (req: Request, res: Res
       error: errorMessage,
       stack: error instanceof Error ? error.stack : undefined,
       userId: req.session.userId, 
-      playlistId: req.params.id,
-      trackId: req.params.trackId
+      playlistId: (req.params as Record<string, string>).id,
+      trackId: (req.params as Record<string, string>).trackId
     });
     
     // Provide more specific error messages
@@ -587,8 +658,8 @@ router.put('/:id/tracks/:trackId/move', requireAuth, async (req: Request, res: R
   try {
     const userId = req.session.userId!;
     const db = req.dbService!;
-    const playlistId = req.params.id; // Keep as string for Plex
-    const { trackId } = req.params;
+    const playlistId = (req.params as Record<string, string>).id; // Keep as string for Plex
+    const { trackId } = req.params as Record<string, string>;
     const { afterId } = req.body;
 
     if (!trackId) {
@@ -611,27 +682,451 @@ router.put('/:id/tracks/:trackId/move', requireAuth, async (req: Request, res: R
     }
 
     // Move track in Plex playlist
-    const plexService = new PlexService(userServer.server_url, user.plex_token);
+    const plexService = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
     await plexService.movePlaylistItem(playlistId, trackId, afterId);
 
     logger.info('Track moved in playlist', { userId, playlistId, trackId, afterId });
 
     res.json({ success: true });
   } catch (error) {
-    logger.error('Failed to move track in playlist', { error, userId: req.session.userId, playlistId: req.params.id });
+    logger.error('Failed to move track in playlist', { error, userId: req.session.userId, playlistId: (req.params as Record<string, string>).id });
     next(createInternalError('Failed to move track in playlist'));
+  }
+});
+
+/** Builds `server://<clientId>/.../library/metadata/<ratingKey>` URIs for
+ * createPlaylist()/addToPlaylist(), the same format every other playlist
+ * mutation in this file uses. */
+function buildTrackUris(serverClientId: string | null | undefined, ratingKeys: string[]): string[] {
+  return ratingKeys.map(key => `server://${serverClientId}/com.plexapp.plugins.library/library/metadata/${key}`);
+}
+
+/**
+ * POST /api/playlists/merge
+ * Combine two or more playlists' tracks (deduped) into a new playlist, or
+ * append them onto an existing one. Takes Plex ratingKeys rather than our
+ * internal numeric ids - like /by-plex-id/:ratingKey and /:id/share below,
+ * this works on any playlist the user's own Plex token can see, not just
+ * ones tracked in our `playlists` table (which only has rows for playlists
+ * imported through this app).
+ */
+router.post('/merge', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.session.userId!;
+    const db = req.dbService!;
+    const { sourceRatingKeys, targetName, existingTargetRatingKey } = req.body;
+
+    if (!Array.isArray(sourceRatingKeys) || sourceRatingKeys.length < 2) {
+      return next(createValidationError('sourceRatingKeys must be an array of at least 2 playlist ratingKeys'));
+    }
+    if (!existingTargetRatingKey && (typeof targetName !== 'string' || !targetName.trim())) {
+      return next(createValidationError('targetName is required when not merging into an existing playlist'));
+    }
+
+    const user = db.getUserById(userId);
+    if (!user) return next(createNotFoundError('User not found'));
+    const userServer = db.getUserServer(userId);
+    if (!userServer || !userServer.library_id) {
+      return next(createValidationError('No server/library selected. Please select one first.'));
+    }
+
+    const { jobId, position } = enqueueAction(userId, 'Merge playlists', async (notificationId) => {
+      try {
+        const plexService = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
+
+        const seen = new Set<string>();
+        const mergedRatingKeys: string[] = [];
+        for (const ratingKey of sourceRatingKeys) {
+          const tracks = await plexService.getPlaylistTracks(ratingKey);
+          for (const track of tracks) {
+            if (track.ratingKey && !seen.has(track.ratingKey)) {
+              seen.add(track.ratingKey);
+              mergedRatingKeys.push(track.ratingKey);
+            }
+          }
+        }
+
+        if (mergedRatingKeys.length === 0) {
+          updateNotification(userId, notificationId, { status: 'error', detail: 'The selected playlists have no tracks to merge' });
+          return;
+        }
+
+        let resultPlexId: string;
+        let resultName: string;
+        if (existingTargetRatingKey) {
+          const existingTracks = await plexService.getPlaylistTracks(existingTargetRatingKey);
+          const existingKeys = new Set(existingTracks.map(t => t.ratingKey));
+          const newKeys = mergedRatingKeys.filter(key => !existingKeys.has(key));
+          if (newKeys.length > 0) {
+            await plexService.addToPlaylist(existingTargetRatingKey, buildTrackUris(userServer.server_client_id, newKeys));
+          }
+          resultPlexId = existingTargetRatingKey;
+          resultName = targetName?.trim() || existingTargetRatingKey;
+          const tracked = db.getPlaylistByPlexId(userId, existingTargetRatingKey);
+          if (tracked) db.updatePlaylist(tracked.id, { updated_at: Date.now() });
+        } else {
+          const libraryUri = `server://${userServer.server_client_id}/com.plexapp.plugins.library/library/sections/${userServer.library_id}`;
+          const plexPlaylist = await plexService.createPlaylist(targetName.trim(), libraryUri, buildTrackUris(userServer.server_client_id, mergedRatingKeys));
+          resultPlexId = plexPlaylist.ratingKey;
+          resultName = targetName.trim();
+          db.createPlaylist(userId, resultPlexId, resultName, 'manual', undefined);
+        }
+
+        logger.info('Playlists merged', { userId, sourceRatingKeys, trackCount: mergedRatingKeys.length, resultPlexId });
+        updateNotification(userId, notificationId, {
+          title: resultName,
+          status: 'success',
+          detail: `Merged ${mergedRatingKeys.length} tracks`,
+        });
+      } catch (error: any) {
+        logger.error('Failed to merge playlists', { error: error.message, userId });
+        updateNotification(userId, notificationId, { status: 'error', detail: error.message || 'Failed to merge playlists' });
+      }
+    });
+
+    res.status(202).json({ queued: true, jobId, position });
+  } catch (error: any) {
+    logger.error('Failed to merge playlists', { error: error.message, userId: req.session.userId });
+    next(createInternalError(`Failed to merge playlists: ${error.message || 'Unknown error'}`));
+  }
+});
+
+/**
+ * POST /api/playlists/:id/clone
+ * Duplicate a playlist's current tracks into a new playlist. `:id` is the
+ * Plex ratingKey (see /:id/share below, which uses the same convention).
+ */
+router.post('/:id/clone', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.session.userId!;
+    const db = req.dbService!;
+    const sourceRatingKey = (req.params as Record<string, string>).id;
+
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+    if (!name) return next(createValidationError('name is required'));
+
+    const user = db.getUserById(userId);
+    if (!user) return next(createNotFoundError('User not found'));
+    const userServer = db.getUserServer(userId);
+    if (!userServer || !userServer.library_id) {
+      return next(createValidationError('No server/library selected. Please select one first.'));
+    }
+
+    const plexService = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
+    const tracks = await plexService.getPlaylistTracks(sourceRatingKey);
+    const ratingKeys = tracks.map(t => t.ratingKey).filter((k): k is string => !!k);
+    if (ratingKeys.length === 0) {
+      return next(createValidationError('This playlist has no tracks to clone'));
+    }
+
+    const libraryUri = `server://${userServer.server_client_id}/com.plexapp.plugins.library/library/sections/${userServer.library_id}`;
+    const plexPlaylist = await plexService.createPlaylist(name, libraryUri, buildTrackUris(userServer.server_client_id, ratingKeys));
+    const clonedPlaylist = db.createPlaylist(userId, plexPlaylist.ratingKey, name, 'manual', undefined);
+
+    logger.info('Playlist cloned', { userId, sourceRatingKey, clonedPlaylistId: clonedPlaylist.id, trackCount: ratingKeys.length });
+    res.status(201).json({ playlist: clonedPlaylist });
+  } catch (error: any) {
+    logger.error('Failed to clone playlist', { error: error.message, userId: req.session.userId, playlistId: (req.params as Record<string, string>).id });
+    next(createInternalError(`Failed to clone playlist: ${error.message || 'Unknown error'}`));
+  }
+});
+
+/**
+ * POST /api/playlists/:id/split
+ * Copy subsets of a playlist's tracks (by ratingKey) out into one or more
+ * new playlists. Non-destructive - the source playlist is left untouched.
+ * `:id` is the Plex ratingKey, same convention as clone/share above.
+ */
+router.post('/:id/split', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.session.userId!;
+    const db = req.dbService!;
+
+    const { groups } = req.body as { groups?: Array<{ name: string; trackIds: string[] }> };
+    if (!Array.isArray(groups) || groups.length === 0) {
+      return next(createValidationError('groups must be a non-empty array of { name, trackIds }'));
+    }
+    for (const group of groups) {
+      if (!group.name?.trim() || !Array.isArray(group.trackIds) || group.trackIds.length === 0) {
+        return next(createValidationError('Each group needs a name and a non-empty trackIds array'));
+      }
+    }
+
+    const user = db.getUserById(userId);
+    if (!user) return next(createNotFoundError('User not found'));
+    const userServer = db.getUserServer(userId);
+    if (!userServer || !userServer.library_id) {
+      return next(createValidationError('No server/library selected. Please select one first.'));
+    }
+
+    const sourceRatingKey = (req.params as Record<string, string>).id;
+    const { jobId, position } = enqueueAction(userId, 'Split playlist', async (notificationId) => {
+      try {
+        const plexService = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
+        const libraryUri = `server://${userServer.server_client_id}/com.plexapp.plugins.library/library/sections/${userServer.library_id}`;
+
+        const createdPlaylists = [];
+        for (const group of groups) {
+          const plexPlaylist = await plexService.createPlaylist(
+            group.name.trim(),
+            libraryUri,
+            buildTrackUris(userServer.server_client_id, group.trackIds)
+          );
+          createdPlaylists.push(db.createPlaylist(userId, plexPlaylist.ratingKey, group.name.trim(), 'manual', undefined));
+        }
+
+        logger.info('Playlist split', { userId, sourceRatingKey, groupCount: groups.length });
+        updateNotification(userId, notificationId, {
+          status: 'success',
+          detail: `Split into ${createdPlaylists.length} playlist(s)`,
+        });
+      } catch (error: any) {
+        logger.error('Failed to split playlist', { error: error.message, userId, playlistId: sourceRatingKey });
+        updateNotification(userId, notificationId, { status: 'error', detail: error.message || 'Failed to split playlist' });
+      }
+    });
+
+    res.status(202).json({ queued: true, jobId, position });
+  } catch (error: any) {
+    logger.error('Failed to split playlist', { error: error.message, userId: req.session.userId, playlistId: (req.params as Record<string, string>).id });
+    next(createInternalError(`Failed to split playlist: ${error.message || 'Unknown error'}`));
+  }
+});
+
+/** Fisher-Yates shuffle - unbiased, unlike the common `sort(() => Math.random() - 0.5)`
+ * one-liner. Kept as a local function rather than exporting MixService's
+ * private equivalent, since that would mean restructuring a class for one
+ * call site. */
+function shuffleArray<T>(array: T[]): T[] {
+  const result = [...array];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+/**
+ * Rewrites a playlist's order to match `ordered` by moving each track after
+ * the one before it. Shared by shuffle and sort so there is one description
+ * of how a reorder is performed.
+ *
+ * ponytail: Plex's playlist API has no batch-reorder endpoint, so this is
+ * O(n) sequential movePlaylistItem calls - fine for typical playlist sizes,
+ * but slow (and non-atomic - a mid-run failure leaves a partial reorder) for
+ * very large ones. Revisit if Plex ever adds a bulk-reorder endpoint.
+ */
+async function applyTrackOrder(plexService: any, ratingKey: string, ordered: any[]): Promise<void> {
+  for (let i = 0; i < ordered.length; i++) {
+    const afterId = i === 0 ? '0' : ordered[i - 1].playlistItemID!.toString();
+    await plexService.movePlaylistItem(ratingKey, ordered[i].playlistItemID!.toString(), afterId);
+  }
+}
+
+/** The fields a playlist can be sorted on, and how to read each one off a
+ * Plex track. Strings are compared with localeCompare so accented titles sort
+ * where a reader expects rather than after "z". */
+const SORT_KEYS: Record<string, (t: any) => string | number> = {
+  title: t => t.title || '',
+  artist: t => t.grandparentTitle || t.originalTitle || '',
+  album: t => t.parentTitle || '',
+  year: t => t.year || t.parentYear || 0,
+  duration: t => t.duration || 0,
+};
+
+/**
+ * POST /api/playlists/:id/shuffle
+ * Randomize a playlist's track order in place. `:id` is the Plex ratingKey,
+ * same convention as clone/split/share above.
+ *
+ * ponytail: Plex's playlist API has no batch-reorder endpoint, so this is
+ * O(n) sequential movePlaylistItem calls - fine for typical playlist sizes,
+ * but slow (and non-atomic - a mid-shuffle failure leaves a partial reorder)
+ * for very large ones. Revisit if Plex ever adds a bulk-reorder endpoint.
+ */
+router.post('/:id/shuffle', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.session.userId!;
+    const db = req.dbService!;
+    const ratingKey = (req.params as Record<string, string>).id;
+
+    const user = db.getUserById(userId);
+    if (!user) return next(createNotFoundError('User not found'));
+    const userServer = db.getUserServer(userId);
+    if (!userServer) return next(createValidationError('No server selected. Please select a server first.'));
+
+    const { jobId, position } = enqueueAction(userId, 'Shuffle playlist', async (notificationId) => {
+      try {
+        const plexService = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
+        const tracks = await plexService.getPlaylistTracks(ratingKey);
+        const shuffled = shuffleArray(tracks.filter(t => t.playlistItemID != null));
+        await applyTrackOrder(plexService, ratingKey, shuffled);
+
+        const tracked = db.getPlaylistByPlexId(userId, ratingKey);
+        if (tracked) db.updatePlaylist(tracked.id, { updated_at: Date.now() });
+
+        logger.info('Playlist shuffled', { userId, ratingKey, trackCount: shuffled.length });
+        updateNotification(userId, notificationId, { status: 'success', detail: `Shuffled ${shuffled.length} tracks` });
+      } catch (error: any) {
+        logger.error('Failed to shuffle playlist', { error: error.message, userId, playlistId: ratingKey });
+        updateNotification(userId, notificationId, { status: 'error', detail: error.message || 'Failed to shuffle playlist' });
+      }
+    });
+
+    res.status(202).json({ queued: true, jobId, position });
+  } catch (error: any) {
+    logger.error('Failed to shuffle playlist', { error: error.message, userId: req.session.userId, playlistId: (req.params as Record<string, string>).id });
+    next(createInternalError(`Failed to shuffle playlist: ${error.message || 'Unknown error'}`));
+  }
+});
+
+/**
+ * POST /api/playlists/:id/sort
+ * Reorder a playlist by one of the fields in SORT_KEYS. Body: `{ by,
+ * direction }`. `:id` is the Plex ratingKey, same convention as the other
+ * playlist operations here.
+ */
+router.post('/:id/sort', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.session.userId!;
+    const db = req.dbService!;
+    const ratingKey = (req.params as Record<string, string>).id;
+    const { by, direction } = req.body as { by?: string; direction?: string };
+
+    const readKey = SORT_KEYS[by || ''];
+    if (!readKey) {
+      return next(createValidationError(`by must be one of: ${Object.keys(SORT_KEYS).join(', ')}`));
+    }
+    const descending = direction === 'desc';
+
+    const user = db.getUserById(userId);
+    if (!user) return next(createNotFoundError('User not found'));
+    const userServer = db.getUserServer(userId);
+    if (!userServer) return next(createValidationError('No server selected. Please select a server first.'));
+
+    const { jobId, position } = enqueueAction(userId, 'Sort playlist', async (notificationId) => {
+      try {
+        const plexService = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
+        const tracks = (await plexService.getPlaylistTracks(ratingKey)).filter(t => t.playlistItemID != null);
+
+        const sorted = [...tracks].sort((a, b) => {
+          const left = readKey(a);
+          const right = readKey(b);
+          const comparison = typeof left === 'string' || typeof right === 'string'
+            ? String(left).localeCompare(String(right), undefined, { sensitivity: 'base' })
+            : Number(left) - Number(right);
+          return descending ? -comparison : comparison;
+        });
+
+        await applyTrackOrder(plexService, ratingKey, sorted);
+
+        const tracked = db.getPlaylistByPlexId(userId, ratingKey);
+        if (tracked) db.updatePlaylist(tracked.id, { updated_at: Date.now() });
+
+        logger.info('Playlist sorted', { userId, ratingKey, by, direction: descending ? 'desc' : 'asc', trackCount: sorted.length });
+        updateNotification(userId, notificationId, { status: 'success', detail: `Sorted ${sorted.length} tracks by ${by}` });
+      } catch (error: any) {
+        logger.error('Failed to sort playlist', { error: error.message, userId, playlistId: ratingKey });
+        updateNotification(userId, notificationId, { status: 'error', detail: error.message || 'Failed to sort playlist' });
+      }
+    });
+
+    res.status(202).json({ queued: true, jobId, position });
+  } catch (error: any) {
+    logger.error('Failed to sort playlist', { error: error.message, userId: req.session.userId, playlistId: (req.params as Record<string, string>).id });
+    next(createInternalError(`Failed to sort playlist: ${error.message || 'Unknown error'}`));
+  }
+});
+
+/**
+ * POST /api/playlists/:id/dedupe
+ * Remove repeated tracks, keeping the first occurrence of each so the
+ * playlist's order is otherwise untouched. Duplicates are judged by Plex
+ * ratingKey - the same track added twice - not by title, so two genuinely
+ * different recordings of a song are both kept.
+ */
+router.post('/:id/dedupe', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.session.userId!;
+    const db = req.dbService!;
+    const ratingKey = (req.params as Record<string, string>).id;
+
+    const user = db.getUserById(userId);
+    if (!user) return next(createNotFoundError('User not found'));
+    const userServer = db.getUserServer(userId);
+    if (!userServer) return next(createValidationError('No server selected. Please select a server first.'));
+
+    const { jobId, position } = enqueueAction(userId, 'Remove duplicates', async (notificationId) => {
+      try {
+        const plexService = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
+        const tracks = await plexService.getPlaylistTracks(ratingKey);
+
+        const seen = new Set<string>();
+        const duplicates = tracks.filter(t => {
+          if (t.playlistItemID == null || !t.ratingKey) return false;
+          const key = String(t.ratingKey);
+          if (seen.has(key)) return true;
+          seen.add(key);
+          return false;
+        });
+
+        await plexService.removeMultipleFromPlaylist(
+          ratingKey,
+          duplicates.map(d => d.playlistItemID!.toString())
+        );
+
+        const tracked = db.getPlaylistByPlexId(userId, ratingKey);
+        if (tracked) db.updatePlaylist(tracked.id, { updated_at: Date.now() });
+
+        logger.info('Playlist deduplicated', { userId, ratingKey, removed: duplicates.length, remaining: seen.size });
+        updateNotification(userId, notificationId, { status: 'success', detail: `Removed ${duplicates.length} duplicate(s)` });
+      } catch (error: any) {
+        logger.error('Failed to remove duplicates', { error: error.message, userId, playlistId: ratingKey });
+        updateNotification(userId, notificationId, { status: 'error', detail: error.message || 'Failed to remove duplicates' });
+      }
+    });
+
+    res.status(202).json({ queued: true, jobId, position });
+  } catch (error: any) {
+    logger.error('Failed to remove duplicates', { error: error.message, userId: req.session.userId, playlistId: (req.params as Record<string, string>).id });
+    next(createInternalError(`Failed to remove duplicates: ${error.message || 'Unknown error'}`));
+  }
+});
+
+/**
+ * GET /api/playlists/share-targets
+ * Other Playlist Lab users on this server that a playlist can be shared
+ * with (i.e. everyone but yourself, with a Plex server configured).
+ */
+router.get('/share-targets', requireAuth, (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const currentUserId = req.session.userId!;
+    const db = req.dbService!;
+
+    const users = db.getAllUsers()
+      .filter(u => u.id !== currentUserId && !!db.getUserServer(u.id))
+      .map(u => ({
+        id: u.id,
+        username: u.plex_username,
+        thumb: u.plex_thumb,
+      }));
+
+    res.json({ users });
+  } catch (error) {
+    logger.error('Failed to get share targets', { error, userId: req.session.userId });
+    next(createInternalError('Failed to retrieve share targets'));
   }
 });
 
 /**
  * POST /api/playlists/:id/share
- * Share a playlist with another user (copy playlist to their account)
+ * Share a playlist with another Playlist Lab user (copy playlist to their account)
  */
 router.post('/:id/share', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const currentUserId = req.session.userId!;
     const db = req.dbService!;
-    const playlistId = req.params.id;
+    const playlistId = (req.params as Record<string, string>).id;
     const { targetUserId } = req.body;
 
     if (!targetUserId) {
@@ -641,11 +1136,6 @@ router.post('/:id/share', requireAuth, async (req: Request, res: Response, next:
     const targetUserIdNum = parseInt(targetUserId, 10);
     if (isNaN(targetUserIdNum)) {
       return next(createValidationError('Invalid target user ID'));
-    }
-
-    // Only admins can share playlists
-    if (!db.isAdmin(currentUserId)) {
-      return next(createForbiddenError('You do not have permission to share playlists'));
     }
 
     // Get source user (playlist owner) and target user
@@ -677,7 +1167,7 @@ router.post('/:id/share', requireAuth, async (req: Request, res: Response, next:
     }
 
     // Get playlist details and tracks
-    const plexService = new PlexService(currentUserServer.server_url, currentUser.plex_token);
+    const plexService = new PlexService(currentUserServer.server_url, resolvePlexToken(currentUser, currentUserServer));
     const tracks = await plexService.getPlaylistTracks(playlistId);
     
     if (tracks.length === 0) {
@@ -693,7 +1183,7 @@ router.post('/:id/share', requireAuth, async (req: Request, res: Response, next:
     }
 
     // Create the playlist in the target user's account
-    const targetPlexService = new PlexService(targetUserServer.server_url, targetUser.plex_token);
+    const targetPlexService = new PlexService(targetUserServer.server_url, resolvePlexToken(targetUser, targetUserServer));
     const libraryUri = `server://${targetUserServer.server_client_id}/com.plexapp.plugins.library/library/sections/${targetUserServer.library_id}`;
     
     // Build track URIs
@@ -715,7 +1205,18 @@ router.post('/:id/share', requireAuth, async (req: Request, res: Response, next:
       undefined
     );
 
-    logger.info('Playlist shared', { 
+    // Record the share so it shows up in the recipient's "Shared With Me" list.
+    const sourcePlaylistRecord = db.getPlaylistByPlexId(currentUserId, playlistId)
+      ?? db.createPlaylist(currentUserId, playlistId, sourcePlaylist.title, 'plex', undefined);
+    db.recordPlaylistShare(
+      sourcePlaylistRecord.id,
+      currentUserId,
+      targetUserIdNum,
+      playlistId,
+      sourcePlaylist.title
+    );
+
+    logger.info('Playlist shared', {
       playlistId, 
       playlistName: sourcePlaylist.title,
       fromUserId: currentUserId, 
@@ -729,7 +1230,7 @@ router.post('/:id/share', requireAuth, async (req: Request, res: Response, next:
       trackCount: tracks.length
     });
   } catch (error) {
-    logger.error('Failed to share playlist', { error, userId: req.session.userId, playlistId: req.params.id });
+    logger.error('Failed to share playlist', { error, userId: req.session.userId, playlistId: (req.params as Record<string, string>).id });
     next(createInternalError('Failed to share playlist'));
   }
 });
@@ -741,7 +1242,7 @@ router.post('/:id/share', requireAuth, async (req: Request, res: Response, next:
 router.post('/:id/share-to-friend', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const db = req.dbService!;
-    const playlistId = parseInt(req.params.id);
+    const playlistId = parseInt((req.params as Record<string, string>).id);
     const { friendUsername } = req.body;
     const currentUserId = req.session.userId!;
 
@@ -769,7 +1270,7 @@ router.post('/:id/share-to-friend', async (req: Request, res: Response, next: Ne
     // Initialize Plex service
     const plexService = new PlexService(
       userServer.server_url,
-      req.user!.plexToken,
+      resolvePlexToken({ plex_token: req.user!.plexToken }, userServer),
       userServer.library_id
     );
 
@@ -815,7 +1316,7 @@ router.post('/:id/share-to-friend', async (req: Request, res: Response, next: Ne
     logger.error('Failed to share playlist with friend', { 
       error: error.message, 
       userId: req.session.userId, 
-      playlistId: req.params.id 
+      playlistId: (req.params as Record<string, string>).id 
     });
     next(createInternalError(error.message || 'Failed to share playlist'));
   }
@@ -846,8 +1347,10 @@ router.post('/copy-to-managed-user', requireAuth, async (req: Request, res: Resp
       playlistId 
     });
 
-    // Get source user's token
-    const sourceTokenResponse = await axios.post(
+    // Get source user's token - direct axios (plex.tv, not the user's own
+    // PlexClient instance), so route it through plexLimiter by hand like
+    // every other Plex call in the app.
+    const sourceTokenResponse = await plexLimiter.run(() => axios.post(
       `https://plex.tv/api/v2/home/users/${sourceUserId}/switch`,
       {},
       {
@@ -856,11 +1359,11 @@ router.post('/copy-to-managed-user', requireAuth, async (req: Request, res: Resp
           'X-Plex-Token': user.plex_token
         }
       }
-    );
+    ));
     const sourceToken = sourceTokenResponse.data.authToken;
 
     // Get target user's token
-    const targetTokenResponse = await axios.post(
+    const targetTokenResponse = await plexLimiter.run(() => axios.post(
       `https://plex.tv/api/v2/home/users/${targetUserId}/switch`,
       {},
       {
@@ -869,7 +1372,7 @@ router.post('/copy-to-managed-user', requireAuth, async (req: Request, res: Resp
           'X-Plex-Token': user.plex_token
         }
       }
-    );
+    ));
     const targetToken = targetTokenResponse.data.authToken;
 
     // Get user's server
@@ -951,7 +1454,7 @@ router.post('/:id/cover', requireAuth, upload.single('cover'), async (req: Reque
   try {
     const userId = req.session.userId!;
     const db = req.dbService!;
-    const playlistId = req.params.id; // Keep as string for Plex
+    const playlistId = (req.params as Record<string, string>).id; // Keep as string for Plex
 
     if (!req.file) {
       return next(createValidationError('No file uploaded'));
@@ -970,22 +1473,23 @@ router.post('/:id/cover', requireAuth, upload.single('cover'), async (req: Reque
 
     // Upload to Plex
     // Plex expects the image to be uploaded via POST to /library/metadata/{ratingKey}/posters
-    const uploadUrl = `${userServer.server_url}/library/metadata/${playlistId}/posters?X-Plex-Token=${user.plex_token}`;
-    
+    const coverToken = resolvePlexToken(user, userServer);
+    const uploadUrl = `${userServer.server_url}/library/metadata/${playlistId}/posters?X-Plex-Token=${coverToken}`;
+
     const formData = new FormData();
     formData.append('file', req.file.buffer, {
       filename: req.file.originalname,
       contentType: req.file.mimetype,
     });
 
-    await axios.post(uploadUrl, formData, {
+    await plexLimiter.run(() => axios.post(uploadUrl, formData, {
       headers: {
         ...formData.getHeaders(),
-        'X-Plex-Token': user.plex_token,
+        'X-Plex-Token': coverToken,
       },
       maxBodyLength: Infinity,
       maxContentLength: Infinity,
-    });
+    }));
 
     logger.info('Playlist cover uploaded', { userId, playlistId });
     res.json({ success: true, message: 'Cover uploaded successfully' });
@@ -993,7 +1497,7 @@ router.post('/:id/cover', requireAuth, upload.single('cover'), async (req: Reque
     logger.error('Failed to upload playlist cover', { 
       error: error.message, 
       userId: req.session.userId, 
-      playlistId: req.params.id 
+      playlistId: (req.params as Record<string, string>).id 
     });
     next(createInternalError('Failed to upload cover'));
   }
@@ -1007,8 +1511,8 @@ router.put('/:id/tracks/:trackId/move', requireAuth, async (req: Request, res: R
   try {
     const userId = req.session.userId!;
     const db = req.dbService!;
-    const playlistId = req.params.id;
-    const { trackId } = req.params;
+    const playlistId = (req.params as Record<string, string>).id;
+    const { trackId } = req.params as Record<string, string>;
     const { afterId } = req.body;
 
     logger.info('Move track request received', { 
@@ -1036,84 +1540,15 @@ router.put('/:id/tracks/:trackId/move', requireAuth, async (req: Request, res: R
     }
 
     // Move track in Plex playlist
-    const plexService = new PlexService(userServer.server_url, user.plex_token);
+    const plexService = new PlexService(userServer.server_url, resolvePlexToken(user, userServer));
     await plexService.movePlaylistItem(playlistId, trackId, afterId);
 
     logger.info('Track moved in playlist', { userId, playlistId, trackId, afterId });
 
     res.json({ success: true });
   } catch (error) {
-    logger.error('Failed to move track in playlist', { error, userId: req.session.userId, playlistId: req.params.id });
+    logger.error('Failed to move track in playlist', { error, userId: req.session.userId, playlistId: (req.params as Record<string, string>).id });
     next(createInternalError('Failed to move track'));
-  }
-});
-
-/**
- * POST /api/playlists/:id/share
- * Share a playlist with another user (copy playlist to their account)
- */
-router.post('/:id/share', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { id } = req.params;
-    const { userIds } = req.body;
-    const currentUserId = req.session.userId!;
-    const db = req.dbService!;
-
-    if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
-      return next(createValidationError('userIds array is required'));
-    }
-
-    // Get the playlist from Plex to verify it exists
-    const user = db.getUserById(currentUserId);
-    if (!user) {
-      return next(createNotFoundError('User not found'));
-    }
-
-    const userServer = db.getUserServer(currentUserId);
-    if (!userServer) {
-      return next(createValidationError('No Plex server configured'));
-    }
-
-    const plexService = new PlexService(userServer.server_url, user.plex_token);
-    const playlists = await plexService.getPlaylists();
-    const playlist = playlists.find(p => p.ratingKey === id);
-
-    if (!playlist) {
-      return next(createNotFoundError('Playlist not found'));
-    }
-
-    // Get or create playlist record in database
-    let playlistRecord = db.getPlaylistByPlexId(currentUserId, id);
-    if (!playlistRecord) {
-      playlistRecord = db.createPlaylist(
-        currentUserId,
-        id,
-        playlist.title,
-        'plex',
-        null
-      );
-    }
-
-    // Share with each user
-    const sharedCount = db.sharePlaylistWithUsers(playlistRecord.id, currentUserId, userIds, {
-      plexPlaylistId: id,
-      playlistName: playlist.title
-    });
-
-    logger.info('Playlist shared', {
-      playlistId: id,
-      playlistName: playlist.title,
-      ownerId: currentUserId,
-      sharedWithCount: sharedCount
-    });
-
-    res.json({
-      success: true,
-      sharedCount
-    });
-  } catch (error: any) {
-    logger.error('Failed to share playlist', { error: error.message });
-    next(createInternalError('Failed to share playlist'));
   }
 });
 

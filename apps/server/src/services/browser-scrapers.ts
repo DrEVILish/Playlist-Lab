@@ -55,6 +55,58 @@ async function getBrowser() {
   return browserInstance;
 }
 
+const DEFAULT_SCRAPE_TIMEOUT_MS = 90 * 1000;
+
+/**
+ * Every scraper below opens a page against the shared browser instance
+ * (getBrowser), does its site-specific work, and is responsible for closing
+ * that page again. Puppeteer's own per-call timeouts (page.goto's 30s,
+ * waitForSelector's 10s, ...) only bound *that one call* - a step with no
+ * timeout of its own (page.evaluate(), page.content(), or Chrome simply
+ * becoming unresponsive under load) can hang forever. When that happens
+ * nothing ever throws, so the surrounding try/catch never runs and
+ * page.close() never gets called - and since the browser itself is a
+ * long-lived singleton, that renderer leaks permanently. Real-world result:
+ * an 11-hour-old Chrome instance with 24 stray renderer processes, none of
+ * them doing anything, none of them ever logged as failed.
+ *
+ * Wrapping every scrape in one overall timeout, and guaranteeing page.close()
+ * in a finally (itself timeout-guarded, since a wedged renderer can hang on
+ * close() too), fixes the whole class of bug once for every scraper here,
+ * rather than chasing down which individual page.* call is missing a timeout
+ * this time.
+ */
+async function runBrowserScrape<T>(label: string, fn: (page: any) => Promise<T>, timeoutMs = DEFAULT_SCRAPE_TIMEOUT_MS): Promise<T> {
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+  const work = fn(page);
+  // A timeout below abandons `work` without waiting for it - if it later
+  // rejects with nothing left listening, that's an unhandled rejection.
+  // This second handler (a no-op, deliberately not the one Promise.race
+  // below observes) exists purely to keep that from crashing the process.
+  work.catch(() => {});
+  try {
+    return await Promise.race([
+      work,
+      new Promise<T>((_, reject) => {
+        const timer = setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)}s`)), timeoutMs);
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    // Never propagates: a close() failure on an already-broken (or
+    // already-closed) page is not itself a scrape failure, and must not mask
+    // whatever `fn` actually threw. Also timeout-guarded, on the same
+    // "a wedged renderer can hang on anything" logic as above - this would
+    // otherwise just trade a leaked page for a cleanup step that never
+    // finishes.
+    await Promise.race([
+      page.close().catch(() => {}),
+      new Promise<void>(resolve => { const t = setTimeout(resolve, 5000); t.unref?.(); }),
+    ]);
+  }
+}
+
 /**
  * Scrape Apple Music playlist using Puppeteer
  * Based on desktop app's BrowserWindow implementation
@@ -71,17 +123,19 @@ export async function scrapeAppleMusicWithBrowser(url: string, progressEmitter?:
     total: 0,
     currentTrackName: 'Loading Apple Music page...'
   });
-  
-  const browser = await getBrowser();
-  const page = await browser.newPage();
-  
+
   try {
+    return await runBrowserScrape('Apple Music Browser', async (page) => {
     // Set user agent to avoid detection
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
     
-    // Navigate to the page
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-    
+    // Navigate to the page. Apple Music's web player keeps background
+    // connections open (telemetry, track preview prefetch) that can stop
+    // the page from ever reaching networkidle2's "quiet" bar, so wait for
+    // just the initial HTML instead - the waitForSelector/delay below are
+    // the real readiness check for the SPA's rendered content.
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
     // Wait for images to load - Apple Music loads images dynamically
     await page.waitForSelector('img', { timeout: 10000 }).catch(() => {
       logger.warn('[Apple Music Browser] No images found after 10s');
@@ -334,8 +388,8 @@ export async function scrapeAppleMusicWithBrowser(url: string, progressEmitter?:
     debugLog('[Apple Music Browser] ================================================');
     
     return finalResult;
+    });
   } catch (error) {
-    await page.close();
     logger.error('[Apple Music Browser] Error:', error);
     throw error;
   }
@@ -354,11 +408,9 @@ export async function scrapeYouTubeMusicWithBrowser(url: string, progressEmitter
     total: 0,
     currentTrackName: 'Loading YouTube Music page...'
   });
-  
-  const browser = await getBrowser();
-  const page = await browser.newPage();
-  
+
   try {
+    return await runBrowserScrape('YouTube Music Browser', async (page) => {
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
     
     progressEmitter?.emit('progress', {
@@ -544,8 +596,8 @@ export async function scrapeYouTubeMusicWithBrowser(url: string, progressEmitter
       tracks: result.tracks,
       coverUrl: result.coverUrl,
     };
+    });
   } catch (error) {
-    await page.close();
     logger.error('[YouTube Music Browser] Error:', error);
     throw error;
   }
@@ -564,11 +616,9 @@ export async function scrapeTidalWithBrowser(url: string, progressEmitter?: Even
     total: 0,
     currentTrackName: 'Loading Tidal page...'
   });
-  
-  const browser = await getBrowser();
-  const page = await browser.newPage();
-  
+
   try {
+    return await runBrowserScrape('Tidal Browser', async (page) => {
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
     
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
@@ -644,8 +694,8 @@ export async function scrapeTidalWithBrowser(url: string, progressEmitter?: Even
       source: 'tidal',
       tracks: result.tracks,
     };
+    });
   } catch (error) {
-    await page.close();
     logger.error('[Tidal Browser] Error:', error);
     throw error;
   }
@@ -664,11 +714,9 @@ export async function scrapeAmazonMusicWithBrowser(url: string, progressEmitter?
     total: 0,
     currentTrackName: 'Loading Amazon Music page...'
   });
-  
-  const browser = await getBrowser();
-  const page = await browser.newPage();
-  
+
   try {
+    return await runBrowserScrape('Amazon Music Browser', async (page) => {
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
     
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
@@ -719,8 +767,8 @@ export async function scrapeAmazonMusicWithBrowser(url: string, progressEmitter?
       source: 'amazon',
       tracks: result.tracks,
     };
+    });
   } catch (error) {
-    await page.close();
     logger.error('[Amazon Music Browser] Error:', error);
     throw error;
   }
@@ -739,11 +787,9 @@ export async function scrapeQobuzWithBrowser(url: string, progressEmitter?: Even
     total: 0,
     currentTrackName: 'Loading Qobuz page...'
   });
-  
-  const browser = await getBrowser();
-  const page = await browser.newPage();
-  
+
   try {
+    return await runBrowserScrape('Qobuz Browser', async (page) => {
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
     
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
@@ -794,8 +840,8 @@ export async function scrapeQobuzWithBrowser(url: string, progressEmitter?: Even
       source: 'qobuz',
       tracks: result.tracks,
     };
+    });
   } catch (error) {
-    await page.close();
     logger.error('[Qobuz Browser] Error:', error);
     throw error;
   }
@@ -815,10 +861,8 @@ export async function scrapeAriaChartWithBrowser(url: string, progressEmitter?: 
     currentTrackName: 'Loading ARIA chart page...'
   });
 
-  const browser = await getBrowser();
-  const page = await browser.newPage();
-
   try {
+    return await runBrowserScrape('ARIA Browser', async (page) => {
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
     // Intercept API responses that might contain chart data
@@ -1015,8 +1059,8 @@ export async function scrapeAriaChartWithBrowser(url: string, progressEmitter?: 
       source: 'aria',
       tracks,
     };
+    });
   } catch (error) {
-    await page.close();
     logger.error('[ARIA Browser] Error:', error);
     throw error;
   }
@@ -1205,13 +1249,10 @@ export async function scrapeSpotifyWithBrowser(url: string, progressEmitter?: Ev
   }
   const playlistId = playlistMatch[1];
   
-  const browser = await getBrowser();
-  const page = await browser.newPage();
-  
-  try {
+  return runBrowserScrape('Spotify Browser', async (page) => {
     // Set user agent to avoid detection
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-    
+
     // Use a tall viewport to render more tracks initially (~82 vs ~30 with default)
     await page.setViewport({ width: 1920, height: 4000 });
     
@@ -1350,9 +1391,7 @@ export async function scrapeSpotifyWithBrowser(url: string, progressEmitter?: Ev
       tracks,
       coverUrl,
     };
-  } finally {
-    await page.close().catch(() => {});
-  }
+  });
 }
 
 
@@ -1365,13 +1404,10 @@ export async function scrapeSpotifyUserPlaylists(userId: string): Promise<Array<
   debugLog('[Spotify Browser] Scraping user playlists for:', userId);
   logger.info(`[Spotify Browser] Scraping user playlists: ${userId}`);
   
-  const browser = await getBrowser();
-  const page = await browser.newPage();
-  
-  try {
+  return runBrowserScrape('Spotify Browser', async (page) => {
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
     await page.setViewport({ width: 1920, height: 4000 });
-    
+
     const profileUrl = `https://open.spotify.com/user/${encodeURIComponent(userId)}/playlists`;
     await page.goto(profileUrl, { waitUntil: 'networkidle2', timeout: 30000 });
     await new Promise(resolve => setTimeout(resolve, 3000));
@@ -1443,9 +1479,7 @@ export async function scrapeSpotifyUserPlaylists(userId: string): Promise<Array<
     
     logger.info(`[Spotify Browser] Found ${allPlaylists.length} playlists for user ${userId}`);
     return allPlaylists;
-  } finally {
-    await page.close().catch(() => {});
-  }
+  });
 }
 
 

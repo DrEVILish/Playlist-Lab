@@ -301,7 +301,7 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
 router.delete('/:id', requireAuth, (req: Request, res: Response): void => {
   try {
     const userId = (req as any).user.id;
-    const savedUserId = parseInt(req.params.id, 10);
+    const savedUserId = parseInt((req.params as Record<string, string>).id, 10);
 
     if (isNaN(savedUserId)) {
       res.status(400).json({ 
@@ -345,7 +345,7 @@ router.delete('/:id', requireAuth, (req: Request, res: Response): void => {
 router.patch('/:id/refresh', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user.id;
-    const savedUserId = parseInt(req.params.id, 10);
+    const savedUserId = parseInt((req.params as Record<string, string>).id, 10);
 
     if (isNaN(savedUserId)) {
       res.status(400).json({ error: { message: 'Invalid saved user ID' } });

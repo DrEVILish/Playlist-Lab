@@ -20,3 +20,9 @@
   font-size: 0.8125rem;
   color: var(--text-muted);
 }
+
+/* On mobile this lives at the bottom of the slide-out menu instead
+   (MobileNav), so the page-level copy is dropped. */
+@media (max-width: 768px) {
+  .layout > .footer { display: none; }
+}

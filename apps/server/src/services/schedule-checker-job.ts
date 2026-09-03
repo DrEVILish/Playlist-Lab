@@ -6,12 +6,14 @@
  * - Mix generation schedules
  */
 
+import { EventEmitter } from 'events';
 import { DatabaseService } from '../database/database';
 import { logger } from '../utils/logger';
 import { importPlaylist } from './import';
 import { dedupeByPlexRatingKey } from './matching';
 import { MixService } from './mixes';
-import { PlexClient } from './plex';
+import { PlexClient, resolvePlexToken } from './plex';
+import { addNotification, updateNotification } from './job-notifications';
 import type { Schedule } from '../database/types';
 
 /**
@@ -21,10 +23,15 @@ import type { Schedule } from '../database/types';
  *   directly instead of querying `db.getDueSchedules()`. Used by
  *   runSingleSchedule() for manual "Run Now" triggers so it doesn't need to
  *   mutate any shared state on `db` (which is a process-wide singleton).
+ * @param progressEmitter - Only meaningful together with `schedulesOverride`
+ *   (which is always exactly one schedule for a manual trigger) - forwarded
+ *   into importPlaylist() so the caller can mirror real scraping/matching
+ *   progress into that schedule's notification.
  */
 async function executePlaylistRefreshSchedules(
   db: DatabaseService,
-  schedulesOverride?: Schedule[]
+  schedulesOverride?: Schedule[],
+  progressEmitter?: EventEmitter
 ): Promise<{ executed: number; failed: number }> {
   const dueSchedules = (schedulesOverride ?? db.getDueSchedules()).filter(s => s.schedule_type === 'playlist_refresh');
 
@@ -96,10 +103,11 @@ async function executePlaylistRefreshSchedules(
           {
             userId: schedule.user_id,
             serverUrl: server.server_url,
-            plexToken: user.plex_token,
+            plexToken: resolvePlexToken(user, server),
             libraryId: server.library_id || undefined,
           },
-          db
+          db,
+          progressEmitter
         );
 
         // Use custom playlist name from config, or fall back to chart name
@@ -120,66 +128,108 @@ async function executePlaylistRefreshSchedules(
           {
             userId: schedule.user_id,
             serverUrl: server.server_url,
-            plexToken: user.plex_token,
+            plexToken: resolvePlexToken(user, server),
             libraryId: server.library_id || undefined,
           },
-          db
+          db,
+          progressEmitter
         );
 
         playlistName = playlist.name;
       }
 
       // Update the playlist in Plex
-      const plex = new PlexClient(server.server_url, user.plex_token);
+      const plex = new PlexClient(server.server_url, resolvePlexToken(user, server));
 
-      // Handle overwrite option
-      const overwriteExisting = config.overwriteExisting !== undefined ? config.overwriteExisting : true;
-
-      if (overwriteExisting) {
-        // Find existing playlist with the same name
-        try {
-          const playlists = await plex.getPlaylists();
-          const existingPlaylist = playlists.find((p: any) => p.title === playlistName);
-
-          if (existingPlaylist) {
-            logger.info('Deleting existing playlist before creating new one', {
-              playlistName,
-              existingPlaylistId: existingPlaylist.ratingKey
-            });
-            await plex.deletePlaylist(existingPlaylist.ratingKey);
-          }
-        } catch (error: any) {
-          logger.warn('Failed to check for existing playlist', {
-            playlistName,
-            error: error.message
-          });
-          // Continue anyway - playlist creation will handle duplicates
-        }
+      // Resolve the DB record this run should update, by the most stable
+      // identifier available - the schedule's own link if it has one, else
+      // (for chart imports) the chart's source URL, which - unlike the
+      // playlist name - never changes when the user renames the playlist.
+      // Matching on name alone here used to miss a just-renamed playlist and
+      // create a duplicate instead of reusing it (see issue #33 and its
+      // follow-up).
+      let trackedPlaylist = schedule.playlist_id ? db.getPlaylistById(schedule.playlist_id) : null;
+      if (!trackedPlaylist && isChartImport && config.chartUrl) {
+        trackedPlaylist = db.getPlaylistByUserAndSourceUrl(schedule.user_id, config.chartUrl);
+      }
+      if (!trackedPlaylist && isChartImport) {
+        trackedPlaylist = db.getPlaylistByUserAndName(schedule.user_id, playlistName);
       }
 
-      // Create new playlist with refreshed tracks
+      // How this run reconciles the refreshed source against what's already
+      // in the playlist:
+      //   'replace'    - the playlist mirrors the source. Tracks that left
+      //                  the source leave the playlist.
+      //   'accumulate' - the playlist only ever grows. New tracks are added,
+      //                  nothing is removed, so a weekly chart becomes a
+      //                  running archive of everything that ever charted.
+      // `overwriteExisting` is the older boolean this replaces: true always
+      // meant replace. false used to create a second playlist of the same
+      // name on every run, which just accumulated duplicates in Plex rather
+      // than tracks in one playlist - accumulate is what that was reaching
+      // for, so it maps there.
+      const updateMode: 'replace' | 'accumulate' =
+        config.updateMode === 'accumulate' || config.updateMode === 'replace'
+          ? config.updateMode
+          : (config.overwriteExisting === false ? 'accumulate' : 'replace');
+
+      // A refresh run only ever writes into an existing Plex playlist - the
+      // tracked one, or (first run / a stale tracking link) whatever
+      // playlist already has this name in Plex. A new playlist is created
+      // only when neither exists, so ratingKeys stay stable across runs.
+      const targetPlaylistId = await resolveTargetPlaylistId(plex, trackedPlaylist, playlistName);
+
       // Filter out tracks without valid plexRatingKey and build proper URIs
       const matchedWithKeys = dedupeByPlexRatingKey(result.matched.filter((t: any) => t.matched && t.plexRatingKey));
-      
+
       // Get server client ID for building track URIs
       const serverClientId = server.server_client_id || 'playlist-lab-server';
-      const trackUris = matchedWithKeys.map((t: any) => 
+      const trackUris = matchedWithKeys.map((t: any) =>
         `server://${serverClientId}/com.plexapp.plugins.library/library/metadata/${t.plexRatingKey}`
       );
-      
-      logger.info('Creating playlist with matched tracks', {
+
+      logger.info('Updating playlist with matched tracks', {
         scheduleId: schedule.id,
         totalMatched: result.matched.filter((t: any) => t.matched).length,
         validTrackUris: trackUris.length,
         playlistName,
+        targetPlaylistId,
         sampleUri: trackUris[0]
       });
-      
-      const newPlaylist = await plex.createPlaylist(
-        playlistName,
-        server.library_id || '',
-        trackUris
-      );
+
+      // In accumulate mode new tracks are appended, nothing removed. In
+      // replace mode the playlist's contents are cleared and refilled in
+      // the source's order. Either way, an existing playlist keeps its
+      // ratingKey, its cover, and anything the user added by hand.
+      let newPlaylist: { ratingKey: string };
+      if (targetPlaylistId && updateMode === 'accumulate') {
+        const existingTracks = await plex.getPlaylistTracks(targetPlaylistId);
+        const alreadyPresent = new Set(existingTracks.map((t: any) => String(t.ratingKey)));
+        const newUris = matchedWithKeys
+          .filter((t: any) => !alreadyPresent.has(String(t.plexRatingKey)))
+          .map((t: any) => `server://${serverClientId}/com.plexapp.plugins.library/library/metadata/${t.plexRatingKey}`);
+
+        if (newUris.length > 0) {
+          await plex.addToPlaylist(targetPlaylistId, newUris);
+        }
+        logger.info('Accumulated refreshed tracks into existing playlist', {
+          scheduleId: schedule.id,
+          playlistName,
+          added: newUris.length,
+          alreadyPresent: matchedWithKeys.length - newUris.length,
+          totalAfter: alreadyPresent.size + newUris.length,
+        });
+        newPlaylist = { ratingKey: targetPlaylistId };
+      } else if (targetPlaylistId) {
+        await replacePlaylistTracks(plex, targetPlaylistId, trackUris);
+        newPlaylist = { ratingKey: targetPlaylistId };
+      } else {
+        newPlaylist = await plex.createPlaylist(
+          playlistName,
+          server.library_id || '',
+          trackUris
+        );
+      }
 
       // Upload cover art if available and overwriteCover is enabled
       const overwriteCover = config.overwriteCover !== undefined ? config.overwriteCover : true;
@@ -201,53 +251,41 @@ async function executePlaylistRefreshSchedules(
         }
       }
 
-      // Get or create playlist record in database
-      let playlistDbId = schedule.playlist_id;
-      
+      // Get or create playlist record in database, reusing the record
+      // resolved above so a schedule with no direct link yet (chart imports)
+      // still lands on its existing playlist instead of spawning a
+      // duplicate.
+      let playlistDbId = trackedPlaylist?.id ?? null;
+
       if (playlistDbId) {
-        // Update existing playlist record
+        // Update existing playlist record - including the name, so a
+        // rename that only reached the schedule's config (not this row)
+        // doesn't keep drifting the two apart on every future run.
         db.updatePlaylist(playlistDbId, {
           plex_playlist_id: newPlaylist.ratingKey,
+          name: playlistName,
           updated_at: Math.floor(Date.now() / 1000)
         });
       } else {
-        // For chart imports or new playlists, there's no schedule.playlist_id
-        // to key off yet. Since overwriteExisting deletes and recreates the
-        // Plex playlist on every run, the new Plex ratingKey never matches a
-        // prior run's, so looking up by plex_playlist_id alone would always
-        // miss and create a fresh playlist record every time the schedule
-        // fired (see issue #33). Fall back to matching by user + playlist
-        // name so repeat runs of the same named playlist reuse one record.
-        let existingPlaylist = db.getPlaylistByPlexId(schedule.user_id, newPlaylist.ratingKey);
-        if (!existingPlaylist) {
-          existingPlaylist = db.getPlaylistByUserAndName(schedule.user_id, playlistName);
-        }
+        // Create new playlist record
+        const createdPlaylist = db.createPlaylist(
+          schedule.user_id,
+          newPlaylist.ratingKey,
+          playlistName,
+          isChartImport ? config.chartSource : 'plex',
+          isChartImport ? config.chartUrl : undefined
+        );
+        playlistDbId = createdPlaylist.id;
 
-        if (existingPlaylist) {
-          playlistDbId = existingPlaylist.id;
-          db.updatePlaylist(playlistDbId, {
-            plex_playlist_id: newPlaylist.ratingKey,
-            updated_at: Math.floor(Date.now() / 1000)
-          });
-        } else {
-          // Create new playlist record
-          const createdPlaylist = db.createPlaylist(
-            schedule.user_id,
-            newPlaylist.ratingKey,
-            playlistName,
-            isChartImport ? config.chartSource : 'plex',
-            isChartImport ? config.chartUrl : undefined
-          );
-          playlistDbId = createdPlaylist.id;
-          
-          logger.info('Created playlist record for scheduled import', {
-            scheduleId: schedule.id,
-            playlistId: playlistDbId,
-            playlistName,
-            isChartImport
-          });
-        }
+        logger.info('Created playlist record for scheduled import', {
+          scheduleId: schedule.id,
+          playlistId: playlistDbId,
+          playlistName,
+          isChartImport
+        });
+      }
 
+      if (schedule.playlist_id !== playlistDbId) {
         // Persist the resolved playlist record back onto the schedule so
         // future runs go straight to the "update existing record" branch
         // above instead of re-resolving (and risking a new record) each time.
@@ -318,6 +356,116 @@ async function executePlaylistRefreshSchedules(
 
 
 /**
+ * Resolve which Plex playlist a refresh/mix-generation run should write
+ * into - never a new one. Schedules always fully regenerate their track
+ * list, so the previous run's playlist (tracked by DB record, or by name
+ * for schedules that predate tracking) is reused; a fresh playlist is only
+ * created when nothing to reuse exists yet (a genuine first run). This is
+ * what keeps a playlist's Plex ratingKey stable across every scheduled run.
+ */
+async function resolveTargetPlaylistId(
+  plex: PlexClient,
+  trackedPlaylist: { plex_playlist_id: string } | null | undefined,
+  playlistName: string
+): Promise<string | null> {
+  if (trackedPlaylist?.plex_playlist_id && !trackedPlaylist.plex_playlist_id.startsWith('pending-')) {
+    return trackedPlaylist.plex_playlist_id;
+  }
+
+  // No tracked record yet - fall back to a name search (covers a genuinely
+  // first run, or a schedule that predates DB tracking).
+  try {
+    const playlists = await plex.getPlaylists();
+    const existing = playlists.find((p: any) => p.title === playlistName);
+    return existing?.ratingKey ?? null;
+  } catch (error: any) {
+    logger.warn('Failed to check for existing playlist', { playlistName, error: error.message });
+    return null;
+  }
+}
+
+/**
+ * Replace a Plex playlist's contents in place - same ratingKey throughout -
+ * by clearing its current items and adding the refreshed set, in order.
+ */
+async function replacePlaylistTracks(plex: PlexClient, playlistId: string, trackUris: string[]): Promise<void> {
+  const existingTracks = await plex.getPlaylistTracks(playlistId);
+  const existingItemIds = existingTracks
+    .filter(t => t.playlistItemID != null)
+    .map(t => String(t.playlistItemID));
+  await plex.removeMultipleFromPlaylist(playlistId, existingItemIds);
+  if (trackUris.length > 0) {
+    await plex.addToPlaylist(playlistId, trackUris);
+  }
+}
+
+/**
+ * Write a generated mix's tracks into Plex and keep the DB record pointed
+ * at it, reusing the schedule's existing playlist (by link, else by name)
+ * so a mix schedule's ratingKey never changes across runs.
+ */
+async function createOrUpdateMixPlaylist(
+  db: DatabaseService,
+  plex: PlexClient,
+  schedule: Schedule,
+  playlistName: string,
+  trackUris: string[],
+  libraryId: string
+): Promise<string> {
+  const linked = schedule.playlist_id ? db.getPlaylistById(schedule.playlist_id) : null;
+  const targetPlaylistId = await resolveTargetPlaylistId(plex, linked, playlistName);
+
+  let ratingKey: string;
+  if (targetPlaylistId) {
+    await replacePlaylistTracks(plex, targetPlaylistId, trackUris);
+    ratingKey = targetPlaylistId;
+  } else {
+    const created = await plex.createPlaylist(playlistName, libraryId, trackUris);
+    ratingKey = created.ratingKey;
+  }
+
+  upsertMixPlaylistRecord(db, schedule, ratingKey, playlistName);
+  return ratingKey;
+}
+
+/**
+ * After creating/recreating a mix's Plex playlist, keep the local
+ * `playlists` record (and the schedule's link to it) pointed at the new
+ * ratingKey so the next run can find and delete it again instead of
+ * accumulating duplicates.
+ */
+function upsertMixPlaylistRecord(
+  db: DatabaseService,
+  schedule: Schedule,
+  newPlaylistId: string,
+  playlistName: string
+): void {
+  if (schedule.playlist_id) {
+    db.updatePlaylist(schedule.playlist_id, {
+      plex_playlist_id: newPlaylistId,
+      updated_at: Math.floor(Date.now() / 1000)
+    });
+    return;
+  }
+
+  const existing = db.getPlaylistByPlexId(schedule.user_id, newPlaylistId)
+    ?? db.getPlaylistByUserAndName(schedule.user_id, playlistName);
+
+  const playlistDbId = existing
+    ? existing.id
+    : db.createPlaylist(schedule.user_id, newPlaylistId, playlistName, 'plex', undefined).id;
+
+  if (existing) {
+    db.updatePlaylist(playlistDbId, {
+      plex_playlist_id: newPlaylistId,
+      updated_at: Math.floor(Date.now() / 1000)
+    });
+  }
+
+  db.linkSchedulePlaylist(schedule.id, playlistDbId);
+}
+
+/**
  * Execute mix generation schedules that are due.
  *
  * @param schedulesOverride - When provided, these schedules are executed
@@ -366,7 +514,7 @@ async function executeMixGenerationSchedules(
       // Parse schedule config to determine which mixes to generate
       const config = schedule.config ? JSON.parse(schedule.config) : {};
       
-      const plex = new PlexClient(server.server_url, user.plex_token);
+      const plex = new PlexClient(server.server_url, resolvePlexToken(user, server));
 
       // Check if this is a template-based schedule
       if (config.templateId) {
@@ -405,7 +553,7 @@ async function executeMixGenerationSchedules(
           // Custom mix from template
           result = await mixService.generateCustomMix(
             server.server_url,
-            user.plex_token,
+            resolvePlexToken(user, server),
             server.library_id || '',
             {
               ...templateConfig,
@@ -419,7 +567,7 @@ async function executeMixGenerationSchedules(
             mixService,
             mixType,
             server.server_url,
-            user.plex_token,
+            resolvePlexToken(user, server),
             server.library_id || '',
             settings,
             templateConfig
@@ -439,17 +587,15 @@ async function executeMixGenerationSchedules(
         }
 
         // Create or update playlist
-        const playlistId = await plex.createPlaylist(
-          playlistName,
-          server.library_id || '',
-          result.trackKeys
+        const templateRatingKey = await createOrUpdateMixPlaylist(
+          db, plex, schedule, playlistName, result.trackKeys, server.library_id || ''
         );
 
-        logger.info('Template mix generated successfully', { 
+        logger.info('Template mix generated successfully', {
           templateId: template.id,
-          playlistName, 
+          playlistName,
           trackCount: result.trackCount,
-          playlistId: playlistId.ratingKey
+          playlistId: templateRatingKey
         });
 
         // Update template usage
@@ -478,7 +624,7 @@ async function executeMixGenerationSchedules(
           mixService,
           mixType,
           server.server_url,
-          user.plex_token,
+          resolvePlexToken(user, server),
           server.library_id || '',
           settings,
           config
@@ -494,17 +640,15 @@ async function executeMixGenerationSchedules(
         }
 
         // Create or update playlist
-        const playlistId = await plex.createPlaylist(
-          playlistName,
-          server.library_id || '',
-          result.trackKeys
+        const mixRatingKey = await createOrUpdateMixPlaylist(
+          db, plex, schedule, playlistName, result.trackKeys, server.library_id || ''
         );
 
-        logger.info('Mix generated successfully', { 
-          mixType, 
-          playlistName, 
+        logger.info('Mix generated successfully', {
+          mixType,
+          playlistName,
           trackCount: result.trackCount,
-          playlistId: playlistId.ratingKey
+          playlistId: mixRatingKey
         });
 
         // Update execution record with success
@@ -524,7 +668,7 @@ async function executeMixGenerationSchedules(
               mixService,
               mixType,
               server.server_url,
-              user.plex_token,
+              resolvePlexToken(user, server),
               server.library_id || '',
               settings,
               {}
@@ -535,18 +679,26 @@ async function executeMixGenerationSchedules(
               continue;
             }
 
-            // Create new playlist
-            const playlistId = await plex.createPlaylist(
-              playlistName,
-              server.library_id || '',
-              result.trackKeys
-            );
+            // Create or update playlist by name. Legacy multi-mix schedules
+            // generate several differently-named playlists per run, so
+            // there's no single schedule.playlist_id to link them to (unlike
+            // the template/quick-mix branches above) - matching this
+            // branch's existing no-DB-record behavior.
+            const legacyTargetId = await resolveTargetPlaylistId(plex, null, playlistName);
+            let legacyRatingKey: string;
+            if (legacyTargetId) {
+              await replacePlaylistTracks(plex, legacyTargetId, result.trackKeys);
+              legacyRatingKey = legacyTargetId;
+            } else {
+              const created = await plex.createPlaylist(playlistName, server.library_id || '', result.trackKeys);
+              legacyRatingKey = created.ratingKey;
+            }
 
-            logger.info('Mix generated successfully', { 
-              mixType, 
-              playlistName, 
+            logger.info('Mix generated successfully', {
+              mixType,
+              playlistName,
               trackCount: result.trackCount,
-              playlistId: playlistId.ratingKey
+              playlistId: legacyRatingKey
             });
           } catch (error: any) {
             logger.error('Failed to generate mix', { 
@@ -660,27 +812,46 @@ async function generateMixByType(
  * Run schedule checker job (checks both playlist refresh and mix generation)
  */
 export async function runScheduleCheckerJob(db: DatabaseService): Promise<void> {
-  logger.info('Starting schedule checker job');
+  logger.debug('Starting schedule checker job');
 
   const playlistResults = await executePlaylistRefreshSchedules(db);
   const mixResults = await executeMixGenerationSchedules(db);
 
-  logger.info('Schedule checker job completed', {
+  // The checker wakes up on a timer and almost always finds nothing due, so
+  // only a run that actually did something is worth an info line - otherwise
+  // it emits a pair of lines every few minutes forever and drowns the log.
+  const didSomething = playlistResults.executed + playlistResults.failed +
+                       mixResults.executed + mixResults.failed > 0;
+  // No `timestamp` in the meta - winston stamps every line itself, and this
+  // one overwrote it with a different (ISO) format, so these lines sorted and
+  // filtered differently from every other line in the log.
+  logger[didSomething ? 'info' : 'debug']('Schedule checker job completed', {
     playlistRefresh: playlistResults,
     mixGeneration: mixResults,
-    timestamp: new Date().toISOString()
   });
 }
 
 /**
- * Run a single schedule immediately (for manual "Run Now" triggers)
- * This executes the schedule logic without checking if it's due
+ * Run a single schedule immediately (for manual "Run Now" and "Refresh All"
+ * triggers) - executes the schedule logic without checking if it's due, and
+ * reports live progress into a notification the header's bell reads, so a
+ * manually-triggered run (unlike the automatic cron-driven checker) always
+ * gives the user something to watch instead of just vanishing until it's done.
  */
 export async function runSingleSchedule(db: DatabaseService, schedule: any): Promise<void> {
   logger.info('Manually running single schedule', {
     scheduleId: schedule.id,
     scheduleType: schedule.schedule_type,
     userId: schedule.user_id
+  });
+
+  const title = scheduleDisplayName(db, schedule);
+  const notification = addNotification(schedule.user_id, {
+    type: 'schedule',
+    title,
+    detail: schedule.schedule_type === 'mix_generation' ? 'Generating mix' : 'Starting...',
+    status: 'in-progress',
+    progress: 0,
   });
 
   try {
@@ -692,16 +863,33 @@ export async function runSingleSchedule(db: DatabaseService, schedule: any): Pro
       // for multiple schedules (e.g. "Run Now" and "Run All Schedules"), so
       // mutating shared state on it is not safe - overlapping calls would
       // race on saving/restoring the original method.
-      await executePlaylistRefreshSchedules(db, [schedule]);
+      const progressEmitter = new EventEmitter();
+      progressEmitter.on('progress', (data: { phase?: string; current?: number; total?: number; currentTrackName?: string }) => {
+        const detail = data.phase === 'matching' ? 'Matching tracks with your Plex library...' : (data.currentTrackName || 'Fetching tracks...');
+        const progress = data.total ? Math.round(((data.current || 0) / data.total) * 100) : undefined;
+        updateNotification(schedule.user_id, notification.id, { detail, progress });
+      });
 
+      // executePlaylistRefreshSchedules() catches its own per-schedule
+      // errors (to keep a batch of many due schedules going) rather than
+      // throwing, so success/failure has to be read from its returned
+      // counts, not from whether this call rejects.
+      const { failed } = await executePlaylistRefreshSchedules(db, [schedule], progressEmitter);
+      if (failed > 0) throw new Error('Playlist refresh failed - check the logs for details');
+
+      updateNotification(schedule.user_id, notification.id, { status: 'success', progress: 100, detail: 'Refreshed' });
       logger.info('Manual playlist refresh completed', {
         scheduleId: schedule.id
       });
     } else if (schedule.schedule_type === 'mix_generation') {
       // Same rationale as above - pass the schedule directly rather than
-      // mutating shared db state.
-      await executeMixGenerationSchedules(db, [schedule]);
+      // mutating shared db state. Mix generation is a single Plex-side
+      // selection call with no meaningful sub-progress to report, so this
+      // just tracks start/success/failure rather than a percentage.
+      const { failed } = await executeMixGenerationSchedules(db, [schedule]);
+      if (failed > 0) throw new Error('Mix generation failed - check the logs for details');
 
+      updateNotification(schedule.user_id, notification.id, { status: 'success', progress: 100, detail: 'Generated' });
       logger.info('Manual mix generation completed', {
         scheduleId: schedule.id
       });
@@ -714,6 +902,20 @@ export async function runSingleSchedule(db: DatabaseService, schedule: any): Pro
       error: error.message,
       stack: error.stack
     });
+    updateNotification(schedule.user_id, notification.id, { status: 'error', detail: error.message || 'Failed' });
     throw error;
   }
+}
+
+/** Best-effort display name for a schedule's notification title - doesn't
+ * need to match the executor's own playlistName resolution exactly, just be
+ * recognizable to the user who triggered it. */
+function scheduleDisplayName(db: DatabaseService, schedule: any): string {
+  if (schedule.playlist_id) {
+    const playlist = db.getPlaylistById(schedule.playlist_id);
+    if (playlist) return playlist.name;
+  }
+  const config = schedule.config ? JSON.parse(schedule.config) : {};
+  return config.playlistName || config.chartName || config.templateName || config.mixName
+    || (schedule.schedule_type === 'mix_generation' ? 'Scheduled mix' : 'Scheduled playlist refresh');
 }

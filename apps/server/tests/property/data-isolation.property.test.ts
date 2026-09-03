@@ -154,7 +154,7 @@ describe('Data Isolation Property Tests', () => {
             fc.record({
               scheduleType: fc.constantFrom('playlist_refresh', 'mix_generation'),
               frequency: fc.constantFrom('daily', 'weekly', 'fortnightly', 'monthly'),
-              startDate: fc.date({ min: new Date('2020-01-01'), max: new Date('2025-12-31') })
+              startDate: fc.date({ min: new Date('2020-01-01'), max: new Date('2025-12-31'), noInvalidDate: true })
                 .map(d => d.toISOString().split('T')[0]),
             }),
             { minLength: 1, maxLength: 5 }

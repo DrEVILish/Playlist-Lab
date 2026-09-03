@@ -24,8 +24,27 @@ import type {
   ExternalTrack,
   MissingTrackStat,
   MixTemplate,
-  ParsedMixTemplate
+  ParsedMixTemplate,
+  ManualMatch,
+  DeemixDownload
 } from './types';
+
+/**
+ * Replaces any non-finite number (NaN, +/-Infinity - e.g. from a malformed
+ * API payload) with the corresponding value from `fallback` before it's
+ * JSON.stringify'd for storage. Without this, JSON.stringify silently turns
+ * NaN/Infinity into `null`, corrupting the setting instead of rejecting or
+ * ignoring the bad value.
+ */
+function sanitizeNumbers<T extends Record<string, any>>(incoming: T, fallback: T): T {
+  const result = { ...incoming };
+  for (const key of Object.keys(result)) {
+    if (typeof result[key] === 'number' && !Number.isFinite(result[key])) {
+      (result as any)[key] = fallback[key];
+    }
+  }
+  return result;
+}
 
 /**
  * Default matching settings
@@ -180,6 +199,17 @@ export class DatabaseService {
     stmt.run(token, userId);
   }
 
+  /**
+   * Update a user's display name and avatar.
+   *
+   * Called on every login so names captured before plex.tv had one for the
+   * account (managed Plex Home users) stop showing as blank in the admin UI.
+   */
+  updateUserProfile(userId: number, username: string, thumb?: string): void {
+    const stmt = this.db.prepare('UPDATE users SET plex_username = ?, plex_thumb = COALESCE(?, plex_thumb) WHERE id = ?');
+    stmt.run(username, thumb ?? null, userId);
+  }
+
   // ==================== Server Operations ====================
 
   /**
@@ -191,11 +221,12 @@ export class DatabaseService {
     serverClientId: string,
     serverUrl: string,
     libraryId?: string,
-    libraryName?: string
+    libraryName?: string,
+    accessToken?: string | null
   ): UserServer {
     const insertStmt = this.db.prepare(`
-      INSERT INTO user_servers (user_id, server_name, server_client_id, server_url, library_id, library_name)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO user_servers (user_id, server_name, server_client_id, server_url, library_id, library_name, access_token)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
     const deleteStmt = this.db.prepare('DELETE FROM user_servers WHERE user_id = ?');
 
@@ -204,7 +235,7 @@ export class DatabaseService {
     // leaving the user with zero server rows.
     const replaceServer = this.db.transaction(() => {
       deleteStmt.run(userId);
-      return insertStmt.run(userId, serverName, serverClientId, serverUrl, libraryId, libraryName);
+      return insertStmt.run(userId, serverName, serverClientId, serverUrl, libraryId, libraryName, accessToken ?? null);
     });
 
     const result = replaceServer();
@@ -216,7 +247,8 @@ export class DatabaseService {
       server_client_id: serverClientId,
       server_url: serverUrl,
       library_id: libraryId,
-      library_name: libraryName
+      library_name: libraryName,
+      access_token: accessToken ?? null
     };
   }
 
@@ -279,8 +311,8 @@ export class DatabaseService {
     const current = this.getUserSettings(userId);
     
     const country = settings.country ?? current.country;
-    const matchingSettings = settings.matching_settings ?? current.matching_settings;
-    const mixSettings = settings.mix_settings ?? current.mix_settings;
+    const matchingSettings = sanitizeNumbers(settings.matching_settings ?? current.matching_settings, current.matching_settings);
+    const mixSettings = sanitizeNumbers(settings.mix_settings ?? current.mix_settings, current.mix_settings);
     const geminiApiKey = settings.gemini_api_key !== undefined ? settings.gemini_api_key : current.gemini_api_key;
     const grokApiKey = settings.grok_api_key !== undefined ? settings.grok_api_key : current.grok_api_key;
     const aiProvider = settings.ai_provider ?? current.ai_provider ?? 'gemini';
@@ -435,6 +467,25 @@ export class DatabaseService {
   getUserSchedules(userId: number): Schedule[] {
     const stmt = this.db.prepare('SELECT * FROM schedules WHERE user_id = ?');
     return stmt.all(userId) as Schedule[];
+  }
+
+  /**
+   * All schedules across every user, with the owning username and playlist
+   * name joined in - for the admin "all users' schedules in one place" view,
+   * which otherwise only has each user's own scoped GET /api/schedules.
+   * Returns raw snake_case rows (like getUserSchedules) plus `username` and
+   * `playlist_name`, for the route to run through the same transformSchedule
+   * used by GET /api/schedules.
+   */
+  getAllSchedules(): any[] {
+    const stmt = this.db.prepare(`
+      SELECT schedules.*, users.plex_username AS username, playlists.name AS playlist_name
+      FROM schedules
+      JOIN users ON users.id = schedules.user_id
+      LEFT JOIN playlists ON playlists.id = schedules.playlist_id
+      ORDER BY schedules.last_run DESC
+    `);
+    return stmt.all();
   }
 
   /**
@@ -820,6 +871,49 @@ export class DatabaseService {
     stmt.run(playlistId);
   }
 
+  // ==================== Manual Matches Operations ====================
+
+  /**
+   * Remember a user's explicit "use this Plex track" choice for a source
+   * track, so future matching for the same (title, artist, album) reuses it
+   * instead of re-running the fuzzy search. Upserts by that same key -
+   * (title, artist) normalized the same way addMissingTracks() dedupes, so
+   * picking a different track for the same source track later overwrites
+   * the old choice rather than accumulating stale rows.
+   */
+  recordManualMatch(userId: number, track: { title: string; artist: string; album?: string }, plexRatingKey: string): void {
+    const findStmt = this.db.prepare(`
+      SELECT id FROM manual_matches
+      WHERE user_id = ?
+        AND LOWER(TRIM(title)) = LOWER(TRIM(?))
+        AND LOWER(TRIM(artist)) = LOWER(TRIM(?))
+        AND LOWER(TRIM(COALESCE(album, ''))) = LOWER(TRIM(COALESCE(?, '')))
+    `);
+    const existing = findStmt.get(userId, track.title, track.artist, track.album ?? '') as { id: number } | undefined;
+
+    const now = Math.floor(Date.now() / 1000);
+
+    if (existing) {
+      this.db.prepare('UPDATE manual_matches SET plex_rating_key = ?, updated_at = ? WHERE id = ?')
+        .run(plexRatingKey, now, existing.id);
+    } else {
+      this.db.prepare(`
+        INSERT INTO manual_matches (user_id, title, artist, album, plex_rating_key, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(userId, track.title, track.artist, track.album ?? null, plexRatingKey, now, now);
+    }
+  }
+
+  /**
+   * All of a user's remembered manual matches, for callers (matchPlaylist())
+   * to look up against before falling back to the normal search - fetched
+   * once per matching run rather than once per track.
+   */
+  getUserManualMatches(userId: number): ManualMatch[] {
+    const stmt = this.db.prepare('SELECT * FROM manual_matches WHERE user_id = ?');
+    return stmt.all(userId) as ManualMatch[];
+  }
+
   // ==================== Cached Playlists Operations ====================
 
   /**
@@ -937,12 +1031,15 @@ export class DatabaseService {
     // Group by normalized (case/whitespace-insensitive) title+artist, same
     // as addMissingTracks' dedup logic, so e.g. "Song" and "song " aggregate
     // into a single stat instead of being counted separately. MIN() picks a
-    // consistent (if arbitrary) original-cased variant for display.
+    // consistent (if arbitrary) original-cased variant for display. addedAt
+    // is the most recent added_at across every user missing this track, so
+    // sorting by it surfaces recently-flagged tracks first.
     const stmt = this.db.prepare(`
       SELECT
-        MIN(title) || ' - ' || MIN(artist) as track,
+        MIN(title) as title,
         MIN(artist) as artist,
-        COUNT(*) as count
+        COUNT(*) as count,
+        MAX(added_at) as addedAt
       FROM missing_tracks
       GROUP BY LOWER(TRIM(title)), LOWER(TRIM(artist))
       ORDER BY count DESC
@@ -1044,47 +1141,6 @@ export class DatabaseService {
   // ==================== Playlist Sharing Operations ====================
 
   /**
-   * Share a playlist with multiple users
-   */
-  sharePlaylistWithUsers(
-    playlistId: number,
-    ownerUserId: number,
-    userIds: number[],
-    metadata: { plexPlaylistId: string; playlistName: string }
-  ): number {
-    const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO playlist_shares 
-      (playlist_id, owner_user_id, shared_with_user_id, plex_playlist_id, playlist_name, shared_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
-
-    const now = Date.now();
-    let sharedCount = 0;
-
-    for (const userId of userIds) {
-      // Don't share with yourself
-      if (userId === ownerUserId) continue;
-
-      try {
-        stmt.run(
-          playlistId,
-          ownerUserId,
-          userId,
-          metadata.plexPlaylistId,
-          metadata.playlistName,
-          now
-        );
-        sharedCount++;
-      } catch (error) {
-        // Skip if already shared or other error
-        continue;
-      }
-    }
-
-    return sharedCount;
-  }
-
-  /**
    * Record a single playlist share
    */
   recordPlaylistShare(
@@ -1174,6 +1230,25 @@ export class DatabaseService {
     `);
 
     return (stmt.get(userId, name) as Playlist | undefined) ?? null;
+  }
+
+  /**
+   * Get a user's playlist record by its source URL (e.g. a chart/Spotify/
+   * Deezer link). Unlike the name, this never changes when the user renames
+   * the playlist, so it's the preferred way to re-associate an unlinked
+   * chart-import schedule with its existing record - matching by name alone
+   * missed a just-renamed playlist and spawned a duplicate instead of
+   * reusing it.
+   */
+  getPlaylistByUserAndSourceUrl(userId: number, sourceUrl: string): Playlist | null {
+    const stmt = this.db.prepare(`
+      SELECT * FROM playlists
+      WHERE user_id = ? AND source_url = ?
+      ORDER BY created_at ASC
+      LIMIT 1
+    `);
+
+    return (stmt.get(userId, sourceUrl) as Playlist | undefined) ?? null;
   }
 
   /**
@@ -1372,6 +1447,44 @@ export class DatabaseService {
       stmt.run(now, id);
     }
 
+  // ==================== Deemix Download Operations ====================
 
+  /**
+   * Records a deemix download that is still in flight, so its progress
+   * poller (and the missing track it was queued for) can be picked back up
+   * after a server restart. Not unique on uuid: two missing tracks from the
+   * same album resolve to the same deemix queue item, and each still needs
+   * its own row to reconcile back to.
+   */
+  addDeemixDownload(userId: number, uuid: string, title: string, detail: string | null, missingTrackId: number | null): number {
+    const stmt = this.db.prepare(`
+      INSERT INTO deemix_downloads (user_id, uuid, missing_track_id, title, detail, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    return Number(stmt.run(userId, uuid, missingTrackId, title, detail, Date.now()).lastInsertRowid);
+  }
 
+  /** Called once a download reaches a terminal state - completed, failed, or
+   * given up on - so only genuinely in-flight downloads are ever resumed. */
+  deleteDeemixDownload(id: number): void {
+    this.db.prepare('DELETE FROM deemix_downloads WHERE id = ?').run(id);
+  }
+
+  /**
+   * Every download still recorded as in flight, newest first. Rows older
+   * than `maxAgeMs` are deleted rather than returned: deemix drops its own
+   * queue entry for a long-finished item, so resuming one would only poll
+   * for something that can no longer be found.
+   */
+  getActiveDeemixDownloads(maxAgeMs: number): DeemixDownload[] {
+    this.db.prepare('DELETE FROM deemix_downloads WHERE created_at < ?').run(Date.now() - maxAgeMs);
+    return this.db.prepare('SELECT * FROM deemix_downloads ORDER BY created_at DESC').all() as DeemixDownload[];
+  }
+
+  /** Every admin's user id, for server-wide notifications (e.g. an expired
+   * Deezer ARL) that aren't tied to whoever happens to be logged in. */
+  getAdminUserIds(): number[] {
+    const rows = this.db.prepare('SELECT user_id FROM admin_users').all() as Array<{ user_id: number }>;
+    return rows.map(r => r.user_id);
+  }
 }

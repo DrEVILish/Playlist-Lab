@@ -1,10 +1,11 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AppProvider } from './contexts/AppContext';
 import { ConfirmProvider } from './contexts/ConfirmContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { ErrorBoundary, CHUNK_RELOAD_GUARD_KEY } from './components/ErrorBoundary';
 import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { AuthCallbackPage } from './pages/AuthCallbackPage';
@@ -80,17 +81,28 @@ function AppRoutes() {
 }
 
 function App() {
+  // A page that reaches this render without an ErrorBoundary trip is a
+  // sign the currently-loaded chunks are good - clear the reload guard
+  // (see ErrorBoundary.tsx) so a *future* stale-chunk error after another
+  // deploy still gets its one automatic reload instead of being
+  // permanently suppressed for the rest of this tab's lifetime.
+  useEffect(() => {
+    sessionStorage.removeItem(CHUNK_RELOAD_GUARD_KEY);
+  }, []);
+
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <AppProvider>
-          <ToastProvider>
-            <ConfirmProvider>
-              <AppRoutes />
-            </ConfirmProvider>
-          </ToastProvider>
-        </AppProvider>
-      </AuthProvider>
+      <ErrorBoundary>
+        <AuthProvider>
+          <AppProvider>
+            <ToastProvider>
+              <ConfirmProvider>
+                <AppRoutes />
+              </ConfirmProvider>
+            </ToastProvider>
+          </AppProvider>
+        </AuthProvider>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }

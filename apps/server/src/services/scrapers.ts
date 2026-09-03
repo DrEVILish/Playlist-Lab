@@ -72,6 +72,14 @@ export async function scrapeDeezerPlaylist(playlistId: string, progressEmitter?:
     };
   } catch (error) {
     logger.error('[Deezer] Scrape error:', { error: (error as any)?.message || error });
+    // A 403 from Deezer's public API means the playlist itself is
+    // unreachable (deleted, made private, or region-restricted) - not a
+    // transient network/auth problem - so say that instead of the generic
+    // axios status-code message, which just confuses anyone reading logs
+    // or a failed-schedule notification.
+    if (axios.isAxiosError(error) && error.response?.status === 403) {
+      throw new Error('This Deezer playlist is unavailable (it may have been deleted, made private, or is region-restricted)');
+    }
     throw new Error(`Failed to scrape Deezer playlist: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -569,30 +577,23 @@ export async function scrapeYouTubeMusicPlaylist(url: string, progressEmitter?: 
       currentTrackName: 'Loading playlist details...'
     });
     
-    // Get playlist details - getPlaylist returns basic info without tracks
-    // Get playlist info
-    const playlistInfo: any = await ytmusic.getPlaylist(playlistId);
-    
+    // getPlaylist() only returns playlist metadata (name, thumbnails, ...) -
+    // this ytmusic-api version requires a separate call for the track list.
+    const [playlistInfo, trackList]: [any, any[]] = await Promise.all([
+      ytmusic.getPlaylist(playlistId),
+      ytmusic.getPlaylistVideos(playlistId).catch(() => []),
+    ]);
+
     if (!playlistInfo) {
       throw new Error('Playlist not found or is private');
     }
-    
-    // Try to get tracks from items
-    const trackList = playlistInfo.items || [];
-    
-    console.log('[YouTube Music] Playlist info:', {
-      playlistId,
-      name: playlistInfo.name,
-      trackListLength: trackList.length,
-      firstTrack: trackList[0] ? Object.keys(trackList[0]) : null
-    });
-    
+
     // If no tracks found, throw error to trigger browser scraping fallback
     if (trackList.length === 0) {
       logger.warn('[YouTube Music] No tracks found via API, falling back to browser scraping');
       throw new Error('No tracks found in playlist via API');
     }
-    
+
     progressEmitter?.emit('progress', {
       type: 'progress',
       phase: 'scraping',
@@ -600,16 +601,13 @@ export async function scrapeYouTubeMusicPlaylist(url: string, progressEmitter?: 
       total: trackList.length,
       currentTrackName: 'Extracting tracks...'
     });
-    
-    // Extract tracks - ytmusic-api returns items with different structure
+
+    // getPlaylistVideos() items are VideoDetailed: { name, artist: { name }, ... } - singular artist, no album.
     const tracks: ExternalTrack[] = trackList.map((item: any) => {
-      // The item has a 'name' field for title and 'artists' array
       const title = item.name || item.title || 'Unknown';
-      const artist = item.artists && item.artists.length > 0 
-        ? item.artists.map((a: any) => a.name).join(', ')
-        : 'Unknown';
+      const artist = item.artist?.name || (Array.isArray(item.artists) ? item.artists.map((a: any) => a.name).join(', ') : undefined) || 'Unknown';
       const album = item.album?.name || undefined;
-      
+
       return {
         title,
         artist,

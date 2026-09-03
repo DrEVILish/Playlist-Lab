@@ -29,11 +29,13 @@ import {
   scrapeLastfmPlaylist,
   ExternalPlaylist,
 } from './scrapers';
-import { matchPlaylist, MatchedTrack, dedupeByPlexRatingKey } from './matching';
+import { matchPlaylist, MatchedTrack, dedupeByPlexRatingKey, buildRememberedMatchMap, rememberedMatchKey, rememberMatches } from './matching';
 import { logger } from '../utils/logger';
 import { logImportDebug } from '../utils/import-debug-logger';
 import { EventEmitter } from 'events';
 import { debugLog } from '../utils/debug-logger';
+import { addNotification, updateNotification } from './job-notifications';
+import { externalLimiter } from './task-queues';
 
 export interface ImportResult {
   playlistId: string;
@@ -85,6 +87,7 @@ export async function importPlaylist(
   
   let externalPlaylist: ExternalPlaylist;
   let usedCache = false;
+  let vanishedFromSource: ExternalPlaylist['tracks'] = [];
   
   // Emit initial scraping progress
   if (progressEmitter) {
@@ -100,7 +103,9 @@ export async function importPlaylist(
   debugLog('[Import] ========== STARTING SCRAPE ==========');
   
   try {
-    externalPlaylist = await scrapePlaylist(source, sourceIdentifier, progressEmitter, options.userId, db, options);
+    externalPlaylist = await externalLimiter.run(() =>
+      scrapePlaylist(source, sourceIdentifier, progressEmitter, options.userId, db, options)
+    );
     debugLog('[Import] scrapePlaylist returned successfully');
     
     logImportDebug('=== SCRAPING COMPLETE ===', {
@@ -131,6 +136,15 @@ export async function importPlaylist(
       logger.info(`[Import] Starting matching phase...`);
     }
     
+    // A previous cache row means this is a reimport/refresh, not a first-time
+    // import - diff its tracks against the fresh scrape to find any that
+    // dropped off the source playlist since last time, before the cache gets
+    // overwritten below and that comparison is lost.
+    if (cached) {
+      const freshKeys = new Set(externalPlaylist.tracks.map(t => rememberedMatchKey(t.title, t.artist, t.album)));
+      vanishedFromSource = cached.tracks.filter(t => !freshKeys.has(rememberedMatchKey(t.title, t.artist, t.album)));
+    }
+
     // Store scraped data in cache (for fallback if future scrapes fail)
     try {
       db.saveCachedPlaylist(
@@ -207,6 +221,9 @@ export async function importPlaylist(
       });
     }
     
+    const rememberedMatches = buildRememberedMatchMap(db.getUserManualMatches(options.userId));
+    const vanishedFromPlex: typeof externalPlaylist.tracks = [];
+
     const matchedTracks = await matchPlaylist(
       externalPlaylist.tracks,
       options.serverUrl,
@@ -216,17 +233,42 @@ export async function importPlaylist(
       progressEmitter,
       externalPlaylist.coverUrl,
       externalPlaylist.name,
-      () => cancelledSessions?.has(sessionId || '') ?? false
+      () => cancelledSessions?.has(sessionId || '') ?? false,
+      rememberedMatches,
+      vanishedFromPlex
     );
-    
+
+    // Remember what this run resolved, so the next refresh of this playlist
+    // reuses the same decisions instead of re-deriving them.
+    rememberMatches(db, options.userId, matchedTracks);
+
     const matched = matchedTracks.filter((t: MatchedTrack) => t.matched);
     const unmatched = matchedTracks.filter((t: MatchedTrack) => !t.matched);
-    
+
     logger.info(`[Import] Matched ${matched.length}/${matchedTracks.length} tracks`);
-    
+
     // Use custom name if provided, otherwise use the scraped name
     const finalPlaylistName = options.customName || externalPlaylist.name;
-    
+
+    // Surface both "vanished" cases as one notification per import rather
+    // than spamming per-track - this is informational (not a job), so it's
+    // posted straight in 'success' status.
+    if (vanishedFromSource.length > 0 || vanishedFromPlex.length > 0) {
+      const details: string[] = [];
+      if (vanishedFromSource.length > 0) {
+        details.push(`${vanishedFromSource.length} track(s) no longer in the source playlist`);
+      }
+      if (vanishedFromPlex.length > 0) {
+        details.push(`${vanishedFromPlex.length} previously-matched track(s) no longer found in your Plex library`);
+      }
+      addNotification(options.userId, {
+        type: 'track-vanished',
+        title: finalPlaylistName,
+        detail: details.join('; '),
+        status: 'success',
+      });
+    }
+
     return {
       playlistId: externalPlaylist.id,
       playlistName: finalPlaylistName,
@@ -271,64 +313,243 @@ export async function reimportPlaylistNow(
   db: DatabaseService,
   playlist: { id: number; name: string; source: string; source_url?: string | null; plex_playlist_id: string },
   user: { id: number; plex_token: string },
-  server: { server_url: string; server_client_id?: string; library_id?: string | null }
+  server: { server_url: string; server_client_id?: string; library_id?: string | null; access_token?: string | null }
 ): Promise<void> {
-  const { PlexClient } = await import('./plex');
+  const { PlexClient, resolvePlexToken } = await import('./plex');
 
-  const result = await importPlaylist(
-    playlist.source as any,
-    playlist.source_url || playlist.plex_playlist_id,
-    {
-      userId: user.id,
-      serverUrl: server.server_url,
-      plexToken: user.plex_token,
-      libraryId: server.library_id || undefined,
-    },
-    db
-  );
-
-  const plex = new PlexClient(server.server_url, user.plex_token);
+  // Fire-and-forget from the caller (the "Reimport" row button) - without
+  // this, the only feedback was a blind timeout-then-refresh on the
+  // frontend. Mirrors the notification schedule-checker-job.ts's
+  // runSingleSchedule() creates for a manual schedule run.
+  const notification = addNotification(user.id, {
+    type: 'schedule',
+    title: playlist.name,
+    detail: 'Starting...',
+    status: 'in-progress',
+    progress: 0,
+  });
 
   try {
-    const plexPlaylists = await plex.getPlaylists();
-    const existing = plexPlaylists.find((p: any) => p.ratingKey === playlist.plex_playlist_id || p.title === playlist.name);
-    if (existing) {
-      await plex.deletePlaylist(existing.ratingKey);
+    const progressEmitter = new EventEmitter();
+    progressEmitter.on('progress', (data: { phase?: string; current?: number; total?: number; currentTrackName?: string }) => {
+      const detail = data.phase === 'matching' ? 'Matching tracks with your Plex library...' : (data.currentTrackName || 'Fetching tracks...');
+      const progress = data.total ? Math.round(((data.current || 0) / data.total) * 100) : undefined;
+      updateNotification(user.id, notification.id, { detail, progress });
+    });
+
+    const result = await importPlaylist(
+      playlist.source as any,
+      playlist.source_url || playlist.plex_playlist_id,
+      {
+        userId: user.id,
+        serverUrl: server.server_url,
+        plexToken: resolvePlexToken(user, server),
+        libraryId: server.library_id || undefined,
+      },
+      db,
+      progressEmitter
+    );
+
+    const plex = new PlexClient(server.server_url, resolvePlexToken(user, server));
+
+    try {
+      const plexPlaylists = await plex.getPlaylists();
+      const existing = plexPlaylists.find((p: any) => p.ratingKey === playlist.plex_playlist_id || p.title === playlist.name);
+      if (existing) {
+        await plex.deletePlaylist(existing.ratingKey);
+      }
+    } catch (error: any) {
+      logger.warn('Failed to check for existing playlist before reimport', { playlistId: playlist.id, error: error.message });
     }
+
+    const trackUris = dedupeByPlexRatingKey(result.matched.filter((t: any) => t.matched && t.plexRatingKey))
+      .map((t: any) => `server://${server.server_client_id || 'playlist-lab-server'}/com.plexapp.plugins.library/library/metadata/${t.plexRatingKey}`);
+
+    const newPlaylist = await plex.createPlaylist(playlist.name, server.library_id || '', trackUris);
+
+    if (result.coverUrl) {
+      try {
+        await plex.uploadPlaylistPoster(newPlaylist.ratingKey, result.coverUrl);
+      } catch (error: any) {
+        logger.warn('Failed to upload cover art during reimport', { playlistId: playlist.id, error: error.message });
+      }
+    }
+
+    db.updatePlaylist(playlist.id, {
+      plex_playlist_id: newPlaylist.ratingKey,
+      updated_at: Math.floor(Date.now() / 1000),
+    } as any);
+
+    if (result.unmatched.length > 0) {
+      const missingSource = `Manual reimport – ${new Date().toLocaleDateString('en-GB')}`;
+      db.addMissingTracks(user.id, playlist.id, result.unmatched.map((t, i) => ({
+        title: t.title || 'Unknown',
+        artist: t.artist || 'Unknown',
+        album: t.album,
+        position: i + 1,
+        source: missingSource,
+      })));
+    }
+
+    updateNotification(user.id, notification.id, {
+      status: 'success',
+      progress: 100,
+      detail: `Matched ${result.matchedCount} of ${result.totalCount}`,
+    });
+    logger.info('Manual reimport completed', { playlistId: playlist.id, matched: result.matchedCount, unmatched: result.unmatched.length });
   } catch (error: any) {
-    logger.warn('Failed to check for existing playlist before reimport', { playlistId: playlist.id, error: error.message });
+    updateNotification(user.id, notification.id, { status: 'error', detail: error.message || 'Reimport failed' });
+    throw error;
+  }
+}
+
+export interface FinalizeImportOpts {
+  playlistName?: string;
+  overwriteExisting?: boolean;
+  keepExistingCover?: boolean;
+}
+
+/**
+ * Creates the Plex playlist from a completed scrape+match's matched tracks,
+ * saves the playlist row (with the actual source/sourceIdentifier this
+ * import used, so a later scheduled refresh has a real link to re-scrape -
+ * see runNewImportAndFinalize's docs) and any unmatched tracks as missing
+ * tracks. Split out from runNewImportAndFinalize() so a caller that already
+ * has a scrape+match result in hand (the import-queue job handler in
+ * index.ts, which ran importPlaylist() itself for its own SSE progress
+ * wiring) doesn't have to scrape a second time just to finalize it.
+ */
+export async function finalizeImportResult(
+  db: DatabaseService,
+  source: string,
+  sourceIdentifier: string,
+  user: { id: number; plex_token: string },
+  server: { server_url: string; server_client_id?: string; library_id?: string | null; access_token?: string | null },
+  result: { matched: MatchedTrack[]; unmatched: MatchedTrack[]; coverUrl?: string; playlistName: string; matchedCount: number; totalCount: number },
+  opts: FinalizeImportOpts = {}
+): Promise<{ dbPlaylistId: number; plexRatingKey: string }> {
+  const { PlexClient, resolvePlexToken } = await import('./plex');
+  const playlistName = opts.playlistName || result.playlistName;
+  const plex = new PlexClient(server.server_url, resolvePlexToken(user, server));
+
+  let existingCoverUrl: string | undefined;
+  if (opts.overwriteExisting) {
+    try {
+      const normalize = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
+      const normalizedTarget = normalize(playlistName);
+      const plexPlaylists = await plex.getPlaylists();
+      const matches = plexPlaylists.filter((p: any) => p.playlistType === 'audio' && normalize(p.title || '') === normalizedTarget);
+      if (opts.keepExistingCover && matches[0]?.composite) {
+        existingCoverUrl = `${server.server_url}${matches[0].composite}?X-Plex-Token=${resolvePlexToken(user, server)}`;
+      }
+      for (const existing of matches) {
+        await plex.deletePlaylist(existing.ratingKey);
+      }
+      for (const existingDb of db.getUserPlaylists(user.id).filter((p: any) => normalize(p.name || '') === normalizedTarget)) {
+        db.deletePlaylist(existingDb.id);
+      }
+    } catch (error: any) {
+      logger.warn('[Import] Failed to overwrite existing playlist during finalize', { playlistName, error: error.message });
+    }
   }
 
   const trackUris = dedupeByPlexRatingKey(result.matched.filter((t: any) => t.matched && t.plexRatingKey))
     .map((t: any) => `server://${server.server_client_id || 'playlist-lab-server'}/com.plexapp.plugins.library/library/metadata/${t.plexRatingKey}`);
 
-  const newPlaylist = await plex.createPlaylist(playlist.name, server.library_id || '', trackUris);
+  if (trackUris.length === 0) {
+    throw new Error('No tracks matched in your Plex library - nothing to add to a playlist');
+  }
 
-  if (result.coverUrl) {
+  const newPlaylist = await plex.createPlaylist(playlistName, server.library_id || '', trackUris);
+
+  const finalCoverUrl = result.coverUrl || existingCoverUrl;
+  if (finalCoverUrl) {
     try {
-      await plex.uploadPlaylistPoster(newPlaylist.ratingKey, result.coverUrl);
+      await plex.uploadPlaylistPoster(newPlaylist.ratingKey, finalCoverUrl);
     } catch (error: any) {
-      logger.warn('Failed to upload cover art during reimport', { playlistId: playlist.id, error: error.message });
+      logger.warn('[Import] Failed to upload cover art', { playlistName, error: error.message });
     }
   }
 
-  db.updatePlaylist(playlist.id, {
-    plex_playlist_id: newPlaylist.ratingKey,
-    updated_at: Math.floor(Date.now() / 1000),
-  } as any);
+  const dbPlaylist = db.createPlaylist(user.id, newPlaylist.ratingKey, playlistName, source, sourceIdentifier);
 
   if (result.unmatched.length > 0) {
-    const missingSource = `Manual reimport – ${new Date().toLocaleDateString('en-GB')}`;
-    db.addMissingTracks(user.id, playlist.id, result.unmatched.map((t, i) => ({
+    db.addMissingTracks(user.id, dbPlaylist.id, result.unmatched.map((t, i) => ({
       title: t.title || 'Unknown',
       artist: t.artist || 'Unknown',
       album: t.album,
-      position: i + 1,
-      source: missingSource,
+      position: i,
+      source,
     })));
   }
 
-  logger.info('Manual reimport completed', { playlistId: playlist.id, matched: result.matchedCount, unmatched: result.unmatched.length });
+  return { dbPlaylistId: dbPlaylist.id, plexRatingKey: newPlaylist.ratingKey };
+}
+
+/**
+ * Scrape+match a playlist and, once matching completes, immediately create
+ * the Plex playlist and save it - no manual "review matches, then confirm"
+ * step. Used for import triggers that don't already run their own
+ * scrape+match (file upload) so an import is a fire-and-forget background
+ * job tracked in the notification bell, the same way reimportPlaylistNow()
+ * already works for the "Reimport" row action. The caller is expected NOT
+ * to await this.
+ */
+export async function runNewImportAndFinalize(
+  db: DatabaseService,
+  source: 'spotify' | 'deezer' | 'apple' | 'tidal' | 'youtube' | 'amazon' | 'qobuz' | 'listenbrainz' | 'file' | 'aria' | 'billboard' | 'lastfm',
+  sourceIdentifier: string,
+  user: { id: number; plex_token: string },
+  server: { server_url: string; server_client_id?: string; library_id?: string | null; access_token?: string | null },
+  opts: FinalizeImportOpts & { notificationTitle?: string; filename?: string } = {}
+): Promise<void> {
+  const notification = addNotification(user.id, {
+    type: 'import',
+    title: opts.notificationTitle || opts.playlistName || `${source} import`,
+    detail: 'Starting...',
+    status: 'in-progress',
+    progress: 0,
+  });
+
+  try {
+    const { resolvePlexToken } = await import('./plex');
+    const progressEmitter = new EventEmitter();
+    progressEmitter.on('progress', (data: { phase?: string; current?: number; total?: number; currentTrackName?: string; playlistName?: string }) => {
+      if (data.playlistName && notification.title !== data.playlistName) {
+        updateNotification(user.id, notification.id, { title: data.playlistName });
+      }
+      const detail = data.phase === 'matching' ? 'Matching tracks with your Plex library...' : (data.currentTrackName || 'Fetching tracks...');
+      const progress = data.total ? Math.round(((data.current || 0) / data.total) * 100) : undefined;
+      updateNotification(user.id, notification.id, { detail, progress });
+    });
+
+    const result = await importPlaylist(
+      source,
+      sourceIdentifier,
+      {
+        userId: user.id,
+        serverUrl: server.server_url,
+        plexToken: resolvePlexToken(user, server),
+        libraryId: server.library_id || undefined,
+        filename: opts.filename,
+      },
+      db,
+      progressEmitter
+    );
+
+    await finalizeImportResult(db, source, sourceIdentifier, user, server, result, opts);
+
+    updateNotification(user.id, notification.id, {
+      title: opts.playlistName || result.playlistName,
+      status: 'success',
+      progress: 100,
+      detail: `Matched ${result.matchedCount} of ${result.totalCount}`,
+    });
+    logger.info('Import completed', { userId: user.id, source, playlistName: result.playlistName, matched: result.matchedCount, unmatched: result.unmatched.length });
+  } catch (error: any) {
+    updateNotification(user.id, notification.id, { status: 'error', detail: error.message || 'Import failed' });
+    logger.error('[Import] Fatal error in runNewImportAndFinalize', { error: error.message, stack: error.stack, source, sourceIdentifier, userId: user.id });
+  }
 }
 
 /**

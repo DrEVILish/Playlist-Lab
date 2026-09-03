@@ -19,6 +19,9 @@ export interface PlexServer {
   url: string;
   libraryId?: string;
   libraryName?: string;
+  // Server-specific token, present only for servers shared with (not owned
+  // by) this account - required to authenticate against that PMS directly.
+  accessToken?: string;
 }
 
 // Settings types
@@ -135,6 +138,54 @@ export interface MissingTrack {
   source: string;
 }
 
+// Live status feed for the header's notification center (deemix downloads,
+// missing-tracks retry batches, manually-triggered schedule runs, ...)
+/** Fields a playlist can be reordered by - mirrors SORT_KEYS in
+ * routes/playlists.ts. */
+export type PlaylistSortKey = 'title' | 'artist' | 'album' | 'year' | 'duration';
+
+/** Returned by any action routed through the server's shared action queue
+ * instead of running immediately - `position` is 0 when it's about to run
+ * next, otherwise how many other queued items are ahead of it (never any
+ * detail about whose items those are). The real result arrives later via a
+ * JobNotification with this same id. */
+export interface QueuedActionResult {
+  queued: true;
+  jobId: string;
+  position: number;
+}
+
+export interface JobNotification {
+  id: string;
+  type: 'deemix' | 'lidarr' | 'retry-match' | 'schedule' | 'import' | 'track-vanished' | 'action';
+  title: string;
+  detail?: string;
+  status: 'in-progress' | 'success' | 'error';
+  /** 0-100, omitted when progress isn't known yet */
+  progress?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+// deemix-server's own download/tagging settings (the fields the admin
+// Deemix settings panel edits) - an index signature covers the rest of its
+// ~50 fields we pass through untouched.
+export interface DeemixSettings {
+  downloadLocation: string;
+  maxBitrate: string;
+  fallbackBitrate: boolean;
+  tracknameTemplate: string;
+  albumTracknameTemplate: string;
+  createArtistFolder: boolean;
+  artistNameTemplate: string;
+  createAlbumFolder: boolean;
+  albumNameTemplate: string;
+  createSingleFolder: boolean;
+  saveArtwork: boolean;
+  tags: Record<string, boolean | string>;
+  [key: string]: any;
+}
+
 // Cached playlist types
 export interface CachedPlaylist {
   id: number;
@@ -174,6 +225,10 @@ export interface MatchedTrack {
   plexCodec?: string;
   plexBitrate?: number;
   score?: number;
+  /** Set when the user picked this Plex track by hand via a Rematch search,
+   * rather than the automatic matcher finding it - lets the server remember
+   * the choice for next time. */
+  manuallyMatched?: boolean;
 }
 
 // Plex track types

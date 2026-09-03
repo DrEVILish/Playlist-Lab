@@ -109,10 +109,7 @@ describe('Admin Features Property Tests', () => {
                   
                   // Track which users have which tracks
                   for (const track of userMissingTracks) {
-                    // getMissingTrackStats() returns `track` as the display string
-                    // `${title} - ${artist}` (see DatabaseService.getMissingTrackStats),
-                    // so the key here must be built the same way to match up with stats.
-                    const key = `${track.title} - ${track.artist}|${track.artist}`;
+                    const key = `${track.title}|${track.artist}`;
                     if (!trackUserCounts.has(key)) {
                       trackUserCounts.set(key, new Set());
                     }
@@ -126,7 +123,7 @@ describe('Admin Features Property Tests', () => {
               
               // Property: Stats should aggregate by title and artist
               for (const stat of stats) {
-                const key = `${stat.track}|${stat.artist}`;
+                const key = `${stat.title}|${stat.artist}`;
                 const expectedCount = trackUserCounts.get(key)?.size || 0;
                 
                 // The count should match the number of users who have this track missing
@@ -135,7 +132,7 @@ describe('Admin Features Property Tests', () => {
               }
               
               // Property: All unique missing tracks should appear in stats
-              const statsKeys = new Set(stats.map(s => `${s.track}|${s.artist}`));
+              const statsKeys = new Set(stats.map(s => `${s.title}|${s.artist}`));
               for (const [key, userSet] of trackUserCounts.entries()) {
                 if (userSet.size > 0) {
                   expect(statsKeys.has(key)).toBe(true);

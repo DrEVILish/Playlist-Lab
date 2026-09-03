@@ -156,7 +156,7 @@ describe('APIClient', () => {
 
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
-        json: jest.fn().mockResolvedValueOnce(mockServers),
+        json: jest.fn().mockResolvedValueOnce({ servers: mockServers }),
       });
 
       const result = await client.getServers();

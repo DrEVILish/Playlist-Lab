@@ -8,6 +8,10 @@ import type {
   Schedule,
   MissingTrack,
   MatchedTrack,
+  JobNotification,
+  DeemixSettings,
+  PlaylistSortKey,
+  QueuedActionResult,
 } from '../types';
 
 export class APIError extends Error {
@@ -28,6 +32,11 @@ export class NetworkError extends Error {
     this.name = 'NetworkError';
   }
 }
+
+// Long enough for a genuinely slow library operation, short enough that a
+// stalled backend surfaces as an error the UI can render rather than an
+// endless spinner.
+const REQUEST_TIMEOUT_MS = 30000;
 
 export class APIClient {
   constructor(private baseURL: string, private getToken?: () => string | null) {}
@@ -88,6 +97,11 @@ export class APIClient {
         ...options,
         headers,
         credentials: 'include', // Include cookies for session
+        // A request the server never answers - which is what every call
+        // becomes while Plex is unresponsive - otherwise leaves the UI on a
+        // spinner indefinitely, with no error to render and no way back. A
+        // caller that genuinely needs longer passes its own signal.
+        signal: options?.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
 
       if (!response.ok) {
@@ -106,6 +120,12 @@ export class APIClient {
       }
       if (error instanceof TypeError) {
         throw new NetworkError('Network error - check your connection');
+      }
+      // AbortSignal.timeout rejects with a TimeoutError DOMException, which
+      // is a hung server rather than anything the user did wrong - say so,
+      // instead of surfacing a bare "signal is aborted" to the UI.
+      if (error instanceof DOMException && error.name === 'TimeoutError') {
+        throw new NetworkError('The server did not respond in time - it may be busy or your Plex server may be unreachable');
       }
       throw error;
     }
@@ -245,6 +265,15 @@ export class APIClient {
     return this.request(`/api/playlists/by-plex-id/${ratingKey}`, { method: 'DELETE' });
   }
 
+  // Renames by Plex ratingKey instead of our internal numeric id - same
+  // reasoning as deletePlaylistByPlexId() above.
+  async renamePlaylistByPlexId(ratingKey: string, name: string): Promise<{ success: boolean; name: string }> {
+    return this.request(`/api/playlists/by-plex-id/${ratingKey}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name }),
+    });
+  }
+
   // Re-scrapes the playlist from its original online source and replaces its
   // Plex tracks. Fires in the background - use refreshPlaylists() afterward.
   async reimportPlaylist(id: number | string): Promise<{ success: boolean; message: string }> {
@@ -262,6 +291,10 @@ export class APIClient {
     });
   }
 
+  async getShareTargets(): Promise<{ users: Array<{ id: number; username: string; thumb?: string }> }> {
+    return this.request('/api/playlists/share-targets');
+  }
+
   async addTrackToPlaylist(id: number | string, trackUri: string): Promise<{ success: boolean }> {
     return this.request(`/api/playlists/${id}/tracks`, {
       method: 'POST',
@@ -273,6 +306,50 @@ export class APIClient {
     return this.request(`/api/playlists/${id}/tracks/${trackId}`, {
       method: 'DELETE',
     });
+  }
+
+  // Merge/clone/split/shuffle all key off the Plex ratingKey (same as
+  // deletePlaylistByPlexId/renamePlaylistByPlexId above), not our internal
+  // numeric id, so they work on any playlist visible to the user's own Plex
+  // account - not just ones tracked in our own playlists table.
+  // These run through the server's shared action queue rather than
+  // completing within the request - the real result shows up later as a
+  // JobNotification with the returned jobId (see QueuedActionResult).
+  async mergePlaylists(sourceRatingKeys: string[], targetName?: string, existingTargetRatingKey?: string): Promise<QueuedActionResult> {
+    return this.request('/api/playlists/merge', {
+      method: 'POST',
+      body: JSON.stringify({ sourceRatingKeys, targetName, existingTargetRatingKey }),
+    });
+  }
+
+  async clonePlaylist(ratingKey: string, name: string): Promise<{ playlist: any }> {
+    return this.request(`/api/playlists/${ratingKey}/clone`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  }
+
+  async splitPlaylist(ratingKey: string, groups: Array<{ name: string; trackIds: string[] }>): Promise<QueuedActionResult> {
+    return this.request(`/api/playlists/${ratingKey}/split`, {
+      method: 'POST',
+      body: JSON.stringify({ groups }),
+    });
+  }
+
+  async shufflePlaylist(ratingKey: string): Promise<QueuedActionResult> {
+    return this.request(`/api/playlists/${ratingKey}/shuffle`, { method: 'POST' });
+  }
+
+  async sortPlaylist(ratingKey: string, by: PlaylistSortKey, direction: 'asc' | 'desc' = 'asc'): Promise<QueuedActionResult> {
+    return this.request(`/api/playlists/${ratingKey}/sort`, {
+      method: 'POST',
+      body: JSON.stringify({ by, direction }),
+    });
+  }
+
+  /** Removes repeats of the same Plex track, keeping the first of each. */
+  async dedupePlaylist(ratingKey: string): Promise<QueuedActionResult> {
+    return this.request(`/api/playlists/${ratingKey}/dedupe`, { method: 'POST' });
   }
 
   // Import methods
@@ -825,6 +902,48 @@ export class APIClient {
     });
   }
 
+  async deemixDownload(id: number): Promise<{ success: boolean; matchedTitle: string; matchedArtist: string; score: number }> {
+    return this.request(`/api/missing/${id}/deemix-download`, { method: 'POST' });
+  }
+
+  /** Retries matching against Plex and then queues every still-missing track
+   * for deemix download - one playlist's worth, or the whole library when no
+   * id is given. Runs server-side on the shared action queue and returns as
+   * soon as it's queued, so progress is watched via the notification bell
+   * rather than by keeping this page open. */
+  async deemixAll(playlistId?: number): Promise<QueuedActionResult & { message: string }> {
+    return this.request('/api/missing/deemix-all', {
+      method: 'POST',
+      body: JSON.stringify({ playlistId }),
+    });
+  }
+
+  async replaceSimilarMissingTrack(id: number): Promise<{ success: boolean; replacementTitle: string; replacementArtist: string }> {
+    return this.request(`/api/missing/${id}/replace-similar`, { method: 'POST' });
+  }
+
+  async lidarrDownload(id: number): Promise<{ success: boolean; matchedArtist: string; matchedAlbum?: string }> {
+    return this.request(`/api/missing/${id}/lidarr-download`, { method: 'POST' });
+  }
+
+  async getNotifications(): Promise<{ notifications: JobNotification[] }> {
+    return this.request('/api/notifications');
+  }
+
+  async dismissNotification(id: string): Promise<{ success: boolean }> {
+    return this.request(`/api/notifications/${id}/dismiss`, { method: 'POST' });
+  }
+
+  /** Clears finished notifications. Running jobs are always kept - their
+   * entry is the only place their progress shows. `completedOnly` keeps
+   * failures too. */
+  async clearNotifications(completedOnly = false): Promise<{ success: boolean }> {
+    return this.request('/api/notifications/clear', {
+      method: 'POST',
+      body: JSON.stringify({ completedOnly }),
+    });
+  }
+
   async clearPlaylistMissingTracks(playlistId: number): Promise<void> {
     return this.request(`/api/missing/playlist/${playlistId}`, {
       method: 'DELETE',
@@ -880,17 +999,63 @@ export class APIClient {
   }
 
   async getAdminMissingTracks(): Promise<
-    Array<{ track: string; artist: string; count: number }>
+    Array<{ title: string; artist: string; count: number; addedAt: number }>
   > {
-    const data = await this.request<{ missingTracks: Array<{ track: string; artist: string; count: number }> }>('/api/admin/missing');
+    const data = await this.request<{ missingTracks: Array<{ title: string; artist: string; count: number; addedAt: number }> }>('/api/admin/missing');
     return data.missingTracks;
   }
 
+  /** Queues a whole list of aggregated missing-track rows as one server-side
+   * job, so the notification stays in progress until the searches are
+   * actually done rather than reporting "queued" as finished. */
+  async deemixAllAdmin(tracks: Array<{ title: string; artist: string }>): Promise<QueuedActionResult & { message: string }> {
+    return this.request('/api/admin/missing/deemix-all', {
+      method: 'POST',
+      body: JSON.stringify({ tracks }),
+    });
+  }
+
+  async deemixDownloadAdmin(title: string, artist: string): Promise<QueuedActionResult> {
+    return this.request('/api/admin/missing/deemix-download', {
+      method: 'POST',
+      body: JSON.stringify({ title, artist }),
+    });
+  }
+
   async getAdminJobs(): Promise<
-    Array<{ name: string; status: string; lastRun?: number }>
+    Array<{ name: string; status: string; lastRun?: number; nextRun?: number | null }>
   > {
-    const data = await this.request<{ jobs: Array<{ name: string; status: string; lastRun?: number }> }>('/api/admin/jobs');
+    const data = await this.request<{ jobs: Array<{ name: string; status: string; lastRun?: number; nextRun?: number | null }> }>('/api/admin/jobs');
     return data.jobs;
+  }
+
+  async getAdminSchedules(): Promise<Array<Schedule & { username: string; playlistName: string | null }>> {
+    const data = await this.request<{ schedules: Array<Schedule & { username: string; playlistName: string | null }> }>('/api/admin/schedules');
+    return data.schedules;
+  }
+
+  async getAdminLogs(limit = 200, level = ''): Promise<{
+    entries: Array<{ level: string; message: string; timestamp: string | null; [key: string]: unknown }>;
+    truncated: boolean;
+  }> {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (level) params.set('level', level);
+    return this.request(`/api/admin/logs?${params}`);
+  }
+
+  async clearAdminLogs(): Promise<{ success: boolean }> {
+    return this.request('/api/admin/logs', { method: 'DELETE' });
+  }
+
+  async getLogLevel(): Promise<{ level: string; levels: readonly string[] }> {
+    return this.request('/api/admin/log-level');
+  }
+
+  async updateLogLevel(level: string): Promise<{ success: boolean; level: string }> {
+    return this.request('/api/admin/log-level', {
+      method: 'PUT',
+      body: JSON.stringify({ level }),
+    });
   }
 
   async enableUser(userId: number): Promise<{ success: boolean }> {
@@ -903,6 +1068,45 @@ export class APIClient {
 
   async deleteUser(userId: number): Promise<{ success: boolean }> {
     return this.request(`/api/admin/users/${userId}`, { method: 'DELETE' });
+  }
+
+  /** `status` is the result of the last ARL check (daily, plus on save and
+   * on startup) - null if none has run yet in this server process. */
+  async getDeemixArl(): Promise<{ arl: string; status: { ok: boolean; error?: string; at: number } | null }> {
+    return this.request('/api/admin/deemix-arl');
+  }
+
+  async checkDeemixArl(): Promise<{ ok: boolean; error?: string }> {
+    return this.request('/api/admin/deemix-arl/check', { method: 'POST' });
+  }
+
+  async updateDeemixArl(arl: string): Promise<{ success: boolean; arl: string }> {
+    return this.request('/api/admin/deemix-arl', {
+      method: 'PUT',
+      body: JSON.stringify({ arl }),
+    });
+  }
+
+  async getDeemixSettings(): Promise<{ settings: DeemixSettings }> {
+    return this.request('/api/admin/deemix-settings');
+  }
+
+  async updateDeemixSettings(settings: DeemixSettings): Promise<{ success: boolean }> {
+    return this.request('/api/admin/deemix-settings', {
+      method: 'PUT',
+      body: JSON.stringify({ settings }),
+    });
+  }
+
+  async getLidarrConfig(): Promise<{ url: string; apiKey: string }> {
+    return this.request('/api/admin/lidarr-config');
+  }
+
+  async updateLidarrConfig(url: string, apiKey: string): Promise<{ success: boolean; url: string }> {
+    return this.request('/api/admin/lidarr-config', {
+      method: 'PUT',
+      body: JSON.stringify({ url, apiKey }),
+    });
   }
 
   async getHomeUsers(): Promise<

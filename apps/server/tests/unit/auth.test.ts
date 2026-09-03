@@ -15,6 +15,7 @@ import authRoutes from '../../src/routes/auth';
 import { DatabaseService, getDatabase } from '../../src/database';
 import { AuthService } from '../../src/services/auth';
 import { errorHandler } from '../../src/middleware/error-handler';
+import { logger } from '../../src/utils/logger';
 
 // Mock the AuthService
 jest.mock('../../src/services/auth');
@@ -49,6 +50,10 @@ describe('Authentication Routes', () => {
 
     // Add error handler (must be after routes)
     app.use(errorHandler);
+
+    // Approval now checks Plex friends as well as Plex Home; default the
+    // friends list to empty so each test opts in explicitly.
+    (AuthService.prototype.getFriends as jest.Mock).mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -369,6 +374,56 @@ describe('Authentication Routes', () => {
       expect(dbService.isUserEnabled(managedUser!.id)).toBe(false);
     });
 
+    it('auto-approves a Plex friend who is not a Plex Home member', async () => {
+      // Bootstrap the admin user.
+      (AuthService.prototype.pollAuth as jest.Mock).mockResolvedValueOnce({
+        id: 7,
+        code: 'ADMIN3',
+        authToken: 'admin-token-3',
+      });
+      (AuthService.prototype.getUserInfo as jest.Mock).mockResolvedValueOnce({
+        id: adminPlexId,
+        username: 'admin-user',
+        thumb: 'thumb',
+      });
+
+      await request(app)
+        .post('/api/auth/poll')
+        .send({ pinId: 7, code: 'ADMIN3' })
+        .expect(200);
+
+      // Not in Plex Home, but is a friend - should be let in.
+      (AuthService.prototype.pollAuth as jest.Mock).mockResolvedValueOnce({
+        id: 8,
+        code: 'FRIEND1',
+        authToken: 'friend-token-1',
+      });
+      (AuthService.prototype.getUserInfo as jest.Mock).mockResolvedValueOnce({
+        id: managedPlexId,
+        // Managed/restricted Plex users have no username, only a title.
+        username: null,
+        title: 'Logan',
+        thumb: 'thumb',
+      });
+      (AuthService.prototype.getHomeUsers as jest.Mock).mockResolvedValueOnce([]);
+      (AuthService.prototype.getFriends as jest.Mock).mockResolvedValueOnce([
+        { id: managedPlexId },
+      ]);
+
+      const login = await request(app)
+        .post('/api/auth/poll')
+        .send({ pinId: 8, code: 'FRIEND1' })
+        .expect(200);
+
+      expect(login.body.authenticated).toBe(true);
+
+      const friendUser = dbService.getUserByPlexId(managedPlexId);
+      expect(friendUser).toBeDefined();
+      expect(dbService.isUserEnabled(friendUser!.id)).toBe(true);
+      // Falls back to the title when Plex gives us no username.
+      expect(friendUser!.plex_username).toBe('Logan');
+    });
+
     it('re-enables a returning non-admin user who was disabled but has since been re-added to Plex Home', async () => {
       // Bootstrap the admin user.
       (AuthService.prototype.pollAuth as jest.Mock).mockResolvedValueOnce({
@@ -514,6 +569,59 @@ describe('Authentication Routes', () => {
         plexThumb: 'https://plex.tv/users/avatar.png',
         isAdmin: true,
       });
+    });
+  });
+
+  describe('Login denial is logged', () => {
+    // The bug this pins: a denied login was logged at 'warn', and the
+    // server's log level is routinely turned down to error-only in
+    // production - so a rejected access attempt an admin actually needs to
+    // see was written nowhere at all. It must be logged at 'error'.
+    it('logs at error level when a non-approved user is denied, naming who was denied', async () => {
+      // Bootstrap the first (admin) user - only the second user onward goes
+      // through the approval check.
+      (AuthService.prototype.pollAuth as jest.Mock).mockResolvedValueOnce({
+        id: 20,
+        code: 'ADMINLOG',
+        authToken: 'admin-token-log',
+      });
+      (AuthService.prototype.getUserInfo as jest.Mock).mockResolvedValueOnce({
+        id: 'admin-logtest',
+        username: 'admin-user',
+        thumb: 'thumb',
+      });
+      await request(app).post('/api/auth/poll').send({ pinId: 20, code: 'ADMINLOG' }).expect(200);
+
+      const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => logger);
+
+      // A brand-new user who is neither a Plex Home member nor a friend -
+      // the plain "random Plex account tries to log in" denial case.
+      (AuthService.prototype.pollAuth as jest.Mock).mockResolvedValueOnce({
+        id: 21,
+        code: 'DENYME',
+        authToken: 'deny-token',
+      });
+      (AuthService.prototype.getUserInfo as jest.Mock).mockResolvedValueOnce({
+        id: 'stranger-98999',
+        username: 'stranger',
+        thumb: 'thumb',
+      });
+      (AuthService.prototype.getHomeUsers as jest.Mock).mockResolvedValueOnce([]);
+      (AuthService.prototype.getFriends as jest.Mock).mockResolvedValueOnce([]);
+
+      const response = await request(app)
+        .post('/api/auth/poll')
+        .send({ pinId: 21, code: 'DENYME' })
+        .expect(200);
+
+      expect(response.body.denied).toBe(true);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('not approved'),
+        expect.objectContaining({ plexUserId: 'stranger-98999' })
+      );
+
+      errorSpy.mockRestore();
+      getDatabase().prepare('DELETE FROM users WHERE plex_user_id IN (?, ?)').run('admin-logtest', 'stranger-98999');
     });
   });
 });

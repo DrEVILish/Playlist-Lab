@@ -1,9 +1,15 @@
 import type { FC } from 'react';
 import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import { Footer } from './Footer';
 import './MobileNav.css';
 
-export const MobileNav: FC = () => {
+interface MobileNavProps {
+  user?: { plexUsername: string; plexThumb?: string } | null;
+  onLogout?: () => void;
+}
+
+export const MobileNav: FC<MobileNavProps> = ({ user, onLogout }) => {
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
 
@@ -87,6 +93,21 @@ export const MobileNav: FC = () => {
               {item.label}
             </NavLink>
           ))}
+        </div>
+
+        <div className="mobile-nav-footer">
+          {user && (
+            <div className="mobile-nav-user">
+              {user.plexThumb && (
+                <img src={user.plexThumb} alt="" className="mobile-nav-user-avatar" />
+              )}
+              <span className="mobile-nav-user-name">{user.plexUsername}</span>
+              {onLogout && (
+                <button onClick={onLogout} className="btn btn-secondary btn-logout">Logout</button>
+              )}
+            </div>
+          )}
+          <Footer />
         </div>
       </nav>
     </>

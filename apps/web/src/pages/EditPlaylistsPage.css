@@ -1,22 +1,3 @@
-.page-container:has(.edit-playlists-layout) {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.edit-playlists-layout {
-  display: grid;
-  grid-template-columns: 300px 1fr;
-  gap: 1.5rem;
-  margin-top: 0;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.playlists-panel,
 .tracks-panel {
   background: var(--surface);
   border-radius: 8px;
@@ -32,105 +13,6 @@
   font-size: 1.125rem;
   margin-bottom: 1rem;
   color: var(--text-primary);
-}
-
-.playlists-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.playlist-item {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background-color 0.15s;
-}
-
-.playlist-item:hover {
-  background-color: var(--surface-hover);
-}
-
-.playlist-item.active {
-  background: linear-gradient(135deg, rgba(79, 209, 197, 0.15) 0%, rgba(56, 178, 172, 0.1) 100%);
-  color: var(--primary-color);
-  border: 1px solid rgba(79, 209, 197, 0.2);
-}
-
-.playlist-thumb-container {
-  width: 48px;
-  height: 48px;
-  flex-shrink: 0;
-  background: var(--surface-hover);
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-.playlist-thumb {
-  width: 100%;
-  height: 100%;
-  border-radius: 4px;
-  object-fit: cover;
-  display: block;
-}
-
-.playlist-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.playlist-name {
-  font-weight: 500;
-  font-size: 0.875rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.2;
-  display: block;
-  color: var(--text-primary);
-}
-
-.playlist-name::before,
-.playlist-name::after {
-  content: none;
-  display: none;
-}
-
-.playlist-item.active .playlist-name {
-  color: var(--primary-color);
-}
-
-.playlist-meta {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.2;
-  display: block;
-}
-
-.playlist-meta::before,
-.playlist-meta::after {
-  content: none;
-  display: none;
-}
-
-.playlist-meta span {
-  display: inline;
-}
-
-.playlist-item.active .playlist-meta {
-  color: rgba(79, 209, 197, 0.7);
 }
 
 /* Table styles */
@@ -329,10 +211,6 @@ tr.selected-for-removal td {
 }
 
 @media (max-width: 768px) {
-  .edit-playlists-layout {
-    grid-template-columns: 1fr;
-  }
-  
   .tracks-table-container {
     overflow-x: scroll;
   }
@@ -347,7 +225,7 @@ tr.selected-for-removal td {
 .playlist-header {
   display: flex;
   gap: 1.5rem;
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
   padding-bottom: 1.5rem;
   border-bottom: 1px solid var(--border);
 }
@@ -366,7 +244,7 @@ tr.selected-for-removal td {
   height: 200px;
 }
 
-.playlist-cover {
+.playlist-cover-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -438,39 +316,10 @@ tr.selected-for-removal td {
   line-height: 1.2;
 }
 
-.playlist-name-display {
-  font-size: 1.75rem;
-  font-weight: 600;
-  margin: 0;
-  cursor: pointer;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  transition: background-color 0.15s;
-}
-
-.playlist-name-display:hover {
-  background-color: var(--surface-hover);
-}
-
-.playlist-name-edit {
-  margin: 0;
-}
-
-.playlist-name-input {
-  font-size: 1.75rem;
-  font-weight: 600;
-  padding: 0.25rem 0.5rem;
-  border: 2px solid var(--primary-color);
-  border-radius: 4px;
-  background: var(--surface);
-  color: var(--text-primary);
-  width: 100%;
-  max-width: 500px;
-}
-
 .playlist-stats {
   color: var(--text-secondary);
   font-size: 0.875rem;
+  margin: 0.25rem 0;
 }
 
 .add-tracks-btn {
@@ -489,6 +338,10 @@ tr.selected-for-removal td {
   color: var(--text-secondary);
   font-size: 1.25rem;
   user-select: none;
+}
+
+.track-move-buttons {
+  display: none;
 }
 
 .tracks-table tbody tr {
@@ -566,14 +419,39 @@ tr.selected-for-removal td {
     margin: 0 auto;
   }
 
-  .playlist-name-display,
-  .playlist-name-input {
-    font-size: 1.25rem;
+  /* Native HTML5 drag-and-drop doesn't work on touch, so swap the drag
+     handle for tap-to-move buttons instead of just losing reordering. */
+  .col-drag {
+    width: auto;
   }
 
-  /* Hide drag handle on mobile */
-  .col-drag {
+  .drag-handle {
     display: none;
+  }
+
+  .track-move-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .track-move-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 28px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--text-secondary);
+    font-size: 0.625rem;
+    cursor: pointer;
+  }
+
+  .track-move-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
   }
 }
 

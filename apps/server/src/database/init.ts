@@ -410,6 +410,19 @@ export function runMigrations(db: Database.Database): void {
       existingIds.forEach((row, index) => backfillStmt.run(now - (existingIds.length - index), row.id));
       console.log('Migration completed: created_at column added to schedules');
     }
+
+    // Check if access_token column exists in user_servers table (server-
+    // specific token for servers shared with the user rather than owned by
+    // them - see UserServer.access_token for why this differs from the
+    // account token in users.plex_token).
+    const userServerColumns = db.prepare("PRAGMA table_info(user_servers)").all() as Array<{ name: string }>;
+    const hasServerAccessToken = userServerColumns.some(col => col.name === 'access_token');
+
+    if (!hasServerAccessToken) {
+      console.log('Adding access_token column to user_servers table...');
+      db.exec('ALTER TABLE user_servers ADD COLUMN access_token TEXT');
+      console.log('Migration completed: access_token column added to user_servers');
+    }
   } catch (error) {
     console.error('Migration failed:', error);
     throw error;

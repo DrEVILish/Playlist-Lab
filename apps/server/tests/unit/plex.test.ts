@@ -13,11 +13,28 @@
  */
 
 import axios from 'axios';
-import { PlexClient } from '../../src/services/plex';
+import { PlexClient, PlexAuthError, resolvePlexToken } from '../../src/services/plex';
 
 // Mock axios
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
+
+/**
+ * The fields that identify a track, as searchTrack() returns them.
+ * PlexClient slims every track it returns (slimTrack in services/plex.ts):
+ * artwork, summary and rating fields are blanked before anything is cached,
+ * because an artist-catalog fetch can pull thousands of tracks and
+ * matching.ts only ever scores against the titles. These tests are about
+ * which tracks come back and in what order, so they compare on that rather
+ * than on whole-object equality with the raw Plex fixture.
+ */
+function identifyingFields(track: any) {
+  const picked: Record<string, unknown> = {};
+  for (const key of ['ratingKey', 'title', 'originalTitle', 'grandparentTitle', 'parentTitle']) {
+    if (track[key] !== undefined) picked[key] = track[key];
+  }
+  return picked;
+}
 
 describe('PlexClient', () => {
   let client: PlexClient;
@@ -87,7 +104,7 @@ describe('PlexClient', () => {
           limit: 100,
         },
       });
-      expect(result).toEqual(mockTracks);
+      expect(result).toMatchObject(mockTracks.map(identifyingFields));
     });
 
     it('should search globally using hub search when no library specified', async () => {
@@ -126,7 +143,7 @@ describe('PlexClient', () => {
           limit: 100,
         },
       });
-      expect(result).toEqual(mockTracks);
+      expect(result).toMatchObject(mockTracks.map(identifyingFields));
     });
 
     it('should return empty array when no tracks found', async () => {
@@ -204,7 +221,7 @@ describe('PlexClient', () => {
           'Life Is a Highway'
         );
 
-        expect(result).toEqual([compilationTrack]);
+        expect(result).toMatchObject([identifyingFields(compilationTrack)]);
         expect(mockInstance.get).toHaveBeenNthCalledWith(
           3,
           '/library/sections/1/all',
@@ -260,7 +277,7 @@ describe('PlexClient', () => {
           'Go the Distance'
         );
 
-        expect(result).toEqual([wantedTrack, unrelatedTrack]);
+        expect(result).toMatchObject([identifyingFields(wantedTrack), identifyingFields(unrelatedTrack)]);
       });
 
       it('should prefer the direct artist.title match when the source artist is genuinely the album artist', async () => {
@@ -279,7 +296,7 @@ describe('PlexClient', () => {
 
         const result = await client.searchTrack('', '1', 'The Beatles', 'Yesterday');
 
-        expect(result).toEqual([track]);
+        expect(result).toMatchObject([identifyingFields(track)]);
         expect(mockInstance.get).toHaveBeenCalledTimes(2);
       });
     });
@@ -735,6 +752,56 @@ describe('PlexClient', () => {
       expect(uri).toBe(
         'server://test-client/com.plexapp.plugins.library/library/sections/1'
       );
+    });
+  });
+
+  describe('401 handling', () => {
+    it('turns any 401 response into a PlexAuthError carrying a 401 status', async () => {
+      // The conversion lives in the client's response interceptor so it
+      // covers every method, including the ones with no 401 branch of their
+      // own. Pull the registered rejection handler back out and drive it.
+      const use = (mockedAxios.create.mock.results[0].value as any).interceptors.response.use;
+      const onRejected = use.mock.calls[0][1];
+
+      await expect(onRejected({ response: { status: 401 } })).rejects.toBeInstanceOf(PlexAuthError);
+      await expect(onRejected({ response: { status: 401 } })).rejects.toMatchObject({
+        statusCode: 401,
+        code: 'PLEX_AUTH_INVALID',
+      });
+    });
+
+    it('leaves non-401 failures alone', async () => {
+      const use = (mockedAxios.create.mock.results[0].value as any).interceptors.response.use;
+      const onRejected = use.mock.calls[0][1];
+      const original = { response: { status: 500 }, message: 'boom' };
+
+      await expect(onRejected(original)).rejects.toBe(original);
+    });
+  });
+
+  describe('resolvePlexToken', () => {
+    // Regression test for a bug where every direct-to-PMS call used the
+    // plex.tv account token even for servers merely shared with (not owned
+    // by) the user. Plex rejects the account token there with a 401, which
+    // the app read as "the session expired" and bounced the user back to
+    // /login - a loop re-authenticating with Plex could never break, since
+    // that only ever refreshes the account token, not the server-specific one.
+    it('prefers the server-specific access token when one is saved', () => {
+      const user = { plex_token: 'account-token' };
+      const userServer = { access_token: 'server-specific-token' };
+      expect(resolvePlexToken(user, userServer)).toBe('server-specific-token');
+    });
+
+    it('falls back to the account token for owned servers (no access_token saved)', () => {
+      const user = { plex_token: 'account-token' };
+      const userServer = { access_token: null };
+      expect(resolvePlexToken(user, userServer)).toBe('account-token');
+    });
+
+    it('falls back to the account token when there is no server row at all', () => {
+      const user = { plex_token: 'account-token' };
+      expect(resolvePlexToken(user, null)).toBe('account-token');
+      expect(resolvePlexToken(user, undefined)).toBe('account-token');
     });
   });
 });

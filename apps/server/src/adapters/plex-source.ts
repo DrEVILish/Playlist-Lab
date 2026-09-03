@@ -12,6 +12,7 @@
 import axios from 'axios';
 import { SourceAdapter, PlaylistInfo, TrackInfo, ServiceMeta } from './types';
 import { PlexClient } from '../services/plex';
+import { plexLimiter } from '../services/task-queues';
 import { logger } from '../utils/logger';
 
 const PLEX_TV_API = 'https://plex.tv/api/v2';
@@ -21,7 +22,7 @@ const PLEX_TV_API = 'https://plex.tv/api/v2';
  * Requires the admin token of the Plex Home owner.
  */
 async function getManagedUserToken(plexHomeUserId: string, adminToken: string): Promise<string> {
-  const response = await axios.post(
+  const response = await plexLimiter.run(() => axios.post(
     `${PLEX_TV_API}/home/users/${plexHomeUserId}/switch`,
     null,
     {
@@ -32,7 +33,7 @@ async function getManagedUserToken(plexHomeUserId: string, adminToken: string): 
         'X-Plex-Client-Identifier': 'playlist-lab-server',
       },
     }
-  );
+  ));
 
   const token = response.data?.authToken;
   if (!token) {
@@ -144,7 +145,10 @@ export const plexSourceAdapter: SourceAdapter = {
 
     const tracks: TrackInfo[] = rawTracks.map((t: any) => ({
       title: t.title,
-      artist: t.grandparentTitle ?? '',
+      // originalTitle is the real per-track artist; grandparentTitle is just the
+      // album/folder artist and can be wrong for compilations/soundtracks - this
+      // artist is fed straight into matching against the destination service.
+      artist: t.originalTitle || t.grandparentTitle || '',
       album: t.parentTitle ?? undefined,
     }));
 

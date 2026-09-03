@@ -9,6 +9,7 @@ export const LoginPage: FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [pinCode, setPinCode] = useState<string | null>(null);
   const [_pinId, setPinId] = useState<number | null>(null);
+  const [authUrl, setAuthUrl] = useState<string | null>(null);
   const navigate = useNavigate();
   const { isAuthenticated, checkAuth } = useAuth();
   const authPopupRef = useRef<Window | null>(null);
@@ -53,6 +54,7 @@ export const LoginPage: FC = () => {
       const data = await response.json();
       setPinCode(data.code);
       setPinId(data.id);
+      setAuthUrl(data.authUrl);
 
       // Open a popup window instead of a new tab (like Seerr and similar apps)
       const width = 600;
@@ -104,6 +106,14 @@ export const LoginPage: FC = () => {
         
         const data = await response.json();
 
+        if (data.expired) {
+          setError('The Plex sign-in code expired. Please try again.');
+          setIsLoading(false);
+          setPinCode(null);
+          setPinId(null);
+          return;
+        }
+
         if (data.denied) {
           setError(data.message || 'Your account has not been approved by the server admin.');
           setIsLoading(false);
@@ -147,6 +157,7 @@ export const LoginPage: FC = () => {
       setIsLoading(false);
       setPinCode(null);
       setPinId(null);
+      setAuthUrl(null);
     };
 
     poll();
@@ -179,6 +190,14 @@ export const LoginPage: FC = () => {
               <strong>After authorizing in Plex:</strong><br/>
               The window will close automatically and you'll be signed in.
             </p>
+            {/* Popup blockers are silent - window.open just returns null - so
+                always offer the link rather than leaving people staring at a
+                spinner with no Plex window. */}
+            {authUrl && (
+              <p className="login-pin-info">
+                No sign-in window? <a href={authUrl} target="_blank" rel="noopener noreferrer">Open the Plex sign-in page</a>
+              </p>
+            )}
             <button className="login-btn-cancel" onClick={cancelAuth}>Cancel</button>
           </div>
         )}

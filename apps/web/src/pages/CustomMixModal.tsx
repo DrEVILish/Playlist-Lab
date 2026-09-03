@@ -86,6 +86,10 @@ export const CustomMixModal: FC<CustomMixModalProps> = ({ onClose, onGenerate, o
     ...initialSettings,
   });
 
+  const [showTimeFilters, setShowTimeFilters] = useState(false);
+  const [showReleaseDateFilters, setShowReleaseDateFilters] = useState(false);
+  const [showRatingFilters, setShowRatingFilters] = useState(false);
+  const [showTrackCharFilters, setShowTrackCharFilters] = useState(false);
   const [showQualityFilters, setShowQualityFilters] = useState(false);
   const [showMetadataFilters, setShowMetadataFilters] = useState(false);
   const [showSonicFilters, setShowSonicFilters] = useState(false);
@@ -266,336 +270,357 @@ export const CustomMixModal: FC<CustomMixModalProps> = ({ onClose, onGenerate, o
           {/* Sorting */}
           <div className="form-group">
             <label className="form-label">Sort By</label>
-            <select
-              className="form-select"
-              value={settings.sortBy}
-              onChange={(e) => updateSetting('sortBy', e.target.value as any)}
-              disabled={isGenerating}
-            >
-              <option value="random">Random</option>
-              <option value="playCount">Play Count</option>
-              <option value="lastPlayed">Last Played</option>
-              <option value="dateAdded">Date Added</option>
-              <option value="releaseDate">Release Date</option>
-              <option value="rating">Rating</option>
-              <option value="duration">Duration</option>
-              <option value="title">Title</option>
-            </select>
-            {settings.sortBy !== 'random' && (
+            <div className="sorting-inputs">
               <select
                 className="form-select"
-                value={settings.sortDirection}
-                onChange={(e) => updateSetting('sortDirection', e.target.value as any)}
+                value={settings.sortBy}
+                onChange={(e) => updateSetting('sortBy', e.target.value as any)}
                 disabled={isGenerating}
-                style={{ marginTop: '0.5rem' }}
               >
-                <option value="desc">Descending</option>
-                <option value="asc">Ascending</option>
+                <option value="random">Random</option>
+                <option value="playCount">Play Count</option>
+                <option value="lastPlayed">Last Played</option>
+                <option value="dateAdded">Date Added</option>
+                <option value="releaseDate">Release Date</option>
+                <option value="rating">Rating</option>
+                <option value="duration">Duration</option>
+                <option value="title">Title</option>
               </select>
+              {settings.sortBy !== 'random' && (
+                <select
+                  className="form-select"
+                  value={settings.sortDirection}
+                  onChange={(e) => updateSetting('sortDirection', e.target.value as any)}
+                  disabled={isGenerating}
+                >
+                  <option value="desc">Descending</option>
+                  <option value="asc">Ascending</option>
+                </select>
+              )}
+            </div>
+          </div>
+
+          {/* Time Filters (Collapsible) */}
+          <div className="filter-section-collapsible">
+            <button className="section-toggle" onClick={() => setShowTimeFilters(!showTimeFilters)} type="button">
+              <span className="toggle-icon">{showTimeFilters ? '▼' : '▶'}</span>
+              Time Filters
+            </button>
+
+            {showTimeFilters && (
+              <div className="filter-section-content">
+                <div className="form-group">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={settings.playedInLastDays !== undefined}
+                      onChange={(e) => updateSetting('playedInLastDays', e.target.checked ? 30 : undefined)}
+                      disabled={isGenerating}
+                    />
+                    <span>Played in last</span>
+                  </label>
+                  {settings.playedInLastDays !== undefined && (
+                    <input
+                      type="number"
+                      className="form-input-small"
+                      value={settings.playedInLastDays}
+                      onChange={(e) => updateSetting('playedInLastDays', parseInt(e.target.value) || undefined)}
+                      min="1"
+                      disabled={isGenerating}
+                      placeholder="days"
+                    />
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={settings.notPlayedInLastDays !== undefined}
+                      onChange={(e) => updateSetting('notPlayedInLastDays', e.target.checked ? 90 : undefined)}
+                      disabled={isGenerating}
+                    />
+                    <span>NOT played in last</span>
+                  </label>
+                  {settings.notPlayedInLastDays !== undefined && (
+                    <input
+                      type="number"
+                      className="form-input-small"
+                      value={settings.notPlayedInLastDays}
+                      onChange={(e) => updateSetting('notPlayedInLastDays', parseInt(e.target.value) || undefined)}
+                      min="1"
+                      disabled={isGenerating}
+                      placeholder="days"
+                    />
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={settings.addedInLastDays !== undefined}
+                      onChange={(e) => updateSetting('addedInLastDays', e.target.checked ? 30 : undefined)}
+                      disabled={isGenerating}
+                    />
+                    <span>Added in last</span>
+                  </label>
+                  {settings.addedInLastDays !== undefined && (
+                    <input
+                      type="number"
+                      className="form-input-small"
+                      value={settings.addedInLastDays}
+                      onChange={(e) => updateSetting('addedInLastDays', parseInt(e.target.value) || undefined)}
+                      min="1"
+                      disabled={isGenerating}
+                      placeholder="days"
+                    />
+                  )}
+                </div>
+              </div>
             )}
           </div>
 
-          {/* Time Filters Section */}
-          <div className="filter-section">
-            <h3 className="section-title">Time Filters</h3>
-            
-            <div className="form-group">
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={settings.playedInLastDays !== undefined}
-                  onChange={(e) => updateSetting('playedInLastDays', e.target.checked ? 30 : undefined)}
-                  disabled={isGenerating}
-                />
-                <span>Played in last</span>
-              </label>
-              {settings.playedInLastDays !== undefined && (
-                <input
-                  type="number"
-                  className="form-input-small"
-                  value={settings.playedInLastDays}
-                  onChange={(e) => updateSetting('playedInLastDays', parseInt(e.target.value) || undefined)}
-                  min="1"
-                  disabled={isGenerating}
-                  placeholder="days"
-                />
-              )}
-            </div>
+          {/* Release Date (Collapsible) */}
+          <div className="filter-section-collapsible">
+            <button className="section-toggle" onClick={() => setShowReleaseDateFilters(!showReleaseDateFilters)} type="button">
+              <span className="toggle-icon">{showReleaseDateFilters ? '▼' : '▶'}</span>
+              Release Date
+            </button>
 
-            <div className="form-group">
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={settings.notPlayedInLastDays !== undefined}
-                  onChange={(e) => updateSetting('notPlayedInLastDays', e.target.checked ? 90 : undefined)}
-                  disabled={isGenerating}
-                />
-                <span>NOT played in last</span>
-              </label>
-              {settings.notPlayedInLastDays !== undefined && (
-                <input
-                  type="number"
-                  className="form-input-small"
-                  value={settings.notPlayedInLastDays}
-                  onChange={(e) => updateSetting('notPlayedInLastDays', parseInt(e.target.value) || undefined)}
-                  min="1"
-                  disabled={isGenerating}
-                  placeholder="days"
-                />
-              )}
-            </div>
-
-            <div className="form-group">
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={settings.addedInLastDays !== undefined}
-                  onChange={(e) => updateSetting('addedInLastDays', e.target.checked ? 30 : undefined)}
-                  disabled={isGenerating}
-                />
-                <span>Added in last</span>
-              </label>
-              {settings.addedInLastDays !== undefined && (
-                <input
-                  type="number"
-                  className="form-input-small"
-                  value={settings.addedInLastDays}
-                  onChange={(e) => updateSetting('addedInLastDays', parseInt(e.target.value) || undefined)}
-                  min="1"
-                  disabled={isGenerating}
-                  placeholder="days"
-                />
-              )}
-            </div>
-          </div>
-
-          {/* Release Date Filters */}
-          <div className="filter-section">
-            <h3 className="section-title">Release Date</h3>
-            
-            <div className="form-group">
-              <label className="form-label">Released After Year</label>
-              <input
-                type="number"
-                className="form-input"
-                value={settings.releasedAfterYear || ''}
-                onChange={(e) => updateSetting('releasedAfterYear', e.target.value ? parseInt(e.target.value) : undefined)}
-                min="1900"
-                max={new Date().getFullYear()}
-                disabled={isGenerating}
-                placeholder="e.g., 2010"
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Released Before Year</label>
-              <input
-                type="number"
-                className="form-input"
-                value={settings.releasedBeforeYear || ''}
-                onChange={(e) => updateSetting('releasedBeforeYear', e.target.value ? parseInt(e.target.value) : undefined)}
-                min="1900"
-                max={new Date().getFullYear()}
-                disabled={isGenerating}
-                placeholder="e.g., 2020"
-              />
-            </div>
-          </div>
-
-          {/* Rating & Popularity Filters */}
-          <div className="filter-section">
-            <h3 className="section-title">Rating & Popularity</h3>
-            
-            <div className="form-group">
-              <label className="form-label">Minimum Rating (0-10)</label>
-              <input
-                type="number"
-                className="form-input"
-                value={settings.minRating || ''}
-                onChange={(e) => updateSetting('minRating', e.target.value ? parseFloat(e.target.value) : undefined)}
-                min="0"
-                max="10"
-                step="0.5"
-                disabled={isGenerating}
-                placeholder="e.g., 7.5"
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Maximum Rating (0-10)</label>
-              <input
-                type="number"
-                className="form-input"
-                value={settings.maxRating || ''}
-                onChange={(e) => updateSetting('maxRating', e.target.value ? parseFloat(e.target.value) : undefined)}
-                min="0"
-                max="10"
-                step="0.5"
-                disabled={isGenerating}
-                placeholder="e.g., 9.5"
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Minimum Play Count</label>
-              <input
-                type="number"
-                className="form-input"
-                value={settings.minPlayCount || ''}
-                onChange={(e) => updateSetting('minPlayCount', e.target.value ? parseInt(e.target.value) : undefined)}
-                min="0"
-                disabled={isGenerating}
-                placeholder="e.g., 5"
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Maximum Play Count</label>
-              <input
-                type="number"
-                className="form-input"
-                value={settings.maxPlayCount || ''}
-                onChange={(e) => updateSetting('maxPlayCount', e.target.value ? parseInt(e.target.value) : undefined)}
-                min="0"
-                disabled={isGenerating}
-                placeholder="e.g., 100"
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={settings.popularTracksOnly || false}
-                  onChange={(e) => updateSetting('popularTracksOnly', e.target.checked || undefined)}
-                  disabled={isGenerating}
-                />
-                <span>Only include popular tracks</span>
-              </label>
-              <p className="form-hint">
-                Uses external popularity data (Last.fm, MusicBrainz) to select only the most popular tracks from each artist.
-              </p>
-              {settings.popularTracksOnly && (
-                <div style={{ marginTop: '0.5rem' }}>
-                  <label className="form-label">Popular tracks per artist</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={settings.popularTracksPerArtist || 5}
-                    onChange={(e) => updateSetting('popularTracksPerArtist', parseInt(e.target.value) || 5)}
-                    min="1"
-                    max="50"
-                    disabled={isGenerating}
-                    placeholder="e.g., 5"
-                  />
-                  <p className="form-hint">
-                    Number of popular tracks to fetch from each artist (default: 5)
-                  </p>
+            {showReleaseDateFilters && (
+              <div className="filter-section-content">
+                <div className="form-group">
+                  <label className="form-label">Release Year Range</label>
+                  <div className="year-inputs">
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={settings.releasedAfterYear || ''}
+                      onChange={(e) => updateSetting('releasedAfterYear', e.target.value ? parseInt(e.target.value) : undefined)}
+                      min="1900"
+                      max={new Date().getFullYear()}
+                      disabled={isGenerating}
+                      placeholder="After, e.g. 2010"
+                    />
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={settings.releasedBeforeYear || ''}
+                      onChange={(e) => updateSetting('releasedBeforeYear', e.target.value ? parseInt(e.target.value) : undefined)}
+                      min="1900"
+                      max={new Date().getFullYear()}
+                      disabled={isGenerating}
+                      placeholder="Before, e.g. 2020"
+                    />
+                  </div>
                 </div>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={settings.popularArtistsOnly || false}
-                  onChange={(e) => updateSetting('popularArtistsOnly', e.target.checked || undefined)}
-                  disabled={isGenerating}
-                />
-                <span>Only include popular artists</span>
-              </label>
-              <p className="form-hint">
-                Filters to only include tracks from well-known artists based on Last.fm popularity data. 
-                Note: Plex must have fetched Last.fm metadata for your artists (requires Last.fm agent enabled in Plex settings).
-              </p>
-              {settings.popularArtistsOnly && (
-                <div style={{ marginTop: '0.5rem' }}>
-                  <label className="form-label">Maximum number of popular artists</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={settings.maxPopularArtists || 20}
-                    onChange={(e) => updateSetting('maxPopularArtists', parseInt(e.target.value) || 20)}
-                    min="1"
-                    max="500"
-                    disabled={isGenerating}
-                    placeholder="e.g., 20"
-                  />
-                  <p className="form-hint">
-                    Maximum number of popular artists to include (default: 20)
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Track Characteristics */}
-          <div className="filter-section">
-            <h3 className="section-title">Track Characteristics</h3>
-            
-            <div className="form-group">
-              <label className="form-label">Minimum Duration (seconds)</label>
-              <input
-                type="number"
-                className="form-input"
-                value={settings.minDuration || ''}
-                onChange={(e) => updateSetting('minDuration', e.target.value ? parseInt(e.target.value) : undefined)}
-                min="0"
-                disabled={isGenerating}
-                placeholder="e.g., 180 (3 minutes)"
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Maximum Duration (seconds)</label>
-              <input
-                type="number"
-                className="form-input"
-                value={settings.maxDuration || ''}
-                onChange={(e) => updateSetting('maxDuration', e.target.value ? parseInt(e.target.value) : undefined)}
-                min="0"
-                disabled={isGenerating}
-                placeholder="e.g., 300 (5 minutes)"
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Track Number Range</label>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={settings.minTrackNumber || ''}
-                  onChange={(e) => updateSetting('minTrackNumber', e.target.value ? parseInt(e.target.value) : undefined)}
-                  min="1"
-                  disabled={isGenerating}
-                  placeholder="Min"
-                />
-                <input
-                  type="number"
-                  className="form-input"
-                  value={settings.maxTrackNumber || ''}
-                  onChange={(e) => updateSetting('maxTrackNumber', e.target.value ? parseInt(e.target.value) : undefined)}
-                  min="1"
-                  disabled={isGenerating}
-                  placeholder="Max"
-                />
               </div>
-            </div>
+            )}
+          </div>
 
-            <div className="form-group">
-              <label className="form-label">Disc Number</label>
-              <input
-                type="number"
-                className="form-input"
-                value={settings.discNumber || ''}
-                onChange={(e) => updateSetting('discNumber', e.target.value ? parseInt(e.target.value) : undefined)}
-                min="1"
-                disabled={isGenerating}
-                placeholder="e.g., 1"
-              />
-            </div>
+          {/* Rating & Popularity (Collapsible) */}
+          <div className="filter-section-collapsible">
+            <button className="section-toggle" onClick={() => setShowRatingFilters(!showRatingFilters)} type="button">
+              <span className="toggle-icon">{showRatingFilters ? '▼' : '▶'}</span>
+              Rating & Popularity
+            </button>
+
+            {showRatingFilters && (
+              <div className="filter-section-content">
+                <div className="form-group">
+                  <label className="form-label">Rating Range (0-10)</label>
+                  <div className="year-inputs">
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={settings.minRating || ''}
+                      onChange={(e) => updateSetting('minRating', e.target.value ? parseFloat(e.target.value) : undefined)}
+                      min="0"
+                      max="10"
+                      step="0.5"
+                      disabled={isGenerating}
+                      placeholder="Min, e.g. 7.5"
+                    />
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={settings.maxRating || ''}
+                      onChange={(e) => updateSetting('maxRating', e.target.value ? parseFloat(e.target.value) : undefined)}
+                      min="0"
+                      max="10"
+                      step="0.5"
+                      disabled={isGenerating}
+                      placeholder="Max, e.g. 9.5"
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Play Count Range</label>
+                  <div className="year-inputs">
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={settings.minPlayCount || ''}
+                      onChange={(e) => updateSetting('minPlayCount', e.target.value ? parseInt(e.target.value) : undefined)}
+                      min="0"
+                      disabled={isGenerating}
+                      placeholder="Min, e.g. 5"
+                    />
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={settings.maxPlayCount || ''}
+                      onChange={(e) => updateSetting('maxPlayCount', e.target.value ? parseInt(e.target.value) : undefined)}
+                      min="0"
+                      disabled={isGenerating}
+                      placeholder="Max, e.g. 100"
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={settings.popularTracksOnly || false}
+                      onChange={(e) => updateSetting('popularTracksOnly', e.target.checked || undefined)}
+                      disabled={isGenerating}
+                    />
+                    <span>Only include popular tracks</span>
+                  </label>
+                  <p className="form-hint">
+                    Uses external popularity data (Last.fm, MusicBrainz) to select only the most popular tracks from each artist.
+                  </p>
+                  {settings.popularTracksOnly && (
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <label className="form-label">Popular tracks per artist</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={settings.popularTracksPerArtist || 5}
+                        onChange={(e) => updateSetting('popularTracksPerArtist', parseInt(e.target.value) || 5)}
+                        min="1"
+                        max="50"
+                        disabled={isGenerating}
+                        placeholder="e.g., 5"
+                      />
+                      <p className="form-hint">
+                        Number of popular tracks to fetch from each artist (default: 5)
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={settings.popularArtistsOnly || false}
+                      onChange={(e) => updateSetting('popularArtistsOnly', e.target.checked || undefined)}
+                      disabled={isGenerating}
+                    />
+                    <span>Only include popular artists</span>
+                  </label>
+                  <p className="form-hint">
+                    Filters to only include tracks from well-known artists based on Last.fm popularity data.
+                    Note: Plex must have fetched Last.fm metadata for your artists (requires Last.fm agent enabled in Plex settings).
+                  </p>
+                  {settings.popularArtistsOnly && (
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <label className="form-label">Maximum number of popular artists</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={settings.maxPopularArtists || 20}
+                        onChange={(e) => updateSetting('maxPopularArtists', parseInt(e.target.value) || 20)}
+                        min="1"
+                        max="500"
+                        disabled={isGenerating}
+                        placeholder="e.g., 20"
+                      />
+                      <p className="form-hint">
+                        Maximum number of popular artists to include (default: 20)
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Track Characteristics (Collapsible) */}
+          <div className="filter-section-collapsible">
+            <button className="section-toggle" onClick={() => setShowTrackCharFilters(!showTrackCharFilters)} type="button">
+              <span className="toggle-icon">{showTrackCharFilters ? '▼' : '▶'}</span>
+              Track Characteristics
+            </button>
+
+            {showTrackCharFilters && (
+              <div className="filter-section-content">
+                <div className="form-group">
+                  <label className="form-label">Duration Range (seconds)</label>
+                  <div className="year-inputs">
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={settings.minDuration || ''}
+                      onChange={(e) => updateSetting('minDuration', e.target.value ? parseInt(e.target.value) : undefined)}
+                      min="0"
+                      disabled={isGenerating}
+                      placeholder="Min, e.g. 180"
+                    />
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={settings.maxDuration || ''}
+                      onChange={(e) => updateSetting('maxDuration', e.target.value ? parseInt(e.target.value) : undefined)}
+                      min="0"
+                      disabled={isGenerating}
+                      placeholder="Max, e.g. 300"
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Track Number Range</label>
+                  <div className="year-inputs">
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={settings.minTrackNumber || ''}
+                      onChange={(e) => updateSetting('minTrackNumber', e.target.value ? parseInt(e.target.value) : undefined)}
+                      min="1"
+                      disabled={isGenerating}
+                      placeholder="Min"
+                    />
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={settings.maxTrackNumber || ''}
+                      onChange={(e) => updateSetting('maxTrackNumber', e.target.value ? parseInt(e.target.value) : undefined)}
+                      min="1"
+                      disabled={isGenerating}
+                      placeholder="Max"
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Disc Number</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={settings.discNumber || ''}
+                    onChange={(e) => updateSetting('discNumber', e.target.value ? parseInt(e.target.value) : undefined)}
+                    min="1"
+                    disabled={isGenerating}
+                    placeholder="e.g., 1"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Sonic Analysis Filters (Collapsible) */}

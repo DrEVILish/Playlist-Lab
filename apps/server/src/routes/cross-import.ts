@@ -5,6 +5,8 @@ import { logger } from '../utils/logger';
 import { adapterRegistry } from '../adapters/registry';
 import { TargetConfig, MatchResult } from '../adapters/types';
 import { startYouTubeLoginSession, getLoginSessionStatus } from '../adapters/youtube-plain-target';
+import { updateNotification } from '../services/job-notifications';
+import { enqueueAction } from '../services/action-queue';
 
 const router = Router();
 
@@ -119,7 +121,7 @@ router.get('/targets', async (req: Request, res: Response, next: NextFunction) =
 // ---------------------------------------------------------------------------
 router.get('/sources/:sourceId/playlists', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { sourceId } = req.params;
+    const { sourceId } = req.params as Record<string, string>;
     const userId = req.session.userId!;
     const db = getRawDb(req);
 
@@ -150,7 +152,7 @@ router.get('/sources/:sourceId/playlists', async (req: Request, res: Response, n
 // ---------------------------------------------------------------------------
 router.get('/sources/:sourceId/search', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { sourceId } = req.params;
+    const { sourceId } = req.params as Record<string, string>;
     const { q } = req.query as { q?: string };
 
     if (!q?.trim()) {
@@ -187,7 +189,7 @@ router.get('/sources/:sourceId/search', async (req: Request, res: Response, next
 // ---------------------------------------------------------------------------
 router.post('/sources/:sourceId/preview', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { sourceId } = req.params;
+    const { sourceId } = req.params as Record<string, string>;
     const { urlOrId } = req.body as { urlOrId: string };
 
     if (!urlOrId) {
@@ -221,7 +223,7 @@ router.post('/sources/:sourceId/preview', async (req: Request, res: Response, ne
 // ---------------------------------------------------------------------------
 router.post('/sources/:sourceId/tracks', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { sourceId } = req.params;
+    const { sourceId } = req.params as Record<string, string>;
     const { urlOrId } = req.body as { urlOrId: string };
 
     if (!urlOrId) {
@@ -314,42 +316,55 @@ router.post('/execute', async (req: Request, res: Response, next: NextFunction) 
       return res.status(404).json({ error: `Target adapter '${targetId}' not found` });
     }
 
-    const result = await adapter.createPlaylist(playlistName, reviewedTracks, targetConfig ?? {}, userId, db);
+    const { jobId: queueJobId, position } = enqueueAction(userId, `Import: ${playlistName}`, async (notificationId) => {
+      try {
+        const result = await adapter.createPlaylist(playlistName, reviewedTracks, targetConfig ?? {}, userId, db);
 
-    // Update job record if jobId provided
-    if (jobId) {
-      const matchedCount = reviewedTracks.filter(t => t.matched && !t.skipped).length;
-      const unmatchedCount = reviewedTracks.filter(t => !t.matched && !t.skipped).length;
-      const skippedCount = reviewedTracks.filter(t => t.skipped).length;
-      const unmatchedTracks = reviewedTracks
-        .filter(t => !t.matched && !t.skipped)
-        .map(t => ({ title: t.sourceTrack.title, artist: t.sourceTrack.artist }));
+        // Update job record if jobId provided
+        if (jobId) {
+          const matchedCount = reviewedTracks.filter(t => t.matched && !t.skipped).length;
+          const unmatchedCount = reviewedTracks.filter(t => !t.matched && !t.skipped).length;
+          const skippedCount = reviewedTracks.filter(t => t.skipped).length;
+          const unmatchedTracks = reviewedTracks
+            .filter(t => !t.matched && !t.skipped)
+            .map(t => ({ title: t.sourceTrack.title, artist: t.sourceTrack.artist }));
 
-      rawDb.prepare(`
-        UPDATE cross_import_jobs SET
-          status = 'complete',
-          target_playlist_name = ?,
-          matched_count = ?,
-          unmatched_count = ?,
-          skipped_count = ?,
-          total_count = ?,
-          unmatched_tracks = ?,
-          completed_at = ?
-        WHERE id = ? AND user_id = ?
-      `).run(
-        result.name,
-        matchedCount,
-        unmatchedCount,
-        skippedCount,
-        reviewedTracks.length,
-        JSON.stringify(unmatchedTracks),
-        Date.now(),
-        jobId,
-        userId
-      );
-    }
+          rawDb.prepare(`
+            UPDATE cross_import_jobs SET
+              status = 'complete',
+              target_playlist_name = ?,
+              matched_count = ?,
+              unmatched_count = ?,
+              skipped_count = ?,
+              total_count = ?,
+              unmatched_tracks = ?,
+              completed_at = ?
+            WHERE id = ? AND user_id = ?
+          `).run(
+            result.name,
+            matchedCount,
+            unmatchedCount,
+            skippedCount,
+            reviewedTracks.length,
+            JSON.stringify(unmatchedTracks),
+            Date.now(),
+            jobId,
+            userId
+          );
+        }
 
-    res.json(result);
+        updateNotification(userId, notificationId, {
+          title: result.name,
+          status: 'success',
+          detail: `Imported ${reviewedTracks.filter(t => t.matched && !t.skipped).length} tracks`,
+        });
+      } catch (error: any) {
+        logger.error('[CrossImport] POST /execute error', { error: error.message, userId });
+        updateNotification(userId, notificationId, { status: 'error', detail: error.message || 'Import failed' });
+      }
+    }, 'import');
+
+    res.status(202).json({ queued: true, jobId: queueJobId, position });
     return;
   } catch (err: any) {
     logger.error('[CrossImport] POST /execute error', { error: err.message });
@@ -390,7 +405,7 @@ router.get('/history', (req: Request, res: Response, next: NextFunction) => {
 // SSE endpoint — streams matching progress events to the client.
 // ---------------------------------------------------------------------------
 router.get('/match/progress/:sessionId', (req: Request, res: Response) => {
-  const { sessionId } = req.params;
+  const { sessionId } = req.params as Record<string, string>;
   logger.info('[CrossImport] SSE connection request received', { sessionId, url: req.url });
 
   const origin = req.headers.origin;
@@ -478,7 +493,7 @@ router.get('/match/progress/:sessionId', (req: Request, res: Response) => {
 // Polling endpoint — returns current matching progress state.
 // ---------------------------------------------------------------------------
 router.get('/match/status/:sessionId', (req: Request, res: Response) => {
-  const { sessionId } = req.params;
+  const { sessionId } = req.params as Record<string, string>;
   
   // Log ALL keys in the Map for debugging
   const allKeys = Array.from(matchProgressState.keys());
@@ -602,8 +617,11 @@ router.post('/match', async (req: Request, res: Response, next: NextFunction) =>
     // Respond immediately so the client can start listening on the SSE stream
     res.json({ jobId, sessionId });
 
-    // Run matching asynchronously
-    setImmediate(async () => {
+    // Gated through the shared action queue so an unbounded number of these
+    // don't all run at once across users - the existing SSE/polling progress
+    // channel above already renders the "fetching" state as a waiting
+    // indicator, so a job sitting queued here needs no extra client changes.
+    enqueueAction(userId, `Cross-import: ${playlistUrlOrId}`, async (notificationId) => {
       const emitter = matchSessions.get(sessionId);
       const isCancelled = () => cancelledSessions.has(sessionId);
 
@@ -633,10 +651,12 @@ router.post('/match', async (req: Request, res: Response, next: NextFunction) =>
         };
         matchProgressState.set(sessionId, fetchedProgress);
         emitter?.emit('progress', fetchedProgress);
+        updateNotification(userId, notificationId, { title: `Cross-import: ${playlist.name}`, detail: 'Matching tracks...' });
 
         if (isCancelled()) {
           rawDb.prepare('DELETE FROM cross_import_jobs WHERE id = ?').run(jobId);
           emitter?.emit('error', { message: 'Cancelled' });
+          updateNotification(userId, notificationId, { status: 'error', detail: 'Cancelled' });
           return;
         }
 
@@ -688,6 +708,7 @@ router.post('/match', async (req: Request, res: Response, next: NextFunction) =>
         if (isCancelled()) {
           rawDb.prepare('DELETE FROM cross_import_jobs WHERE id = ?').run(jobId);
           emitter?.emit('error', { message: 'Cancelled' });
+          updateNotification(userId, notificationId, { status: 'error', detail: 'Cancelled' });
           return;
         }
 
@@ -697,15 +718,17 @@ router.post('/match', async (req: Request, res: Response, next: NextFunction) =>
         const completeData = { type: 'complete', results, jobId };
         matchProgressState.set(sessionId, completeData);
         emitter?.emit('complete', completeData);
+        updateNotification(userId, notificationId, { status: 'success', detail: `Matched ${results.filter((r: any) => r.matched).length} of ${results.length} tracks - ready to review` });
       } catch (err: any) {
         logger.error('[CrossImport] Async matching error', { error: err.message, stack: err.stack, jobId, sessionId, hasEmitter: !!emitter });
         try {
           rawDb.prepare(`UPDATE cross_import_jobs SET status = 'failed' WHERE id = ?`).run(jobId);
         } catch { /* ignore */ }
-        
+
         // Send detailed error message to UI
         const errorMessage = err.message || 'Matching failed';
-        const errorData = { 
+        updateNotification(userId, notificationId, { status: 'error', detail: errorMessage });
+        const errorData = {
           type: 'error',
           message: errorMessage,
           detail: err.stack ? err.stack.split('\n').slice(0, 3).join('\n') : undefined
@@ -734,7 +757,7 @@ router.post('/match', async (req: Request, res: Response, next: NextFunction) =>
 // batches and stops. Deletes the job record on cancellation.
 // ---------------------------------------------------------------------------
 router.post('/match/cancel/:sessionId', (req: Request, res: Response) => {
-  const { sessionId } = req.params;
+  const { sessionId } = req.params as Record<string, string>;
 
   cancelledSessions.add(sessionId);
 
@@ -759,7 +782,7 @@ router.post('/match/cancel/:sessionId', (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 router.get('/oauth/:service', async (req: Request, res: Response, _next: NextFunction) => {
   try {
-    const { service } = req.params;
+    const { service } = req.params as Record<string, string>;
     const userId = req.session.userId!;
     const db = getRawDb(req);
 
@@ -797,7 +820,7 @@ router.get('/oauth/:service', async (req: Request, res: Response, _next: NextFun
 // ARL tokens, or browser cookies instead of standard OAuth.
 // ---------------------------------------------------------------------------
 router.get('/oauth/:service/form', (req: Request, res: Response) => {
-  const { service } = req.params;
+  const { service } = req.params as Record<string, string>;
   const { state } = req.query as { state?: string };
 
   const callbackUrl = `/api/cross-import/oauth/${service}/callback`;
@@ -992,7 +1015,7 @@ router.get('/oauth/:service/form', (req: Request, res: Response) => {
 // Handles the OAuth callback: exchanges code for tokens and redirects to UI.
 // ---------------------------------------------------------------------------
 router.get('/oauth/:service/callback', async (req: Request, res: Response, _next: NextFunction) => {
-  const { service } = req.params;
+  const { service } = req.params as Record<string, string>;
 
   const closePopup = (status: 'connected' | 'error', detail: string) => {
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Connecting…</title></head><body>
@@ -1011,7 +1034,7 @@ router.get('/oauth/:service/callback', async (req: Request, res: Response, _next
   };
 
   try {
-    const { code, state, error } = req.query;
+    const { code, state, error } = req.query as Record<string, string>;
 
     if (error) return closePopup('error', String(error));
     if (!code || typeof code !== 'string') return closePopup('error', 'no_code');
@@ -1057,7 +1080,7 @@ router.get('/oauth/:service/callback', async (req: Request, res: Response, _next
 // Returns JSON instead of HTML since the form uses fetch().
 // ---------------------------------------------------------------------------
 router.post('/oauth/:service/callback', async (req: Request, res: Response) => {
-  const { service } = req.params;
+  const { service } = req.params as Record<string, string>;
   try {
     const { code, state } = req.body as { code?: string; state?: string };
 
@@ -1098,7 +1121,7 @@ router.post('/oauth/:service/callback', async (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 router.delete('/oauth/:service', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { service } = req.params;
+    const { service } = req.params as Record<string, string>;
     const userId = req.session.userId!;
     const db = getRawDb(req);
 
@@ -1285,7 +1308,7 @@ router.post('/oauth/youtube/browser-login/save', async (req: Request, res: Respo
 // ---------------------------------------------------------------------------
 router.get('/sources/:sourceId/tracks', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { sourceId } = req.params;
+    const { sourceId } = req.params as Record<string, string>;
     const { urlOrId } = req.query as { urlOrId?: string };
 
     if (!urlOrId) {

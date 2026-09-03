@@ -650,7 +650,7 @@ describe('DatabaseService', () => {
       const stats = dbService.getMissingTrackStats();
 
       // Should collapse into a single aggregated stat, not two separate ones.
-      const matching = stats.filter(s => s.track.toLowerCase().includes('popular song'));
+      const matching = stats.filter(s => s.title.toLowerCase().includes('popular song'));
       expect(matching).toHaveLength(1);
       expect(matching[0].count).toBe(2);
     });

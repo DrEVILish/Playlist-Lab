@@ -206,7 +206,46 @@ async function fetchAllPlaylistsViaPuppeteer(userId: string, _displayName: strin
  *   2. If Spotify Client Credentials are configured → use Spotify Web API for ALL playlists (paginated, ~2s)
  *   3. Otherwise → use Puppeteer to scroll and collect ALL playlists (~10-15s)
  */
+// A user's public playlist list costs ~7s to assemble: the SSR page only
+// carries the first handful (10 of 54 for one real account), so the full list
+// has to be scrolled out of a headless browser. That is worth doing once, not
+// every time someone opens the same profile - the list is public data that
+// changes on the order of days, and the same profile is typically opened
+// repeatedly while picking playlists to import. Keyed by Spotify user alone
+// because the data is public and identical for every caller.
+// ponytail: in-memory, so a restart re-pays the first fetch. Move it into
+// cached_playlists if surviving restarts turns out to matter.
+const userPlaylistsCache = new Map<string, { at: number; result: { displayName: string; playlists: PlaylistInfo[] } }>();
+const USER_PLAYLISTS_TTL_MS = 10 * 60 * 1000;
+
+/** Drops a user's cached list so the next fetch goes back to Spotify - used
+ * by the endpoint's explicit refresh, so a user who has just added or renamed
+ * a playlist is not stuck looking at the old list until the TTL expires. */
+export function invalidateUserPlaylistsCache(userId: string): void {
+  userPlaylistsCache.delete(userId);
+}
+
 async function fetchUserPlaylistsUnauthenticated(userId: string): Promise<{ displayName: string; playlists: PlaylistInfo[] }> {
+  const cached = userPlaylistsCache.get(userId);
+  if (cached && Date.now() - cached.at < USER_PLAYLISTS_TTL_MS) {
+    logger.info('[SpotifySourceAdapter] Serving user playlists from cache', {
+      userId,
+      playlistCount: cached.result.playlists.length,
+      ageMs: Date.now() - cached.at,
+    });
+    return cached.result;
+  }
+  const result = await fetchUserPlaylistsFresh(userId);
+  // Only worth caching a real answer - an empty list is usually a failed
+  // scrape, and caching it would keep the profile looking empty for 10
+  // minutes after it started working again.
+  if (result.playlists.length > 0) {
+    userPlaylistsCache.set(userId, { at: Date.now(), result });
+  }
+  return result;
+}
+
+async function fetchUserPlaylistsFresh(userId: string): Promise<{ displayName: string; playlists: PlaylistInfo[] }> {
   try {
     const url = `https://open.spotify.com/user/${userId}?locale=en-US`;
     logger.info('[SpotifySourceAdapter] Fetching user profile via curl', { userId, url });

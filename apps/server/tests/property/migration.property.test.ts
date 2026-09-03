@@ -58,7 +58,7 @@ describe('Migration Property Tests', () => {
           }),
           // Generate a subset of matching settings to test
           fc.record({
-            minMatchScore: fc.float({ min: 0, max: 1 }),
+            minMatchScore: fc.float({ min: 0, max: 1, noNaN: true }),
             stripParentheses: fc.boolean(),
             useFirstArtistOnly: fc.boolean(),
           }),

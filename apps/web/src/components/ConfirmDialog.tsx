@@ -1,5 +1,5 @@
 import type { FC, ReactNode } from 'react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import './ConfirmDialog.css';
 
@@ -13,6 +13,10 @@ export interface ConfirmOptions {
    * every confirm() call this replaced across the app guarded a destructive
    * action. */
   danger?: boolean;
+  /** Turns this into a text-entry dialog (the styled replacement for
+   * window.prompt) - the entered value is passed to onConfirm, and the
+   * confirm button stays disabled until it's non-empty. */
+  input?: { defaultValue?: string; placeholder?: string; label?: string };
 }
 
 /**
@@ -21,32 +25,36 @@ export interface ConfirmOptions {
  * modal. Rendered by contexts/ConfirmContext.tsx's ConfirmProvider - use the
  * useConfirm() hook rather than this component directly.
  */
-export const ConfirmDialog: FC<ConfirmOptions & { onConfirm: () => void; onCancel: () => void }> = ({
+export const ConfirmDialog: FC<ConfirmOptions & { onConfirm: (value: string) => void; onCancel: () => void }> = ({
   title,
   message,
   warning,
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
   danger = true,
+  input,
   onConfirm,
   onCancel,
 }) => {
+  const [value, setValue] = useState(input?.defaultValue ?? '');
+  const canConfirm = !input || value.trim().length > 0;
+
   useEscapeKey(true, onCancel);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        onConfirm();
+        if (canConfirm) onConfirm(value);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onConfirm]);
+  }, [onConfirm, value, canConfirm]);
 
   useEffect(() => {
     const modal = document.querySelector('.confirm-dialog-modal');
-    const focusable = modal?.querySelectorAll<HTMLElement>('button, [tabindex]:not([tabindex="-1"])');
+    const focusable = modal?.querySelectorAll<HTMLElement>('input, button, [tabindex]:not([tabindex="-1"])');
     const first = focusable?.[0];
     const last = focusable?.[focusable.length - 1];
     first?.focus();
@@ -81,11 +89,21 @@ export const ConfirmDialog: FC<ConfirmOptions & { onConfirm: () => void; onCance
 
         <div className="confirm-dialog-content">
           <p id="confirm-dialog-message" className="confirm-dialog-message">{message}</p>
+          {input && (
+            <input
+              type="text"
+              className="confirm-dialog-input"
+              value={value}
+              placeholder={input.placeholder}
+              aria-label={input.label ?? (typeof message === 'string' ? message : 'Value')}
+              onChange={(e) => setValue(e.target.value)}
+            />
+          )}
           {warning && <p className="confirm-dialog-warning" role="alert">{warning}</p>}
         </div>
 
         <div className="confirm-dialog-actions">
-          <button onClick={onConfirm} className={`btn-confirm ${danger ? 'btn-confirm-danger' : ''}`} aria-label={confirmLabel}>
+          <button onClick={() => onConfirm(value)} disabled={!canConfirm} className={`btn-confirm ${danger ? 'btn-confirm-danger' : ''}`} aria-label={confirmLabel}>
             {confirmLabel}
           </button>
           <button onClick={onCancel} className="btn-cancel" aria-label={cancelLabel}>
