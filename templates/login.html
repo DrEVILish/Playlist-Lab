@@ -1,0 +1,10 @@
+{{define "content"}}
+<main class="login">
+  <h1>Playlist Lab</h1>
+  <p>Sign in with your Plex account to continue.</p>
+  <button hx-post="/auth/start" hx-target="#auth-status" hx-swap="innerHTML">
+    Sign in with Plex
+  </button>
+  <div id="auth-status"></div>
+</main>
+{{end}}

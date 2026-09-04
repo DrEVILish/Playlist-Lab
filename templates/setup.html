@@ -1,0 +1,17 @@
+{{define "content"}}
+<main class="setup">
+  <h1>Select your Plex server</h1>
+  <form hx-post="/servers/select" hx-target="body" hx-swap="outerHTML">
+    <label>Server
+      <select name="server" hx-get="/setup/libraries" hx-target="#libraries" hx-trigger="change">
+        <option value="">-- choose a server --</option>
+        {{range .Servers}}
+        <option value="{{.Value}}">{{.Name}}</option>
+        {{end}}
+      </select>
+    </label>
+    <div id="libraries"></div>
+    <button type="submit">Save</button>
+  </form>
+</main>
+{{end}}

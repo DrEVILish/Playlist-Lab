@@ -1,0 +1,13 @@
+{{define "partials/libraries_select.html"}}
+{{if .Error}}
+<p class="error">{{.Error}}</p>
+{{else}}
+<label>Music library
+  <select name="library">
+    {{range .Libraries}}
+    <option value="{{.Value}}">{{.Name}}</option>
+    {{end}}
+  </select>
+</label>
+{{end}}
+{{end}}

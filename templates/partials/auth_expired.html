@@ -1,0 +1,3 @@
+{{define "partials/auth_expired.html"}}
+<p class="error">Sign-in expired. <button hx-post="/auth/start" hx-target="#auth-status" hx-swap="innerHTML">Try again</button></p>
+{{end}}

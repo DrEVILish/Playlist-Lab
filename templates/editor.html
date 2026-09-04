@@ -1,0 +1,65 @@
+{{define "content"}}
+<main class="editor">
+  <p><a href="/">&larr; Back to library</a></p>
+  <h1>Playlist</h1>
+  <table id="tracks">
+    <thead><tr><th></th><th>Title</th><th>Artist</th><th>Album</th><th>Codec</th><th></th></tr></thead>
+    <tbody>
+      {{$plexId := .PlexID}}
+      {{range .Tracks}}
+      {{if .PlaylistItemID}}
+      <tr draggable="true" data-item-id="{{.PlaylistItemID}}">
+        <td class="drag-handle">&#8942;&#8942;</td>
+        <td>{{.Title}}</td>
+        <td>{{.Artist}}</td>
+        <td>{{.Album}}</td>
+        <td>{{.Codec}}</td>
+        <td><button hx-delete="/playlists/{{$plexId}}/tracks/{{.PlaylistItemID}}" hx-target="closest tr" hx-swap="outerHTML swap:0s">Remove</button></td>
+      </tr>
+      {{else}}
+      <tr>
+        <td></td>
+        <td>{{.Title}}</td>
+        <td>{{.Artist}}</td>
+        <td>{{.Album}}</td>
+        <td>{{.Codec}}</td>
+        <td><em>smart playlist - not editable</em></td>
+      </tr>
+      {{end}}
+      {{end}}
+    </tbody>
+  </table>
+</main>
+<script>
+(function () {
+  const plexId = {{.PlexID}};
+  const tbody = document.querySelector('#tracks tbody');
+  let dragged = null;
+
+  tbody.addEventListener('dragstart', (e) => {
+    dragged = e.target.closest('tr');
+  });
+
+  tbody.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    const target = e.target.closest('tr');
+    if (!target || target === dragged) return;
+    const rect = target.getBoundingClientRect();
+    const before = (e.clientY - rect.top) / rect.height < 0.5;
+    tbody.insertBefore(dragged, before ? target : target.nextSibling);
+  });
+
+  tbody.addEventListener('drop', (e) => {
+    e.preventDefault();
+    if (!dragged) return;
+    const prev = dragged.previousElementSibling;
+    const afterId = prev ? prev.dataset.itemId : '0';
+    htmx.ajax('PUT', `/playlists/${plexId}/tracks/${dragged.dataset.itemId}/move`, {
+      values: { afterId },
+      swap: 'none',
+    });
+    dragged = null;
+  });
+})();
+</script>
+{{end}}

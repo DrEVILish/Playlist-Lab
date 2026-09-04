@@ -1,0 +1,30 @@
+{{define "content"}}
+<main class="home">
+  <header>
+    <h1>Playlist Lab</h1>
+    <form hx-post="/auth/logout"><button type="submit">Log out</button></form>
+  </header>
+
+  {{if .PlexError}}
+    <p class="error">Couldn't reach your Plex server. Check your connection and refresh.</p>
+  {{else if not .Playlists}}
+    <p>No playlists found on your server yet.</p>
+  {{else}}
+  <table>
+    <thead><tr><th>Name</th><th>Source</th><th>Tracks</th><th></th></tr></thead>
+    <tbody>
+      {{range .Playlists}}
+      <tr>
+        <td><a href="/playlists/{{.PlexID}}">{{.Name}}</a></td>
+        <td>{{.Source}}</td>
+        <td>{{.TrackCount}}</td>
+        <td>
+          <button hx-delete="/playlists/{{.PlexID}}" hx-confirm="Delete this playlist from Plex?">Delete</button>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{end}}
+</main>
+{{end}}

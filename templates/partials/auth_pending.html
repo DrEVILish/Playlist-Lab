@@ -1,0 +1,7 @@
+{{define "partials/auth_pending.html"}}
+<div hx-post="/auth/poll" hx-vals='{"pinId": "{{.PinID}}", "code": "{{.Code}}"}' hx-trigger="load delay:2s" hx-target="#auth-status" hx-swap="innerHTML">
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  <p>Waiting for sign-in... <a href="{{.AuthURL}}" target="_blank" rel="noopener">Open Plex sign-in</a> if it didn't open automatically.</p>
+</div>
+<script>window.open("{{.AuthURL}}", "_blank", "noopener");</script>
+{{end}}

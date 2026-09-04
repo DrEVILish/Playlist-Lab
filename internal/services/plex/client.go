@@ -1,0 +1,523 @@
+// Package plex ports services/plex.ts's PlexClient/PlexService to Go: HTTP
+// access to a user's Plex Media Server for library, playlist, and track
+// operations. Only the subset used by Phase 1 (playlist CRUD) is ported so
+// far - the original file also covers search, history, sonic similarity,
+// sharing, etc., which land in later phases alongside the routes that use
+// them.
+package plex
+
+import (
+	"crypto/tls"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/drevilish/playlist-lab/internal/services/limiter"
+)
+
+// AuthError is thrown when Plex rejects the stored auth token (revoked,
+// expired, or otherwise invalid), so route handlers can answer 401
+// (prompting re-login) instead of a generic 500.
+type AuthError struct{ Message string }
+
+func (e *AuthError) Error() string { return e.Message }
+
+// UnreachableError means the server was already known to be down and the
+// call fast-failed instead of waiting on a fresh timeout.
+type UnreachableError struct{ Message string }
+
+func (e *UnreachableError) Error() string { return e.Message }
+
+// ResolveToken picks the right token to authenticate directly against a
+// user's selected Plex Media Server: servers a user owns accept their
+// plex.tv account token, but servers merely shared with them require the
+// server-specific access token from /api/resources instead - see plex.ts's
+// resolvePlexToken for the full rationale (using the wrong one sends
+// shared-server users into an unbreakable re-login loop).
+func ResolveToken(userToken string, serverAccessToken string) string {
+	if serverAccessToken != "" {
+		return serverAccessToken
+	}
+	return userToken
+}
+
+type Library struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+type Folder struct {
+	Path       string `json:"path"`
+	Accessible bool   `json:"accessible"`
+}
+
+type Playlist struct {
+	RatingKey    string `json:"ratingKey"`
+	Title        string `json:"title"`
+	PlaylistType string `json:"playlistType"`
+	Smart        bool   `json:"smart"`
+	Composite    string `json:"composite"`
+	LeafCount    int    `json:"leafCount"`
+	Duration     int64  `json:"duration"`
+	AddedAt      int64  `json:"addedAt"`
+	UpdatedAt    int64  `json:"updatedAt"`
+}
+
+type media struct {
+	AudioCodec string `json:"audioCodec"`
+	Bitrate    int    `json:"bitrate"`
+}
+
+type Track struct {
+	RatingKey string `json:"ratingKey"`
+	// Plex returns this as a JSON number for a real playlist item, and omits
+	// it entirely for a smart (dynamically-generated) playlist's items -
+	// int rather than string because a plain string field fails to
+	// unmarshal a numeric JSON value.
+	PlaylistItemID   int     `json:"playlistItemID"`
+	Title            string  `json:"title"`
+	OriginalTitle    string  `json:"originalTitle"`
+	GrandparentKey   string  `json:"grandparentKey"`
+	ParentTitle      string  `json:"parentTitle"`
+	GrandparentTitle string  `json:"grandparentTitle"`
+	Duration         int64   `json:"duration"`
+	LibrarySectionID int     `json:"librarySectionID"`
+	Year             int     `json:"year"`
+	ParentYear       int     `json:"parentYear"`
+	Key              string  `json:"key"`
+	Media            []media `json:"Media"`
+}
+
+// DisplayArtist prefers the track-level artist (originalTitle) over the
+// album/grandparent artist whenever they differ - the album artist is just
+// the library's folder/grouping artist and can be wrong for compilations,
+// soundtracks, and "Various Artists" albums.
+func (t Track) DisplayArtist() string {
+	if t.OriginalTitle != "" && !strings.EqualFold(t.OriginalTitle, t.GrandparentTitle) {
+		return t.OriginalTitle
+	}
+	return t.GrandparentTitle
+}
+
+func (t Track) Codec() string {
+	if len(t.Media) == 0 {
+		return ""
+	}
+	return strings.ToUpper(t.Media[0].AudioCodec)
+}
+
+type mediaContainer struct {
+	MediaContainer struct {
+		Directory []struct {
+			Key      string `json:"key"`
+			Title    string `json:"title"`
+			Type     string `json:"type"`
+			Location []struct {
+				Path string `json:"path"`
+			} `json:"Location"`
+		} `json:"Directory"`
+		Metadata  []json.RawMessage `json:"Metadata"`
+		Hub       []hub             `json:"Hub"`
+		TotalSize int               `json:"totalSize"`
+	} `json:"MediaContainer"`
+}
+
+type hub struct {
+	Type     string            `json:"type"`
+	Metadata []json.RawMessage `json:"Metadata"`
+}
+
+type Client struct {
+	ServerURL string
+	Token     string
+	ClientID  string
+	Product   string
+	http      *http.Client
+
+	// Per-instance search caches, matching plex.ts's design: a PlexClient is
+	// constructed once per matching run (see matching.go) and reused across
+	// every track in that run, so an artist looked up for one track is
+	// already warm for the next track by the same artist. Not shared across
+	// requests/instances - a fresh matching run gets a fresh cache, same as
+	// the Node server.
+	cacheMu           sync.Mutex
+	searchCache       map[string]cacheEntry[[]Track]
+	artistLookupCache map[string]cacheEntry[[]Track]
+	artistTracksCache map[string]cacheEntry[[]Track]
+}
+
+type cacheEntry[T any] struct {
+	value     T
+	expiresAt time.Time
+}
+
+const (
+	searchCacheTTL   = 5 * time.Minute
+	maxCacheEntries  = 500
+	maxArtistCatalog = 3000
+)
+
+func NewClient(serverURL, token, clientID, product string) *Client {
+	serverURL = strings.TrimSuffix(serverURL, "/")
+	transport := http.DefaultTransport
+	if strings.HasPrefix(serverURL, "https://") {
+		// Relaxed TLS for direct-IP/self-signed Plex connections, matching
+		// the Node client's httpsAgent({ rejectUnauthorized: false }).
+		transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} //nolint:gosec
+	}
+	return &Client{
+		ServerURL:         serverURL,
+		Token:             token,
+		ClientID:          clientID,
+		Product:           product,
+		http:              &http.Client{Timeout: 60 * time.Second, Transport: transport},
+		searchCache:       map[string]cacheEntry[[]Track]{},
+		artistLookupCache: map[string]cacheEntry[[]Track]{},
+		artistTracksCache: map[string]cacheEntry[[]Track]{},
+	}
+}
+
+func (c *Client) do(req *http.Request) (*http.Response, error) {
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Plex-Token", c.Token)
+	req.Header.Set("X-Plex-Product", c.Product)
+	req.Header.Set("X-Plex-Client-Identifier", c.ClientID)
+	req.Header.Set("X-Plex-Platform", "Node.js")
+	if req.Header.Get("X-Plex-Container-Size") == "" {
+		req.Header.Set("X-Plex-Container-Size", "50")
+	}
+
+	if down, msg := checkUnreachable(c.ServerURL); down {
+		return nil, &UnreachableError{Message: msg}
+	}
+
+	limiter.Plex.Acquire()
+	defer limiter.Plex.Release()
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		markConnectionFailure(c.ServerURL, err)
+		return nil, fmt.Errorf("Plex server is unreachable")
+	}
+	if resp.StatusCode == http.StatusUnauthorized {
+		resp.Body.Close()
+		return nil, &AuthError{Message: "Invalid or expired Plex token"}
+	}
+	clearUnreachable(c.ServerURL)
+	return resp, nil
+}
+
+func (c *Client) get(path string) (*mediaContainer, error) {
+	req, err := http.NewRequest(http.MethodGet, c.ServerURL+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("not found")
+	}
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("Plex request failed: status %d", resp.StatusCode)
+	}
+	var mc mediaContainer
+	if err := json.NewDecoder(resp.Body).Decode(&mc); err != nil {
+		return nil, err
+	}
+	return &mc, nil
+}
+
+// getWithHeaders is get() plus caller-supplied header overrides (e.g.
+// X-Plex-Container-Size, which do() defaults to 50 - a header, not a query
+// param, wins over a param of the same name, so this is the only way to ask
+// for more than 50 results). do() only fills in a header if the request
+// doesn't already have one, so setting it here first makes it stick.
+func (c *Client) getWithHeaders(path string, headers map[string]string) (*mediaContainer, error) {
+	req, err := http.NewRequest(http.MethodGet, c.ServerURL+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("Plex request failed: status %d", resp.StatusCode)
+	}
+	var mc mediaContainer
+	if err := json.NewDecoder(resp.Body).Decode(&mc); err != nil {
+		return nil, err
+	}
+	return &mc, nil
+}
+
+func (c *Client) mutate(method, path string) (*mediaContainer, int, error) {
+	req, err := http.NewRequest(method, c.ServerURL+path, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return nil, resp.StatusCode, fmt.Errorf("Plex request failed: status %d", resp.StatusCode)
+	}
+	var mc mediaContainer
+	_ = json.NewDecoder(resp.Body).Decode(&mc) // many mutations return an empty body
+	return &mc, resp.StatusCode, nil
+}
+
+func (c *Client) GetLibraries() ([]Library, error) {
+	mc, err := c.get("/library/sections")
+	if err != nil {
+		return nil, err
+	}
+	libs := make([]Library, 0, len(mc.MediaContainer.Directory))
+	for _, d := range mc.MediaContainer.Directory {
+		libs = append(libs, Library{ID: d.Key, Name: d.Title, Type: d.Type})
+	}
+	return libs, nil
+}
+
+func (c *Client) GetLibraryFolders(libraryID string) ([]Folder, error) {
+	mc, err := c.get("/library/sections/" + url.PathEscape(libraryID))
+	if err != nil {
+		return nil, err
+	}
+	if len(mc.MediaContainer.Directory) == 0 {
+		return nil, nil
+	}
+	folders := make([]Folder, 0, len(mc.MediaContainer.Directory[0].Location))
+	for _, loc := range mc.MediaContainer.Directory[0].Location {
+		folders = append(folders, Folder{Path: loc.Path, Accessible: true})
+	}
+	return folders, nil
+}
+
+func (c *Client) ScanLibrary(libraryID, path string) error {
+	p := "/library/sections/" + url.PathEscape(libraryID) + "/refresh"
+	if path != "" {
+		p += "?path=" + url.QueryEscape(path)
+	}
+	_, _, err := c.mutate(http.MethodGet, p)
+	return err
+}
+
+func (c *Client) GetPlaylists() ([]Playlist, error) {
+	mc, err := c.get("/playlists")
+	if err != nil {
+		return nil, err
+	}
+	return decodePlaylists(mc.MediaContainer.Metadata)
+}
+
+func (c *Client) CreatePlaylist(name, libraryURI string, trackURIs []string) (*Playlist, error) {
+	p := fmt.Sprintf("/playlists?type=audio&title=%s&smart=0&uri=%s", url.QueryEscape(name), url.QueryEscape(libraryURI))
+	mc, _, err := c.mutate(http.MethodPost, p)
+	if err != nil {
+		return nil, err
+	}
+	playlists, err := decodePlaylists(mc.MediaContainer.Metadata)
+	if err != nil || len(playlists) == 0 {
+		return nil, fmt.Errorf("failed to create playlist - no playlist returned")
+	}
+	if len(trackURIs) > 0 {
+		if err := c.AddToPlaylist(playlists[0].RatingKey, trackURIs); err != nil {
+			return nil, err
+		}
+	}
+	return &playlists[0], nil
+}
+
+func (c *Client) GetPlaylistTracks(playlistID string) ([]Track, error) {
+	mc, err := c.get("/playlists/" + url.PathEscape(playlistID) + "/items")
+	if err != nil {
+		return nil, err
+	}
+	tracks := make([]Track, 0, len(mc.MediaContainer.Metadata))
+	for _, raw := range mc.MediaContainer.Metadata {
+		var t Track
+		if err := json.Unmarshal(raw, &t); err != nil {
+			return nil, err
+		}
+		tracks = append(tracks, t)
+	}
+	return tracks, nil
+}
+
+func (c *Client) RenamePlaylist(playlistID, title string) error {
+	_, _, err := c.mutate(http.MethodPut, "/playlists/"+url.PathEscape(playlistID)+"?title="+url.QueryEscape(title))
+	return err
+}
+
+// AddToPlaylist adds tracks in batches of 50, matching python-plexapi's
+// approach of a single comma-joined ratingKeys URI per batch rather than
+// one request per track.
+func (c *Client) AddToPlaylist(playlistID string, trackURIs []string) error {
+	const batchSize = 50
+	if len(trackURIs) == 0 {
+		return nil
+	}
+	prefixIdx := strings.Index(trackURIs[0], "/library/metadata/")
+	if prefixIdx == -1 {
+		return fmt.Errorf("invalid track URI: %s", trackURIs[0])
+	}
+	uriPrefix := trackURIs[0][:prefixIdx]
+
+	for i := 0; i < len(trackURIs); i += batchSize {
+		end := min(i+batchSize, len(trackURIs))
+		batch := trackURIs[i:end]
+		ratingKeys := make([]string, len(batch))
+		for j, uri := range batch {
+			parts := strings.SplitN(uri, "/library/metadata/", 2)
+			if len(parts) != 2 {
+				return fmt.Errorf("invalid track URI: %s", uri)
+			}
+			ratingKeys[j] = parts[1]
+		}
+		batchURI := uriPrefix + "/library/metadata/" + strings.Join(ratingKeys, ",")
+		p := "/playlists/" + url.PathEscape(playlistID) + "/items?uri=" + url.QueryEscape(batchURI)
+		if _, _, err := c.mutate(http.MethodPut, p); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Client) RemoveFromPlaylist(playlistID, playlistItemID string) error {
+	_, status, err := c.mutate(http.MethodDelete, "/playlists/"+url.PathEscape(playlistID)+"/items/"+url.PathEscape(playlistItemID))
+	if status == http.StatusNotFound {
+		return fmt.Errorf("Playlist or item not found")
+	}
+	return err
+}
+
+// RemoveMultipleFromPlaylist removes several items in one pass. Plex
+// reassigns the remaining items' playlistItemID after each removal, so a
+// 404 partway through almost always just means Plex already shifted that
+// item out from under the ID collected up front - skipped rather than
+// treated as a real failure, matching plex.ts's removeMultipleFromPlaylist.
+func (c *Client) RemoveMultipleFromPlaylist(playlistID string, playlistItemIDs []string) error {
+	for _, id := range playlistItemIDs {
+		if err := c.RemoveFromPlaylist(playlistID, id); err != nil {
+			if err.Error() == "Playlist or item not found" {
+				continue
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Client) MovePlaylistItem(playlistID, playlistItemID, afterItemID string) error {
+	p := "/playlists/" + url.PathEscape(playlistID) + "/items/" + url.PathEscape(playlistItemID) + "/move?after=" + url.QueryEscape(afterItemID)
+	_, _, err := c.mutate(http.MethodPut, p)
+	return err
+}
+
+func (c *Client) DeletePlaylist(playlistID string) error {
+	_, _, err := c.mutate(http.MethodDelete, "/playlists/"+url.PathEscape(playlistID))
+	return err
+}
+
+// GetTrackDetails fetches a single track's full metadata by ratingKey, used
+// to resolve a remembered manual match (or a missing-track's stored
+// ratingKey) to fresh details rather than trusting a possibly-stale cache.
+// Returns nil, nil (not an error) if the track no longer exists in Plex.
+func (c *Client) GetTrackDetails(ratingKey string) (*Track, error) {
+	mc, err := c.get("/library/metadata/" + url.PathEscape(ratingKey))
+	if err != nil {
+		if err.Error() == "not found" {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if len(mc.MediaContainer.Metadata) == 0 {
+		return nil, nil
+	}
+	var t Track
+	if err := json.Unmarshal(mc.MediaContainer.Metadata[0], &t); err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+func decodePlaylists(raw []json.RawMessage) ([]Playlist, error) {
+	out := make([]Playlist, 0, len(raw))
+	for _, r := range raw {
+		var p Playlist
+		if err := json.Unmarshal(r, &p); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+// BuildTrackURI builds a server://<clientId>/.../library/metadata/<ratingKey>
+// URI for CreatePlaylist()/AddToPlaylist(), the format every playlist
+// mutation uses to reference a track.
+func BuildTrackURI(serverClientID, ratingKey string) string {
+	return "server://" + serverClientID + "/com.plexapp.plugins.library/library/metadata/" + ratingKey
+}
+
+// BuildLibraryURI builds a server://<id>/.../library/sections/<libraryId>
+// URI for CreatePlaylist(). id should be the server's machine identifier
+// (see GetMachineIdentifier) when available - client.ClientID (this app's
+// own identifier, not the Plex server's) is only a fallback.
+func (c *Client) BuildLibraryURI(libraryID, machineIdentifier string) string {
+	id := machineIdentifier
+	if id == "" {
+		id = c.ClientID
+	}
+	return "server://" + id + "/com.plexapp.plugins.library/library/sections/" + libraryID
+}
+
+func (c *Client) BuildTrackURI(ratingKey, machineIdentifier string) string {
+	id := machineIdentifier
+	if id == "" {
+		id = c.ClientID
+	}
+	return BuildTrackURI(id, ratingKey)
+}
+
+// GetMachineIdentifier returns the Plex server's own unique identifier,
+// used (in preference to this app's client ID) when building server://
+// URIs for playlist creation.
+func (c *Client) GetMachineIdentifier() (string, error) {
+	req, err := http.NewRequest(http.MethodGet, c.ServerURL+"/", nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := c.do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("failed to get machine identifier: status %d", resp.StatusCode)
+	}
+	var data struct {
+		MediaContainer struct {
+			MachineIdentifier string `json:"machineIdentifier"`
+		} `json:"MediaContainer"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return "", err
+	}
+	return data.MediaContainer.MachineIdentifier, nil
+}

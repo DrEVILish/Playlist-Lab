@@ -1,0 +1,17 @@
+/* Minimal Phase 0 styling - real per-page CSS gets ported from apps/web/src
+   in later phases. */
+body {
+  font-family: system-ui, sans-serif;
+  max-width: 640px;
+  margin: 4rem auto;
+  padding: 0 1rem;
+  color: #1a1a1a;
+}
+button {
+  font: inherit;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+}
+.error {
+  color: #b00020;
+}

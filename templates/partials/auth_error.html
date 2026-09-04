@@ -1,0 +1,3 @@
+{{define "partials/auth_error.html"}}
+<p class="error">{{.Message}} <button hx-post="/auth/start" hx-target="#auth-status" hx-swap="innerHTML">Try again</button></p>
+{{end}}
