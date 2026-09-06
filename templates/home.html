@@ -23,31 +23,6 @@
   {{if .PlexError}}
     <p class="error-message">Couldn't reach your Plex server. Check your connection and refresh.</p>
   {{else}}
-  <!-- Filters ride the same query-string round trip as the column sort
-       (this page renders server-side per request), so they need no client
-       state: each control is a plain GET form submitting to "/". -->
-  <form class="playlists-filters" method="get" action="/">
-    {{if .Sort}}<input type="hidden" name="sort" value="{{.Sort}}">{{end}}
-    {{if .Dir}}<input type="hidden" name="dir" value="{{.Dir}}">{{end}}
-    <input type="search" name="q" value="{{.Filter.Search}}" placeholder="Search playlists..." class="form-input playlists-filter-search" aria-label="Search playlists">
-    <select name="fSource" class="form-input" aria-label="Filter by source">
-      <option value="">All sources</option>
-      {{range .Sources}}<option value="{{.}}"{{if eq . $.Filter.Source}} selected{{end}}>{{.}}</option>{{end}}
-    </select>
-    <select name="fMissing" class="form-input" aria-label="Filter by missing tracks">
-      <option value="">Any missing</option>
-      <option value="has"{{if eq .Filter.Missing "has"}} selected{{end}}>Has missing tracks</option>
-      <option value="none"{{if eq .Filter.Missing "none"}} selected{{end}}>No missing tracks</option>
-    </select>
-    <select name="fSchedule" class="form-input" aria-label="Filter by schedule">
-      <option value="">Any schedule</option>
-      <option value="on"{{if eq .Filter.Schedule "on"}} selected{{end}}>Scheduled</option>
-      <option value="off"{{if eq .Filter.Schedule "off"}} selected{{end}}>Not scheduled</option>
-    </select>
-    <button type="submit" class="btn btn-secondary btn-small">Apply</button>
-    {{if .Filter.Active}}<a class="btn btn-secondary btn-small" href="/">Clear</a>{{end}}
-  </form>
-
   {{if not .Playlists}}
     <div style="text-align:center;padding:3rem;color:var(--text-secondary)">
       {{if .Filter.Active}}No playlists match these filters.{{else}}No playlists found on your server yet.{{end}}
@@ -62,6 +37,11 @@
     <div class="bulk-actions-bar">
       <span class="bulk-actions-count">Selected</span>
       <button type="submit" formaction="/backup/export" formmethod="get" class="btn btn-secondary btn-small">Backup Selected</button>
+      <!-- Merge needs a name for the resulting playlist - prompt() rather
+           than a permanently-visible text field, since it's only relevant
+           right when this button is clicked (matches the React version's
+           promptDialog()). -->
+      <button type="submit" formaction="/playlists/merge" class="btn btn-secondary btn-small" title="Combine these playlists' tracks into a new playlist" onclick="var n=prompt('Combining the selected playlists into one new playlist.\n\nName for the new playlist:'); if(!n)return false; this.form.querySelector('[name=targetName]')?.remove(); var i=document.createElement('input'); i.type='hidden'; i.name='targetName'; i.value=n; this.form.appendChild(i);">Merge Selected</button>
       <button type="submit" class="btn btn-secondary btn-small" style="color:var(--error)" onclick="return confirm('Delete the selected playlist(s) from Plex? This cannot be undone.')">Delete Selected</button>
     </div>
     <div class="playlists-table-container">
@@ -69,16 +49,63 @@
       <thead>
         <tr>
           <th class="col-select"><input type="checkbox" id="select-all" aria-label="Select all playlists"></th>
-          <th class="col-name"><span class="th-label">Playlist</span></th>
-          <th class="sortable"><a href="{{sortHref "source" $.Sort $.Dir}}"><span class="th-label">Source</span> <span class="sort-arrow">{{sortArrow "source" $.Sort $.Dir}}</span></a></th>
-          <th class="sortable"><a href="{{sortHref "tracks" $.Sort $.Dir}}"><span class="th-label">Tracks</span> <span class="sort-arrow">{{sortArrow "tracks" $.Sort $.Dir}}</span></a></th>
-          <th class="sortable"><a href="{{sortHref "duration" $.Sort $.Dir}}"><span class="th-label">Duration</span> <span class="sort-arrow">{{sortArrow "duration" $.Sort $.Dir}}</span></a></th>
-          <th class="sortable"><a href="{{sortHref "missing" $.Sort $.Dir}}"><span class="th-label">Missing Tracks</span> <span class="sort-arrow">{{sortArrow "missing" $.Sort $.Dir}}</span></a></th>
-          <th><span class="th-label">Schedule</span></th>
+          <!-- Per-column filter popovers: the real page portals a
+               JS-positioned floating menu per header (FilterMenu/
+               SearchFilterMenu in PlaylistsPage.tsx); <details> gives the
+               same click-to-open popover with no JS, just anchored directly
+               under its own header cell (chrome-interactions.css) instead of
+               being portalled to document.body. Every option link carries
+               the rest of the current query string via .Query.With, so
+               applying one filter/sort never silently drops another. -->
+          <th class="col-name">
+            <span class="th-label">Playlist</span>
+            <details class="th-filter">
+              <summary class="th-filter-btn{{if .Filter.Search}} active{{end}}" title="Search"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+              <form class="th-filter-menu" method="get" action="/">
+                {{range $k, $v := .Query}}{{if ne $k "q"}}<input type="hidden" name="{{$k}}" value="{{index $v 0}}">{{end}}{{end}}
+                <input type="search" name="q" value="{{.Filter.Search}}" placeholder="Search playlists..." class="form-input" autofocus>
+                <button type="submit" class="btn btn-primary btn-small" style="margin-top:0.375rem">Search</button>
+              </form>
+            </details>
+          </th>
+          <th class="sortable">
+            <a href="{{.Query.SortHref "source"}}"><span class="th-label">Source</span> <span class="sort-arrow">{{sortArrow "source" $.Sort $.Dir}}</span></a>
+            <details class="th-filter">
+              <summary class="th-filter-btn{{if .Filter.Source}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+              <div class="th-filter-menu">
+                <a class="th-filter-option{{if not .Filter.Source}} active{{end}}" href="{{.Query.With "fSource" ""}}">All sources</a>
+                {{range .Sources}}<a class="th-filter-option{{if eq . $.Filter.Source}} active{{end}}" href="{{$.Query.With "fSource" .}}">{{.}}</a>{{end}}
+              </div>
+            </details>
+          </th>
+          <th class="sortable"><a href="{{.Query.SortHref "tracks"}}"><span class="th-label">Tracks</span> <span class="sort-arrow">{{sortArrow "tracks" $.Sort $.Dir}}</span></a></th>
+          <th class="sortable"><a href="{{.Query.SortHref "duration"}}"><span class="th-label">Duration</span> <span class="sort-arrow">{{sortArrow "duration" $.Sort $.Dir}}</span></a></th>
+          <th class="sortable">
+            <a href="{{.Query.SortHref "missing"}}"><span class="th-label">Missing Tracks</span> <span class="sort-arrow">{{sortArrow "missing" $.Sort $.Dir}}</span></a>
+            <details class="th-filter">
+              <summary class="th-filter-btn{{if .Filter.Missing}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+              <div class="th-filter-menu">
+                <a class="th-filter-option{{if not .Filter.Missing}} active{{end}}" href="{{.Query.With "fMissing" ""}}">Any missing</a>
+                <a class="th-filter-option{{if eq .Filter.Missing "has"}} active{{end}}" href="{{.Query.With "fMissing" "has"}}">Has missing tracks</a>
+                <a class="th-filter-option{{if eq .Filter.Missing "none"}} active{{end}}" href="{{.Query.With "fMissing" "none"}}">No missing tracks</a>
+              </div>
+            </details>
+          </th>
+          <th>
+            <span class="th-label">Schedule</span>
+            <details class="th-filter">
+              <summary class="th-filter-btn{{if .Filter.Schedule}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+              <div class="th-filter-menu">
+                <a class="th-filter-option{{if not .Filter.Schedule}} active{{end}}" href="{{.Query.With "fSchedule" ""}}">Any schedule</a>
+                <a class="th-filter-option{{if eq .Filter.Schedule "on"}} active{{end}}" href="{{.Query.With "fSchedule" "on"}}">Scheduled</a>
+                <a class="th-filter-option{{if eq .Filter.Schedule "off"}} active{{end}}" href="{{.Query.With "fSchedule" "off"}}">Not scheduled</a>
+              </div>
+            </details>
+          </th>
           <th><span class="th-label">Next Run</span></th>
           <th><span class="th-label">Last Run</span></th>
-          <th class="sortable"><a href="{{sortHref "dateAdded" $.Sort $.Dir}}"><span class="th-label">Date Added</span> <span class="sort-arrow">{{sortArrow "dateAdded" $.Sort $.Dir}}</span></a></th>
-          <th class="col-actions"></th>
+          <th class="sortable"><a href="{{.Query.SortHref "dateAdded"}}"><span class="th-label">Date Added</span> <span class="sort-arrow">{{sortArrow "dateAdded" $.Sort $.Dir}}</span></a></th>
+          <th class="col-actions">{{if .Filter.Active}}<a class="btn btn-secondary btn-small" href="/" title="Clear all filters">Clear</a>{{end}}</th>
         </tr>
       </thead>
       <tbody>
@@ -121,6 +148,9 @@
             <a class="icon-btn" href="/playlists/{{.PlexID}}" title="Edit tracks" aria-label="Edit tracks in {{.Name}}">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             </a>
+            <button type="button" class="icon-btn" hx-get="/playlists/{{.PlexID}}/share" hx-target="#modal-root" hx-swap="innerHTML" title="Share with another Playlist Lab user" aria-label="Share {{.Name}} with another Playlist Lab user">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            </button>
             {{if .DBID}}
             <button type="button" class="icon-btn" hx-get="/playlists/{{.PlexID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML" title="{{if .ScheduleID}}Manage schedule{{else}}Create schedule{{end}}" aria-label="Schedule {{.Name}}">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>

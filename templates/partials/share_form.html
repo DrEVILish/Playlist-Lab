@@ -1,0 +1,30 @@
+{{/* "Share with another Playlist Lab user" modal, ported from ShareModal.tsx.
+     Same self-contained overlay/close pattern as schedule_form.html, reusing
+     AdvancedMixModal.css's generic dark-modal chrome. Rendered via
+     GET /playlists/{plexId}/share into #modal-root. */}}
+{{define "partials/share_form.html"}}
+<div class="advanced-mix-overlay" onclick="if(event.target===this)document.getElementById('modal-root').innerHTML=''">
+  <div class="advanced-mix-modal" style="max-width:420px">
+    <div class="advanced-mix-header">
+      <h2 class="advanced-mix-title">Share Playlist</h2>
+      <button type="button" class="advanced-mix-close" onclick="document.getElementById('modal-root').innerHTML=''">&times;</button>
+    </div>
+    <div class="advanced-mix-content">
+      {{if not .Targets}}
+      <p style="color:var(--text-secondary)">No other Playlist Lab users with a Plex server configured yet.</p>
+      {{else}}
+      <form hx-post="/playlists/{{.PlexID}}/share" hx-target="closest .advanced-mix-content" hx-swap="innerHTML">
+        <label class="form-label">Share with
+          <select name="targetUserId" class="form-input" required>
+            {{range .Targets}}<option value="{{.ID}}">{{.PlexUsername}}</option>{{end}}
+          </select>
+        </label>
+        <div class="advanced-mix-actions" style="margin-top:1rem">
+          <button type="submit" class="btn btn-primary">Share</button>
+        </div>
+      </form>
+      {{end}}
+    </div>
+  </div>
+</div>
+{{end}}

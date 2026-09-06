@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -308,7 +309,14 @@ func (c *PlexClient) GetFriends(authToken string) ([]int, error) {
 		return nil, fmt.Errorf("invalid or expired Plex token")
 	}
 
-	dec := xml.NewDecoder(resp.Body)
+	return parseFriendIDs(resp.Body), nil
+}
+
+// parseFriendIDs pulls each <User id="..."> attribute out of plex.tv's XML
+// user list, split out of GetFriends so the parsing itself can be tested
+// without a real HTTP round trip.
+func parseFriendIDs(body io.Reader) []int {
+	dec := xml.NewDecoder(body)
 	var ids []int
 	for {
 		tok, err := dec.Token()
@@ -325,7 +333,7 @@ func (c *PlexClient) GetFriends(authToken string) ([]int, error) {
 			}
 		}
 	}
-	return ids, nil
+	return ids
 }
 
 // SwitchToManagedUser obtains a Plex Home managed user's own auth token via

@@ -537,6 +537,84 @@
   margin-bottom: 2rem;
 }
 
+/* Error message (Go page-only: React's cross-import error state reused a
+   shared component; here it's just a styled div in cross_import.html) */
+.error-message {
+  background-color: rgba(239, 83, 80, 0.08);
+  border: 1px solid rgba(239, 83, 80, 0.3);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  color: var(--error);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* Loading state (playlists partial's initial hx-get placeholder) */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  color: var(--text-secondary);
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loading-text {
+  font-size: 0.9375rem;
+  color: var(--text-secondary);
+}
+
+/* YouTube connect prompt (shown before the target has an OAuth connection) */
+.youtube-connect-container {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  text-align: left;
+}
+
+/* Wraps the oauth_services.html partial's connected-service row above the
+   playlist picker */
+.cross-import-connected-service {
+  margin-bottom: 1.5rem;
+}
+
+/* Import history section beneath the main flow */
+.cross-import-history-section {
+  margin-top: 2rem;
+  flex-shrink: 0;
+}
+
+/* Confirm-import playlist name field (review partial) - was unstyled, this
+   class has no rule anywhere the page links (base.css only styles bare
+   `input`, ImportPage.css's .form-input isn't linked here). */
+.form-input {
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background-color: var(--background);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .cross-import-page {

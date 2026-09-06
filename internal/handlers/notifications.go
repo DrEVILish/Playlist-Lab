@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -13,6 +14,21 @@ import (
 	"github.com/drevilish/playlist-lab/internal/auth"
 	"github.com/drevilish/playlist-lab/internal/services/notifications"
 )
+
+// sortedNotifications orders a user's feed to match
+// NotificationCenter.tsx's display order: active jobs pinned above
+// finished ones, most-recently-updated first within each group.
+func sortedNotifications(list []notifications.Notification) []notifications.Notification {
+	sort.SliceStable(list, func(i, j int) bool {
+		iActive := list[i].Status == notifications.StatusInProgress
+		jActive := list[j].Status == notifications.StatusInProgress
+		if iActive != jActive {
+			return iActive
+		}
+		return list[i].UpdatedAt.After(list[j].UpdatedAt)
+	})
+	return list
+}
 
 // NotificationsHandler ports routes/notifications.ts to HTMX: instead of
 // streaming JSON for client-side JS to render, the SSE endpoint pushes a
@@ -34,9 +50,28 @@ func RegisterNotifications(r chi.Router, mw *auth.Middleware, h *NotificationsHa
 }
 
 func (h *NotificationsHandler) render(w http.ResponseWriter, userID int64) {
-	h.Tmpl.RenderPartial(w, "partials/notifications.html", map[string]any{
-		"Notifications": h.Store.List(userID),
-	})
+	h.Tmpl.RenderPartial(w, "partials/notifications.html", notificationsViewData(h.Store.List(userID)))
+}
+
+// notificationsViewData bundles the sorted list with the two derived flags
+// notifications.html needs for its "Clear complete"/"Clear all" buttons
+// (NotificationCenter.tsx: shown only when there's something they'd
+// actually affect), which html/template can't compute mid-range itself.
+func notificationsViewData(list []notifications.Notification) map[string]any {
+	hasSuccess, hasNonInProgress := false, false
+	for _, n := range list {
+		if n.Status == notifications.StatusSuccess {
+			hasSuccess = true
+		}
+		if n.Status != notifications.StatusInProgress {
+			hasNonInProgress = true
+		}
+	}
+	return map[string]any{
+		"Notifications":    sortedNotifications(list),
+		"HasSuccess":       hasSuccess,
+		"HasNonInProgress": hasNonInProgress,
+	}
 }
 
 func (h *NotificationsHandler) dismiss(w http.ResponseWriter, r *http.Request) {
@@ -99,9 +134,7 @@ func (h *NotificationsHandler) stream(w http.ResponseWriter, r *http.Request) {
 
 func (h *NotificationsHandler) renderFragment(userID int64) string {
 	var buf bytes.Buffer
-	h.Tmpl.partials.ExecuteTemplate(&buf, "partials/notifications.html", map[string]any{
-		"Notifications": h.Store.List(userID),
-	})
+	h.Tmpl.partials.ExecuteTemplate(&buf, "partials/notifications.html", notificationsViewData(h.Store.List(userID)))
 	return buf.String()
 }
 

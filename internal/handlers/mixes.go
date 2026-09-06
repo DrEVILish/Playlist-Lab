@@ -161,6 +161,9 @@ func (h *MixesHandler) generate(w http.ResponseWriter, r *http.Request) {
 
 	form := r.PostForm
 	title := formLabel(mixType)
+	if mixType == "all" {
+		title = "All Mixes"
+	}
 	jobID, _ := h.Queue.Enqueue(user.ID, "Generating "+title, notifications.TypeMix, func(notificationID string) error {
 		return h.run(user.ID, userServer, mixType, form, notificationID)
 	})
@@ -199,6 +202,9 @@ func formLabel(mixType string) string {
 // Progress is reported through the notification's own Detail field - this
 // handler's caller (actionqueue) is what makes that visible over SSE.
 func (h *MixesHandler) run(userID int64, userServer *db.UserServer, mixType string, form map[string][]string, notificationID string) error {
+	if mixType == "all" {
+		return h.runAll(userID, userServer, notificationID)
+	}
 	get := func(key, def string) string {
 		if v := form[key]; len(v) > 0 && v[0] != "" {
 			return v[0]
@@ -398,6 +404,70 @@ func (h *MixesHandler) run(userID int64, userServer *db.UserServer, mixType stri
 
 	status := notifications.StatusSuccess
 	detail := fmt.Sprintf("Created \"%s\" with %d tracks", playlistName, result.TrackCount)
+	pct := 100
+	h.Notifications.Update(userID, notificationID, notifications.Patch{Status: &status, Detail: &detail, Progress: &pct})
+	return nil
+}
+
+// runAll ports POST /api/mixes/all: generates the four "quick" listening-
+// history mixes with their default settings and creates a playlist for each
+// one that produced tracks, mirroring mixes.ts's /all route (which also
+// hardcodes each mix's default settings rather than taking form input).
+func (h *MixesHandler) runAll(userID int64, userServer *db.UserServer, notificationID string) error {
+	user, err := db.GetUserByID(h.DB, userID)
+	if err != nil {
+		return err
+	}
+	serverURL := userServer.ServerURL
+	token := plex.ResolveToken(user.PlexToken, userServer.AccessToken.String)
+	libraryID := userServer.LibraryID.String
+
+	results, err := h.Mixes.GenerateAllMixes(serverURL, token, libraryID, mixes.AllMixSettings{
+		Weekly:      mixes.WeeklyMixSettings{TopArtists: 10, TracksPerArtist: 5},
+		Daily:       mixes.DailyMixSettings{RecentTracks: 20, RelatedTracks: 15, RediscoveryTracks: 15, RediscoveryDays: 90},
+		TimeCapsule: mixes.TimeCapsuleSettings{TrackCount: 50, DaysAgo: 365, MaxPerArtist: 3},
+		NewMusic:    mixes.NewMusicSettings{AlbumCount: 10, TracksPerAlbum: 3},
+	})
+	if err != nil {
+		return err
+	}
+
+	client := plex.NewClient(serverURL, token, h.PlexAuth.ClientID, "Playlist Lab")
+	libraryURI := client.BuildLibraryURI(libraryID, userServer.ServerClientID)
+	created := 0
+	for _, m := range []struct {
+		name string
+		res  mixes.MixResult
+	}{
+		{"Your Weekly Mix", results.Weekly},
+		{"Daily Mix", results.Daily},
+		{"Time Capsule", results.TimeCapsule},
+		{"New Music Mix", results.NewMusic},
+	} {
+		if m.res.TrackCount == 0 {
+			continue
+		}
+		trackURIs := make([]string, len(m.res.TrackKeys))
+		for i, key := range m.res.TrackKeys {
+			trackURIs[i] = client.BuildTrackURI(key, userServer.ServerClientID)
+		}
+		playlist, err := client.CreatePlaylist(m.name, libraryURI, trackURIs)
+		if err != nil {
+			slog.Error("failed to create playlist in generate-all", "mix", m.name, "error", err)
+			continue
+		}
+		if _, err := db.CreatePlaylistRow(h.DB, userID, playlist.RatingKey, m.name, "mix", ""); err != nil {
+			slog.Error("failed to record mix playlist", "error", err)
+		}
+		created++
+	}
+
+	status := notifications.StatusSuccess
+	detail := fmt.Sprintf("Created %d mix playlist(s)", created)
+	if created == 0 {
+		status = notifications.StatusError
+		detail = "No tracks found for any mix."
+	}
 	pct := 100
 	h.Notifications.Update(userID, notificationID, notifications.Patch{Status: &status, Detail: &detail, Progress: &pct})
 	return nil

@@ -1,23 +1,37 @@
+{{/* Notification bell dropdown, ported from NotificationCenter.tsx. Real
+     class names (notification-list/-item/-item-*, not the earlier
+     placeholder's notifications-list/notification/notification-detail) so
+     NotificationCenter.css actually applies - this partial had been
+     rendering with zero styling since Phase 4. */}}
 {{define "partials/notifications.html"}}
-{{if not .Notifications}}
-<p class="notifications-empty">No notifications.</p>
-{{else}}
-<ul class="notifications-list">
-  {{range .Notifications}}
-  <li class="notification notification-{{.Status}}">
-    <strong>{{.Title}}</strong>
-    {{if .Detail}}<span class="notification-detail">{{.Detail}}</span>{{end}}
-    {{if .Progress}}
-    <progress max="100" value="{{.Progress}}"></progress>
-    {{end}}
-    {{if ne (printf "%v" .Status) "in-progress"}}
-    <button hx-post="/notifications/{{.ID}}/dismiss" hx-target="#notifications" hx-swap="innerHTML">&times;</button>
-    {{end}}
-  </li>
+<div class="notification-panel-header">
+  <span>Notifications</span>
+  <span class="notification-panel-actions">
+    {{if .HasSuccess}}<button type="button" class="notification-clear-btn" hx-post="/notifications/clear" hx-vals='{"completedOnly":"true"}' hx-target="#notifications" hx-swap="innerHTML" title="Clear the ones that finished successfully, keeping failures and running jobs">Clear complete</button>{{end}}
+    {{if .HasNonInProgress}}<button type="button" class="notification-clear-btn" hx-post="/notifications/clear" hx-vals='{"completedOnly":"false"}' hx-target="#notifications" hx-swap="innerHTML" title="Clear everything that has finished, keeping running jobs">Clear all</button>{{end}}
+  </span>
+</div>
+<div class="notification-list">
+  {{if not .Notifications}}
+  <div class="notification-empty">No notifications</div>
   {{end}}
-</ul>
-<form hx-post="/notifications/clear" hx-target="#notifications" hx-swap="innerHTML">
-  <button type="submit">Clear completed</button>
-</form>
-{{end}}
+  {{range .Notifications}}
+  <div class="notification-item notification-item--{{.Status}}">
+    <div class="notification-item-icon">
+      {{if eq (printf "%v" .Status) "in-progress"}}<span class="notification-item-spinner"></span>
+      {{else if eq (printf "%v" .Status) "success"}}<span class="notification-item-check">&check;</span>
+      {{else if eq (printf "%v" .Status) "error"}}<span class="notification-item-error">&#10005;</span>{{end}}
+    </div>
+    <div class="notification-item-body">
+      <div class="notification-item-title">{{notificationTypeLabel (printf "%v" .Type)}}</div>
+      <div class="notification-item-detail">{{.Title}}{{if .Detail}} &middot; {{.Detail}}{{end}}</div>
+      {{if and (eq (printf "%v" .Status) "in-progress") .Progress}}
+      <span class="notification-item-bar"><span class="notification-item-bar-fill" style="width:{{.Progress}}%"></span></span>
+      {{end}}
+      <div class="notification-item-time">{{relativeTime .UpdatedAt}}</div>
+    </div>
+    <button type="button" class="notification-item-dismiss" hx-post="/notifications/{{.ID}}/dismiss" hx-target="#notifications" hx-swap="innerHTML" aria-label="Dismiss" title="Dismiss">&times;</button>
+  </div>
+  {{end}}
+</div>
 {{end}}

@@ -128,7 +128,8 @@ func GetUserSchedules(sqlDB *sql.DB, userID int64) ([]Schedule, error) {
 // unit-testable without a DB, see scheduler/scheduler_test.go).
 func GetDueSchedules(sqlDB *sql.DB) ([]Schedule, error) {
 	rows, err := sqlDB.Query(`
-		SELECT ` + scheduleCols + `
+		SELECT schedules.id, schedules.user_id, schedules.playlist_id, schedules.schedule_type,
+		       schedules.frequency, schedules.start_date, schedules.last_run, schedules.config, schedules.created_at
 		FROM schedules
 		JOIN users ON users.id = schedules.user_id
 		WHERE users.is_enabled = 1

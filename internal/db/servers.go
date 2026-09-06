@@ -69,6 +69,21 @@ func scanUserServer(row *sql.Row) (*UserServer, error) {
 	return &s, nil
 }
 
+// CopyServerConfig gives toUserID the same Plex server/library as
+// fromUserID, if fromUserID has one - ports database.ts's copyServerConfig,
+// used both at login-time auto-approval and admin's manual "Enable" so a
+// newly-approved user doesn't have to run the server/library picker
+// themselves. access_token is deliberately not copied: it's the source
+// user's own Plex auth, not something the new user should inherit.
+func CopyServerConfig(sqlDB *sql.DB, fromUserID, toUserID int64) error {
+	src, err := GetUserServer(sqlDB, fromUserID)
+	if err != nil || src == nil {
+		return err
+	}
+	_, err = SaveUserServer(sqlDB, toUserID, src.ServerName, src.ServerClientID, src.ServerURL, src.LibraryID.String, src.LibraryName.String, "")
+	return err
+}
+
 func nullIfEmpty(s string) any {
 	if s == "" {
 		return nil

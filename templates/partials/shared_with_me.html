@@ -1,0 +1,33 @@
+{{/* "Shared With Me" panel, ported from SharedWithMeModal.tsx. Rendered via
+     GET /playlists/shared-with-me into #modal-root. */}}
+{{define "partials/shared_with_me.html"}}
+<link rel="stylesheet" href="/static/css/pages/SharePlaylistsPage.css">
+<div class="advanced-mix-overlay" onclick="if(event.target===this)document.getElementById('modal-root').innerHTML=''">
+  <div class="advanced-mix-modal" style="max-width:560px">
+    <div class="advanced-mix-header">
+      <h2 class="advanced-mix-title">Shared With Me</h2>
+      <button type="button" class="advanced-mix-close" onclick="document.getElementById('modal-root').innerHTML=''">&times;</button>
+    </div>
+    <div class="advanced-mix-content">
+      <p class="share-description">Playlists other Playlist Lab users have shared with you.</p>
+      {{if not .Shared}}
+      <div class="empty-state" style="text-align:center;padding:1.5rem">
+        <p>You don't have any playlists shared with you yet.</p>
+      </div>
+      {{else}}
+      <div class="playlist-share-list">
+        {{range .Shared}}
+        <div class="playlist-share-item">
+          <div class="playlist-share-info">
+            <div class="playlist-share-name">{{.PlaylistName}}</div>
+            <div class="playlist-share-meta">Shared by {{.SharedByUsername}} &bull; {{dateFromUnixMilli .SharedAt}}</div>
+          </div>
+          <a href="/playlists/{{.PlexPlaylistID}}" class="btn btn-primary btn-small">View</a>
+        </div>
+        {{end}}
+      </div>
+      {{end}}
+    </div>
+  </div>
+</div>
+{{end}}

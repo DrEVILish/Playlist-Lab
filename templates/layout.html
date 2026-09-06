@@ -24,6 +24,15 @@
   <link rel="stylesheet" href="/static/css/components/Footer.css">
   <link rel="stylesheet" href="/static/css/components/Modal.css">
   <link rel="stylesheet" href="/static/css/components/ConfirmDialog.css">
+  <!-- AdvancedMixModal.css's .advanced-mix-overlay/.advanced-mix-modal
+       classes are reused as the generic dark-modal chrome for several
+       partials swapped into the global #modal-root below (schedule_form,
+       share_form, shared_with_me) - loaded here rather than per-page, since
+       any page can trigger one of them and a page that forgot to link this
+       file would render a real modal response as invisible unstyled HTML,
+       which looks indistinguishable from "the modal doesn't work" to
+       whoever's clicking the button. -->
+  <link rel="stylesheet" href="/static/css/components/AdvancedMixModal.css">
   <link rel="stylesheet" href="/static/css/components/chrome-interactions.css">
   <script src="/static/js/htmx.min.js"></script>
   <script src="/static/js/htmx-sse.min.js"></script>
@@ -81,13 +90,13 @@
                and Generate already exist as full pages, so - following this
                project's established plain-link precedent rather than
                reproducing React's portal-modal pattern - they just navigate
-               there. Shared With Me is omitted: playlist_shares exists in
-               the schema but nothing can create a share yet, so the list
-               would always be empty; not worth a header link until sharing
+               there. Shared With Me loads into #modal-root like every other
+               modal-shaped feature (schedule/share forms), now that sharing
                itself is built. -->
           <nav class="header-actions">
             <a class="btn btn-secondary btn-small" href="/import">Import</a>
             <a class="btn btn-secondary btn-small" href="/mixes">Generate</a>
+            <button type="button" class="btn btn-secondary btn-small" hx-get="/playlists/shared-with-me" hx-target="#modal-root" hx-swap="innerHTML">Shared With Me</button>
             <a class="btn btn-secondary btn-small" href="/backup">Backup / Restore</a>
             <a class="btn btn-secondary btn-small" href="/status">Status</a>
           </nav>
@@ -118,9 +127,15 @@
                into #notifications whether the panel is open or not. -->
           <details class="notification-center">
             <summary class="notification-bell" aria-label="Notifications" title="Notifications"></summary>
+            <!-- id="notifications" wraps both the header's Clear
+                 complete/Clear all actions and the item list, not just the
+                 list: those buttons are conditional on what's in the feed
+                 (NotificationCenter.tsx only shows them when there's
+                 something they'd affect), so the whole thing has to be one
+                 SSE-swapped unit rather than a static header plus a
+                 separately-swapped list. -->
             <div class="notification-panel">
-              <div class="notification-panel-header"><span>Notifications</span></div>
-              <div id="notifications" class="notification-list" hx-ext="sse" sse-connect="/notifications/stream" sse-swap="notification" hx-swap="innerHTML" hx-trigger="load"></div>
+              <div id="notifications" hx-ext="sse" sse-connect="/notifications/stream" sse-swap="notification" hx-swap="innerHTML" hx-trigger="load"></div>
             </div>
           </details>
 

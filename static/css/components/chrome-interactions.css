@@ -36,10 +36,42 @@ details.notification-center:not([open]) > .notification-panel {
 }
 
 /* Playlists page bulk-actions bar: hidden until at least one row checkbox
-   is checked, via :has() rather than JS-tracked selection state. */
-.bulk-actions-bar {
+   is checked, via :has() rather than JS-tracked selection state.
+   PlaylistsPage.css (loaded after this file) sets its own unconditional
+   `.bulk-actions-bar { display: flex }` for the React version, which ported
+   verbatim and unconditionally shows in the Go port too since specificity is
+   tied and it loads later - `form > .bulk-actions-bar` below is one type
+   selector more specific, so this hidden-by-default rule wins regardless of
+   load order. */
+form > .bulk-actions-bar {
   display: none;
 }
 form:has(input.row-select:checked) > .bulk-actions-bar {
   display: flex;
+}
+
+/* Playlists page column-header filter popovers: <details>/<summary> instead
+   of React's JS-positioned document.body portal (usePopover in
+   PlaylistsPage.tsx). PlaylistsPage.css's .th-filter-menu is `position:
+   fixed` for that portal; here it's anchored under its own header cell
+   instead, so this overrides to `position: absolute` against .th-filter's
+   own `position: relative`.
+   ponytail: fixed top-left corner of the header cell rather than
+   React's flip-to-stay-onscreen logic - fine for a table where headers sit
+   near the top of the viewport already; revisit if a header near the
+   bottom/edge of the page ever clips the popover. */
+details.th-filter { position: relative; }
+details.th-filter > summary {
+  list-style: none;
+  cursor: pointer;
+}
+details.th-filter > summary::-webkit-details-marker { display: none; }
+details.th-filter > .th-filter-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 0.25rem;
+}
+details.th-filter:not([open]) > .th-filter-menu {
+  display: none;
 }

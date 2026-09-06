@@ -16,6 +16,7 @@ type Config struct {
 	PublicURL    string
 	DatabasePath string
 	LogLevel     string
+	LogDir       string
 
 	SessionSecret string
 	TrustProxy    bool
@@ -69,6 +70,7 @@ func Load() Config {
 		PublicURL:    getEnv("PUBLIC_URL", "http://127.0.0.1:3001"),
 		DatabasePath: getEnv("DATABASE_PATH", "./data/playlist-lab.db"),
 		LogLevel:     getEnv("LOG_LEVEL", "info"),
+		LogDir:       getEnv("LOG_DIR", "./logs"),
 
 		// Must match utils/encryption.ts's fallback exactly: it's also used
 		// to derive the AES key for values (OAuth tokens, API keys) already

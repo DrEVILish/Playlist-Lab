@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -14,14 +15,18 @@ import (
 
 	"github.com/drevilish/playlist-lab/internal/auth"
 	"github.com/drevilish/playlist-lab/internal/db"
+	"github.com/drevilish/playlist-lab/internal/services/actionqueue"
+	"github.com/drevilish/playlist-lab/internal/services/notifications"
 	"github.com/drevilish/playlist-lab/internal/services/plex"
 	"github.com/drevilish/playlist-lab/internal/services/scheduler"
 )
 
 type PlaylistsHandler struct {
-	DB       *sql.DB
-	PlexAuth *auth.PlexClient
-	Tmpl     *Templates
+	DB            *sql.DB
+	PlexAuth      *auth.PlexClient
+	Tmpl          *Templates
+	Notifications *notifications.Store
+	Queue         *actionqueue.Queue
 }
 
 func RegisterPlaylists(r chi.Router, mw *auth.Middleware, h *PlaylistsHandler) {
@@ -34,6 +39,10 @@ func RegisterPlaylists(r chi.Router, mw *auth.Middleware, h *PlaylistsHandler) {
 		r.Delete("/playlists/{plexId}", h.deletePlaylist)
 		r.Post("/playlists/bulk-delete", h.bulkDelete)
 		r.Post("/playlists/{plexId}/clone", h.clone)
+		r.Post("/playlists/merge", h.merge)
+		r.Get("/playlists/{plexId}/share", h.shareForm)
+		r.Post("/playlists/{plexId}/share", h.share)
+		r.Get("/playlists/shared-with-me", h.sharedWithMe)
 	})
 }
 
@@ -183,7 +192,44 @@ func (h *PlaylistsHandler) index(w http.ResponseWriter, r *http.Request) {
 		"TotalMissing": totalMissing, "TotalScheduled": totalScheduled, "TotalAttention": totalAttention,
 		"Sort": q.Get("sort"), "Dir": q.Get("dir"),
 		"Filter": f, "Sources": sources,
+		"Query": queryState(q),
 	})
+}
+
+// queryState lets templates build a link that changes exactly one query
+// param while preserving every other one already in the URL (sort, filters,
+// search) - sortHref used to always reset to bare "?sort=X&dir=Y", silently
+// dropping any active filter every time a column header was clicked.
+type queryState url.Values
+
+// With returns "/?..." with key set to val (or removed, if val is ""),
+// every other current param untouched.
+func (q queryState) With(key, val string) string {
+	v := url.Values{}
+	for k, vals := range q {
+		v[k] = append([]string(nil), vals...)
+	}
+	if val == "" {
+		v.Del(key)
+	} else {
+		v.Set(key, val)
+	}
+	return "/?" + v.Encode()
+}
+
+// SortHref is sortHref's old toggle-direction logic, now filter-preserving.
+func (q queryState) SortHref(key string) string {
+	dir := "asc"
+	if url.Values(q).Get("sort") == key && url.Values(q).Get("dir") == "asc" {
+		dir = "desc"
+	}
+	v := url.Values{}
+	for k, vals := range q {
+		v[k] = append([]string(nil), vals...)
+	}
+	v.Set("sort", key)
+	v.Set("dir", dir)
+	return "/?" + v.Encode()
 }
 
 // rowFilter mirrors the React page's per-column filter dropdowns. Sorting
@@ -517,4 +563,193 @@ func (h *PlaylistsHandler) bulkDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("HX-Redirect", "/")
 	w.WriteHeader(http.StatusOK)
+}
+
+// merge ports routes/playlists.ts's POST /merge: combine two or more Plex
+// playlists' tracks (deduped by rating key) into a new playlist, or append
+// them onto an existing one. Runs through the action queue like the Node
+// version's enqueueAction, since fetching every source playlist's tracks can
+// take a while.
+func (h *PlaylistsHandler) merge(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
+	_ = r.ParseForm()
+	sourceIDs := r.Form["id"]
+	targetName := strings.TrimSpace(r.FormValue("targetName"))
+	if len(sourceIDs) < 2 {
+		http.Error(w, "select at least 2 playlists to merge", http.StatusBadRequest)
+		return
+	}
+	if targetName == "" {
+		http.Error(w, "targetName is required", http.StatusBadRequest)
+		return
+	}
+	client, userServer, err := h.client(user)
+	if err != nil || userServer == nil || !userServer.LibraryID.Valid {
+		http.Error(w, "no server/library selected", http.StatusBadRequest)
+		return
+	}
+
+	h.Queue.Enqueue(user.ID, "Merge playlists", notifications.TypeAction, func(notificationID string) error {
+		seen := make(map[string]bool)
+		var merged []string
+		for _, id := range sourceIDs {
+			tracks, err := client.GetPlaylistTracks(id)
+			if err != nil {
+				return fmt.Errorf("failed to load tracks for %s: %w", id, err)
+			}
+			for _, t := range tracks {
+				if t.RatingKey != "" && !seen[t.RatingKey] {
+					seen[t.RatingKey] = true
+					merged = append(merged, t.RatingKey)
+				}
+			}
+		}
+		if len(merged) == 0 {
+			return fmt.Errorf("the selected playlists have no tracks to merge")
+		}
+		machineID, err := client.GetMachineIdentifier()
+		if err != nil {
+			return err
+		}
+		trackURIs := make([]string, len(merged))
+		for i, key := range merged {
+			trackURIs[i] = client.BuildTrackURI(key, machineID)
+		}
+		libraryURI := client.BuildLibraryURI(userServer.LibraryID.String, machineID)
+		if _, err := client.CreatePlaylist(targetName, libraryURI, trackURIs); err != nil {
+			return err
+		}
+		h.Notifications.Update(user.ID, notificationID, notifications.Patch{
+			Detail: strPtr(fmt.Sprintf("Merged %d tracks into %q", len(merged), targetName)),
+		})
+		return nil
+	})
+	w.Header().Set("HX-Redirect", "/")
+	w.WriteHeader(http.StatusOK)
+}
+
+func strPtr(s string) *string { return &s }
+
+// shareForm renders the "share with another Playlist Lab user" picker
+// (share-targets ported from routes/playlists.ts's GET /share-targets):
+// every other user on this server who has a Plex server of their own
+// configured, since sharing works by copying the playlist into their
+// account.
+func (h *PlaylistsHandler) shareForm(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
+	plexID := chi.URLParam(r, "plexId")
+	users, err := db.GetAllUsers(h.DB)
+	if err != nil {
+		http.Error(w, "failed to load users", http.StatusInternalServerError)
+		return
+	}
+	var targets []db.AdminUserRow
+	for _, u := range users {
+		if u.ID != user.ID && u.HasServer {
+			targets = append(targets, u)
+		}
+	}
+	h.Tmpl.RenderPartial(w, "partials/share_form.html", map[string]any{
+		"PlexID": plexID, "Targets": targets,
+	})
+}
+
+// share ports POST /:id/share: copies the playlist's current tracks into the
+// target user's own Plex account, then records the share so it shows up in
+// their "Shared With Me" list.
+func (h *PlaylistsHandler) share(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
+	plexID := chi.URLParam(r, "plexId")
+	targetUserID, err := strconv.ParseInt(r.FormValue("targetUserId"), 10, 64)
+	if err != nil {
+		http.Error(w, "invalid target user", http.StatusBadRequest)
+		return
+	}
+	targetUser, err := db.GetUserByID(h.DB, targetUserID)
+	if err != nil || targetUser == nil {
+		http.Error(w, "target user not found", http.StatusBadRequest)
+		return
+	}
+	targetServer, err := db.GetUserServer(h.DB, targetUserID)
+	if err != nil || targetServer == nil || !targetServer.LibraryID.Valid {
+		http.Error(w, "target user has no library selected", http.StatusBadRequest)
+		return
+	}
+
+	client, userServer, err := h.client(user)
+	if err != nil || userServer == nil {
+		http.Error(w, "no server selected", http.StatusBadRequest)
+		return
+	}
+	tracks, err := client.GetPlaylistTracks(plexID)
+	if err != nil || len(tracks) == 0 {
+		http.Error(w, "cannot share an empty or unreachable playlist", http.StatusBadGateway)
+		return
+	}
+	playlists, err := client.GetPlaylists()
+	if err != nil {
+		http.Error(w, "failed to load playlists", http.StatusBadGateway)
+		return
+	}
+	var name string
+	for _, p := range playlists {
+		if p.RatingKey == plexID {
+			name = p.Title
+			break
+		}
+	}
+	if name == "" {
+		http.Error(w, "playlist not found", http.StatusNotFound)
+		return
+	}
+
+	targetToken := plex.ResolveToken(targetUser.PlexToken, targetServer.AccessToken.String)
+	targetClient := plex.NewClient(targetServer.ServerURL, targetToken, h.PlexAuth.ClientID, "Playlist Lab")
+	targetMachineID, err := targetClient.GetMachineIdentifier()
+	if err != nil {
+		http.Error(w, "failed to reach target server", http.StatusBadGateway)
+		return
+	}
+	trackURIs := make([]string, len(tracks))
+	for i, t := range tracks {
+		trackURIs[i] = targetClient.BuildTrackURI(t.RatingKey, targetMachineID)
+	}
+	libraryURI := targetClient.BuildLibraryURI(targetServer.LibraryID.String, targetMachineID)
+	newPlaylist, err := targetClient.CreatePlaylist(name, libraryURI, trackURIs)
+	if err != nil {
+		slog.Error("share: failed to create playlist for target user", "error", err)
+		http.Error(w, "failed to create playlist for target user", http.StatusBadGateway)
+		return
+	}
+	if _, err := db.CreatePlaylistRow(h.DB, targetUserID, newPlaylist.RatingKey, name, "shared", ""); err != nil {
+		slog.Warn("share: failed to track new playlist row", "error", err)
+	}
+
+	sourceRow, err := db.GetPlaylistByPlexID(h.DB, user.ID, plexID)
+	if err != nil || sourceRow == nil {
+		sourceRow, err = db.CreatePlaylistRow(h.DB, user.ID, plexID, name, "plex", "")
+		if err != nil {
+			slog.Error("share: failed to record source playlist row", "error", err)
+			http.Error(w, "shared, but failed to record the share", http.StatusInternalServerError)
+			return
+		}
+	}
+	if err := db.RecordPlaylistShare(h.DB, sourceRow.ID, user.ID, targetUserID, plexID, name); err != nil {
+		slog.Error("share: failed to record share", "error", err)
+	}
+	h.Tmpl.RenderPartial(w, "partials/share_result.html", map[string]any{
+		"PlaylistName": name, "TrackCount": len(tracks),
+	})
+}
+
+// sharedWithMe ports GET /shared-with-me for the header's "Shared With Me"
+// panel.
+func (h *PlaylistsHandler) sharedWithMe(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
+	shared, err := db.GetPlaylistsSharedWithUser(h.DB, user.ID)
+	if err != nil {
+		http.Error(w, "failed to load shared playlists", http.StatusInternalServerError)
+		return
+	}
+	h.Tmpl.RenderPartial(w, "partials/shared_with_me.html", map[string]any{"Shared": shared})
 }

@@ -52,9 +52,10 @@ func (h *AuthHandler) start(w http.ResponseWriter, r *http.Request) {
 	}
 	authURL := h.Plex.AuthURL(pin.Code, h.BaseURL+"/auth/callback")
 	h.Tmpl.RenderPartial(w, "partials/auth_pending.html", map[string]any{
-		"AuthURL": authURL,
-		"PinID":   pin.ID,
-		"Code":    pin.Code,
+		"AuthURL":   authURL,
+		"PinID":     pin.ID,
+		"Code":      pin.Code,
+		"OpenPopup": true,
 	})
 }
 
@@ -211,6 +212,9 @@ func (h *AuthHandler) reverifyMembership(admin, user *db.User, plexUserID string
 
 	if approved[plexUserID] {
 		_ = db.EnableUser(h.DB, user.ID)
+		if existing, _ := db.GetUserServer(h.DB, user.ID); existing == nil {
+			_ = db.CopyServerConfig(h.DB, admin.ID, user.ID)
+		}
 	} else if user.IsEnabled {
 		_ = db.DisableUser(h.DB, user.ID)
 		slog.Info("user disabled: not in Plex Home and not a friend", "userId", user.ID, "isNewUser", isNew)

@@ -1,15 +1,22 @@
 // Package handlers: settings.go ports routes/settings.ts to HTMX - the
-// per-user matching engine config, mix generation defaults, and AI provider
-// (Gemini/Grok) API keys. The Plex server/library picker already has its own
-// page (servers.go's setup flow) and Connected Services/public-URL config
-// haven't been reached by this pass, so this page only covers the three
-// tabs above (see GO_REWRITE.md task notes for that scoping call).
+// per-user matching engine config, mix generation defaults, AI provider
+// (Gemini/Grok) API keys, and a library-scan trigger. The Plex server/
+// library picker already has its own page (servers.go's setup flow). The
+// editable "Server Configuration" (public URL) section is deliberately not
+// ported: Node's version is a runtime-mutable value read by every OAuth
+// redirect-URL construction site, and this Go port's config.PublicURL is
+// loaded once at startup from env - making it live-editable would mean
+// threading a mutable override through every one of those call sites, which
+// is real scope (and a real way to break live OAuth flows if done
+// carelessly), not a settings-page addition. Reverse Proxy Setup and About
+// are static reference text, ported as-is.
 package handlers
 
 import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -20,11 +27,15 @@ import (
 	"github.com/drevilish/playlist-lab/internal/db"
 	"github.com/drevilish/playlist-lab/internal/services/ai"
 	"github.com/drevilish/playlist-lab/internal/services/matching"
+	"github.com/drevilish/playlist-lab/internal/services/plex"
 )
 
+var errNoLibrarySelected = errors.New("no Plex server/library selected")
+
 type SettingsHandler struct {
-	DB   *sql.DB
-	Tmpl *Templates
+	DB       *sql.DB
+	PlexAuth *auth.PlexClient
+	Tmpl     *Templates
 }
 
 func RegisterSettings(r chi.Router, mw *auth.Middleware, h *SettingsHandler) {
@@ -37,6 +48,7 @@ func RegisterSettings(r chi.Router, mw *auth.Middleware, h *SettingsHandler) {
 		r.Post("/settings/mixes/reset", h.resetMixes)
 		r.Post("/settings/ai", h.saveAI)
 		r.Post("/settings/ai/test", h.testAI)
+		r.Post("/settings/scan-library", h.scanLibrary)
 	})
 }
 
@@ -77,14 +89,31 @@ func (h *SettingsHandler) page(w http.ResponseWriter, r *http.Request) {
 	mixJSON, _ := db.GetMixSettingsJSON(h.DB, user.ID)
 	aiSettings, _ := db.GetAISettings(h.DB, user.ID)
 	isAdmin, _ := db.IsAdmin(h.DB, user.ID)
+	userServer, _ := db.GetUserServer(h.DB, user.ID)
 
 	h.Tmpl.RenderPage(w, "settings", map[string]any{
-		"User":     user,
-		"IsAdmin":  isAdmin,
-		"Matching": matching.SettingsFromJSON(matchingJSON),
-		"Mixes":    mixDefaultsFromJSON(mixJSON),
-		"AI":       aiSettings,
+		"User":      user,
+		"IsAdmin":   isAdmin,
+		"Matching":  matching.SettingsFromJSON(matchingJSON),
+		"Mixes":     mixDefaultsFromJSON(mixJSON),
+		"AI":        aiSettings,
+		"HasServer": userServer != nil && userServer.LibraryID.Valid,
 	})
+}
+
+// scanLibrary ports the Library Scan section's trigger (SettingsPage.tsx's
+// LibraryScanSection, apps/server/src/services/plex.ts's scanLibrary()):
+// asks Plex to refresh the user's selected library for new/changed files.
+func (h *SettingsHandler) scanLibrary(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
+	userServer, err := db.GetUserServer(h.DB, user.ID)
+	if err != nil || userServer == nil || !userServer.LibraryID.Valid {
+		h.renderAlert(w, "", errNoLibrarySelected)
+		return
+	}
+	client := plex.NewClient(userServer.ServerURL, plex.ResolveToken(user.PlexToken, userServer.AccessToken.String), h.PlexAuth.ClientID, "Playlist Lab")
+	err = client.ScanLibrary(userServer.LibraryID.String, "")
+	h.renderAlert(w, "Library scan triggered.", err)
 }
 
 func (h *SettingsHandler) saveMatching(w http.ResponseWriter, r *http.Request) {

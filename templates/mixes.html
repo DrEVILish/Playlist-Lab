@@ -7,7 +7,7 @@
   <h1 class="page-title">Generate a Mix</h1>
 
   {{if not .HasServer}}
-  <p class="error">Select a Plex server and music library in setup before generating mixes.</p>
+  <p class="error-message">Select a Plex server and music library in setup before generating mixes.</p>
   {{else}}
 
   <div class="generate-mixes-content">
@@ -52,6 +52,12 @@
           <div class="quick-mix-content">
             <h3 class="quick-mix-name">Workout Mix</h3>
             <p class="quick-mix-description">A progressive tempo build for exercise</p>
+          </div>
+        </button>
+        <button type="button" class="quick-mix-card" hx-post="/mixes/generate" hx-vals='{"mixType":"all"}' hx-target="#notifications" hx-swap="innerHTML">
+          <div class="quick-mix-content">
+            <h3 class="quick-mix-name">Generate All</h3>
+            <p class="quick-mix-description">Create every mix above at once, using default settings</p>
           </div>
         </button>
       </div>

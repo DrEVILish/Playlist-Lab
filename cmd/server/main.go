@@ -30,6 +30,7 @@ import (
 	"github.com/drevilish/playlist-lab/internal/config"
 	"github.com/drevilish/playlist-lab/internal/db"
 	"github.com/drevilish/playlist-lab/internal/handlers"
+	"github.com/drevilish/playlist-lab/internal/logging"
 	"github.com/drevilish/playlist-lab/internal/services/actionqueue"
 	"github.com/drevilish/playlist-lab/internal/services/crossimport"
 	"github.com/drevilish/playlist-lab/internal/services/deemix"
@@ -46,14 +47,17 @@ import (
 func main() {
 	cfg := config.Load()
 
-	logLevel := slog.LevelInfo
-	if cfg.LogLevel == "debug" {
-		logLevel = slog.LevelDebug
+	// Mirrors utils/logger.ts: stdout (for the systemd journal, unchanged)
+	// plus size-rotated ./logs/combined.log and ./logs/error.log, so any
+	// ops tooling built around those file paths keeps working post-cutover.
+	// The admin in-app log-viewer tab remains deferred (handlers/admin.go's
+	// header comment) - this only restores the files themselves.
+	closeLogs, err := logging.Setup(cfg.LogDir, cfg.LogLevel)
+	if err != nil {
+		slog.Error("failed to set up logging", "error", err)
+		os.Exit(1)
 	}
-	// Log-file tee + admin log-viewer tab: deferred, same as the other
-	// admin-only server-wide config surfaces noted in handlers/admin.go's
-	// header comment - stdout/journal is enough for now.
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})))
+	defer closeLogs()
 
 	sqlDB, err := db.Open(cfg.DatabasePath)
 	if err != nil {
@@ -99,14 +103,16 @@ func main() {
 		Secure: secure, Tmpl: tmpl, BaseURL: cfg.PublicURL,
 	})
 	handlers.RegisterServers(r, mw, &handlers.ServersHandler{DB: sqlDB, Plex: plexClient, Tmpl: tmpl})
-	handlers.RegisterSettings(r, mw, &handlers.SettingsHandler{DB: sqlDB, Tmpl: tmpl})
-	handlers.RegisterPlaylists(r, mw, &handlers.PlaylistsHandler{DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl})
+	handlers.RegisterSettings(r, mw, &handlers.SettingsHandler{DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl})
 	handlers.RegisterStatus(r, mw, &handlers.StatusHandler{DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl})
 	handlers.RegisterBackup(r, mw, &handlers.BackupHandler{DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl})
 	notificationStore := notifications.NewStore()
 	handlers.RegisterNotifications(r, mw, &handlers.NotificationsHandler{Store: notificationStore, Tmpl: tmpl})
 
 	actionQueue := actionqueue.New(notificationStore)
+	handlers.RegisterPlaylists(r, mw, &handlers.PlaylistsHandler{
+		DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue,
+	})
 	mixService := mixes.New()
 	handlers.RegisterMixes(r, mw, &handlers.MixesHandler{
 		DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue, Mixes: mixService,

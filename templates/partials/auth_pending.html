@@ -9,5 +9,5 @@
     No sign-in window? <a href="{{.AuthURL}}" target="_blank" rel="noopener">Open the Plex sign-in page</a>
   </p>
 </div>
-<script>window.open("{{.AuthURL}}", "_blank", "noopener");</script>
+{{if .OpenPopup}}<script>window.open("{{.AuthURL}}", "_blank", "noopener");</script>{{end}}
 {{end}}

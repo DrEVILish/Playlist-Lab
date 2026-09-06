@@ -1,5 +1,10 @@
 {{define "content"}}
 <link rel="stylesheet" href="/static/css/pages/CrossImportPage.css">
+<!-- partials/oauth_services.html (loaded via hx-get below) uses .settings-service-*
+     classes that only live in SettingsPage.css - link it here too so the
+     "connected service" row this page renders isn't unstyled (it's also
+     used directly by the Settings page, which already links its own CSS). -->
+<link rel="stylesheet" href="/static/css/pages/SettingsPage.css">
 <main class="cross-import-page">
   <div class="cross-import-header">
     <h1 class="cross-import-title">Export to YouTube</h1>

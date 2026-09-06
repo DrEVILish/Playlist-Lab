@@ -106,6 +106,15 @@ func (h *AdminHandler) enableUser(w http.ResponseWriter, r *http.Request) {
 		h.render(w, r, err.Error())
 		return
 	}
+	// Auto-assign the admin's own server config if the user doesn't have one
+	// yet, same as login-time auto-approval (auth.go's reverifyMembership) -
+	// ports admin.ts's enable route so a manually-enabled user doesn't have
+	// to run the server/library picker themselves.
+	if admin := auth.CurrentUser(r); admin != nil {
+		if existing, _ := db.GetUserServer(h.DB, userID); existing == nil {
+			_ = db.CopyServerConfig(h.DB, admin.ID, userID)
+		}
+	}
 	h.render(w, r, "")
 }
 

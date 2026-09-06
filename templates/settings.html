@@ -11,6 +11,8 @@
       <a href="#mixes" class="settings-nav-item"><span class="settings-nav-label">Mixes</span><span class="settings-nav-desc">Mix generation</span></a>
       <a href="#ai" class="settings-nav-item"><span class="settings-nav-label">AI Features</span><span class="settings-nav-desc">Gemini / Grok</span></a>
       <a href="#connected-services" class="settings-nav-item"><span class="settings-nav-label">Connected Services</span><span class="settings-nav-desc">OAuth connections</span></a>
+      {{if .HasServer}}<a href="#library-scan" class="settings-nav-item"><span class="settings-nav-label">Library Scan</span><span class="settings-nav-desc">Refresh Plex library</span></a>{{end}}
+      <a href="#server-info" class="settings-nav-item"><span class="settings-nav-label">Server Info</span><span class="settings-nav-desc">Reverse proxy, about</span></a>
       {{if .IsAdmin}}<a href="/admin" class="settings-nav-item"><span class="settings-nav-label">Admin</span><span class="settings-nav-desc">Users & server admin</span></a>{{end}}
     </nav>
 
@@ -125,6 +127,40 @@
         </div>
         <div id="oauth-services" hx-get="/cross-import/oauth/services" hx-trigger="load" hx-swap="innerHTML">
           <p class="settings-loading">Loading services...</p>
+        </div>
+      </section>
+
+      {{if .HasServer}}
+      <section id="library-scan" class="settings-section">
+        <div class="settings-section-header">
+          <h2>Library Scan</h2>
+          <p>Trigger Plex to scan for new or changed files in your library.</p>
+        </div>
+        <form hx-post="/settings/scan-library" hx-target="#library-scan-result" hx-swap="innerHTML">
+          <button type="submit" class="btn btn-primary">Scan Library</button>
+        </form>
+        <div id="library-scan-result"></div>
+      </section>
+      {{end}}
+
+      <section id="server-info" class="settings-section">
+        <div class="settings-section-header">
+          <h2>Server Info</h2>
+        </div>
+        <div class="settings-subsection">
+          <h3>Reverse Proxy Setup</h3>
+          <p class="settings-hint">If you're running Playlist Lab behind a reverse proxy (Nginx, Apache, Caddy, etc.):</p>
+          <ol class="settings-hint" style="margin-left:1.5rem;margin-top:0.5rem">
+            <li>Set <code>PUBLIC_URL</code> to your public domain (e.g. <code>https://playlist-lab.example.com</code>)</li>
+            <li>Set <code>TRUST_PROXY=true</code> in your <code>.env</code> file</li>
+            <li>Configure your reverse proxy to forward headers (<code>X-Forwarded-Proto</code>, <code>X-Forwarded-Host</code>)</li>
+            <li>Update OAuth app redirect URIs to match your public URL</li>
+            <li>Restart the server</li>
+          </ol>
+        </div>
+        <div class="settings-subsection" style="margin-top:1.5rem">
+          <h3>About</h3>
+          <p class="settings-hint">Playlist Lab (Go rewrite)</p>
         </div>
       </section>
 

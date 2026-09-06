@@ -14,8 +14,45 @@ import (
 // tmplFuncs are available to every page/partial template. "now" backs the
 // footer's copyright year - the only place a template needs the current
 // time - so a full FuncMap-per-caller isn't needed.
+var notificationTypeLabels = map[string]string{
+	"deemix":         "Deemix download",
+	"lidarr":         "Lidarr search",
+	"retry-match":    "Matching missing tracks",
+	"schedule":       "Scheduled refresh",
+	"import":         "Import",
+	"track-vanished": "Tracks vanished",
+	"action":         "Action",
+	"mix":            "Mix generation",
+}
+
 var tmplFuncs = template.FuncMap{
 	"now": time.Now,
+	// notificationTypeLabel backs the bell's per-item title line, matching
+	// NotificationCenter.tsx's TYPE_LABEL map (plus "mix", which this Go
+	// port added and the React map never had a type for).
+	"notificationTypeLabel": func(t string) string {
+		if label, ok := notificationTypeLabels[t]; ok {
+			return label
+		}
+		return t
+	},
+	// relativeTime backs the bell's per-item timestamp, matching
+	// NotificationCenter.tsx's relativeTime().
+	"relativeTime": func(t time.Time) string {
+		seconds := int(time.Since(t).Seconds())
+		if seconds < 0 {
+			seconds = 0
+		}
+		if seconds < 60 {
+			return "just now"
+		}
+		minutes := (seconds + 30) / 60
+		if minutes < 60 {
+			return fmt.Sprintf("%dm ago", minutes)
+		}
+		hours := (minutes + 30) / 60
+		return fmt.Sprintf("%dh ago", hours)
+	},
 	// percent backs the cross-import progress bar's width (current/total*100,
 	// 0 if total is 0) - the only place a template needs this ratio.
 	"percent": func(current, total int) int {
@@ -39,6 +76,15 @@ var tmplFuncs = template.FuncMap{
 		}
 		return time.Unix(sec, 0).Format("Jan 2, 2006")
 	},
+	// dateFromUnixMilli is dateFromUnix for the columns stored in
+	// milliseconds (e.g. playlist_shares.shared_at), matching
+	// database.ts's Date.now()-based timestamps.
+	"dateFromUnixMilli": func(ms int64) string {
+		if ms == 0 {
+			return ""
+		}
+		return time.UnixMilli(ms).Format("Jan 2, 2006")
+	},
 	// formatDuration backs the Duration column - ms to "1h 23m"/"45m",
 	// matching PlaylistsPage.tsx's formatDuration.
 	"formatDuration": func(ms int64) string {
@@ -49,17 +95,6 @@ var tmplFuncs = template.FuncMap{
 			return fmt.Sprintf("%dh %dm", hours, minutes)
 		}
 		return fmt.Sprintf("%dm", minutes)
-	},
-	// sortHref backs the Playlists table's sortable column headers: clicking
-	// a header re-requests "/" sorted by that key, flipping direction if
-	// it's already the active sort (matching the React page's toggleSort,
-	// just as a server round-trip instead of client state).
-	"sortHref": func(key, curSort, curDir string) string {
-		dir := "asc"
-		if curSort == key && curDir == "asc" {
-			dir = "desc"
-		}
-		return "/?sort=" + key + "&dir=" + dir
 	},
 	// sortArrow shows the active sort column's direction, mirroring
 	// SortableHeader's ▲/▼ in PlaylistsPage.tsx.
