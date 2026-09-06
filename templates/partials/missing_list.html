@@ -1,0 +1,51 @@
+{{define "partials/missing_list.html"}}
+{{if not .Groups}}
+<p>No missing tracks. Everything matched.</p>
+{{else}}
+<p>{{.TotalCount}} missing track(s).</p>
+{{range .Groups}}
+<section class="missing-tracks-panel">
+  <div class="missing-tracks-toolbar">
+    <h2>{{.PlaylistName}}</h2>
+    <div class="missing-tracks-toolbar-actions">
+      <form hx-post="/missing/retry" hx-target="#retry-status" hx-swap="innerHTML">
+        <input type="hidden" name="playlistId" value="{{.PlaylistID}}">
+        <button type="submit" class="btn btn-primary btn-small">Retry playlist</button>
+      </form>
+      <form hx-delete="/missing/playlist/{{.PlaylistID}}" hx-target="#missing-list" hx-swap="innerHTML" hx-confirm="Clear all missing tracks for this playlist?">
+        <button type="submit" class="btn btn-secondary btn-small">Clear</button>
+      </form>
+    </div>
+  </div>
+
+  {{range .Tracks}}
+  <div class="missing-track-row" id="missing-track-{{.ID}}">
+    <div class="missing-track-info">
+      <div class="missing-track-title">{{.Title}}</div>
+      <div class="missing-track-sub">{{.Artist}}{{if .Album.Valid}} • {{.Album.String}}{{end}}</div>
+    </div>
+    <div class="missing-track-actions">
+      <form hx-post="/missing/retry" hx-target="#retry-status" hx-swap="innerHTML">
+        <input type="hidden" name="trackId" value="{{.ID}}">
+        <button type="submit" class="btn btn-primary btn-small">Retry</button>
+      </form>
+      <details class="missing-track-more" name="missing-more-{{.PlaylistID}}">
+        <summary aria-label="More actions for {{.Title}}">&#8230;</summary>
+        <div class="missing-track-more-menu">
+          <form hx-post="/missing/{{.ID}}/rematch" hx-target="#missing-list" hx-swap="innerHTML">
+            <input type="text" name="ratingKey" placeholder="Plex ratingKey" size="10">
+            <button type="submit" class="btn btn-secondary btn-small">Rematch</button>
+          </form>
+          <button class="btn btn-secondary btn-small" hx-post="/missing/{{.ID}}/deemix-download" hx-target="#notifications" hx-swap="innerHTML">Deemix</button>
+          <button class="btn btn-secondary btn-small" hx-post="/missing/{{.ID}}/lidarr-download" hx-target="#notifications" hx-swap="innerHTML">Lidarr</button>
+          <button class="btn btn-secondary btn-small" hx-post="/missing/{{.ID}}/replace-similar" hx-target="#missing-list" hx-swap="innerHTML">Replace w/ similar</button>
+          <button class="btn btn-secondary btn-small" hx-delete="/missing/{{.ID}}" hx-target="#missing-list" hx-swap="innerHTML" hx-confirm="Remove this track from the missing list?">Remove</button>
+        </div>
+      </details>
+    </div>
+  </div>
+  {{end}}
+</section>
+{{end}}
+{{end}}
+{{end}}

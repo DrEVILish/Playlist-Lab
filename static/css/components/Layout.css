@@ -1,0 +1,19 @@
+.layout {
+  min-height: 100vh;
+  max-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--background);
+  overflow: hidden;
+}
+
+.layout-main {
+  flex: 1;
+  padding: 0;
+  background: linear-gradient(180deg, var(--background) 0%, var(--background-elevated) 100%);
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+}

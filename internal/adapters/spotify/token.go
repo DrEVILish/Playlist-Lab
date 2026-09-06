@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/drevilish/playlist-lab/internal/crypto"
@@ -108,6 +109,55 @@ func refreshToken(sqlDB *sql.DB, secret string, userID int64, encryptedRefreshTo
 	if err := db.SaveSpotifyTokens(sqlDB, userID, encryptedAccess, newRefreshToken, expiresAt); err != nil {
 		return "", err
 	}
+	return tokens.AccessToken, nil
+}
+
+// clientCredentialsCache ports getSpotifyClientCredentialsToken's
+// module-level cache (spotify-auth.ts) - one app-wide Client Credentials
+// token shared across all users/goroutines, not per-user.
+var clientCredentialsCache struct {
+	mu        sync.Mutex
+	token     string
+	expiresAt time.Time
+}
+
+// GetClientCredentialsToken returns an app-wide Spotify access token via the
+// Client Credentials grant (no user OAuth - reads only public catalog/chart
+// data). Ports getSpotifyClientCredentialsToken: try the user's own stored
+// Client ID/Secret first (getCredentials, same as the OAuth path), then fall
+// back to the server-wide appClientID/appClientSecret (config.SpotifyClientID/
+// Secret). Returns ("", nil) - not an error - if neither is configured,
+// matching the original's "no credentials available" no-op.
+func GetClientCredentialsToken(sqlDB *sql.DB, secret string, userID int64, appClientID, appClientSecret string) (string, error) {
+	clientCredentialsCache.mu.Lock()
+	if clientCredentialsCache.token != "" && time.Now().Add(60*time.Second).Before(clientCredentialsCache.expiresAt) {
+		token := clientCredentialsCache.token
+		clientCredentialsCache.mu.Unlock()
+		return token, nil
+	}
+	clientCredentialsCache.mu.Unlock()
+
+	clientID, clientSecret := appClientID, appClientSecret
+	if userID != 0 {
+		if uID, uSecret, err := getCredentials(sqlDB, secret, userID); err == nil {
+			clientID, clientSecret = uID, uSecret
+		}
+	}
+	if clientID == "" || clientSecret == "" {
+		return "", nil
+	}
+
+	form := url.Values{"grant_type": {"client_credentials"}}
+	tokens, err := requestToken(clientID, clientSecret, form)
+	if err != nil {
+		return "", err
+	}
+
+	clientCredentialsCache.mu.Lock()
+	clientCredentialsCache.token = tokens.AccessToken
+	clientCredentialsCache.expiresAt = time.Now().Add(time.Duration(tokens.ExpiresIn) * time.Second)
+	clientCredentialsCache.mu.Unlock()
+
 	return tokens.AccessToken, nil
 }
 

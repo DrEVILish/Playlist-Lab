@@ -3,13 +3,171 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0a1018">
   <title>Playlist Lab</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+  <link rel="manifest" href="/static/manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/base.css">
+  <link rel="stylesheet" href="/static/css/components/Layout.css">
+  <link rel="stylesheet" href="/static/css/components/Header.css">
+  <link rel="stylesheet" href="/static/css/components/HeaderActions.css">
+  <link rel="stylesheet" href="/static/css/components/NotificationCenter.css">
+  <link rel="stylesheet" href="/static/css/components/MobileNav.css">
+  <link rel="stylesheet" href="/static/css/components/Footer.css">
+  <link rel="stylesheet" href="/static/css/components/Modal.css">
+  <link rel="stylesheet" href="/static/css/components/ConfirmDialog.css">
+  <link rel="stylesheet" href="/static/css/components/chrome-interactions.css">
   <script src="/static/js/htmx.min.js"></script>
+  <script src="/static/js/htmx-sse.min.js"></script>
 </head>
 <body>
-  {{block "content" .}}{{end}}
+  <div class="layout">
+    {{if .User}}
+    <!-- Mobile nav: React toggled a slide-out panel with useState; here a
+         checkbox hack drives the same open/close purely in CSS (no JS
+         needed for a single boolean UI-only toggle). -->
+    <input type="checkbox" id="mobile-nav-toggle" class="mobile-nav-checkbox">
+    <label for="mobile-nav-toggle" class="mobile-nav-toggle" aria-label="Open navigation menu">
+      <span class="hamburger"><span></span><span></span><span></span></span>
+    </label>
+    <label for="mobile-nav-toggle" class="mobile-nav-overlay" aria-hidden="true"></label>
+
+    <nav class="mobile-nav">
+      <div class="mobile-nav-header">
+        <h2>Menu</h2>
+        <label for="mobile-nav-toggle" class="mobile-nav-close" aria-label="Close menu">&times;</label>
+      </div>
+      <div class="mobile-nav-content">
+        <a class="mobile-nav-link" href="/">Home</a>
+        <a class="mobile-nav-link" href="/import">Import</a>
+        <a class="mobile-nav-link" href="/mixes">Generate Mixes</a>
+        <a class="mobile-nav-link" href="/cross-import">Cross-Import</a>
+        <a class="mobile-nav-link" href="/mix-templates">Mix Templates</a>
+        <a class="mobile-nav-link" href="/backup">Backup / Restore</a>
+        <a class="mobile-nav-link" href="/status">Status</a>
+        <a class="mobile-nav-link" href="/settings">Settings</a>
+      </div>
+      <div class="mobile-nav-footer">
+        <div class="mobile-nav-user">
+          {{if .User.PlexThumb.Valid}}<img src="{{.User.PlexThumb.String}}" alt="" class="mobile-nav-user-avatar">{{end}}
+          <span class="mobile-nav-user-name">{{.User.PlexUsername}}</span>
+          <form hx-post="/auth/logout"><button type="submit" class="btn btn-secondary btn-logout">Logout</button></form>
+        </div>
+        {{template "footer-content"}}
+      </div>
+    </nav>
+    {{end}}
+
+    <header class="header">
+      <div class="header-content">
+        <div class="header-left">
+          <a href="/" class="header-logo">
+            <img src="/static/logo.svg" alt="Playlist Lab" class="header-logo-icon">
+            <h1><span class="logo-playlist">Playlist </span><span class="logo-lab">Lab</span></h1>
+          </a>
+          {{if .User}}
+          <!-- Matches the real React header's 5-button set (Header.tsx
+               lines 46-52): Import/Generate/Shared With Me/Backup-Restore/
+               Status - not Cross-Import/Mix Templates, which React only
+               reaches from MobileNav's link list (mirrored above). Import
+               and Generate already exist as full pages, so - following this
+               project's established plain-link precedent rather than
+               reproducing React's portal-modal pattern - they just navigate
+               there. Shared With Me is omitted: playlist_shares exists in
+               the schema but nothing can create a share yet, so the list
+               would always be empty; not worth a header link until sharing
+               itself is built. -->
+          <nav class="header-actions">
+            <a class="btn btn-secondary btn-small" href="/import">Import</a>
+            <a class="btn btn-secondary btn-small" href="/mixes">Generate</a>
+            <a class="btn btn-secondary btn-small" href="/backup">Backup / Restore</a>
+            <a class="btn btn-secondary btn-small" href="/status">Status</a>
+          </nav>
+          {{end}}
+        </div>
+
+        {{if .User}}
+        <div class="header-user">
+          <!-- Actions menu: React used a popover hook driven by JS state;
+               <details>/<summary> gives the same click-to-toggle disclosure
+               natively and needs no script. -->
+          <details class="header-actions-menu">
+            <summary class="header-actions-btn" aria-label="Actions" title="Actions">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+            </summary>
+            <div class="header-actions-popover" role="menu">
+              <button type="button" role="menuitem" class="header-actions-item" hx-post="/playlists/missing/deemix-all" hx-confirm="Retry matching, then queue every still-missing track for deemix download?">Deemix All</button>
+              <button type="button" role="menuitem" class="header-actions-item" hx-post="/playlists/missing/retry-all" hx-confirm="Retry matching every missing track against your Plex library?">Retry All</button>
+              <button type="button" role="menuitem" class="header-actions-item" hx-post="/schedules/run-all" hx-confirm="Run every scheduled playlist refresh now?">Refresh</button>
+            </div>
+          </details>
+
+          <!-- Notification bell: SSE-fed fragment (unchanged plumbing, see
+               internal/handlers/notifications.go). <details> supplies the
+               open/close disclosure; hx-ext="sse" keeps pushing new HTML
+               into #notifications whether the panel is open or not. -->
+          <details class="notification-center">
+            <summary class="notification-bell" aria-label="Notifications" title="Notifications"></summary>
+            <div class="notification-panel">
+              <div class="notification-panel-header"><span>Notifications</span></div>
+              <div id="notifications" class="notification-list" hx-ext="sse" sse-connect="/notifications/stream" sse-swap="notification" hx-swap="innerHTML" hx-trigger="load"></div>
+            </div>
+          </details>
+
+          {{if .User.PlexThumb.Valid}}<img src="{{.User.PlexThumb.String}}" alt="{{.User.PlexUsername}}" class="header-user-avatar">{{end}}
+          <span class="header-user-name">{{.User.PlexUsername}}</span>
+          <a href="/settings" class="header-settings-btn" title="Settings" aria-label="Settings">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </a>
+          <form hx-post="/auth/logout"><button type="submit" class="btn btn-secondary btn-logout">Logout</button></form>
+        </div>
+        {{end}}
+      </div>
+    </header>
+
+    <main class="layout-main">
+      {{block "content" .}}{{end}}
+    </main>
+
+    <footer class="footer">
+      {{template "footer-content"}}
+    </footer>
+  </div>
+
+  <!-- Reusable modal target for HTMX-loaded fragments: a page triggers
+       hx-get="/some/fragment" hx-target="#modal-root" hx-swap="innerHTML"
+       and the fragment is expected to render its own
+       .modal-overlay > .modal-content (see templates/partials/modal.html). -->
+  <div id="modal-root"></div>
+  <script>
+    // Escape closes whatever's currently in #modal-root - the one modal
+    // interaction plain CSS/hx-confirm can't express.
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        var root = document.getElementById('modal-root');
+        if (root) root.innerHTML = '';
+      }
+    });
+  </script>
 </body>
 </html>
+{{end}}
+
+{{define "footer-content"}}
+<div class="footer-content">
+  <p class="footer-text">&copy; {{now.Year}} Playlist Lab. Multi-user web application for managing Plex playlists.</p>
+</div>
 {{end}}

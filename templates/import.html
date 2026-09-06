@@ -1,0 +1,67 @@
+{{define "content"}}
+<link rel="stylesheet" href="/static/css/pages/ImportPage.css">
+<main class="import page-container">
+  <div class="page-header import-header">
+    <h1 class="page-title import-title">Import a Playlist</h1>
+    <p class="import-description">Pull tracks from a source playlist, chart, or file and match them into your Plex library. Unmatched tracks land in Missing Tracks for later acquisition.</p>
+  </div>
+
+  {{if not .HasServer}}
+  <p class="error-message">Select a Plex server and music library in setup before importing.</p>
+  {{else}}
+
+  {{if not .Sources}}
+  <div class="empty-state">
+    <div class="empty-state-icon">&#128193;</div>
+    <div class="empty-state-title">No import sources available</div>
+    <div class="empty-state-description">No source adapters are registered on this server yet.</div>
+  </div>
+  {{else}}
+
+  <!-- Source picker: React drove this with useState + onClick handlers over
+       a button list; a native radio group does the same "pick one" job with
+       no JS, and its own value doubles as the form's submitted "source"
+       field (see .source-tab-input rules appended to ImportPage.css). -->
+  <form hx-post="/import" hx-target="#notifications" hx-swap="innerHTML">
+    <div class="source-tabs">
+      {{range $i, $s := .Sources}}
+      <input type="radio" name="source" id="source-{{$s.ID}}" value="{{$s.ID}}" class="source-tab-input" {{if eq $i 0}}checked{{end}}>
+      <label for="source-{{$s.ID}}" class="source-tab">
+        <span class="source-tab-icon">{{$s.Icon}}</span>{{$s.Name}}
+      </label>
+      {{end}}
+    </div>
+
+    <section class="import-form">
+      <div class="form-section">
+        <label class="form-label" for="import-identifier">Playlist URL or ID</label>
+        <input class="form-input" type="text" id="import-identifier" name="identifier" placeholder="https://..." required>
+        <span class="form-hint">Paste the source playlist's share link or ID. For chart sources, paste the chart page URL.</span>
+      </div>
+      <div class="form-section">
+        <label class="form-label" for="import-playlist-name">Playlist name (optional)</label>
+        <input class="form-input" type="text" id="import-playlist-name" name="playlistName" placeholder="Defaults to the source playlist's name">
+      </div>
+      <button type="submit" class="btn btn-primary">Import</button>
+    </section>
+  </form>
+  {{end}}
+
+  <section class="import-form">
+    <h2 class="progress-title">Import from a file</h2>
+    <form hx-post="/import/file" hx-target="#notifications" hx-swap="innerHTML" hx-encoding="multipart/form-data">
+      <div class="form-section">
+        <label class="form-label" for="import-file">Playlist file (M3U, M3U8, PLS, XSPF, CSV, or TXT)</label>
+        <input class="form-input" type="file" id="import-file" name="file" accept=".m3u,.m3u8,.pls,.xspf,.csv,.txt" required>
+      </div>
+      <div class="form-section">
+        <label class="form-label" for="import-file-name">Playlist name (optional)</label>
+        <input class="form-input" type="text" id="import-file-name" name="playlistName" placeholder="Defaults to the file's name">
+      </div>
+      <button type="submit" class="btn btn-primary">Import File</button>
+    </form>
+  </section>
+
+  {{end}}
+</main>
+{{end}}

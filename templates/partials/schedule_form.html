@@ -1,0 +1,84 @@
+{{/* Create/manage modal for a single playlist's refresh schedule, ported
+     from ScheduleModal.tsx. Reuses AdvancedMixModal.css's overlay/modal
+     classes (generic dark-modal chrome already loaded on every page) rather
+     than adding a near-duplicate stylesheet. Rendered via
+     GET /playlists/{plexId}/schedule into #modal-root. */}}
+{{define "partials/schedule_form.html"}}
+<div class="advanced-mix-overlay" onclick="if(event.target===this)document.getElementById('modal-root').innerHTML=''">
+  <div class="advanced-mix-modal" style="max-width:460px">
+    <div class="advanced-mix-header">
+      <h2 class="advanced-mix-title">{{if .Schedule}}Manage Schedule{{else}}Create Schedule{{end}} — {{.PlaylistName}}</h2>
+      <button type="button" class="advanced-mix-close" onclick="document.getElementById('modal-root').innerHTML=''">&times;</button>
+    </div>
+
+    <form {{if .Schedule}}hx-put="/schedules/{{.Schedule.ID}}"{{else}}hx-post="/schedules"{{end}} hx-swap="none">
+      <div class="advanced-mix-content">
+        <input type="hidden" name="playlistId" value="{{.PlaylistID}}">
+
+        {{if .Schedule}}
+        <div style="font-size:0.8rem;color:var(--text-secondary)">
+          {{if .Schedule.LastRun.Valid}}<div>Last run: {{dateFromUnix .Schedule.LastRun.Int64}}</div>{{end}}
+        </div>
+        {{end}}
+
+        <div class="form-group">
+          <label class="form-label">Frequency</label>
+          <select class="form-select" name="frequency">
+            {{$freq := ""}}{{if .Schedule}}{{$freq = .Schedule.Frequency}}{{end}}
+            <option value="daily" {{if eq $freq "daily"}}selected{{end}}>Daily</option>
+            <option value="weekly" {{if or (eq $freq "weekly") (not $freq)}}selected{{end}}>Weekly</option>
+            <option value="fortnightly" {{if eq $freq "fortnightly"}}selected{{end}}>Fortnightly</option>
+            <option value="monthly" {{if eq $freq "monthly"}}selected{{end}}>Monthly</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Start Date</label>
+          <input class="form-input" type="date" name="startDate" value="{{if .Schedule}}{{.Schedule.StartDate}}{{end}}" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" title="Leave blank to run on the next check after the start date">Run Time</label>
+          <input class="form-input" type="time" name="runTime" value="{{if .Schedule}}{{.Config.RunTime}}{{end}}">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">When the source changes</label>
+          {{$mode := "replace"}}{{if .Schedule}}{{if eq .Config.UpdateMode "accumulate"}}{{$mode = "accumulate"}}{{end}}{{end}}
+          <label style="display:flex;align-items:flex-start;gap:0.5rem;font-size:0.85rem;font-weight:400;cursor:pointer;margin-bottom:0.4rem">
+            <input type="radio" name="updateMode" value="replace" {{if eq $mode "replace"}}checked{{end}} style="margin-top:0.2rem">
+            <span><span style="font-weight:500">Replace</span><span style="display:block;color:var(--text-secondary);font-size:0.8rem">The playlist mirrors the source. Tracks that drop out of the source are removed.</span></span>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:0.5rem;font-size:0.85rem;font-weight:400;cursor:pointer">
+            <input type="radio" name="updateMode" value="accumulate" {{if eq $mode "accumulate"}}checked{{end}} style="margin-top:0.2rem">
+            <span><span style="font-weight:500">Accumulate</span><span style="display:block;color:var(--text-secondary);font-size:0.8rem">New tracks are added and nothing is ever removed - a weekly chart becomes a running archive.</span></span>
+          </label>
+        </div>
+
+        {{if .Schedule}}{{if .Executions}}
+        <div class="form-group">
+          <label class="form-label">Recent runs</label>
+          <div style="display:grid;gap:0.4rem;max-height:150px;overflow-y:auto">
+            {{range .Executions}}
+            <div style="font-size:0.8125rem;color:var(--text-secondary);display:flex;justify-content:space-between">
+              <span>{{dateFromUnix .StartedAt}}</span>
+              <span>{{.Status}}</span>
+            </div>
+            {{end}}
+          </div>
+        </div>
+        {{end}}{{end}}
+      </div>
+
+      <div class="modal-actions" style="padding:1rem 2rem;display:flex;gap:0.5rem;justify-content:flex-end">
+        {{if .Schedule}}
+        <button type="button" class="btn btn-secondary" hx-post="/schedules/{{.Schedule.ID}}/run" hx-swap="none" onclick="document.getElementById('modal-root').innerHTML=''">Run Now</button>
+        <button type="button" class="btn btn-secondary" style="color:var(--error)" hx-delete="/schedules/{{.Schedule.ID}}" hx-swap="none" hx-confirm="Delete this schedule?">Delete Schedule</button>
+        {{end}}
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-root').innerHTML=''">Cancel</button>
+        <button type="submit" class="btn btn-primary">{{if .Schedule}}Save Changes{{else}}Create Schedule{{end}}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}

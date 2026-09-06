@@ -6,6 +6,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -28,7 +29,36 @@ type Config struct {
 	SpotifyClientSecret string
 	SpotifyRedirectURI  string
 
+	YouTubeClientID     string
+	YouTubeClientSecret string
+	YouTubeRedirectURI  string
+
 	DevNoAuth bool
+
+	EnableJobs              bool
+	EnableCacheCleanup      bool
+	EnableScraperJob        bool
+	ScraperSchedule         string
+	EnableScheduleChecker   bool
+	ScheduleCheckerSchedule string
+
+	// Deemix (services/deemix.ts). DeemixURL/DeemixConfigPath/ServiceName
+	// point at our own local deemix-server install and are pure env config.
+	// DeemixArl is also DB-persisted admin config on the Node side
+	// (Settings > Admin > Deemix, editable without touching .env) - that
+	// admin UI hasn't been ported to Go yet, so this only reads the env var
+	// fallback for now; same value, just missing the in-app edit path.
+	DeemixURL              string
+	DeemixConfigPath       string
+	DeemixServiceName      string
+	DeemixArl              string
+	EnableDeemixArlCheck   bool
+	DeemixArlCheckSchedule string
+
+	// Lidarr (services/lidarr.ts) - same admin-DB-override caveat as
+	// DeemixArl above, env var only for now.
+	LidarrURL    string
+	LidarrAPIKey string
 }
 
 func Load() Config {
@@ -55,7 +85,28 @@ func Load() Config {
 		SpotifyClientSecret: getEnv("SPOTIFY_CLIENT_SECRET", ""),
 		SpotifyRedirectURI:  getEnv("SPOTIFY_REDIRECT_URI", ""),
 
+		YouTubeClientID:     getEnv("YOUTUBE_CLIENT_ID", ""),
+		YouTubeClientSecret: getEnv("YOUTUBE_CLIENT_SECRET", ""),
+		YouTubeRedirectURI:  getEnv("YOUTUBE_REDIRECT_URI", ""),
+
 		DevNoAuth: getBool("DEV_NO_AUTH", false),
+
+		EnableJobs:              getBool("ENABLE_JOBS", false),
+		EnableCacheCleanup:      getBool("ENABLE_CACHE_CLEANUP", true),
+		EnableScraperJob:        getBool("ENABLE_SCRAPER_JOB", true),
+		ScraperSchedule:         getEnv("SCRAPER_SCHEDULE", "0 2 * * *"), // 2:00 AM daily
+		EnableScheduleChecker:   getBool("ENABLE_SCHEDULE_CHECKER", true),
+		ScheduleCheckerSchedule: getEnv("SCHEDULE_CHECKER_SCHEDULE", "0,10,20,30,40,50 * * * *"), // every 10 minutes
+
+		DeemixURL:              strings.TrimSuffix(getEnv("DEEMIX_URL", "http://127.0.0.1:6595"), "/"),
+		DeemixConfigPath:       getEnv("DEEMIX_CONFIG_PATH", "/opt/deemix-server/config/config.json"),
+		DeemixServiceName:      getEnv("DEEMIX_SERVICE_NAME", "deemix-server.service"),
+		DeemixArl:              getEnv("DEEMIX_ARL", ""),
+		EnableDeemixArlCheck:   getBool("ENABLE_DEEMIX_ARL_CHECK", true),
+		DeemixArlCheckSchedule: getEnv("DEEMIX_ARL_CHECK_SCHEDULE", "0 4 * * *"),
+
+		LidarrURL:    strings.TrimSuffix(getEnv("LIDARR_URL", ""), "/"),
+		LidarrAPIKey: getEnv("LIDARR_API_KEY", ""),
 	}
 }
 

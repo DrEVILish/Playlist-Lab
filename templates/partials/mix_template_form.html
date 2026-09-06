@@ -1,0 +1,124 @@
+{{/* Edit Template modal, ports EditTemplateModal.tsx. .Template is a
+     handlers.TemplateView: TrackCount, SortBy, Genres, Moods, Decades,
+     AllowDuplicateArtists, AllowDuplicateAlbums, MaxTracksPerArtist,
+     MaxTracksPerAlbum, IncludeGenres, ExcludeGenres and MinRating are
+     unmarshaled once server-side from the raw configuration JSON (see
+     buildTemplateView) since Go templates can't index into that JSON
+     directly. The form posts these granular fields back instead of a raw
+     JSON blob; internal/handlers/mix_templates.go's update() merges them
+     onto the existing configuration so fields this form doesn't expose
+     (artistIds, albumIds) survive the edit. */}}
+{{define "partials/mix_template_form.html"}}
+<div class="edit-template-overlay" onclick="if(event.target===this)document.getElementById('modal-root').innerHTML=''">
+  <div class="edit-template-modal" role="dialog" aria-modal="true" aria-label="Edit Template: {{.Template.Name}}">
+    <form hx-put="/mix-templates/{{.Template.ID}}" hx-target="#mix-templates-list" hx-swap="innerHTML"
+      hx-on::after-request="if(event.detail.successful)document.getElementById('modal-root').innerHTML=''">
+      <div class="edit-template-header">
+        <h2 class="edit-template-title">Edit Template: {{.Template.Name}}</h2>
+        <button type="button" class="edit-template-close" title="Close (Esc)"
+          onclick="document.getElementById('modal-root').innerHTML=''">&times;</button>
+      </div>
+
+      <div class="edit-template-content">
+        <div class="form-group">
+          <label class="form-label" for="edit-template-name">Template Name <span class="required">*</span></label>
+          <input id="edit-template-name" class="form-input" type="text" name="name" value="{{.Template.Name}}" required maxlength="255">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="edit-template-description">Description (optional)</label>
+          <textarea id="edit-template-description" class="form-textarea" name="description" rows="3" maxlength="1000">{{if .Template.Description.Valid}}{{.Template.Description.String}}{{end}}</textarea>
+        </div>
+
+        <div class="config-section">
+          <h3 class="section-title">Mix Configuration</h3>
+
+          <div class="form-group">
+            <label class="form-label" for="track-count">Number of Tracks: {{.Template.TrackCount}}</label>
+            <input id="track-count" class="track-slider" type="range" name="trackCount" min="10" max="200" step="10" value="{{.Template.TrackCount}}">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="sort-by">Sort By</label>
+            <select id="sort-by" class="form-select" name="sortBy">
+              <option value="random" {{if eq .Template.SortBy "random"}}selected{{end}}>Random</option>
+              <option value="rating" {{if eq .Template.SortBy "rating"}}selected{{end}}>Rating</option>
+              <option value="playCount" {{if eq .Template.SortBy "playCount"}}selected{{end}}>Play Count</option>
+              <option value="dateAdded" {{if eq .Template.SortBy "dateAdded"}}selected{{end}}>Date Added</option>
+            </select>
+          </div>
+
+          {{if eq .Template.MixType "genre"}}
+          <div class="form-group">
+            <label class="form-label" for="genres">Genres (comma-separated)</label>
+            <input id="genres" class="form-input" type="text" name="genres" placeholder="e.g., Rock, Pop, Jazz" value="{{join .Template.Genres}}">
+          </div>
+          {{end}}
+
+          {{if eq .Template.MixType "mood"}}
+          <div class="form-group">
+            <label class="form-label" for="moods">Moods (comma-separated)</label>
+            <input id="moods" class="form-input" type="text" name="moods" placeholder="e.g., Chill, Energetic, Relaxing" value="{{join .Template.Moods}}">
+          </div>
+          {{end}}
+
+          {{if eq .Template.MixType "decade"}}
+          <div class="form-group">
+            <label class="form-label" for="decades">Decades (comma-separated, e.g., 1980, 1990)</label>
+            <input id="decades" class="form-input" type="text" name="decades" placeholder="e.g., 1980, 1990, 2000" value="{{joinFloats .Template.Decades}}">
+          </div>
+          {{end}}
+
+          <div class="advanced-section">
+            <details>
+              <summary class="advanced-toggle">Advanced Options</summary>
+              <div class="advanced-content">
+                <div class="form-group">
+                  <label class="checkbox-label">
+                    <input class="checkbox-input" type="checkbox" name="allowDuplicateArtists" {{if .Template.AllowDuplicateArtists}}checked{{end}}>
+                    <span>Allow duplicate artists</span>
+                  </label>
+                </div>
+                <div class="form-group">
+                  <label class="checkbox-label">
+                    <input class="checkbox-input" type="checkbox" name="allowDuplicateAlbums" {{if .Template.AllowDuplicateAlbums}}checked{{end}}>
+                    <span>Allow duplicate albums</span>
+                  </label>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="max-tracks-artist">Max tracks per artist</label>
+                  <input id="max-tracks-artist" class="form-input" type="number" name="maxTracksPerArtist" placeholder="No limit" min="1" value="{{if .Template.MaxTracksPerArtist}}{{.Template.MaxTracksPerArtist}}{{end}}">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="max-tracks-album">Max tracks per album</label>
+                  <input id="max-tracks-album" class="form-input" type="number" name="maxTracksPerAlbum" placeholder="No limit" min="1" value="{{if .Template.MaxTracksPerAlbum}}{{.Template.MaxTracksPerAlbum}}{{end}}">
+                </div>
+
+                {{if eq .Template.MixType "custom"}}
+                <div class="form-group">
+                  <label class="form-label">Include Genres (comma-separated)</label>
+                  <input class="form-input" type="text" name="includeGenres" placeholder="e.g., Rock, Pop" value="{{join .Template.IncludeGenres}}">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Exclude Genres (comma-separated)</label>
+                  <input class="form-input" type="text" name="excludeGenres" placeholder="e.g., Country, Classical" value="{{join .Template.ExcludeGenres}}">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Minimum Rating (0-10)</label>
+                  <input class="form-input" type="number" name="minRating" placeholder="Any" min="0" max="10" step="0.1" value="{{if .Template.MinRating}}{{.Template.MinRating}}{{end}}">
+                </div>
+                {{end}}
+              </div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div class="edit-template-actions">
+        <button type="submit" class="btn-save">Save Changes</button>
+        <button type="button" class="btn-cancel" onclick="document.getElementById('modal-root').innerHTML=''">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}

@@ -1,0 +1,40 @@
+{{define "content"}}
+<link rel="stylesheet" href="/static/css/pages/CrossImportPage.css">
+<main class="cross-import-page">
+  <div class="cross-import-header">
+    <h1 class="cross-import-title">Export to YouTube</h1>
+    <p class="cross-import-description">Export your Plex playlists to YouTube</p>
+  </div>
+
+  <div class="cross-import-flow">
+    <div class="step-content" id="cross-import-step">
+      {{if not .HasServer}}
+      <div class="error-message">Select a Plex server and music library in setup before importing.</div>
+      {{else if not .TargetConnected}}
+      <div class="youtube-connect-container">
+        <h2 class="step-section-title">Connect to YouTube</h2>
+        <p class="cross-import-description" style="margin-bottom:1.5rem;">
+          Connect your YouTube account to export Plex playlists to YouTube.
+        </p>
+        <a class="btn btn-primary" href="/cross-import/oauth/youtube">Connect YouTube</a>
+      </div>
+      {{else}}
+      <div id="oauth-services" class="cross-import-connected-service" hx-get="/cross-import/oauth/services" hx-trigger="load" hx-swap="innerHTML"></div>
+      <h2 class="step-section-title">Choose a playlist</h2>
+      <div id="cross-import-playlists" hx-get="/cross-import/playlists" hx-trigger="load" hx-swap="innerHTML">
+        <div class="loading-container">
+          <div class="loading-spinner"></div>
+          <span class="loading-text">Loading playlists…</span>
+        </div>
+      </div>
+      <div id="cross-import-progress"></div>
+      {{end}}
+    </div>
+  </div>
+
+  <section class="cross-import-history-section">
+    <h2 class="step-section-title">Import History</h2>
+    <div id="cross-import-history" hx-get="/cross-import/history" hx-trigger="load" hx-swap="innerHTML"></div>
+  </section>
+</main>
+{{end}}

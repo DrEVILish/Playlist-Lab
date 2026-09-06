@@ -1,0 +1,28 @@
+.footer {
+  background-color: var(--background);
+  border-top: 1px solid var(--border);
+  padding: 0.625rem 0;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.footer-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.footer-text {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+/* On mobile this lives at the bottom of the slide-out menu instead
+   (MobileNav), so the page-level copy is dropped. */
+@media (max-width: 768px) {
+  .layout > .footer { display: none; }
+}

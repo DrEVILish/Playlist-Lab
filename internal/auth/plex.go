@@ -327,3 +327,35 @@ func (c *PlexClient) GetFriends(authToken string) ([]int, error) {
 	}
 	return ids, nil
 }
+
+// SwitchToManagedUser obtains a Plex Home managed user's own auth token via
+// the account-level switch endpoint - requires the Plex Home owner's
+// (admin's) token.
+func (c *PlexClient) SwitchToManagedUser(adminToken, plexHomeUserID string) (string, error) {
+	req, err := http.NewRequest(http.MethodPost, plexAPIBase+"/home/users/"+plexHomeUserID+"/switch", nil)
+	if err != nil {
+		return "", err
+	}
+	c.headers(req, adminToken)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to obtain token for Plex Home user %s: %w", plexHomeUserID, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		return "", fmt.Errorf("invalid or expired Plex token")
+	}
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("failed to obtain token for Plex Home user %s: status %d", plexHomeUserID, resp.StatusCode)
+	}
+	var data struct {
+		AuthToken string `json:"authToken"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return "", err
+	}
+	if data.AuthToken == "" {
+		return "", fmt.Errorf("failed to obtain token for Plex Home user %s", plexHomeUserID)
+	}
+	return data.AuthToken, nil
+}

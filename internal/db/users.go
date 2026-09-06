@@ -90,6 +90,26 @@ func GetUserCount(sqlDB *sql.DB) (int, error) {
 	return count, err
 }
 
+// GetAdminUserIDs lists every admin, for server-wide notices (e.g. a failed
+// Deemix ARL check) that belong to whoever administers the instance rather
+// than whichever user happens to be logged in when it's detected.
+func GetAdminUserIDs(sqlDB *sql.DB) ([]int64, error) {
+	rows, err := sqlDB.Query("SELECT user_id FROM admin_users")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 func IsAdmin(sqlDB *sql.DB, userID int64) (bool, error) {
 	var exists int
 	err := sqlDB.QueryRow("SELECT 1 FROM admin_users WHERE user_id = ?", userID).Scan(&exists)
@@ -104,6 +124,13 @@ func AddAdmin(sqlDB *sql.DB, userID int64) error {
 	return err
 }
 
+// RemoveAdmin demotes a user, the inverse of AddAdmin - used by the admin
+// Users tab's "revoke admin" action.
+func RemoveAdmin(sqlDB *sql.DB, userID int64) error {
+	_, err := sqlDB.Exec("DELETE FROM admin_users WHERE user_id = ?", userID)
+	return err
+}
+
 func EnableUser(sqlDB *sql.DB, userID int64) error {
 	_, err := sqlDB.Exec("UPDATE users SET is_enabled = 1 WHERE id = ?", userID)
 	return err
@@ -111,5 +138,51 @@ func EnableUser(sqlDB *sql.DB, userID int64) error {
 
 func DisableUser(sqlDB *sql.DB, userID int64) error {
 	_, err := sqlDB.Exec("UPDATE users SET is_enabled = 0 WHERE id = ?", userID)
+	return err
+}
+
+// AdminUserRow is one row of the admin Users table: a User plus the
+// admin/server-config flags that table needs, which plain User doesn't carry.
+type AdminUserRow struct {
+	User
+	LastLogin int64
+	IsAdmin   bool
+	HasServer bool
+}
+
+// GetAllUsers lists every user for the admin Users tab, newest first.
+// Mirrors admin.ts's GET /api/admin/users (db.getAllUsers + per-row
+// isAdmin/isUserEnabled/getUserServer lookups collapsed into one query).
+func GetAllUsers(sqlDB *sql.DB) ([]AdminUserRow, error) {
+	rows, err := sqlDB.Query(
+		`SELECT u.id, u.plex_user_id, u.plex_username, u.plex_thumb, u.last_login, u.is_enabled,
+		        EXISTS(SELECT 1 FROM admin_users a WHERE a.user_id = u.id),
+		        EXISTS(SELECT 1 FROM user_servers s WHERE s.user_id = u.id)
+		 FROM users u ORDER BY u.id ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []AdminUserRow
+	for rows.Next() {
+		var u AdminUserRow
+		var isEnabled, isAdmin, hasServer int
+		if err := rows.Scan(&u.ID, &u.PlexUserID, &u.PlexUsername, &u.PlexThumb, &u.LastLogin, &isEnabled, &isAdmin, &hasServer); err != nil {
+			return nil, err
+		}
+		u.IsEnabled = isEnabled != 0
+		u.IsAdmin = isAdmin != 0
+		u.HasServer = hasServer != 0
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// DeleteUser removes a user and every row that references them - every
+// referencing table's foreign key is declared ON DELETE CASCADE, so one
+// DELETE here is enough (mirrors database.ts's deleteUser).
+func DeleteUser(sqlDB *sql.DB, userID int64) error {
+	_, err := sqlDB.Exec("DELETE FROM users WHERE id = ?", userID)
 	return err
 }

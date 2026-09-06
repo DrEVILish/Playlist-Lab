@@ -1,0 +1,23 @@
+{{define "partials/cross_import_candidates.html"}}
+{{if not .Candidates}}
+<p style="color:var(--text-secondary);font-size:0.875rem;margin-top:0.5rem;">No candidates found.</p>
+{{else}}
+<div style="display:flex;flex-direction:column;gap:0.375rem;margin-top:0.5rem;">
+  {{range .Candidates}}
+  <div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0.625rem;background:var(--background);border:1px solid var(--border);border-radius:var(--radius-md);">
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:0.875rem;font-weight:500;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{.TargetTitle}}</div>
+      <div style="font-size:0.8rem;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{.TargetArtist}}</div>
+    </div>
+    <span class="confidence-badge {{if ge .Confidence 80.0}}confidence-high{{else if ge .Confidence 50.0}}confidence-medium{{else}}confidence-low{{end}}">{{printf "%.0f" .Confidence}}%</span>
+    <form hx-post="/cross-import/review/{{$.SessionID}}/track/{{$.Index}}/select" hx-target="#cross-import-match-status" hx-swap="outerHTML">
+      <input type="hidden" name="targetTrackId" value="{{.TargetTrackID}}">
+      <input type="hidden" name="targetTitle" value="{{.TargetTitle}}">
+      <input type="hidden" name="targetArtist" value="{{.TargetArtist}}">
+      <button type="submit" class="btn btn-primary btn-small">Use this</button>
+    </form>
+  </div>
+  {{end}}
+</div>
+{{end}}
+{{end}}

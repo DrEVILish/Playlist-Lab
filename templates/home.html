@@ -1,30 +1,173 @@
 {{define "content"}}
-<main class="home">
-  <header>
-    <h1>Playlist Lab</h1>
-    <form hx-post="/auth/logout"><button type="submit">Log out</button></form>
-  </header>
+<link rel="stylesheet" href="/static/css/pages/PlaylistsPage.css">
+<div class="page-container">
+  <div class="playlists-stats">
+    <div class="playlists-stat">
+      <span class="playlists-stat-value">{{.TotalPlaylists}}</span>
+      <span class="playlists-stat-label">Playlists</span>
+    </div>
+    <div class="playlists-stat">
+      <span class="playlists-stat-value">{{.TotalScheduled}}</span>
+      <span class="playlists-stat-label">Scheduled</span>
+    </div>
+    <div class="playlists-stat{{if .TotalMissing}} warn{{end}}">
+      <span class="playlists-stat-value">{{.TotalMissing}}</span>
+      <span class="playlists-stat-label">Missing Tracks</span>
+    </div>
+    <div class="playlists-stat{{if .TotalAttention}} warn{{end}}">
+      <span class="playlists-stat-value">{{.TotalAttention}}</span>
+      <span class="playlists-stat-label">Needs Attention</span>
+    </div>
+  </div>
 
   {{if .PlexError}}
-    <p class="error">Couldn't reach your Plex server. Check your connection and refresh.</p>
-  {{else if not .Playlists}}
-    <p>No playlists found on your server yet.</p>
+    <p class="error-message">Couldn't reach your Plex server. Check your connection and refresh.</p>
   {{else}}
-  <table>
-    <thead><tr><th>Name</th><th>Source</th><th>Tracks</th><th></th></tr></thead>
-    <tbody>
-      {{range .Playlists}}
-      <tr>
-        <td><a href="/playlists/{{.PlexID}}">{{.Name}}</a></td>
-        <td>{{.Source}}</td>
-        <td>{{.TrackCount}}</td>
-        <td>
-          <button hx-delete="/playlists/{{.PlexID}}" hx-confirm="Delete this playlist from Plex?">Delete</button>
-        </td>
-      </tr>
-      {{end}}
-    </tbody>
-  </table>
-  {{end}}
-</main>
+  <!-- Filters ride the same query-string round trip as the column sort
+       (this page renders server-side per request), so they need no client
+       state: each control is a plain GET form submitting to "/". -->
+  <form class="playlists-filters" method="get" action="/">
+    {{if .Sort}}<input type="hidden" name="sort" value="{{.Sort}}">{{end}}
+    {{if .Dir}}<input type="hidden" name="dir" value="{{.Dir}}">{{end}}
+    <input type="search" name="q" value="{{.Filter.Search}}" placeholder="Search playlists..." class="form-input playlists-filter-search" aria-label="Search playlists">
+    <select name="fSource" class="form-input" aria-label="Filter by source">
+      <option value="">All sources</option>
+      {{range .Sources}}<option value="{{.}}"{{if eq . $.Filter.Source}} selected{{end}}>{{.}}</option>{{end}}
+    </select>
+    <select name="fMissing" class="form-input" aria-label="Filter by missing tracks">
+      <option value="">Any missing</option>
+      <option value="has"{{if eq .Filter.Missing "has"}} selected{{end}}>Has missing tracks</option>
+      <option value="none"{{if eq .Filter.Missing "none"}} selected{{end}}>No missing tracks</option>
+    </select>
+    <select name="fSchedule" class="form-input" aria-label="Filter by schedule">
+      <option value="">Any schedule</option>
+      <option value="on"{{if eq .Filter.Schedule "on"}} selected{{end}}>Scheduled</option>
+      <option value="off"{{if eq .Filter.Schedule "off"}} selected{{end}}>Not scheduled</option>
+    </select>
+    <button type="submit" class="btn btn-secondary btn-small">Apply</button>
+    {{if .Filter.Active}}<a class="btn btn-secondary btn-small" href="/">Clear</a>{{end}}
+  </form>
+
+  {{if not .Playlists}}
+    <div style="text-align:center;padding:3rem;color:var(--text-secondary)">
+      {{if .Filter.Active}}No playlists match these filters.{{else}}No playlists found on your server yet.{{end}}
+    </div>
+  {{else}}
+  <!-- Row checkboxes, the bulk bar, and the table share one <form> so a
+       native submit just carries every checked "id" along - no JS state
+       needed to track a selection. The bar's visibility is a pure CSS
+       :has() rule (chrome-interactions.css), the same technique as the
+       mobile-nav checkbox hack elsewhere in this codebase. -->
+  <form method="post" action="/playlists/bulk-delete">
+    <div class="bulk-actions-bar">
+      <span class="bulk-actions-count">Selected</span>
+      <button type="submit" formaction="/backup/export" formmethod="get" class="btn btn-secondary btn-small">Backup Selected</button>
+      <button type="submit" class="btn btn-secondary btn-small" style="color:var(--error)" onclick="return confirm('Delete the selected playlist(s) from Plex? This cannot be undone.')">Delete Selected</button>
+    </div>
+    <div class="playlists-table-container">
+    <table class="playlists-table">
+      <thead>
+        <tr>
+          <th class="col-select"><input type="checkbox" id="select-all" aria-label="Select all playlists"></th>
+          <th class="col-name"><span class="th-label">Playlist</span></th>
+          <th class="sortable"><a href="{{sortHref "source" $.Sort $.Dir}}"><span class="th-label">Source</span> <span class="sort-arrow">{{sortArrow "source" $.Sort $.Dir}}</span></a></th>
+          <th class="sortable"><a href="{{sortHref "tracks" $.Sort $.Dir}}"><span class="th-label">Tracks</span> <span class="sort-arrow">{{sortArrow "tracks" $.Sort $.Dir}}</span></a></th>
+          <th class="sortable"><a href="{{sortHref "duration" $.Sort $.Dir}}"><span class="th-label">Duration</span> <span class="sort-arrow">{{sortArrow "duration" $.Sort $.Dir}}</span></a></th>
+          <th class="sortable"><a href="{{sortHref "missing" $.Sort $.Dir}}"><span class="th-label">Missing Tracks</span> <span class="sort-arrow">{{sortArrow "missing" $.Sort $.Dir}}</span></a></th>
+          <th><span class="th-label">Schedule</span></th>
+          <th><span class="th-label">Next Run</span></th>
+          <th><span class="th-label">Last Run</span></th>
+          <th class="sortable"><a href="{{sortHref "dateAdded" $.Sort $.Dir}}"><span class="th-label">Date Added</span> <span class="sort-arrow">{{sortArrow "dateAdded" $.Sort $.Dir}}</span></a></th>
+          <th class="col-actions"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Playlists}}
+        <tr{{if .NeedsAttention}} class="row-attention"{{end}}>
+          <td class="col-select"><input type="checkbox" name="id" value="{{.PlexID}}" class="row-select" aria-label="Select {{.Name}}"></td>
+          <td class="playlist-name-cell">
+            <div class="playlist-cover">{{if .CoverURL}}<img src="{{.CoverURL}}" alt="" loading="lazy">{{end}}</div>
+            <!-- The real table renders the name as a plain <span> (see
+                 PlaylistsPage.tsx); as an <a> it picks up the global blue
+                 underlined link styling and stops matching. Navigation to the
+                 track editor is the row's Edit icon, same as upstream. -->
+            <span class="playlist-name">{{.Name}}</span>
+          </td>
+          <td>
+            {{if eq .Source "plex"}}<span class="playlist-source-label">—</span>
+            {{else if .SourceURL}}<a href="{{.SourceURL}}" target="_blank" rel="noopener noreferrer" class="playlist-source-link">{{.Source}} ↗</a>
+            {{else}}<span class="playlist-source-label">{{.Source}}</span>{{end}}
+          </td>
+          <td>{{.TrackCount}}</td>
+          <td>{{formatDuration .Duration}}</td>
+          <td>
+            {{if .MissingCount}}<span class="badge-button warn">{{.MissingCount}}</span>{{else if .DBID}}0{{else}}—{{end}}
+          </td>
+          <td>
+            {{if not .DBID}}—
+            {{else if .ScheduleID}}<span class="badge-button{{if .ScheduleFailed}} warn{{end}}" title="Next run">{{if .NextRun}}{{.NextRun}}{{else}}scheduled{{end}}</span>
+            {{else}}<span style="color:var(--text-secondary)">off</span>{{end}}
+          </td>
+          <td>{{if .NextRun}}{{.NextRun}}{{else}}—{{end}}</td>
+          <td>
+            {{if .LastRun}}<span{{if eq .LastRunStatus "failed"}} class="badge-button warn"{{end}} title="{{.LastRunStatus}}">{{dateFromUnix .LastRun}}</span>
+            {{else}}—{{end}}
+          </td>
+          <td>{{if .DBID}}{{dateFromUnix .CreatedAt}}{{else}}—{{end}}</td>
+          <!-- .icon-btn is a 26x26 icon box (PlaylistsPage.css): it holds an
+               SVG, not a text label - text overflows and collides. Icon paths
+               are copied from apps/web/src/components/icons.tsx verbatim. -->
+          <td class="row-actions">
+            <a class="icon-btn" href="/playlists/{{.PlexID}}" title="Edit tracks" aria-label="Edit tracks in {{.Name}}">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </a>
+            {{if .DBID}}
+            <button type="button" class="icon-btn" hx-get="/playlists/{{.PlexID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML" title="{{if .ScheduleID}}Manage schedule{{else}}Create schedule{{end}}" aria-label="Schedule {{.Name}}">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </button>
+            {{if .ScheduleID}}
+            <!-- Reimport ("re-fetch from source now") only reaches
+                 scheduler.Run, which needs a real schedules row for its
+                 execution-history bookkeeping - so this only shows when one
+                 already exists (row.ScheduleID != 0), same restriction
+                 PlaylistsPage.tsx applies via isReimportable(), just enforced
+                 by data availability here instead of a source-name allowlist. -->
+            <button type="button" class="icon-btn" hx-post="/schedules/{{.ScheduleID}}/run" hx-confirm="Re-fetch &quot;{{.Name}}&quot; from its source now?" title="Re-fetch this playlist from its original source now" aria-label="Re-import {{.Name}} from its source">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            </button>
+            {{end}}
+            <!-- /backup/export keys its "id" query params off the Plex
+                 rating key (see backup.go's export(), matched against
+                 p.RatingKey), not the internal DB row id - .PlexID here,
+                 not .DBID. -->
+            <a class="icon-btn" href="/backup/export?id={{.PlexID}}" title="Download a JSON backup of this playlist" aria-label="Download a backup of {{.Name}}">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+            </a>
+            <button type="button" class="icon-btn" hx-post="/playlists/{{.PlexID}}/clone" hx-confirm="Duplicate &quot;{{.Name}}&quot;?" title="Duplicate this playlist" aria-label="Duplicate {{.Name}}">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
+            {{end}}
+            <button type="button" class="icon-btn icon-btn-danger" hx-delete="/playlists/{{.PlexID}}" hx-confirm="Delete &quot;{{.Name}}&quot; from Plex? This cannot be undone." title="Delete from Plex" aria-label="Delete {{.Name}} from Plex">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+            </button>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    </div>
+  </form>
+  <!-- "Select all" toggling every row checkbox has no pure-CSS equivalent
+       (unlike the show/hide toggles elsewhere in this app, which are all
+       :checked/:has() tricks) - this is the one bit of real selection logic
+       that needs a script, same exception layout.html already makes for
+       Escape-to-close-modal. -->
+  <script>
+    document.getElementById('select-all')?.addEventListener('change', function () {
+      document.querySelectorAll('input.row-select').forEach(function (cb) { cb.checked = this.checked; }.bind(this));
+    });
+  </script>
+  {{end}}{{/* not .Playlists */}}
+  {{end}}{{/* .PlexError */}}
+</div>
 {{end}}

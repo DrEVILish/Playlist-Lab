@@ -7,9 +7,11 @@
 package plex
 
 import (
+	"bytes"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -69,8 +71,9 @@ type Playlist struct {
 }
 
 type media struct {
-	AudioCodec string `json:"audioCodec"`
-	Bitrate    int    `json:"bitrate"`
+	AudioCodec      string `json:"audioCodec"`
+	Bitrate         int    `json:"bitrate"`
+	AudioSampleRate int    `json:"audioSampleRate"`
 }
 
 type Track struct {
@@ -79,18 +82,51 @@ type Track struct {
 	// it entirely for a smart (dynamically-generated) playlist's items -
 	// int rather than string because a plain string field fails to
 	// unmarshal a numeric JSON value.
-	PlaylistItemID   int     `json:"playlistItemID"`
-	Title            string  `json:"title"`
-	OriginalTitle    string  `json:"originalTitle"`
-	GrandparentKey   string  `json:"grandparentKey"`
-	ParentTitle      string  `json:"parentTitle"`
-	GrandparentTitle string  `json:"grandparentTitle"`
-	Duration         int64   `json:"duration"`
-	LibrarySectionID int     `json:"librarySectionID"`
-	Year             int     `json:"year"`
-	ParentYear       int     `json:"parentYear"`
-	Key              string  `json:"key"`
-	Media            []media `json:"Media"`
+	PlaylistItemID       int     `json:"playlistItemID"`
+	Title                string  `json:"title"`
+	OriginalTitle        string  `json:"originalTitle"`
+	GrandparentKey       string  `json:"grandparentKey"`
+	GrandparentRatingKey string  `json:"grandparentRatingKey"`
+	ParentTitle          string  `json:"parentTitle"`
+	GrandparentTitle     string  `json:"grandparentTitle"`
+	Duration             int64   `json:"duration"`
+	LibrarySectionID     int     `json:"librarySectionID"`
+	Year                 int     `json:"year"`
+	ParentYear           int     `json:"parentYear"`
+	Key                  string  `json:"key"`
+	Media                []media `json:"Media"`
+
+	// Fields used by the discovery/mix-seeding queries (getRecentTracks,
+	// getStalePlayedTracks, getTracksWithAdvancedFilters, etc. - see
+	// discovery.go) - not needed by the plain playlist CRUD paths above,
+	// which is why they weren't on this struct originally.
+	LastViewedAt  int64          `json:"lastViewedAt"`
+	ViewCount     int            `json:"viewCount"`
+	SkipCount     int            `json:"skipCount"`
+	AddedAt       int64          `json:"addedAt"`
+	Index         int            `json:"index"`
+	ParentIndex   int            `json:"parentIndex"`
+	UserRating    float64        `json:"userRating"`
+	ParentStudio  string         `json:"parentStudio"`
+	RatingCount   int            `json:"ratingCount"`
+	Genre         []Tag          `json:"Genre"`
+	Mood          []Tag          `json:"Mood"`
+	Style         []Tag          `json:"Style"`
+	Collection    []Tag          `json:"Collection"`
+	MusicAnalysis *MusicAnalysis `json:"musicAnalysis,omitempty"`
+}
+
+// Tag is Plex's shape for a Genre/Mood/Style/Collection tag entry.
+type Tag struct {
+	Tag string `json:"tag"`
+}
+
+// MusicAnalysis is Plex's sonic-analysis payload, present on a track when
+// its "nearest" (sonic similarity) data has been computed.
+type MusicAnalysis struct {
+	Tempo        float64 `json:"tempo"`
+	Energy       float64 `json:"energy"`
+	Danceability float64 `json:"danceability"`
 }
 
 // DisplayArtist prefers the track-level artist (originalTitle) over the
@@ -122,13 +158,17 @@ type mediaContainer struct {
 			} `json:"Location"`
 		} `json:"Directory"`
 		Metadata  []json.RawMessage `json:"Metadata"`
-		Hub       []hub             `json:"Hub"`
+		Hub       []Hub             `json:"Hub"`
 		TotalSize int               `json:"totalSize"`
 	} `json:"MediaContainer"`
 }
 
-type hub struct {
+// Hub is one of Plex's "Related Hubs" / search-hub / popular-tracks
+// containers - a titled, typed group of Metadata items (e.g. "Popular",
+// "Fans Also Like", the track/album hubs from /hubs/search).
+type Hub struct {
 	Type     string            `json:"type"`
+	Title    string            `json:"title"`
 	Metadata []json.RawMessage `json:"Metadata"`
 }
 
@@ -149,6 +189,22 @@ type Client struct {
 	searchCache       map[string]cacheEntry[[]Track]
 	artistLookupCache map[string]cacheEntry[[]Track]
 	artistTracksCache map[string]cacheEntry[[]Track]
+}
+
+// MediaURL turns a Plex-relative media path (e.g. a playlist's Composite
+// thumb) into a directly loadable, authenticated URL against this client's
+// server. The React app instead proxies these through /api/proxy/image
+// because a browser can't attach X-Plex-Token itself; the Go template
+// renders server-side, so it can just embed the token in the URL directly.
+func (c *Client) MediaURL(path string) string {
+	if path == "" {
+		return ""
+	}
+	sep := "?"
+	if strings.Contains(path, "?") {
+		sep = "&"
+	}
+	return fmt.Sprintf("%s%s%sX-Plex-Token=%s", c.ServerURL, path, sep, url.QueryEscape(c.Token))
 }
 
 type cacheEntry[T any] struct {
@@ -432,6 +488,48 @@ func (c *Client) MovePlaylistItem(playlistID, playlistItemID, afterItemID string
 func (c *Client) DeletePlaylist(playlistID string) error {
 	_, _, err := c.mutate(http.MethodDelete, "/playlists/"+url.PathEscape(playlistID))
 	return err
+}
+
+// UploadPlaylistPoster downloads imageURL and uploads it as a playlist's
+// poster, ports plex.ts's uploadPlaylistPoster. Non-fatal by convention -
+// callers log and continue on error, the playlist still works without one.
+func (c *Client) UploadPlaylistPoster(playlistID, imageURL string) error {
+	imgReq, err := http.NewRequest(http.MethodGet, imageURL, nil)
+	if err != nil {
+		return err
+	}
+	imgReq.Header.Set("User-Agent", "Playlist Lab/1.0")
+	imgResp, err := c.http.Do(imgReq)
+	if err != nil {
+		return err
+	}
+	defer imgResp.Body.Close()
+	if imgResp.StatusCode >= 400 {
+		return fmt.Errorf("failed to download poster image: status %d", imgResp.StatusCode)
+	}
+	body, err := io.ReadAll(imgResp.Body)
+	if err != nil {
+		return err
+	}
+	contentType := imgResp.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "image/jpeg"
+	}
+
+	req, err := http.NewRequest(http.MethodPost, c.ServerURL+"/library/metadata/"+url.PathEscape(playlistID)+"/posters", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", contentType)
+	resp, err := c.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("failed to upload poster: status %d", resp.StatusCode)
+	}
+	return nil
 }
 
 // GetTrackDetails fetches a single track's full metadata by ratingKey, used

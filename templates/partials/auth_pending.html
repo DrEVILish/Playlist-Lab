@@ -1,7 +1,13 @@
 {{define "partials/auth_pending.html"}}
-<div hx-post="/auth/poll" hx-vals='{"pinId": "{{.PinID}}", "code": "{{.Code}}"}' hx-trigger="load delay:2s" hx-target="#auth-status" hx-swap="innerHTML">
-  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
-  <p>Waiting for sign-in... <a href="{{.AuthURL}}" target="_blank" rel="noopener">Open Plex sign-in</a> if it didn't open automatically.</p>
+<div class="login-pin-box" hx-post="/auth/poll" hx-vals='{"pinId": "{{.PinID}}", "code": "{{.Code}}"}' hx-trigger="load delay:2s" hx-target="#auth-status" hx-swap="innerHTML">
+  <div class="login-pin-spinner"></div>
+  {{if .Error}}<p class="login-error">{{.Error}}</p>{{end}}
+  <p class="login-pin-text">A sign-in window has opened. Please sign in to Plex and authorize this app.</p>
+  <p class="login-pin-code">{{.Code}}</p>
+  <p class="login-pin-hint">Enter this code if prompted</p>
+  <p class="login-pin-info">
+    No sign-in window? <a href="{{.AuthURL}}" target="_blank" rel="noopener">Open the Plex sign-in page</a>
+  </p>
 </div>
 <script>window.open("{{.AuthURL}}", "_blank", "noopener");</script>
 {{end}}

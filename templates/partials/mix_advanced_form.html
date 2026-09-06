@@ -1,0 +1,130 @@
+{{/* Advanced mix settings modal, ported from components/AdvancedMixModal.tsx.
+     Rendered via GET /mixes/advanced-form/{mixType} into #modal-root; posts to
+     the existing /mixes/generate route like every other mix form on this page.
+
+     Deferred vs the React version: AdvancedMixModal.tsx does live artist/genre
+     search-as-you-type against /api/search/artists, which this Go server has
+     no route for. Instead this form takes a plain "Artist Name" text field and
+     handlers/mixes.go resolves it server-side via plex.Client.SearchArtist
+     (exact-ish title match) - same end result (a seed artist key), no JS
+     autocomplete. The "Schedule"/onAddToSchedule button is also deferred: this
+     backend has no mix-scheduling feature (only mix_templates, a separate
+     saved-preset feature owned by another page). */}}
+{{define "partials/mix_advanced_form.html"}}
+<div class="advanced-mix-overlay" onclick="if(event.target===this)document.getElementById('modal-root').innerHTML=''">
+  <div class="advanced-mix-modal">
+    <div class="advanced-mix-header">
+      <h2 class="advanced-mix-title">{{.Title}}</h2>
+      <button type="button" class="advanced-mix-close" onclick="document.getElementById('modal-root').innerHTML=''">&times;</button>
+    </div>
+
+    <form hx-post="/mixes/generate" hx-target="#notifications" hx-swap="innerHTML" hx-on::after-request="document.getElementById('modal-root').innerHTML=''">
+      <input type="hidden" name="mixType" value="{{.MixType}}">
+      <div class="advanced-mix-content">
+        <div class="form-group">
+          <label class="form-label">Playlist Name</label>
+          <input type="text" class="form-input" name="playlistName" value="{{.DefaultName}}">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Number of Tracks</label>
+          <input type="range" class="track-slider" name="trackCount" min="10" max="200" step="10" value="50">
+        </div>
+
+        {{if eq .MixType "artist-discovery"}}
+        <div class="form-group">
+          <label class="form-label">Artist Name</label>
+          <input type="text" class="form-input" name="seedArtistName" placeholder="e.g. Radiohead" required>
+          <p class="form-hint">Matched against your library by name</p>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tracks Per Artist</label>
+          <input type="range" class="track-slider" name="tracksPerArtist" min="1" max="10" value="3">
+        </div>
+        {{end}}
+
+        {{if eq .MixType "mood"}}
+        <div class="form-group">
+          <label class="form-label">Select Moods</label>
+          <div class="tag-grid">
+            {{range .Moods}}
+            <label class="tag-button"><input type="checkbox" name="moods" value="{{.}}" style="display:none">{{.}}</label>
+            {{end}}
+          </div>
+          <p class="form-hint">Click to select one or more moods</p>
+        </div>
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" name="useSonicAnalysis" value="true">
+            <span>Use Sonic Analysis (more accurate mood matching)</span>
+          </label>
+        </div>
+        {{end}}
+
+        {{if eq .MixType "era"}}
+        <div class="form-group">
+          <label class="form-label">Year Range</label>
+          <div class="year-range-inputs">
+            <div>
+              <label class="form-label-small">Start Year</label>
+              <input type="number" class="form-input" name="startYear" min="1900" max="2100" value="1970">
+            </div>
+            <div>
+              <label class="form-label-small">End Year</label>
+              <input type="number" class="form-input" name="endYear" min="1900" max="2100" value="1979">
+            </div>
+          </div>
+        </div>
+        {{end}}
+
+        {{if eq .MixType "genre-evolution"}}
+        <div class="form-group">
+          <label class="form-label">Select Genre</label>
+          <select class="form-select" name="genre" required>
+            <option value="">Choose a genre...</option>
+            {{range .Genres}}<option value="{{.}}">{{.}}</option>{{end}}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tracks Per Decade</label>
+          <input type="range" class="track-slider" name="tracksPerDecade" min="1" max="15" value="5">
+        </div>
+        {{end}}
+
+        {{if eq .MixType "artist-journey"}}
+        <div class="form-group">
+          <label class="form-label">Artist Name</label>
+          <input type="text" class="form-input" name="artistName" placeholder="e.g. Radiohead" required>
+          <p class="form-hint">Matched against your library by name</p>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tracks Per Album</label>
+          <input type="range" class="track-slider" name="tracksPerAlbum" min="1" max="10" value="3">
+        </div>
+        {{end}}
+
+        {{if eq .MixType "genre-blend"}}
+        <div class="form-group">
+          <label class="form-label">Select Genres (minimum 2)</label>
+          <div class="tag-grid">
+            {{range .Genres}}
+            <label class="tag-button"><input type="checkbox" name="genres" value="{{.}}" style="display:none">{{.}}</label>
+            {{end}}
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Minimum Genres Per Track</label>
+          <input type="range" class="track-slider" name="minGenres" min="2" max="5" value="2">
+          <p class="form-hint">Tracks must have at least this many of the selected genres</p>
+        </div>
+        {{end}}
+      </div>
+
+      <div class="advanced-mix-actions">
+        <button type="submit" class="btn-generate">Generate Mix</button>
+        <button type="button" class="btn-cancel" onclick="document.getElementById('modal-root').innerHTML=''">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}

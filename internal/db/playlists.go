@@ -74,6 +74,14 @@ func scanPlaylist(row *sql.Row) (*Playlist, error) {
 	return &p, nil
 }
 
+// UpdatePlaylistPlexID sets the real Plex playlist id once one has been
+// created for a row that started out as a "pending-..." placeholder (see
+// matching.InsertMatchedTrackIntoPlaylist).
+func UpdatePlaylistPlexID(sqlDB *sql.DB, id int64, plexPlaylistID string) error {
+	_, err := sqlDB.Exec("UPDATE playlists SET plex_playlist_id = ?, updated_at = ? WHERE id = ?", plexPlaylistID, time.Now().Unix(), id)
+	return err
+}
+
 func TouchPlaylist(sqlDB *sql.DB, id int64) error {
 	_, err := sqlDB.Exec("UPDATE playlists SET updated_at = ? WHERE id = ?", time.Now().Unix(), id)
 	return err
@@ -82,4 +90,12 @@ func TouchPlaylist(sqlDB *sql.DB, id int64) error {
 func DeletePlaylistRow(sqlDB *sql.DB, id int64) error {
 	_, err := sqlDB.Exec("DELETE FROM playlists WHERE id = ?", id)
 	return err
+}
+
+// GetPlaylistCount is the total-playlists-across-all-users figure for the
+// admin Stats tab (mirrors admin.ts's db.getPlaylistCount()).
+func GetPlaylistCount(sqlDB *sql.DB) (int, error) {
+	var count int
+	err := sqlDB.QueryRow("SELECT COUNT(*) FROM playlists").Scan(&count)
+	return count, err
 }

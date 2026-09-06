@@ -13,10 +13,31 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"github.com/drevilish/playlist-lab/internal/adapters"
+	"github.com/drevilish/playlist-lab/internal/adapters/amazon"
+	"github.com/drevilish/playlist-lab/internal/adapters/apple"
+	"github.com/drevilish/playlist-lab/internal/adapters/aria"
+	"github.com/drevilish/playlist-lab/internal/adapters/billboard"
+	"github.com/drevilish/playlist-lab/internal/adapters/deezer"
+	"github.com/drevilish/playlist-lab/internal/adapters/lastfmsource"
+	"github.com/drevilish/playlist-lab/internal/adapters/listenbrainz"
+	"github.com/drevilish/playlist-lab/internal/adapters/plex"
+	"github.com/drevilish/playlist-lab/internal/adapters/qobuz"
+	"github.com/drevilish/playlist-lab/internal/adapters/tidal"
+	"github.com/drevilish/playlist-lab/internal/adapters/youtube"
+	"github.com/drevilish/playlist-lab/internal/adapters/youtubeplain"
 	"github.com/drevilish/playlist-lab/internal/auth"
 	"github.com/drevilish/playlist-lab/internal/config"
 	"github.com/drevilish/playlist-lab/internal/db"
 	"github.com/drevilish/playlist-lab/internal/handlers"
+	"github.com/drevilish/playlist-lab/internal/services/actionqueue"
+	"github.com/drevilish/playlist-lab/internal/services/crossimport"
+	"github.com/drevilish/playlist-lab/internal/services/deemix"
+	"github.com/drevilish/playlist-lab/internal/services/jobs"
+	"github.com/drevilish/playlist-lab/internal/services/lidarr"
+	"github.com/drevilish/playlist-lab/internal/services/mixes"
+	"github.com/drevilish/playlist-lab/internal/services/notifications"
+	schedulerjob "github.com/drevilish/playlist-lab/internal/services/scheduler"
 	"github.com/drevilish/playlist-lab/internal/session"
 	"github.com/drevilish/playlist-lab/static"
 	"github.com/drevilish/playlist-lab/templates"
@@ -29,6 +50,9 @@ func main() {
 	if cfg.LogLevel == "debug" {
 		logLevel = slog.LevelDebug
 	}
+	// Log-file tee + admin log-viewer tab: deferred, same as the other
+	// admin-only server-wide config surfaces noted in handlers/admin.go's
+	// header comment - stdout/journal is enough for now.
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})))
 
 	sqlDB, err := db.Open(cfg.DatabasePath)
@@ -75,7 +99,127 @@ func main() {
 		Secure: secure, Tmpl: tmpl, BaseURL: cfg.PublicURL,
 	})
 	handlers.RegisterServers(r, mw, &handlers.ServersHandler{DB: sqlDB, Plex: plexClient, Tmpl: tmpl})
+	handlers.RegisterSettings(r, mw, &handlers.SettingsHandler{DB: sqlDB, Tmpl: tmpl})
 	handlers.RegisterPlaylists(r, mw, &handlers.PlaylistsHandler{DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl})
+	handlers.RegisterStatus(r, mw, &handlers.StatusHandler{DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl})
+	handlers.RegisterBackup(r, mw, &handlers.BackupHandler{DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl})
+	notificationStore := notifications.NewStore()
+	handlers.RegisterNotifications(r, mw, &handlers.NotificationsHandler{Store: notificationStore, Tmpl: tmpl})
+
+	actionQueue := actionqueue.New(notificationStore)
+	mixService := mixes.New()
+	handlers.RegisterMixes(r, mw, &handlers.MixesHandler{
+		DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue, Mixes: mixService,
+	})
+	handlers.RegisterMixTemplates(r, mw, &handlers.MixTemplatesHandler{
+		DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue, Mixes: mixService,
+	})
+
+	// Cross-import (Phase 6c) only ever exposes Plex as a source and
+	// YouTube as a target (see cross-import.ts's FILTER comments, ported
+	// verbatim rather than re-opened), and plain import (Phase 6e) has a
+	// Go SourceAdapter for deezer/listenbrainz/youtube (public playlist
+	// scraping) plus, as of Phase 5/5b, apple/tidal/amazon/qobuz (chromedp
+	// browser scrape - see adapters/{apple,tidal,amazon,qobuz}/source.go).
+	// Spotify's browser-scrape source (scrapeSpotifyWithBrowser) still
+	// isn't ported - left unregistered as a source rather than faked.
+	// Both handlers share one registry.
+	registry := adapters.NewRegistry()
+	registry.RegisterSource(plex.NewSource(sqlDB, plexClient))
+	registry.RegisterSource(deezer.NewSource())
+	registry.RegisterSource(listenbrainz.NewSource())
+	registry.RegisterSource(youtubeplain.NewSource(sqlDB, cfg.SessionSecret))
+	registry.RegisterSource(apple.NewSource())
+	registry.RegisterSource(tidal.NewSource())
+	registry.RegisterSource(amazon.NewSource())
+	registry.RegisterSource(qobuz.NewSource())
+	registry.RegisterSource(aria.NewSource())
+	registry.RegisterSource(billboard.NewSource())
+	registry.RegisterSource(lastfmsource.NewSource())
+	registry.RegisterTarget(youtube.NewTarget(sqlDB, cfg.SessionSecret, cfg.YouTubeClientID, cfg.YouTubeClientSecret, cfg.YouTubeRedirectURI))
+	handlers.RegisterCrossImport(r, mw, &handlers.CrossImportHandler{
+		DB: sqlDB, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue,
+		Registry: registry, Sessions: crossimport.NewStore(),
+	})
+	handlers.RegisterImport(r, mw, &handlers.ImportHandler{
+		DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue,
+		Registry: registry,
+	})
+	handlers.RegisterCharts(r, mw, &handlers.ChartsHandler{
+		DB: sqlDB, SessionSecret: cfg.SessionSecret,
+		SpotifyClientID: cfg.SpotifyClientID, SpotifyClientSecret: cfg.SpotifyClientSecret,
+	})
+
+	// Missing tracks + acquisition (Phase 6d): deemix (our local Deezer
+	// downloader) and Lidarr are both plain REST clients, wired the same way
+	// as every other plex-direct handler (playlists.go, mixes.go) rather
+	// than through the cross-import adapter registry, since neither is a
+	// cross-import source/target.
+	deemixService := deemix.New(deemix.Config{URL: cfg.DeemixURL, ARL: cfg.DeemixArl}, sqlDB, notificationStore)
+	lidarrService := lidarr.New(lidarr.Config{URL: cfg.LidarrURL, APIKey: cfg.LidarrAPIKey}, sqlDB, notificationStore)
+	handlers.RegisterMissing(r, mw, &handlers.MissingHandler{
+		DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue,
+		Deemix: deemixService, Lidarr: lidarrService,
+	})
+	handlers.RegisterAdmin(r, mw, &handlers.AdminHandler{
+		DB: sqlDB, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue, Deemix: deemixService,
+	})
+
+	// Scheduling (Phase 6f): playlist-refresh + mix-generation schedules,
+	// closing out the schedule-checker job deferred through Phase 4/5 (see
+	// scheduler.Deps below and jobs.RunScheduleChecker's registration).
+	schedulerDeps := schedulerjob.Deps{DB: sqlDB, Registry: registry, Mixes: mixService, ClientID: cfg.PlexClientID}
+	handlers.RegisterSchedules(r, mw, &handlers.SchedulesHandler{
+		DB: sqlDB, Tmpl: tmpl, Deps: schedulerDeps,
+	})
+
+	// deemix keeps downloading across a restart of this server, but the
+	// pollers watching those downloads - and the link back to the missing
+	// track each one was for - only lived in memory, so a restart left the
+	// arriving files with nothing to reconcile them. Pick them back up, and
+	// re-test the ARL now rather than waiting for the daily job, so an admin
+	// checking right after a restart sees a real answer immediately.
+	deemixService.ResumeDownloads()
+	go deemixService.CheckArlAndNotifyAdmins()
+
+	// Background jobs (Phase 4/5/6f).
+	scheduler := jobs.NewScheduler()
+	scheduler.Register(jobs.Config{
+		Name: "cache-cleanup", Spec: "0 3 * * 0", // 3:00 AM every Sunday
+		Handler: func() error { return jobs.RunCacheCleanup(sqlDB) },
+		Enabled: cfg.EnableCacheCleanup,
+	})
+	// Deezer charts + ARIA charts, cached for fast popular-playlist import -
+	// see jobs.RunDailyScraper's doc for which platforms this does NOT cover
+	// (and why).
+	scheduler.Register(jobs.Config{
+		Name: "daily-scraper", Spec: cfg.ScraperSchedule,
+		Handler: func() error { return jobs.RunDailyScraper(sqlDB) },
+		Enabled: cfg.EnableScraperJob,
+	})
+	// The Deezer ARL deemix logs in with expires every few months; checking
+	// it on a schedule (and notifying admins on failure) turns that from
+	// "downloads have been silently failing for a week" into something
+	// someone is actually told about. Deferred until now (Phase 4 left this
+	// job body unwritten) since it needed the Deemix integration this phase
+	// ports.
+	scheduler.Register(jobs.Config{
+		Name: "deemix-arl-check", Spec: cfg.DeemixArlCheckSchedule,
+		Handler: func() error { deemixService.CheckArlAndNotifyAdmins(); return nil },
+		Enabled: cfg.EnableDeemixArlCheck,
+	})
+	scheduler.Register(jobs.Config{
+		Name: "schedule-checker", Spec: cfg.ScheduleCheckerSchedule,
+		Handler: func() error { return jobs.RunScheduleChecker(schedulerDeps) },
+		Enabled: cfg.EnableScheduleChecker,
+	})
+	if cfg.IsProduction() || cfg.EnableJobs {
+		scheduler.Start()
+		defer scheduler.Stop()
+		slog.Info("background jobs started")
+	} else {
+		slog.Info("background jobs disabled in development mode")
+	}
 
 	addr := cfg.Host + ":" + cfg.Port
 	slog.Info("playlist-lab (go) listening", "addr", addr)

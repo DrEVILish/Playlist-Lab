@@ -9,16 +9,36 @@
 // yet and can be added to this struct when those land.
 package matching
 
-// Settings mirrors database/types.ts's MatchingSettings.
+import "encoding/json"
+
+// Settings mirrors database/types.ts's MatchingSettings. JSON tags match
+// the field names the Node server already stores in
+// user_settings.matching_settings, so SettingsFromJSON can unmarshal that
+// column directly without a translation layer.
 type Settings struct {
-	MinMatchScore          float64
-	StripParentheses       bool
-	StripBrackets          bool
-	UseFirstArtistOnly     bool
-	IgnoreFeaturedArtists  bool
-	FeaturedArtistPatterns []string
-	PreferNonCompilation   bool
-	VariousArtistsNames    []string
+	MinMatchScore          float64  `json:"minMatchScore"`
+	StripParentheses       bool     `json:"stripParentheses"`
+	StripBrackets          bool     `json:"stripBrackets"`
+	UseFirstArtistOnly     bool     `json:"useFirstArtistOnly"`
+	IgnoreFeaturedArtists  bool     `json:"ignoreFeaturedArtists"`
+	FeaturedArtistPatterns []string `json:"featuredArtistPatterns"`
+	PreferNonCompilation   bool     `json:"preferNonCompilation"`
+	VariousArtistsNames    []string `json:"variousArtistsNames"`
+}
+
+// SettingsFromJSON parses a user_settings.matching_settings JSON blob (as
+// returned by db.GetMatchingSettingsJSON), falling back to DefaultSettings
+// when raw is empty or fails to parse - matching database.ts's
+// getUserSettings().matching_settings || DEFAULT_MATCHING_SETTINGS pattern.
+func SettingsFromJSON(raw string) Settings {
+	settings := DefaultSettings()
+	if raw == "" {
+		return settings
+	}
+	if err := json.Unmarshal([]byte(raw), &settings); err != nil {
+		return DefaultSettings()
+	}
+	return settings
 }
 
 // DefaultSettings mirrors the Node server's DEFAULT_MATCHING_SETTINGS

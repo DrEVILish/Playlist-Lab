@@ -6,8 +6,80 @@ import (
 	"io/fs"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
+	"time"
 )
+
+// tmplFuncs are available to every page/partial template. "now" backs the
+// footer's copyright year - the only place a template needs the current
+// time - so a full FuncMap-per-caller isn't needed.
+var tmplFuncs = template.FuncMap{
+	"now": time.Now,
+	// percent backs the cross-import progress bar's width (current/total*100,
+	// 0 if total is 0) - the only place a template needs this ratio.
+	"percent": func(current, total int) int {
+		if total <= 0 {
+			return 0
+		}
+		return current * 100 / total
+	},
+	// add backs 1-based row numbers in list partials (e.g. cross-import's
+	// playlist list falling back to a plain index when there's no cover art).
+	"add": func(a, b int) int { return a + b },
+	// join/joinFloats back the mix-template edit form's comma-separated
+	// inputs (genres, moods, decades, ...) - the inverse of the handler's
+	// commaListToAny/commaListToFloats parsing on submit.
+	"join": func(items []string) string { return strings.Join(items, ", ") },
+	// dateFromUnix backs "Date Added" on the home page - unix seconds (0 for
+	// playlists never tracked through Playlist Lab) to a short date string.
+	"dateFromUnix": func(sec int64) string {
+		if sec == 0 {
+			return ""
+		}
+		return time.Unix(sec, 0).Format("Jan 2, 2006")
+	},
+	// formatDuration backs the Duration column - ms to "1h 23m"/"45m",
+	// matching PlaylistsPage.tsx's formatDuration.
+	"formatDuration": func(ms int64) string {
+		totalMinutes := ms / 60000
+		hours := totalMinutes / 60
+		minutes := totalMinutes % 60
+		if hours > 0 {
+			return fmt.Sprintf("%dh %dm", hours, minutes)
+		}
+		return fmt.Sprintf("%dm", minutes)
+	},
+	// sortHref backs the Playlists table's sortable column headers: clicking
+	// a header re-requests "/" sorted by that key, flipping direction if
+	// it's already the active sort (matching the React page's toggleSort,
+	// just as a server round-trip instead of client state).
+	"sortHref": func(key, curSort, curDir string) string {
+		dir := "asc"
+		if curSort == key && curDir == "asc" {
+			dir = "desc"
+		}
+		return "/?sort=" + key + "&dir=" + dir
+	},
+	// sortArrow shows the active sort column's direction, mirroring
+	// SortableHeader's ▲/▼ in PlaylistsPage.tsx.
+	"sortArrow": func(key, curSort, curDir string) string {
+		if curSort != key {
+			return ""
+		}
+		if curDir == "desc" {
+			return "▼"
+		}
+		return "▲"
+	},
+	"joinFloats": func(items []float64) string {
+		parts := make([]string, len(items))
+		for i, f := range items {
+			parts[i] = strconv.Itoa(int(f))
+		}
+		return strings.Join(parts, ", ")
+	},
+}
 
 // Templates loads the layout + per-page templates (each combined with the
 // shared "base" layout so every page gets consistent <head>/nav) and the
@@ -24,7 +96,7 @@ type Templates struct {
 // every templates/partials/*.html file into one combined set for fragment
 // responses.
 func LoadTemplates(fsys fs.FS) (*Templates, error) {
-	base, err := template.ParseFS(fsys, "layout.html")
+	base, err := template.New("layout.html").Funcs(tmplFuncs).ParseFS(fsys, "layout.html")
 	if err != nil {
 		return nil, fmt.Errorf("parsing layout: %w", err)
 	}
@@ -49,7 +121,7 @@ func LoadTemplates(fsys fs.FS) (*Templates, error) {
 		pages[name] = clone
 	}
 
-	partials, err := template.ParseFS(fsys, "partials/*.html")
+	partials, err := template.New("partials").Funcs(tmplFuncs).ParseFS(fsys, "partials/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("parsing partials: %w", err)
 	}

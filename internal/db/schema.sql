@@ -367,3 +367,13 @@ CREATE TABLE IF NOT EXISTS deemix_downloads (
 );
 
 CREATE INDEX IF NOT EXISTS idx_deemix_downloads_user_id ON deemix_downloads(user_id);
+
+-- Admin config table
+-- Simple key/value store for admin-editable, server-wide settings (Deemix
+-- ARL, Lidarr URL/API key) that the Node server instead persisted to a JSON
+-- config file - a table on the same already-open DB is less machinery than
+-- a second config file for the handful of values the Go admin page edits.
+CREATE TABLE IF NOT EXISTS admin_config (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);

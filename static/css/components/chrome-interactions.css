@@ -1,0 +1,45 @@
+/* Wiring for the plain-HTML/CSS replacements of React's useState-driven
+   open/close toggles in Header/MobileNav/NotificationCenter/HeaderActions.
+   Not present in the original app (which conditionally rendered instead of
+   hiding), so these rules live separately from the ported per-component
+   CSS files rather than editing them. */
+
+/* Mobile nav: checkbox-driven, see templates/layout.html. */
+.mobile-nav-checkbox { display: none; }
+.mobile-nav-checkbox:not(:checked) ~ .mobile-nav-overlay,
+.mobile-nav-checkbox:not(:checked) ~ .mobile-nav { display: none; }
+.mobile-nav-checkbox:checked ~ .mobile-nav-overlay { display: block; }
+.mobile-nav-checkbox:checked ~ .mobile-nav { display: flex; left: 0; }
+.mobile-nav-checkbox:checked ~ .mobile-nav-toggle { display: none; }
+label.mobile-nav-toggle { display: none; }
+@media (max-width: 768px) {
+  label.mobile-nav-toggle { display: block; }
+}
+
+/* Header actions / notification bell: native <details> disclosure instead
+   of a JS popover hook. Hide the default marker triangle and let the
+   existing .header-actions-popover/.notification-panel absolute
+   positioning show/hide via [open]. */
+details.header-actions-menu, details.notification-center { position: relative; }
+details.header-actions-menu > summary,
+details.notification-center > summary {
+  list-style: none;
+  cursor: pointer;
+}
+details.header-actions-menu > summary::-webkit-details-marker,
+details.notification-center > summary::-webkit-details-marker {
+  display: none;
+}
+details.header-actions-menu:not([open]) > .header-actions-popover,
+details.notification-center:not([open]) > .notification-panel {
+  display: none;
+}
+
+/* Playlists page bulk-actions bar: hidden until at least one row checkbox
+   is checked, via :has() rather than JS-tracked selection state. */
+.bulk-actions-bar {
+  display: none;
+}
+form:has(input.row-select:checked) > .bulk-actions-bar {
+  display: flex;
+}

@@ -219,6 +219,18 @@ func buildKanaVariants(track Track) []Track {
 	return variants
 }
 
+// BuildAllVariants ports matching.ts's buildAllVariants(): every reading of
+// track worth scoring a candidate against - the original, kana-romanized
+// readings, and (for whatever's left) kanji-derived readings. Unlike
+// FindBestMatch's own variant handling (which gates kanji variants behind
+// "did the cheaper kana ones already pass"), this always computes the full
+// set: a caller that already has its search results in hand (deemix's
+// search-once-score-many shape, see services/deemix) is only paying CPU to
+// re-score them, not another network round trip per variant.
+func BuildAllVariants(track Track) []Track {
+	return append(buildKanaVariants(track), buildKanjiVariants(track)...)
+}
+
 // buildKanjiVariants ports matching.ts's buildKanjiVariants() - currently a
 // no-op, see kanjiToRomaji's doc comment for why.
 func buildKanjiVariants(track Track) []Track {

@@ -1,0 +1,134 @@
+{{define "content"}}
+<link rel="stylesheet" href="/static/css/pages/SettingsPage.css">
+<div class="page-container settings-page">
+  <div class="page-header">
+    <h1 class="page-title">Settings</h1>
+  </div>
+
+  <div class="settings-layout">
+    <nav class="settings-nav">
+      <a href="#matching" class="settings-nav-item"><span class="settings-nav-label">Matching</span><span class="settings-nav-desc">Track matching</span></a>
+      <a href="#mixes" class="settings-nav-item"><span class="settings-nav-label">Mixes</span><span class="settings-nav-desc">Mix generation</span></a>
+      <a href="#ai" class="settings-nav-item"><span class="settings-nav-label">AI Features</span><span class="settings-nav-desc">Gemini / Grok</span></a>
+      <a href="#connected-services" class="settings-nav-item"><span class="settings-nav-label">Connected Services</span><span class="settings-nav-desc">OAuth connections</span></a>
+      {{if .IsAdmin}}<a href="/admin" class="settings-nav-item"><span class="settings-nav-label">Admin</span><span class="settings-nav-desc">Users & server admin</span></a>{{end}}
+    </nav>
+
+    <div class="settings-content">
+
+      <section id="matching" class="settings-section">
+        <div class="settings-section-header">
+          <h2>Matching</h2>
+          <p>Control how Playlist Lab matches tracks when importing from external sources.</p>
+        </div>
+        <form hx-post="/settings/matching" hx-target="#matching-result" hx-swap="innerHTML">
+          <div class="settings-field-group">
+            <div class="settings-field">
+              <label class="settings-label">Minimum match score
+                <span class="settings-value-badge">{{.Matching.MinMatchScore}}</span>
+              </label>
+              <input type="range" name="minMatchScore" min="0" max="1" step="0.05" value="{{.Matching.MinMatchScore}}" class="settings-range">
+              <div class="settings-range-labels"><span>Loose</span><span>Strict</span></div>
+            </div>
+            <div class="settings-field">
+              <label class="settings-label">Title normalisation</label>
+              <div class="settings-toggles">
+                <label class="settings-toggle"><input type="checkbox" name="stripParentheses" {{if .Matching.StripParentheses}}checked{{end}}><span>Strip parentheses from titles</span></label>
+                <label class="settings-toggle"><input type="checkbox" name="stripBrackets" {{if .Matching.StripBrackets}}checked{{end}}><span>Strip brackets from titles</span></label>
+                <label class="settings-toggle"><input type="checkbox" name="useFirstArtistOnly" {{if .Matching.UseFirstArtistOnly}}checked{{end}}><span>Use first artist only</span></label>
+                <label class="settings-toggle"><input type="checkbox" name="ignoreFeaturedArtists" {{if .Matching.IgnoreFeaturedArtists}}checked{{end}}><span>Ignore featured artists</span></label>
+              </div>
+            </div>
+          </div>
+          <div class="settings-actions">
+            <button type="submit" class="btn btn-primary">Save</button>
+            <button type="submit" formaction="/settings/matching/reset" class="btn btn-secondary">Reset to defaults</button>
+          </div>
+        </form>
+        <div id="matching-result"></div>
+      </section>
+
+      <section id="mixes" class="settings-section">
+        <div class="settings-section-header">
+          <h2>Mixes</h2>
+          <p>Tune how each mix type is generated.</p>
+        </div>
+        <form hx-post="/settings/mixes" hx-target="#mixes-result" hx-swap="innerHTML">
+          <div class="settings-mix-grid">
+            <div class="settings-mix-card">
+              <h3>Weekly Mix</h3>
+              <div class="settings-slider-row"><label>Top artists</label><input class="settings-input" type="number" name="weeklyTopArtists" min="5" max="20" value="{{.Mixes.WeeklyMix.TopArtists}}"></div>
+              <div class="settings-slider-row"><label>Tracks per artist</label><input class="settings-input" type="number" name="weeklyTracksPerArtist" min="1" max="10" value="{{.Mixes.WeeklyMix.TracksPerArtist}}"></div>
+            </div>
+            <div class="settings-mix-card">
+              <h3>Daily Mix</h3>
+              <div class="settings-slider-row"><label>Recent tracks</label><input class="settings-input" type="number" name="dailyRecentTracks" min="5" max="20" value="{{.Mixes.DailyMix.RecentTracks}}"></div>
+              <div class="settings-slider-row"><label>Related tracks</label><input class="settings-input" type="number" name="dailyRelatedTracks" min="5" max="20" value="{{.Mixes.DailyMix.RelatedTracks}}"></div>
+              <div class="settings-slider-row"><label>Rediscovery tracks</label><input class="settings-input" type="number" name="dailyRediscoveryTracks" min="0" max="15" value="{{.Mixes.DailyMix.RediscoveryTracks}}"></div>
+              <div class="settings-slider-row"><label>Rediscovery days</label><input class="settings-input" type="number" name="dailyRediscoveryDays" min="30" max="365" value="{{.Mixes.DailyMix.RediscoveryDays}}"></div>
+            </div>
+            <div class="settings-mix-card">
+              <h3>Time Capsule</h3>
+              <div class="settings-slider-row"><label>Track count</label><input class="settings-input" type="number" name="timeCapsuleTrackCount" min="25" max="100" step="5" value="{{.Mixes.TimeCapsule.TrackCount}}"></div>
+              <div class="settings-slider-row"><label>Days ago</label><input class="settings-input" type="number" name="timeCapsuleDaysAgo" min="180" max="730" step="30" value="{{.Mixes.TimeCapsule.DaysAgo}}"></div>
+              <div class="settings-slider-row"><label>Max per artist</label><input class="settings-input" type="number" name="timeCapsuleMaxPerArtist" min="1" max="10" value="{{.Mixes.TimeCapsule.MaxPerArtist}}"></div>
+            </div>
+            <div class="settings-mix-card">
+              <h3>New Music</h3>
+              <div class="settings-slider-row"><label>Album count</label><input class="settings-input" type="number" name="newMusicAlbumCount" min="5" max="20" value="{{.Mixes.NewMusic.AlbumCount}}"></div>
+              <div class="settings-slider-row"><label>Tracks per album</label><input class="settings-input" type="number" name="newMusicTracksPerAlbum" min="1" max="10" value="{{.Mixes.NewMusic.TracksPerAlbum}}"></div>
+            </div>
+          </div>
+          <div class="settings-actions">
+            <button type="submit" class="btn btn-primary">Save</button>
+            <button type="submit" formaction="/settings/mixes/reset" class="btn btn-secondary">Reset to defaults</button>
+          </div>
+        </form>
+        <div id="mixes-result"></div>
+      </section>
+
+      <section id="ai" class="settings-section">
+        <div class="settings-section-header">
+          <h2>AI Features</h2>
+          <p>Playlist Lab can use Google Gemini or xAI Grok to power AI-assisted playlist imports.</p>
+        </div>
+        <form hx-post="/settings/ai" hx-target="#ai-result" hx-swap="innerHTML">
+          <div class="settings-field-group">
+            <div class="settings-field">
+              <label class="settings-label">Provider</label>
+              <select name="aiProvider" class="settings-select">
+                <option value="gemini" {{if eq .AI.Provider "gemini"}}selected{{end}}>Gemini</option>
+                <option value="grok" {{if eq .AI.Provider "grok"}}selected{{end}}>Grok</option>
+              </select>
+            </div>
+            <div class="settings-field">
+              <label class="settings-label">Gemini API Key</label>
+              <input type="password" class="settings-input" name="geminiApiKey" value="{{.AI.GeminiAPIKey}}" placeholder="Enter your Gemini API key">
+            </div>
+            <div class="settings-field">
+              <label class="settings-label">Grok API Key</label>
+              <input type="password" class="settings-input" name="grokApiKey" value="{{.AI.GrokAPIKey}}" placeholder="Enter your Grok API key">
+            </div>
+          </div>
+          <div class="settings-actions">
+            <button type="submit" class="btn btn-primary">Save</button>
+            <button type="submit" formaction="/settings/ai/test" class="btn btn-secondary">Test Connection</button>
+          </div>
+        </form>
+        <div id="ai-result"></div>
+      </section>
+
+      <section id="connected-services" class="settings-section">
+        <div class="settings-section-header">
+          <h2>Connected Services</h2>
+          <p>Manage OAuth connections for external streaming services. Connect services here to use them in Cross Import without re-authenticating.</p>
+        </div>
+        <div id="oauth-services" hx-get="/cross-import/oauth/services" hx-trigger="load" hx-swap="innerHTML">
+          <p class="settings-loading">Loading services...</p>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+{{end}}

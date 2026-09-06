@@ -1,0 +1,99 @@
+{{define "content"}}
+<link rel="stylesheet" href="/static/css/pages/AdminPage.css">
+<link rel="stylesheet" href="/static/css/pages/SettingsPage.css">
+<div class="page-container settings-page">
+  <div class="page-header">
+    <h1 class="page-title">Admin</h1>
+  </div>
+
+  {{if .Error}}<div class="settings-alert settings-alert--error">{{.Error}}</div>{{end}}
+
+  <section class="settings-section">
+    <div class="settings-section-header">
+      <h2>Stats</h2>
+    </div>
+    <div class="settings-mix-grid">
+      <div class="settings-mix-card"><h3>Total Users</h3><p class="settings-value-badge">{{.Stats.TotalUsers}}</p></div>
+      <div class="settings-mix-card"><h3>Active Users (30d)</h3><p class="settings-value-badge">{{.Stats.ActiveUsers}}</p></div>
+      <div class="settings-mix-card"><h3>Total Playlists</h3><p class="settings-value-badge">{{.Stats.TotalPlaylists}}</p></div>
+      <div class="settings-mix-card"><h3>Missing Tracks</h3><p class="settings-value-badge">{{.Stats.TotalMissing}}</p></div>
+    </div>
+  </section>
+
+  <section class="settings-section" style="margin-top:1.25rem;">
+    <div class="settings-section-header">
+      <h2>Users</h2>
+      <p>Enable/disable accounts, grant or revoke admin, or remove a user and all their data.</p>
+    </div>
+    <div class="table-responsive">
+      <table style="width:100%; border-collapse: collapse;">
+        <thead>
+          <tr>
+            <th style="text-align:left; padding:0.5rem;">Username</th>
+            <th style="text-align:left; padding:0.5rem;">Last Login</th>
+            <th style="text-align:left; padding:0.5rem;">Status</th>
+            <th style="text-align:left; padding:0.5rem;">Admin</th>
+            <th style="text-align:left; padding:0.5rem;">Server</th>
+            <th style="text-align:left; padding:0.5rem;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Users}}
+          <tr style="border-top: 1px solid var(--border);">
+            <td style="padding:0.5rem;">{{.PlexUsername}}</td>
+            <td style="padding:0.5rem;">{{if .LastLogin}}{{.LastLogin}}{{else}}never{{end}}</td>
+            <td style="padding:0.5rem;">{{if .IsEnabled}}Enabled{{else}}Disabled{{end}}</td>
+            <td style="padding:0.5rem;">{{if .IsAdmin}}Admin{{else}}-{{end}}</td>
+            <td style="padding:0.5rem;">{{if .HasServer}}Configured{{else}}-{{end}}</td>
+            <td style="padding:0.5rem; display:flex; gap:0.4rem; flex-wrap:wrap;">
+              {{if .IsEnabled}}
+              <button class="btn btn-secondary btn-sm" hx-post="/admin/users/{{.ID}}/disable" hx-target="body" hx-swap="outerHTML">Disable</button>
+              {{else}}
+              <button class="btn btn-secondary btn-sm" hx-post="/admin/users/{{.ID}}/enable" hx-target="body" hx-swap="outerHTML">Enable</button>
+              {{end}}
+              {{if .IsAdmin}}
+              <button class="btn btn-secondary btn-sm" hx-post="/admin/users/{{.ID}}/demote" hx-target="body" hx-swap="outerHTML">Revoke Admin</button>
+              {{else}}
+              <button class="btn btn-secondary btn-sm" hx-post="/admin/users/{{.ID}}/promote" hx-target="body" hx-swap="outerHTML">Make Admin</button>
+              {{end}}
+              <button class="btn btn-secondary btn-sm" hx-post="/admin/users/{{.ID}}/delete" hx-target="body" hx-swap="outerHTML" hx-confirm="Delete this user and all their data? This can't be undone.">Delete</button>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="settings-section" style="margin-top:1.25rem;">
+    <div class="settings-section-header">
+      <h2>Missing Tracks</h2>
+      <p>The most commonly missing tracks across every user, aggregated by title and artist. Search deemix and queue a download for one row, or all of them at once.</p>
+    </div>
+    {{if not .MissingStats}}
+    <p class="settings-hint">No missing tracks reported.</p>
+    {{else}}
+    <div class="settings-actions" style="margin-bottom:0.75rem;">
+      <button class="btn btn-secondary" hx-post="/admin/missing/deemix-all" hx-target="#notifications" hx-swap="innerHTML" hx-confirm="Queue a deemix search for all {{len .MissingStats}} missing track(s)?">Deemix All</button>
+    </div>
+    <div class="admin-cards">
+      {{range .MissingStats}}
+      <div class="admin-card">
+        <div class="admin-card-title">
+          <span class="admin-card-name">{{.Title}}</span>
+          <span class="admin-card-summary">{{.Artist}} · missing for {{.Count}} user(s)</span>
+        </div>
+        <div class="admin-card-actions">
+          <form hx-post="/admin/missing/deemix-download" hx-target="#notifications" hx-swap="innerHTML">
+            <input type="hidden" name="title" value="{{.Title}}">
+            <input type="hidden" name="artist" value="{{.Artist}}">
+            <button type="submit" class="btn btn-secondary btn-sm">Deemix</button>
+          </form>
+        </div>
+      </div>
+      {{end}}
+    </div>
+    {{end}}
+  </section>
+</div>
+{{end}}

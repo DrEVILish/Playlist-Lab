@@ -173,7 +173,7 @@ func (c *Client) searchHub(query, libraryID string) ([]Track, error) {
 	if err != nil {
 		return nil, err
 	}
-	var trackHub, albumHub *hub
+	var trackHub, albumHub *Hub
 	for i := range mc.MediaContainer.Hub {
 		h := &mc.MediaContainer.Hub[i]
 		if h.Type == "track" && trackHub == nil {
@@ -225,6 +225,10 @@ func (c *Client) searchHub(query, libraryID string) ([]Track, error) {
 	}
 	return filtered, nil
 }
+
+// DecodeTracks exposes decodeTracks for callers outside this package (e.g.
+// internal/services/mixes) that need to decode a Hub's raw Metadata list.
+func DecodeTracks(raw []json.RawMessage) ([]Track, error) { return decodeTracks(raw) }
 
 func decodeTracks(raw []json.RawMessage) ([]Track, error) {
 	out := make([]Track, 0, len(raw))

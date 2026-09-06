@@ -1,6 +1,10 @@
 # Claude Code local session state
 .claude/
 
+# Scratch preview server (built binary + DB copy) used to test the Go/HTMX
+# rewrite locally without touching the live systemd service or its DB.
+.preview/
+
 # Dependencies
 node_modules/
 jspm_packages/

@@ -1,0 +1,25 @@
+{{define "partials/oauth_services.html"}}
+{{if not .Services}}
+<p class="settings-hint">No external services available.</p>
+{{else}}
+<div class="settings-services-list">
+  {{range .Services}}
+  <div class="settings-service-row">
+    <div class="settings-service-info">
+      <span class="settings-service-name">{{.Name}}</span>
+      <span class="settings-service-status {{if .Connected}}settings-service-status--connected{{else}}settings-service-status--disconnected{{end}}">
+        {{if .Connected}}Connected{{else}}Not connected{{end}}
+      </span>
+    </div>
+    <div class="settings-service-actions">
+      {{if .Connected}}
+      <button class="btn btn-secondary btn-small" hx-delete="/cross-import/oauth/{{.ID}}" hx-target="closest .settings-services-list" hx-swap="outerHTML" hx-confirm="Disconnect {{.Name}}?" hx-on::after-request="if(event.detail.successful) window.location.reload()">Disconnect</button>
+      {{else}}
+      <a class="btn btn-primary btn-small" href="/cross-import/oauth/{{.ID}}">Connect</a>
+      {{end}}
+    </div>
+  </div>
+  {{end}}
+</div>
+{{end}}
+{{end}}

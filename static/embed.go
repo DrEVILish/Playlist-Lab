@@ -4,5 +4,8 @@ package static
 
 import "embed"
 
-//go:embed css js
+// Root-level assets (logo, favicons, manifest) need listing explicitly:
+// "css js" alone silently excluded them, so every one of them 404'd.
+//
+//go:embed css js *.svg *.ico *.png *.json
 var FS embed.FS

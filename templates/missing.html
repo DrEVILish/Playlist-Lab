@@ -1,0 +1,18 @@
+{{define "content"}}
+<main class="missing">
+  <h1 class="page-title">Missing Tracks</h1>
+
+  <div id="retry-status" hx-get="/missing/retry-status" hx-trigger="every 2s" hx-swap="innerHTML"></div>
+
+  <div class="missing-tracks-toolbar-actions">
+    <form hx-post="/missing/retry" hx-target="#retry-status" hx-swap="innerHTML">
+      <button type="submit" class="btn btn-primary btn-small">Retry All</button>
+    </form>
+    <form hx-post="/missing/deemix-all" hx-target="#notifications" hx-swap="innerHTML">
+      <button type="submit" class="btn btn-secondary btn-small">Deemix All</button>
+    </form>
+  </div>
+
+  <div id="missing-list" hx-get="/missing/list" hx-trigger="load" hx-swap="innerHTML"></div>
+</main>
+{{end}}

@@ -1,0 +1,31 @@
+{{define "partials/cross_import_progress.html"}}
+{{$p := .Progress}}
+<div id="cross-import-match-status"
+     {{if or (eq $p.Phase "fetching") (eq $p.Phase "matching")}}
+     hx-get="/cross-import/match/{{.SessionID}}/status" hx-trigger="every 1s" hx-swap="outerHTML"
+     {{end}}>
+  {{if eq $p.Phase "error"}}
+  <div class="error-message">Matching failed: {{$p.Message}}</div>
+  {{else}}
+  <div class="progress-container">
+    <div class="progress-phase">
+      {{if eq $p.Phase "fetching"}}Fetching playlist…
+      {{else}}Matching tracks{{if $p.PlaylistName}} for "{{$p.PlaylistName}}"{{end}}…{{end}}
+    </div>
+    <div class="progress-bar-track">
+      {{if gt $p.Total 0}}
+      <div class="progress-bar-fill" style="width: {{percent $p.Current $p.Total}}%"></div>
+      {{else}}
+      <div class="progress-bar-fill" style="width: 30%"></div>
+      {{end}}
+    </div>
+    {{if gt $p.Total 0}}
+    <div class="progress-count">{{$p.Current}} / {{$p.Total}} tracks</div>
+    {{end}}
+    <form hx-post="/cross-import/match/{{.SessionID}}/cancel" hx-target="#cross-import-match-status" hx-swap="outerHTML" style="margin-top:1rem;">
+      <button type="submit" class="btn btn-secondary">Cancel</button>
+    </form>
+  </div>
+  {{end}}
+</div>
+{{end}}

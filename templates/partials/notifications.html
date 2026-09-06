@@ -1,0 +1,23 @@
+{{define "partials/notifications.html"}}
+{{if not .Notifications}}
+<p class="notifications-empty">No notifications.</p>
+{{else}}
+<ul class="notifications-list">
+  {{range .Notifications}}
+  <li class="notification notification-{{.Status}}">
+    <strong>{{.Title}}</strong>
+    {{if .Detail}}<span class="notification-detail">{{.Detail}}</span>{{end}}
+    {{if .Progress}}
+    <progress max="100" value="{{.Progress}}"></progress>
+    {{end}}
+    {{if ne (printf "%v" .Status) "in-progress"}}
+    <button hx-post="/notifications/{{.ID}}/dismiss" hx-target="#notifications" hx-swap="innerHTML">&times;</button>
+    {{end}}
+  </li>
+  {{end}}
+</ul>
+<form hx-post="/notifications/clear" hx-target="#notifications" hx-swap="innerHTML">
+  <button type="submit">Clear completed</button>
+</form>
+{{end}}
+{{end}}

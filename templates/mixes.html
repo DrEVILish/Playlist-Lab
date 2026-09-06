@@ -1,0 +1,128 @@
+{{define "content"}}
+<link rel="stylesheet" href="/static/css/pages/GenerateMixesPage.css">
+<link rel="stylesheet" href="/static/css/components/QuickMixSettingsModal.css">
+<link rel="stylesheet" href="/static/css/components/AdvancedMixModal.css">
+<link rel="stylesheet" href="/static/css/pages/CustomMixModal.css">
+<main class="mixes">
+  <h1 class="page-title">Generate a Mix</h1>
+
+  {{if not .HasServer}}
+  <p class="error">Select a Plex server and music library in setup before generating mixes.</p>
+  {{else}}
+
+  <div class="generate-mixes-content">
+
+    <section class="quick-mixes-section">
+      <div class="section-header">
+        <h2 class="section-title">From Your Listening History</h2>
+        <p class="section-description">Built from your play counts and recency - each uses a different angle</p>
+      </div>
+      <div class="quick-mixes-grid">
+        <button type="button" class="quick-mix-card" hx-get="/mixes/quick-settings/weekly" hx-target="#modal-root" hx-swap="innerHTML">
+          <div class="quick-mix-content">
+            <h3 class="quick-mix-name">Weekly Mix</h3>
+            <p class="quick-mix-description">Your most-played artists right now</p>
+          </div>
+        </button>
+        <button type="button" class="quick-mix-card" hx-get="/mixes/quick-settings/daily" hx-target="#modal-root" hx-swap="innerHTML">
+          <div class="quick-mix-content">
+            <h3 class="quick-mix-name">Daily Mix</h3>
+            <p class="quick-mix-description">Recent plays, plus related tracks and rediscoveries</p>
+          </div>
+        </button>
+        <button type="button" class="quick-mix-card" hx-get="/mixes/quick-settings/timecapsule" hx-target="#modal-root" hx-swap="innerHTML">
+          <div class="quick-mix-content">
+            <h3 class="quick-mix-name">Time Capsule</h3>
+            <p class="quick-mix-description">Anything you haven't played in a while, regardless of how often you used to play it</p>
+          </div>
+        </button>
+        <button type="button" class="quick-mix-card" hx-get="/mixes/quick-settings/forgotten-favorites" hx-target="#modal-root" hx-swap="innerHTML">
+          <div class="quick-mix-content">
+            <h3 class="quick-mix-name">Forgotten Favorites</h3>
+            <p class="quick-mix-description">Tracks you used to play a lot but have stopped playing recently</p>
+          </div>
+        </button>
+        <button type="button" class="quick-mix-card" hx-get="/mixes/quick-settings/deep-cuts" hx-target="#modal-root" hx-swap="innerHTML">
+          <div class="quick-mix-content">
+            <h3 class="quick-mix-name">Deep Cuts Mix</h3>
+            <p class="quick-mix-description">Tracks with low play counts you've likely never given much attention</p>
+          </div>
+        </button>
+        <button type="button" class="quick-mix-card" hx-get="/mixes/quick-settings/workout" hx-target="#modal-root" hx-swap="innerHTML">
+          <div class="quick-mix-content">
+            <h3 class="quick-mix-name">Workout Mix</h3>
+            <p class="quick-mix-description">A progressive tempo build for exercise</p>
+          </div>
+        </button>
+      </div>
+    </section>
+
+    <section class="quick-mixes-section">
+      <div class="section-header">
+        <h2 class="section-title">Explore Your Library</h2>
+        <p class="section-description">Built from your library's structure - genres, eras, artists - not your play history</p>
+      </div>
+      <div class="quick-mixes-grid">
+        <button type="button" class="quick-mix-card" hx-get="/mixes/quick-settings/newmusic" hx-target="#modal-root" hx-swap="innerHTML">
+          <div class="quick-mix-content">
+            <h3 class="quick-mix-name">New Music Mix</h3>
+            <p class="quick-mix-description">Recently added albums</p>
+          </div>
+        </button>
+        <button type="button" class="quick-mix-card" hx-get="/mixes/advanced-form/artist-discovery" hx-target="#modal-root" hx-swap="innerHTML">
+          <div class="quick-mix-content">
+            <h3 class="quick-mix-name">Artist Discovery</h3>
+            <p class="quick-mix-description">Tracks from artists similar to ones you like</p>
+          </div>
+        </button>
+        <button type="button" class="quick-mix-card" hx-get="/mixes/advanced-form/mood" hx-target="#modal-root" hx-swap="innerHTML">
+          <div class="quick-mix-content">
+            <h3 class="quick-mix-name">Mood Mix</h3>
+            <p class="quick-mix-description">Tracks filtered by mood tags</p>
+          </div>
+        </button>
+        <button type="button" class="quick-mix-card" hx-get="/mixes/advanced-form/era" hx-target="#modal-root" hx-swap="innerHTML">
+          <div class="quick-mix-content">
+            <h3 class="quick-mix-name">Era Mix</h3>
+            <p class="quick-mix-description">Tracks from a specific decade</p>
+          </div>
+        </button>
+        <button type="button" class="quick-mix-card" hx-get="/mixes/advanced-form/genre-evolution" hx-target="#modal-root" hx-swap="innerHTML">
+          <div class="quick-mix-content">
+            <h3 class="quick-mix-name">Genre Evolution</h3>
+            <p class="quick-mix-description">How a genre evolved over time</p>
+          </div>
+        </button>
+        <button type="button" class="quick-mix-card" hx-get="/mixes/advanced-form/artist-journey" hx-target="#modal-root" hx-swap="innerHTML">
+          <div class="quick-mix-content">
+            <h3 class="quick-mix-name">Artist Journey</h3>
+            <p class="quick-mix-description">One artist's discography in chronological order</p>
+          </div>
+        </button>
+        <button type="button" class="quick-mix-card" hx-get="/mixes/advanced-form/genre-blend" hx-target="#modal-root" hx-swap="innerHTML">
+          <div class="quick-mix-content">
+            <h3 class="quick-mix-name">Genre Blend</h3>
+            <p class="quick-mix-description">Tracks spanning multiple genres</p>
+          </div>
+        </button>
+        <button type="button" class="quick-mix-card custom-mix-card" hx-get="/mixes/custom-form" hx-target="#modal-root" hx-swap="innerHTML">
+          <div class="quick-mix-content">
+            <h3 class="quick-mix-name">Custom Mix</h3>
+            <p class="quick-mix-description">Build a mix from your own filters - genres, moods, artists, ratings and more</p>
+          </div>
+        </button>
+      </div>
+    </section>
+
+    <section class="generated-playlists-section">
+      <div class="section-header">
+        <h2 class="section-title">Mix Progress</h2>
+        <p class="section-description">Generation runs in the background - watch progress and results in the notification bell above</p>
+      </div>
+    </section>
+
+  </div>
+
+  {{end}}
+</main>
+{{end}}
