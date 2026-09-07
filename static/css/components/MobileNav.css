@@ -122,6 +122,22 @@
   border-left: 3px solid transparent;
 }
 
+/* MobileNav.tsx's items were all <Link>s, so these rules never needed to
+   reset button chrome. This port's "Shared With Me" item opens a modal
+   instead of navigating, so it has to be a <button>, which without this
+   renders with the UA's default face, border, centered text and
+   shrink-to-fit width - visibly unlike the links stacked around it. */
+button.mobile-nav-link {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-left: 3px solid transparent;
+  font: inherit;
+  font-size: 0.9375rem;
+  cursor: pointer;
+}
+
 .mobile-nav-link:hover {
   background-color: rgba(91, 155, 213, 0.06);
   color: var(--text-primary);

@@ -58,6 +58,16 @@
         <a class="mobile-nav-link" href="/">Home</a>
         <a class="mobile-nav-link" href="/import">Import</a>
         <a class="mobile-nav-link" href="/mixes">Generate Mixes</a>
+        <!-- Shared With Me has to live here, not only in .header-actions:
+             Header.css hides that whole button row below 768px, so on a
+             phone this drawer is the only way to reach it - which is exactly
+             why MobileNav.tsx's navItems listed it. It opens the same
+             #modal-root fragment the header button does; the inline onclick
+             unchecks the drawer toggle because, unlike the plain links
+             around it, an hx-get doesn't navigate, so nothing else would
+             close the drawer covering the modal it just opened. -->
+        <button type="button" class="mobile-nav-link" hx-get="/playlists/shared-with-me" hx-target="#modal-root" hx-swap="innerHTML"
+          onclick="document.getElementById('mobile-nav-toggle').checked=false">Shared With Me</button>
         <a class="mobile-nav-link" href="/cross-import">Cross-Import</a>
         <a class="mobile-nav-link" href="/mix-templates">Mix Templates</a>
         <a class="mobile-nav-link" href="/backup">Backup / Restore</a>
@@ -85,8 +95,14 @@
           {{if .User}}
           <!-- Matches the real React header's 5-button set (Header.tsx
                lines 46-52): Import/Generate/Shared With Me/Backup-Restore/
-               Status - not Cross-Import/Mix Templates, which React only
-               reaches from MobileNav's link list (mirrored above). Import
+               Status - not Cross-Import/Mix Templates. Those two are this
+               port's own additions to the mobile drawer above, not a mirror
+               of React: MobileNav.tsx's navItems has neither, App.tsx
+               redirects /cross-import straight back to /, and mix templates
+               were only ever reachable as modals inside GenerateMixesPage
+               (SaveTemplateModal/EditTemplateModal), never as a page. They
+               are kept because this port did build both as real pages, and
+               a page with no nav entry is unreachable. Import
                and Generate already exist as full pages, so - following this
                project's established plain-link precedent rather than
                reproducing React's portal-modal pattern - they just navigate
