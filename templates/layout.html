@@ -36,6 +36,19 @@
   <link rel="stylesheet" href="/static/css/components/chrome-interactions.css">
   <script src="/static/js/htmx.min.js"></script>
   <script src="/static/js/htmx-sse.min.js"></script>
+  <script>
+    // htmx 4 swaps every response body into its target by default, even a
+    // 4xx/5xx one - only 204/304 are skipped out of the box. Every error
+    // response in this app is a plain http.Error() text body, never markup
+    // meant for a target: an hx-post on a "Delete" button returning 400
+    // would otherwise dump "playlist not found" as raw text into the
+    // playlist row it was trying to delete. htmx 2 (and this app's own
+    // error handling, built against it) assumed 4xx/5xx never got swapped,
+    // so restoring that as the default here is a compatibility fix, not a
+    // preference - it is not something any individual handler should have
+    // to opt into.
+    htmx.config.noSwap = [204, 304, '4xx', '5xx'];
+  </script>
 </head>
 <body>
   <div class="layout">
@@ -163,8 +176,14 @@
                  something they'd affect), so the whole thing has to be one
                  SSE-swapped unit rather than a static header plus a
                  separately-swapped list. -->
+            <!-- htmx 4's SSE extension (registered name unchanged: "sse")
+                 dropped sse-swap - it auto-swaps unnamed messages straight
+                 into this element, which is exactly what this stream sends
+                 (see writeSSEEvent's doc). hx-sse:connect replaces
+                 sse-connect; the old name still works via the extension's
+                 own back-compat shim but logs a deprecation warning. -->
             <div class="notification-panel">
-              <div id="notifications" hx-ext="sse" sse-connect="/notifications/stream" sse-swap="notification" hx-swap="innerHTML" hx-trigger="load"></div>
+              <div id="notifications" hx-ext="sse" hx-sse:connect="/notifications/stream" hx-swap="innerHTML" hx-trigger="load"></div>
             </div>
           </details>
 
@@ -226,7 +245,7 @@
       // whatever opened it when it closes - otherwise focus is left stranded
       // on a detached node and keyboard users restart from the top of the
       // document. Watching #modal-root covers every close path there is
-      // (close button, overlay, Escape, hx-on::after-request), so no partial
+      // (close button, overlay, Escape, hx-on::after:request), so no partial
       // has to remember to participate.
       new MutationObserver(function () {
         var el = overlay();

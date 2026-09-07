@@ -12,7 +12,7 @@
 <div class="edit-template-overlay">
   <div class="edit-template-modal" role="dialog" aria-modal="true" aria-label="Edit Template: {{.Template.Name}}">
     <form hx-put="/mix-templates/{{.Template.ID}}" hx-target="#mix-templates-list" hx-swap="innerHTML"
-      hx-on::after-request="if(event.detail.successful)document.getElementById('modal-root').innerHTML=''">
+      hx-on::after:request="if(event.detail.ctx.response.status<400)document.getElementById('modal-root').innerHTML=''">
       <div class="edit-template-header">
         <h2 class="edit-template-title">Edit Template: {{.Template.Name}}</h2>
         <button type="button" class="edit-template-close" title="Close (Esc)"

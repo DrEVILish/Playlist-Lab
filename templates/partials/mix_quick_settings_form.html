@@ -6,7 +6,7 @@
 {{define "partials/mix_quick_settings_form.html"}}
 <div class="modal-overlay quick-mix-settings-overlay">
   <div class="modal-content quick-mix-settings-modal" role="dialog" aria-modal="true" aria-label="{{.Title}}">
-    <form hx-post="/mixes/generate" hx-target="#notifications" hx-swap="innerHTML" hx-on::after-request="document.getElementById('modal-root').innerHTML=''">
+    <form hx-post="/mixes/generate" hx-target="#notifications" hx-swap="innerHTML" hx-on::after:request="document.getElementById('modal-root').innerHTML=''">
       <input type="hidden" name="mixType" value="{{.MixType}}">
       <div class="quick-mix-settings-header">
         <div>

@@ -19,7 +19,7 @@
       <button type="button" class="custom-mix-close" onclick="document.getElementById('modal-root').innerHTML=''">&times;</button>
     </div>
 
-    <form hx-post="/mixes/generate" hx-target="#notifications" hx-swap="innerHTML" hx-on::after-request="document.getElementById('modal-root').innerHTML=''">
+    <form hx-post="/mixes/generate" hx-target="#notifications" hx-swap="innerHTML" hx-on::after:request="document.getElementById('modal-root').innerHTML=''">
       <input type="hidden" name="mixType" value="custom">
       <div class="custom-mix-content">
         <div class="form-group">

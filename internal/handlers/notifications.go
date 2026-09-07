@@ -106,7 +106,7 @@ func (h *NotificationsHandler) stream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Accel-Buffering", "no")
 
 	send := func() {
-		writeSSEEvent(w, "notification", h.renderFragment(user.ID))
+		writeSSEEvent(w, h.renderFragment(user.ID))
 		flusher.Flush()
 	}
 	send()
@@ -142,8 +142,17 @@ func (h *NotificationsHandler) renderFragment(userID int64) string {
 // "data: " (a bare multi-line payload would otherwise terminate the event
 // early at its first blank line, and a rendered HTML fragment is always
 // multi-line).
-func writeSSEEvent(w http.ResponseWriter, event, data string) {
-	fmt.Fprintf(w, "event: %s\n", event)
+//
+// Deliberately unnamed (no "event: ..." line): htmx 4's SSE extension only
+// auto-swaps unnamed messages into the connected element - a named event is
+// instead dispatched as a plain DOM CustomEvent with no swap performed,
+// which is a real behavior change from htmx 2's sse-swap="name" attribute
+// this stream's one consumer (#notifications in layout.html) used to rely
+// on. Since this stream has always carried exactly one kind of message,
+// switching to unnamed is the direct replacement - see the htmx-sse
+// extension's own console.warn for "sse-swap is removed in htmx 4" for the
+// upstream migration guidance this follows.
+func writeSSEEvent(w http.ResponseWriter, data string) {
 	scanner := bufio.NewScanner(strings.NewReader(data))
 	for scanner.Scan() {
 		fmt.Fprintf(w, "data: %s\n", scanner.Text())
