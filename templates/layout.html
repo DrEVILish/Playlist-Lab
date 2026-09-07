@@ -114,10 +114,25 @@
                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
               </svg>
             </summary>
+            <!-- Endpoints must match what's actually registered: deemix-all
+                 and retry live under /missing (internal/handlers/missing.go),
+                 not /playlists/missing, and "Retry All" is plain POST
+                 /missing/retry with no trackId/playlistId - that handler
+                 treats "no filter" as "everything", which is exactly this
+                 menu item. Each also needs an explicit target: htmx defaults
+                 to swapping the response into the element that triggered it,
+                 which would replace the menu item's own label with the
+                 response body (or blank it, for run-all's empty 202).
+                 deemix-all returns the notifications fragment, so it targets
+                 #notifications like every other action-queue trigger;
+                 retry returns the missing-page retry-status fragment, which
+                 doesn't belong in the header, and run-all returns nothing -
+                 both report progress through the notification bell's SSE
+                 feed on their own, so they swap nothing here. -->
             <div class="header-actions-popover" role="menu">
-              <button type="button" role="menuitem" class="header-actions-item" hx-post="/playlists/missing/deemix-all" hx-confirm="Retry matching, then queue every still-missing track for deemix download?">Deemix All</button>
-              <button type="button" role="menuitem" class="header-actions-item" hx-post="/playlists/missing/retry-all" hx-confirm="Retry matching every missing track against your Plex library?">Retry All</button>
-              <button type="button" role="menuitem" class="header-actions-item" hx-post="/schedules/run-all" hx-confirm="Run every scheduled playlist refresh now?">Refresh</button>
+              <button type="button" role="menuitem" class="header-actions-item" hx-post="/missing/deemix-all" hx-target="#notifications" hx-swap="innerHTML" hx-confirm="Retry matching, then queue every still-missing track for deemix download?">Deemix All</button>
+              <button type="button" role="menuitem" class="header-actions-item" hx-post="/missing/retry" hx-swap="none" hx-confirm="Retry matching every missing track against your Plex library?">Retry All</button>
+              <button type="button" role="menuitem" class="header-actions-item" hx-post="/schedules/run-all" hx-swap="none" hx-confirm="Run every scheduled playlist refresh now?">Refresh</button>
             </div>
           </details>
 
