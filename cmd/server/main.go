@@ -109,6 +109,9 @@ func main() {
 	handlers.RegisterServers(r, mw, &handlers.ServersHandler{DB: sqlDB, Plex: plexClient, Tmpl: tmpl})
 	handlers.RegisterSettings(r, mw, &handlers.SettingsHandler{DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl})
 	handlers.RegisterStatus(r, mw, &handlers.StatusHandler{DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl})
+	// Cover art is relayed through the server rather than linked directly -
+	// see internal/handlers/proxy.go for why.
+	handlers.RegisterProxy(r, mw, &handlers.ProxyHandler{DB: sqlDB, PlexAuth: plexClient})
 	handlers.RegisterBackup(r, mw, &handlers.BackupHandler{DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl})
 	notificationStore := notifications.NewStore()
 	handlers.RegisterNotifications(r, mw, &handlers.NotificationsHandler{Store: notificationStore, Tmpl: tmpl})

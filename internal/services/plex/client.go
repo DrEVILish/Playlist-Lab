@@ -191,20 +191,35 @@ type Client struct {
 	artistTracksCache map[string]cacheEntry[[]Track]
 }
 
-// MediaURL turns a Plex-relative media path (e.g. a playlist's Composite
-// thumb) into a directly loadable, authenticated URL against this client's
-// server. The React app instead proxies these through /api/proxy/image
-// because a browser can't attach X-Plex-Token itself; the Go template
-// renders server-side, so it can just embed the token in the URL directly.
-func (c *Client) MediaURL(path string) string {
+// FetchMedia streams a Plex-relative media path (a playlist's Composite
+// thumb, cover art) from this client's server. Callers relay the bytes to
+// the browser themselves - see handlers.ProxyHandler - so that a token is
+// never handed to the browser, and so that cover art keeps working for
+// clients with no route to the Plex server. The caller closes the returned
+// body.
+//
+// This replaced a MediaURL helper that built a directly-loadable
+// ?X-Plex-Token=... URL for templates to embed. That put the user's token in
+// the page (hundreds of times over, once per thumb) and only rendered at all
+// for browsers that could reach the Plex server themselves; it is gone
+// rather than deprecated so nothing reintroduces it.
+func (c *Client) FetchMedia(path string) (io.ReadCloser, string, error) {
 	if path == "" {
-		return ""
+		return nil, "", fmt.Errorf("empty media path")
 	}
-	sep := "?"
-	if strings.Contains(path, "?") {
-		sep = "&"
+	req, err := http.NewRequest(http.MethodGet, c.ServerURL+path, nil)
+	if err != nil {
+		return nil, "", err
 	}
-	return fmt.Sprintf("%s%s%sX-Plex-Token=%s", c.ServerURL, path, sep, url.QueryEscape(c.Token))
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, "", fmt.Errorf("plex returned %s for %s", resp.Status, path)
+	}
+	return resp.Body, resp.Header.Get("Content-Type"), nil
 }
 
 type cacheEntry[T any] struct {

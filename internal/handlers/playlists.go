@@ -147,7 +147,7 @@ func (h *PlaylistsHandler) index(w http.ResponseWriter, r *http.Request) {
 		row := playlistRow{
 			PlexID: p.RatingKey, Name: cleanPlaylistName(p.Title),
 			Source: "plex", TrackCount: p.LeafCount, Duration: p.Duration,
-			CoverURL: client.MediaURL(p.Composite),
+			CoverURL: ImageProxyURL(p.Composite),
 		}
 		if t, ok := trackedByPlexID[p.RatingKey]; ok {
 			row.Source = t.Source
