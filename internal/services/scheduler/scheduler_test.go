@@ -2,10 +2,14 @@ package scheduler
 
 import (
 	"database/sql"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/drevilish/playlist-lab/internal/db"
+	"github.com/drevilish/playlist-lab/internal/services/plex"
 )
 
 func TestIsDue(t *testing.T) {
@@ -78,4 +82,74 @@ func TestIsDue(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestResolveTargetPlaylistID covers schedule-checker-job.test.ts's
+// resolveTargetPlaylistID equivalent: a refresh/mix-generation run must
+// write into the playlist it already tracks by ratingKey, only falling back
+// to a Plex name search when that ratingKey is missing or a "pending-..."
+// placeholder left by an interrupted first import.
+func TestResolveTargetPlaylistID(t *testing.T) {
+	var searched bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		searched = true
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"MediaContainer": map[string]any{
+				"Metadata": []map[string]any{
+					{"ratingKey": "found-123", "title": "My Playlist"},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+	client := plex.NewClient(srv.URL, "token", "client-id", "Playlist Lab")
+
+	t.Run("uses the tracked ratingKey without hitting Plex", func(t *testing.T) {
+		searched = false
+		got, err := resolveTargetPlaylistID(client, "already-tracked-456", "My Playlist")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != "already-tracked-456" {
+			t.Fatalf("got %q, want the tracked ratingKey unchanged", got)
+		}
+		if searched {
+			t.Fatal("must not search Plex when a real ratingKey is already tracked")
+		}
+	})
+
+	t.Run("falls back to a name search for a pending placeholder", func(t *testing.T) {
+		searched = false
+		got, err := resolveTargetPlaylistID(client, "pending-abc", "My Playlist")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != "found-123" {
+			t.Fatalf("got %q, want the ratingKey found by name search", got)
+		}
+		if !searched {
+			t.Fatal("expected a Plex playlist search for a pending placeholder")
+		}
+	})
+
+	t.Run("falls back to a name search for an empty tracked id", func(t *testing.T) {
+		searched = false
+		got, err := resolveTargetPlaylistID(client, "", "My Playlist")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != "found-123" {
+			t.Fatalf("got %q, want the ratingKey found by name search", got)
+		}
+	})
+
+	t.Run("returns empty when no playlist in Plex matches the name", func(t *testing.T) {
+		got, err := resolveTargetPlaylistID(client, "", "Some Other Name")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != "" {
+			t.Fatalf("got %q, want empty (no match -> caller creates a new playlist)", got)
+		}
+	})
 }

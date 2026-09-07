@@ -2,6 +2,32 @@ package handlers
 
 import "testing"
 
+// TestCleanPlaylistName covers cleanPlaylistName, which ports routes/
+// playlists.ts's inline "clean up duplicate prefixes" cleanup
+// (parts[0] === parts[1].split(' ')[0]) - not playlist-utilities.test.ts
+// (that TS file covers the sort/dedupe routes, which have no Go equivalent
+// yet; see the port report). This was untested on both sides, so the cases
+// below are derived directly from the ported one-liner rather than from an
+// existing test: the prefix must equal the remainder's first *word*, not
+// just be a prefix of it, so e.g. "All out - All out 60s" does NOT clean up
+// (the whole "All out" is not equal to the single word "All").
+func TestCleanPlaylistName(t *testing.T) {
+	tests := []struct{ name, in, want string }{
+		{"single-word prefix duplicated as the first word after the separator", "Chill - Chill Vibes", "Chill Vibes"},
+		{"multi-word prefix is not equal to just the first word, so it is left alone", "All out - All out 60s", "All out - All out 60s"},
+		{"no separator at all", "Deep Focus", "Deep Focus"},
+		{"separator present but prefix does not repeat", "Chill - Vibes Only", "Chill - Vibes Only"},
+		{"more than one separator is left alone, matching Node's exactly-one-split requirement", "A - A - B", "A - A - B"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := cleanPlaylistName(tt.in); got != tt.want {
+				t.Errorf("cleanPlaylistName(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestFilterRows(t *testing.T) {
 	rows := []playlistRow{
 		{Name: "Christmas: Pop", Source: "spotify", MissingCount: 3, ScheduleID: 1},

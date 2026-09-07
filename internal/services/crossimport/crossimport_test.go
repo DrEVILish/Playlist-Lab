@@ -42,6 +42,55 @@ func TestSessionUpdate(t *testing.T) {
 	}
 }
 
+// TestSessionCancelIsolation ports cross-import-sse.test.ts's "cancel sets
+// flag" / "does not affect other sessions" cases: Cancel/IsCancelled must be
+// per-session state, not shared across the store.
+func TestSessionCancelIsolation(t *testing.T) {
+	s1 := &Session{}
+	s2 := &Session{}
+
+	if s1.IsCancelled() {
+		t.Fatal("new session must not start cancelled")
+	}
+	s1.Cancel()
+	if !s1.IsCancelled() {
+		t.Fatal("expected Cancel to set the flag")
+	}
+	if s2.IsCancelled() {
+		t.Fatal("cancelling one session must not cancel another")
+	}
+}
+
+// TestSessionProgressRoundTrip covers SetProgress/GetProgress - the "each new
+// event overwrites the state" behaviour the TS test pinned on the raw
+// matchProgressState map, ported here to the Progress struct that replaced
+// it.
+func TestSessionProgressRoundTrip(t *testing.T) {
+	s := &Session{}
+	s.SetProgress(Progress{Phase: PhaseFetching})
+	if got := s.GetProgress(); got.Phase != PhaseFetching {
+		t.Fatalf("expected phase %q, got %q", PhaseFetching, got.Phase)
+	}
+
+	s.SetProgress(Progress{Phase: PhaseMatching, Current: 10, Total: 50})
+	got := s.GetProgress()
+	if got.Phase != PhaseMatching || got.Current != 10 || got.Total != 50 {
+		t.Fatalf("expected latest progress to overwrite prior state, got %+v", got)
+	}
+}
+
+// TestSessionSetResultsSetsReviewPhase covers SetResults' side effect: the
+// TS suite's "job status transitions from matching to review on successful
+// match" - in this port that transition happens as part of SetResults itself
+// rather than a separate route step.
+func TestSessionSetResultsSetsReviewPhase(t *testing.T) {
+	s := &Session{Progress: Progress{Phase: PhaseMatching}}
+	s.SetResults(nil)
+	if got := s.GetProgress().Phase; got != PhaseReview {
+		t.Fatalf("expected SetResults to move phase to %q, got %q", PhaseReview, got)
+	}
+}
+
 func TestStoreNewAndDelete(t *testing.T) {
 	store := NewStore()
 	sess := store.New("sid", 42, "youtube", adapters.TargetConfig{})
