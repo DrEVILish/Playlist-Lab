@@ -4,7 +4,7 @@
      has no such context, so mixType + a raw configuration JSON field are
      kept here (same fields the previous version of this page exposed). */}}
 {{define "partials/mix_template_new_form.html"}}
-<div class="save-template-overlay" onclick="if(event.target===this)document.getElementById('modal-root').innerHTML=''">
+<div class="save-template-overlay">
   <div class="save-template-modal" role="dialog" aria-modal="true" aria-label="Save Mix">
     <form hx-post="/mix-templates" hx-target="#mix-templates-list" hx-swap="innerHTML"
       hx-on::after-request="if(event.detail.successful)document.getElementById('modal-root').innerHTML=''">

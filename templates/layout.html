@@ -195,18 +195,99 @@
 
   <!-- Reusable modal target for HTMX-loaded fragments: a page triggers
        hx-get="/some/fragment" hx-target="#modal-root" hx-swap="innerHTML"
-       and the fragment is expected to render its own
-       .modal-overlay > .modal-content (see templates/partials/modal.html). -->
+       and the fragment renders a single root overlay element wrapping its
+       content (schedule_form.html is the smallest example). The script below
+       supplies every behaviour beyond that, so the fragment needs no
+       close/focus/keyboard wiring of its own. -->
   <div id="modal-root"></div>
   <script>
-    // Escape closes whatever's currently in #modal-root - the one modal
-    // interaction plain CSS/hx-confirm can't express.
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') {
-        var root = document.getElementById('modal-root');
-        if (root) root.innerHTML = '';
-      }
-    });
+    // The behaviour Modal.tsx used to own, applied once here to whatever is
+    // currently in #modal-root instead of being re-implemented per partial:
+    // focus handling, the Tab trap, Escape, and click-outside-to-close. Each
+    // modal partial only supplies its own overlay + content markup, so a new
+    // one gets all of this for free and none of them can drift apart.
+    (function () {
+      var root = document.getElementById('modal-root');
+      if (!root) return;
+      var FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+      var trigger = null;
+      var downOnOverlay = false;
+
+      // Matched on the shared "*-overlay" class rather than by position:
+      // some partials (shared_with_me.html, mix_custom_form.html) emit a
+      // <link rel="stylesheet"> for their page CSS ahead of the overlay, so
+      // firstElementChild is not reliably the dialog. The partials variously
+      // use .modal-overlay, .advanced-mix-overlay, .quick-mix-settings-overlay,
+      // .custom-mix-overlay, .save-template-overlay and .edit-template-overlay.
+      function overlay() { return root.querySelector('[class*="overlay"]'); }
+      function close() { root.innerHTML = ''; }
+
+      // Move focus into the dialog when one opens, and hand it back to
+      // whatever opened it when it closes - otherwise focus is left stranded
+      // on a detached node and keyboard users restart from the top of the
+      // document. Watching #modal-root covers every close path there is
+      // (close button, overlay, Escape, hx-on::after-request), so no partial
+      // has to remember to participate.
+      new MutationObserver(function () {
+        var el = overlay();
+        if (el) {
+          if (!trigger) trigger = document.activeElement;
+          var first = el.querySelector(FOCUSABLE);
+          if (first) {
+            first.focus();
+          } else {
+            el.setAttribute('tabindex', '-1');
+            el.focus();
+          }
+        } else if (trigger) {
+          if (document.body.contains(trigger)) trigger.focus();
+          trigger = null;
+        }
+      }).observe(root, { childList: true });
+
+      document.addEventListener('keydown', function (e) {
+        var el = overlay();
+        if (!el) {
+          // The delete-template confirmation is a checkbox-hack dialog
+          // rendered inline in the templates list rather than swapped into
+          // #modal-root, so it is invisible to everything above - but a
+          // dialog that ignores Escape when every other one accepts it is
+          // just a bug the user has to learn. Unchecking closes it.
+          if (e.key === 'Escape') {
+            var open = document.querySelectorAll('.delete-dialog-checkbox:checked');
+            for (var i = 0; i < open.length; i++) open[i].checked = false;
+          }
+          return;
+        }
+        if (e.key === 'Escape') { close(); return; }
+        if (e.key !== 'Tab') return;
+        // Trap Tab inside the dialog: without this, tabbing past the last
+        // control walks into the page behind the overlay, which is still
+        // fully interactive.
+        var items = Array.prototype.filter.call(el.querySelectorAll(FOCUSABLE), function (n) {
+          return n.offsetParent !== null && !n.disabled;
+        });
+        if (!items.length) return;
+        var first = items[0], last = items[items.length - 1];
+        if (e.shiftKey && (document.activeElement === first || !el.contains(document.activeElement))) {
+          e.preventDefault(); last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault(); first.focus();
+        }
+      });
+
+      // Close only on a click that both starts and ends on the overlay. A
+      // plain onclick (what each partial used to carry inline) resolves its
+      // target from mouseup via the nearest common ancestor of the two
+      // events, so selecting text inside a modal and releasing the drag
+      // outside it counted as an outside click and threw away whatever had
+      // been typed into the form. Modal.tsx guarded this for the same reason.
+      root.addEventListener('mousedown', function (e) { downOnOverlay = e.target === overlay(); });
+      root.addEventListener('mouseup', function (e) {
+        if (downOnOverlay && e.target === overlay()) close();
+        downOnOverlay = false;
+      });
+    })();
   </script>
 </body>
 </html>

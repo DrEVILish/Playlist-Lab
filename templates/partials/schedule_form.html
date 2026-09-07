@@ -4,7 +4,7 @@
      than adding a near-duplicate stylesheet. Rendered via
      GET /playlists/{plexId}/schedule into #modal-root. */}}
 {{define "partials/schedule_form.html"}}
-<div class="advanced-mix-overlay" onclick="if(event.target===this)document.getElementById('modal-root').innerHTML=''">
+<div class="advanced-mix-overlay">
   <div class="advanced-mix-modal" style="max-width:460px">
     <div class="advanced-mix-header">
       <h2 class="advanced-mix-title">{{if .Schedule}}Manage Schedule{{else}}Create Schedule{{end}} — {{.PlaylistName}}</h2>
