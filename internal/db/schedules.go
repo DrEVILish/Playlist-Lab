@@ -122,6 +122,42 @@ func GetUserSchedules(sqlDB *sql.DB, userID int64) ([]Schedule, error) {
 	return out, rows.Err()
 }
 
+// AdminSchedule is a Schedule plus the cross-user context the admin-wide
+// Schedules tab needs and a per-user view has no reason to carry: whose
+// schedule it is and, for playlist_refresh schedules, which playlist.
+type AdminSchedule struct {
+	Schedule
+	Username     string
+	PlaylistName sql.NullString
+}
+
+// GetAllSchedules returns every schedule across every user, for the admin
+// Schedules tab (routes/admin.ts's GET /schedules, database.ts's
+// getAllSchedules). GetUserSchedules stays scoped to one user because every
+// other caller (the playlists page, the scheduler) only ever needs that.
+func GetAllSchedules(sqlDB *sql.DB) ([]AdminSchedule, error) {
+	rows, err := sqlDB.Query(`
+		SELECT s.id, s.user_id, s.playlist_id, s.schedule_type, s.frequency,
+		       s.start_date, s.last_run, s.config, s.created_at, u.plex_username, p.name
+		FROM schedules s
+		JOIN users u ON u.id = s.user_id
+		LEFT JOIN playlists p ON p.id = s.playlist_id
+		ORDER BY s.created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AdminSchedule
+	for rows.Next() {
+		var a AdminSchedule
+		if err := rows.Scan(&a.ID, &a.UserID, &a.PlaylistID, &a.ScheduleType, &a.Frequency, &a.StartDate, &a.LastRun, &a.Config, &a.CreatedAt, &a.Username, &a.PlaylistName); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
 // GetDueSchedules returns every schedule belonging to an enabled user -
 // scheduler.IsDue still has to be applied by the caller to filter down to
 // schedules actually due right now (kept as a pure function there so it's

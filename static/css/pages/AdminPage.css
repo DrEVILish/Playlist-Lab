@@ -273,3 +273,8 @@
   font-size: 0.75rem;
   overflow-x: auto;
 }
+
+.admin-schedules-subheading {
+  margin: 1.5rem 0 0.75rem;
+}
+.admin-schedules-subheading:first-child { margin-top: 0; }

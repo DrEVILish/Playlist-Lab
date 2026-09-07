@@ -1,0 +1,44 @@
+{{/* Admin Schedules tab body, ported from routes/admin.ts's GET /jobs and
+     GET /schedules (database.ts's getAllSchedules). */}}
+{{define "partials/admin_schedules.html"}}
+<div id="admin-schedules">
+  <h3 class="admin-schedules-subheading">Background jobs</h3>
+  <div class="table-responsive">
+    <table style="width:100%; border-collapse: collapse;">
+      <thead><tr><th>Job</th><th>Schedule</th><th>Status</th><th>Next run</th></tr></thead>
+      <tbody>
+        {{range .Jobs}}
+        <tr>
+          <td>{{.Name}}</td>
+          <td><code>{{.Spec}}</code></td>
+          <td>{{if .Enabled}}enabled{{else}}disabled{{end}}</td>
+          <td>{{if .NextRun}}{{.NextRun}}{{else}}&mdash;{{end}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="admin-schedules-subheading">All schedules</h3>
+  {{if not .Schedules}}
+    <p class="settings-hint">No schedules exist yet.</p>
+  {{else}}
+  <div class="table-responsive">
+    <table style="width:100%; border-collapse: collapse;">
+      <thead><tr><th>User</th><th>Type</th><th>Playlist</th><th>Frequency</th><th>Last run</th></tr></thead>
+      <tbody>
+        {{range .Schedules}}
+        <tr>
+          <td>{{.Username}}</td>
+          <td>{{.ScheduleType}}</td>
+          <td>{{if .PlaylistName.Valid}}{{.PlaylistName.String}}{{else}}&mdash;{{end}}</td>
+          <td>{{.Frequency}}</td>
+          <td>{{if not .LastRunTime.IsZero}}{{relativeTime .LastRunTime}}{{else}}never{{end}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{end}}
+</div>
+{{end}}

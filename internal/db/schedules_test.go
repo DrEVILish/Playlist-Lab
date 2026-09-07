@@ -108,3 +108,60 @@ func TestGetDueSchedulesDisabledUser(t *testing.T) {
 		t.Fatal("expected schedule due again after re-enabling user")
 	}
 }
+
+// GetAllSchedules is a cross-user view GetUserSchedules never needed to be -
+// it must return every user's schedules, not just the caller's, and must
+// carry the username/playlist name the admin Schedules tab renders without
+// a second round trip per row.
+func TestGetAllSchedules(t *testing.T) {
+	sqlDB := newTestDB(t)
+	u1, _ := CreateUser(sqlDB, "plex1", "alice", "tok1", "")
+	u2, _ := CreateUser(sqlDB, "plex2", "bob", "tok2", "")
+	pl, _ := CreatePlaylistRow(sqlDB, u1.ID, "pl1", "Alice's Playlist", "spotify", "")
+
+	s1, err := CreateSchedule(sqlDB, u1.ID, pl.ID, "playlist_refresh", "daily", "2024-01-01", "")
+	if err != nil {
+		t.Fatalf("CreateSchedule (alice): %v", err)
+	}
+	// mix_generation schedules have no playlist yet - GetAllSchedules must
+	// tolerate that rather than erroring on the LEFT JOIN.
+	s2, err := CreateSchedule(sqlDB, u2.ID, 0, "mix_generation", "weekly", "2024-01-01", "")
+	if err != nil {
+		t.Fatalf("CreateSchedule (bob): %v", err)
+	}
+
+	all, err := GetAllSchedules(sqlDB)
+	if err != nil {
+		t.Fatalf("GetAllSchedules: %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("got %d schedules, want 2 across both users", len(all))
+	}
+
+	byID := map[int64]AdminSchedule{}
+	for _, s := range all {
+		byID[s.ID] = s
+	}
+
+	got1, ok := byID[s1.ID]
+	if !ok {
+		t.Fatalf("alice's schedule (id %d) missing from GetAllSchedules", s1.ID)
+	}
+	if got1.Username != "alice" {
+		t.Errorf("username = %q, want alice", got1.Username)
+	}
+	if !got1.PlaylistName.Valid || got1.PlaylistName.String != "Alice's Playlist" {
+		t.Errorf("playlist name = %+v, want Alice's Playlist", got1.PlaylistName)
+	}
+
+	got2, ok := byID[s2.ID]
+	if !ok {
+		t.Fatalf("bob's schedule (id %d) missing from GetAllSchedules", s2.ID)
+	}
+	if got2.Username != "bob" {
+		t.Errorf("username = %q, want bob", got2.Username)
+	}
+	if got2.PlaylistName.Valid {
+		t.Errorf("playlist name = %+v, want NULL for a playlist-less mix_generation schedule", got2.PlaylistName)
+	}
+}

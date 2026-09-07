@@ -207,35 +207,47 @@ func main() {
 
 	// Background jobs (Phase 4/5/6f).
 	scheduler := jobs.NewScheduler()
-	scheduler.Register(jobs.Config{
-		Name: "cache-cleanup", Spec: "0 3 * * 0", // 3:00 AM every Sunday
-		Handler: func() error { return jobs.RunCacheCleanup(sqlDB) },
-		Enabled: cfg.EnableCacheCleanup,
-	})
-	// Deezer charts + ARIA charts, cached for fast popular-playlist import -
-	// see jobs.RunDailyScraper's doc for which platforms this does NOT cover
-	// (and why).
-	scheduler.Register(jobs.Config{
-		Name: "daily-scraper", Spec: cfg.ScraperSchedule,
-		Handler: func() error { return jobs.RunDailyScraper(sqlDB) },
-		Enabled: cfg.EnableScraperJob,
-	})
-	// The Deezer ARL deemix logs in with expires every few months; checking
-	// it on a schedule (and notifying admins on failure) turns that from
-	// "downloads have been silently failing for a week" into something
-	// someone is actually told about. Deferred until now (Phase 4 left this
-	// job body unwritten) since it needed the Deemix integration this phase
-	// ports.
-	scheduler.Register(jobs.Config{
-		Name: "deemix-arl-check", Spec: cfg.DeemixArlCheckSchedule,
-		Handler: func() error { deemixService.CheckArlAndNotifyAdmins(); return nil },
-		Enabled: cfg.EnableDeemixArlCheck,
-	})
-	scheduler.Register(jobs.Config{
-		Name: "schedule-checker", Spec: cfg.ScheduleCheckerSchedule,
-		Handler: func() error { return jobs.RunScheduleChecker(schedulerDeps) },
-		Enabled: cfg.EnableScheduleChecker,
-	})
+	jobConfigs := []jobs.Config{
+		{
+			Name: "cache-cleanup", Spec: "0 3 * * 0", // 3:00 AM every Sunday
+			Handler: func() error { return jobs.RunCacheCleanup(sqlDB) },
+			Enabled: cfg.EnableCacheCleanup,
+		},
+		// Deezer charts + ARIA charts, cached for fast popular-playlist
+		// import - see jobs.RunDailyScraper's doc for which platforms this
+		// does NOT cover (and why).
+		{
+			Name: "daily-scraper", Spec: cfg.ScraperSchedule,
+			Handler: func() error { return jobs.RunDailyScraper(sqlDB) },
+			Enabled: cfg.EnableScraperJob,
+		},
+		// The Deezer ARL deemix logs in with expires every few months;
+		// checking it on a schedule (and notifying admins on failure) turns
+		// that from "downloads have been silently failing for a week" into
+		// something someone is actually told about. Deferred until now
+		// (Phase 4 left this job body unwritten) since it needed the Deemix
+		// integration this phase ports.
+		{
+			Name: "deemix-arl-check", Spec: cfg.DeemixArlCheckSchedule,
+			Handler: func() error { deemixService.CheckArlAndNotifyAdmins(); return nil },
+			Enabled: cfg.EnableDeemixArlCheck,
+		},
+		{
+			Name: "schedule-checker", Spec: cfg.ScheduleCheckerSchedule,
+			Handler: func() error { return jobs.RunScheduleChecker(schedulerDeps) },
+			Enabled: cfg.EnableScheduleChecker,
+		},
+	}
+	// Fed straight to the admin Schedules tab (handlers.BackgroundJob), so
+	// its "enabled"/"next run" view can never drift from what actually got
+	// registered below - jobs.Scheduler itself exposes no status API to
+	// read this back from (see BackgroundJob's doc).
+	backgroundJobs := make([]handlers.BackgroundJob, len(jobConfigs))
+	for i, jc := range jobConfigs {
+		scheduler.Register(jc)
+		backgroundJobs[i] = handlers.BackgroundJob{Name: jc.Name, Spec: jc.Spec, Enabled: jc.Enabled}
+	}
+	handlers.RegisterAdminSchedules(r, mw, &handlers.AdminSchedulesHandler{DB: sqlDB, Tmpl: tmpl, Jobs: backgroundJobs})
 	if cfg.IsProduction() || cfg.EnableJobs {
 		scheduler.Start()
 		defer scheduler.Stop()
