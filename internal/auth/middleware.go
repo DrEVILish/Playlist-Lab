@@ -85,7 +85,7 @@ func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 
 		if data == nil || data.UserID == 0 {
 			slog.Debug("rejected unauthenticated request", "method", r.Method, "path", r.URL.Path, "hadCookie", SessionID(r) != "")
-			writeJSONError(w, http.StatusUnauthorized, "AUTH_REQUIRED", "Authentication required")
+			redirectToLoginOrJSONError(w, r, "AUTH_REQUIRED", "Authentication required")
 			return
 		}
 
@@ -93,7 +93,7 @@ func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 		if err != nil {
 			slog.Warn("session references a user that no longer exists, destroying it", "userId", data.UserID)
 			_ = m.Store.Destroy(SessionID(r))
-			writeJSONError(w, http.StatusUnauthorized, "AUTH_INVALID", "Invalid session")
+			redirectToLoginOrJSONError(w, r, "AUTH_INVALID", "Invalid session")
 			return
 		}
 
@@ -147,4 +147,24 @@ func writeJSONError(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_, _ = w.Write([]byte(`{"error":{"code":"` + code + `","message":"` + message + `","statusCode":` + strconv.Itoa(status) + `}}`))
+}
+
+// redirectToLoginOrJSONError sends a browser tab loading a page straight to
+// the login screen instead of the raw JSON body every other 401 in this app
+// returns. The React app never needed this distinction: its catch-all route
+// always served the same SPA shell regardless of auth state, and the shell's
+// own client-side router decided whether to show LoginPage - so the "no
+// session" response body was never rendered directly. Server-rendered pages
+// have no such shell to fall back on, so a plain top-level navigation
+// (GET, no HX-Request header - the header htmx adds to every request it
+// makes, so its absence means this wasn't triggered by an in-app htmx call)
+// gets a 302 to /login. htmx-driven requests and non-GET requests keep the
+// JSON error: an in-app fetch expects a body it can react to, not a
+// redirect it would just follow into a login page rendered inside a modal.
+func redirectToLoginOrJSONError(w http.ResponseWriter, r *http.Request, code, message string) {
+	if r.Method == http.MethodGet && r.Header.Get("HX-Request") != "true" {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+	writeJSONError(w, http.StatusUnauthorized, code, message)
 }

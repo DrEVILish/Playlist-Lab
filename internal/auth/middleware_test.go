@@ -47,9 +47,49 @@ func handlerChain(m *Middleware) http.Handler {
 	return m.WithSession(m.RequireAuth(final))
 }
 
+// A plain top-level browser GET (no HX-Request header - htmx sets this on
+// every request it makes, so its absence means a real navigation rather
+// than an in-app call) must redirect to /login rather than render a raw
+// JSON error body: there is no SPA shell here to fall back on, unlike the
+// React app this replaces, where the catch-all route always served the same
+// shell and let client-side routing decide what to show.
 func TestRequireAuth_NoSessionRejected(t *testing.T) {
 	m, _ := newTestMiddleware(t)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	handlerChain(m).ServeHTTP(rec, req)
+	if rec.Code != http.StatusFound {
+		t.Fatalf("got status %d, want 302", rec.Code)
+	}
+	if got := rec.Header().Get("Location"); got != "/login" {
+		t.Fatalf("Location = %q, want /login", got)
+	}
+}
+
+// An htmx-driven request (one already inside the loaded app, e.g. a button
+// click after the session expired) must keep getting the JSON error body -
+// it expects something it can react to, not a redirect it would follow into
+// a login page rendered inside whatever partial it was targeting.
+func TestRequireAuth_NoSession_HTMXRequestGetsJSON(t *testing.T) {
+	m, _ := newTestMiddleware(t)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	handlerChain(m).ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("got status %d, want 401", rec.Code)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json", got)
+	}
+}
+
+// A non-GET request (POST/DELETE/etc, always AJAX in this app - there are
+// no plain <form> submits) also keeps the JSON body regardless of
+// HX-Request: a browser never top-level-navigates via POST here.
+func TestRequireAuth_NoSession_NonGETGetsJSON(t *testing.T) {
+	m, _ := newTestMiddleware(t)
+	req := httptest.NewRequest(http.MethodPost, "/playlists/bulk-delete", nil)
 	rec := httptest.NewRecorder()
 	handlerChain(m).ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
@@ -79,8 +119,8 @@ func TestRequireAuth_SessionForDeletedUserIsDestroyed(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	handlerChain(m).ServeHTTP(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("got status %d, want 401", rec.Code)
+	if rec.Code != http.StatusFound {
+		t.Fatalf("got status %d, want 302", rec.Code)
 	}
 	if _, err := m.Store.Get(sid); err != session.ErrNotFound {
 		t.Fatalf("expected session to be destroyed, got err=%v", err)
@@ -127,8 +167,13 @@ func TestRequireAuth_DisabledAdminStillAllowed(t *testing.T) {
 func TestRequireAuth_DevAutoLoginRequiresBothFlags(t *testing.T) {
 	m, _ := newTestMiddleware(t)
 
+	// HX-Request keeps these focused on what they actually test - whether
+	// the bypass fired - via the plain JSON-401 branch, rather than also
+	// asserting the browser-navigation redirect covered by
+	// TestRequireAuth_NoSessionRejected above.
 	t.Run("neither flag set: rejected", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("HX-Request", "true")
 		rec := httptest.NewRecorder()
 		handlerChain(m).ServeHTTP(rec, req)
 		if rec.Code != http.StatusUnauthorized {
@@ -140,6 +185,7 @@ func TestRequireAuth_DevAutoLoginRequiresBothFlags(t *testing.T) {
 		m.DevAuto = true
 		m.DevMode = false
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("HX-Request", "true")
 		rec := httptest.NewRecorder()
 		handlerChain(m).ServeHTTP(rec, req)
 		if rec.Code != http.StatusUnauthorized {
