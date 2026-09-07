@@ -85,6 +85,7 @@
     </nav>
     {{end}}
 
+    {{if .User}}
     <header class="header">
       <div class="header-content">
         <div class="header-left">
@@ -92,7 +93,6 @@
             <img src="/static/logo.svg" alt="Playlist Lab" class="header-logo-icon">
             <h1><span class="logo-playlist">Playlist </span><span class="logo-lab">Lab</span></h1>
           </a>
-          {{if .User}}
           <!-- Matches the real React header's 5-button set (Header.tsx
                lines 46-52): Import/Generate/Shared With Me/Backup-Restore/
                Status - not Cross-Import/Mix Templates. Those two are this
@@ -116,10 +116,8 @@
             <a class="btn btn-secondary btn-small" href="/backup">Backup / Restore</a>
             <a class="btn btn-secondary btn-small" href="/status">Status</a>
           </nav>
-          {{end}}
         </div>
 
-        {{if .User}}
         <div class="header-user">
           <!-- Actions menu: React used a popover hook driven by JS state;
                <details>/<summary> gives the same click-to-toggle disclosure
@@ -180,17 +178,19 @@
           </a>
           <form hx-post="/auth/logout"><button type="submit" class="btn btn-secondary btn-logout">Logout</button></form>
         </div>
-        {{end}}
       </div>
     </header>
+    {{end}}
 
     <main class="layout-main">
       {{block "content" .}}{{end}}
     </main>
 
+    {{if .User}}
     <footer class="footer">
       {{template "footer-content"}}
     </footer>
+    {{end}}
   </div>
 
   <!-- Reusable modal target for HTMX-loaded fragments: a page triggers
