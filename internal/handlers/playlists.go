@@ -3,7 +3,9 @@ package handlers
 import (
 	"database/sql"
 	"fmt"
+	"io"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"sort"
@@ -39,6 +41,12 @@ func RegisterPlaylists(r chi.Router, mw *auth.Middleware, h *PlaylistsHandler) {
 		r.Delete("/playlists/{plexId}", h.deletePlaylist)
 		r.Post("/playlists/bulk-delete", h.bulkDelete)
 		r.Post("/playlists/{plexId}/clone", h.clone)
+		r.Post("/playlists/{plexId}/shuffle", h.shuffle)
+		r.Post("/playlists/{plexId}/sort", h.sortTracks)
+		r.Post("/playlists/{plexId}/dedupe", h.dedupe)
+		r.Post("/playlists/{plexId}/split", h.split)
+		r.Put("/playlists/{plexId}/rename", h.rename)
+		r.Post("/playlists/{plexId}/cover", h.uploadCover)
 		r.Post("/playlists/merge", h.merge)
 		r.Get("/playlists/{plexId}/share", h.shareForm)
 		r.Post("/playlists/{plexId}/share", h.share)
@@ -649,6 +657,385 @@ func (h *PlaylistsHandler) merge(w http.ResponseWriter, r *http.Request) {
 }
 
 func strPtr(s string) *string { return &s }
+
+// applyTrackOrder rewrites a playlist's order to match ordered, by moving
+// each track after the one before it - ports playlists.ts's applyTrackOrder,
+// shared by shuffle and sort so there is one description of how a reorder
+// is performed.
+//
+// ponytail: Plex's playlist API has no batch-reorder endpoint, so this is
+// O(n) sequential MovePlaylistItem calls - fine for typical playlist sizes,
+// but slow (and non-atomic - a mid-run failure leaves a partial reorder) for
+// very large ones. Revisit if Plex ever adds a bulk-reorder endpoint.
+func applyTrackOrder(client *plex.Client, plexID string, ordered []plex.Track) error {
+	afterID := "0"
+	for _, t := range ordered {
+		itemID := strconv.Itoa(t.PlaylistItemID)
+		if err := client.MovePlaylistItem(plexID, itemID, afterID); err != nil {
+			return err
+		}
+		afterID = itemID
+	}
+	return nil
+}
+
+// touchTrackedPlaylist bumps a tracked playlist's updated_at after an
+// in-place reorder/dedupe, matching playlists.ts's `db.updatePlaylist(tracked.id,
+// { updated_at: Date.now() })` - a no-op if this playlist was never
+// imported/tracked through Playlist Lab (an untracked Plex playlist has
+// nothing to bump).
+func touchTrackedPlaylist(sqlDB *sql.DB, userID int64, plexID string) {
+	tracked, err := db.GetPlaylistByPlexID(sqlDB, userID, plexID)
+	if err != nil || tracked == nil {
+		return
+	}
+	if err := db.TouchPlaylist(sqlDB, tracked.ID); err != nil {
+		slog.Warn("failed to touch playlist after reorder", "error", err, "playlistId", tracked.ID)
+	}
+}
+
+// shuffle ports POST /api/playlists/:id/shuffle: randomize a playlist's
+// track order in place. Runs through the action queue since a full
+// sequential reorder (see applyTrackOrder) can take a while.
+func (h *PlaylistsHandler) shuffle(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
+	plexID := chi.URLParam(r, "plexId")
+	client, userServer, err := h.client(user)
+	if err != nil || userServer == nil {
+		http.Error(w, "no server selected", http.StatusBadRequest)
+		return
+	}
+
+	h.Queue.Enqueue(user.ID, "Shuffle playlist", notifications.TypeAction, func(notificationID string) error {
+		tracks, err := client.GetPlaylistTracks(plexID)
+		if err != nil {
+			return err
+		}
+		shuffled := onlyRealItems(tracks)
+		rand.Shuffle(len(shuffled), func(i, j int) { shuffled[i], shuffled[j] = shuffled[j], shuffled[i] })
+		if err := applyTrackOrder(client, plexID, shuffled); err != nil {
+			return err
+		}
+		touchTrackedPlaylist(h.DB, user.ID, plexID)
+		status := notifications.StatusSuccess
+		detail := fmt.Sprintf("Shuffled %d tracks", len(shuffled))
+		h.Notifications.Update(user.ID, notificationID, notifications.Patch{Status: &status, Detail: &detail})
+		return nil
+	})
+	// 202 Accepted (matches playlists.ts's res.status(202).json(...) for
+	// these same endpoints), with the notifications fragment rendered
+	// immediately into the body - same as every other action-queue trigger
+	// (missing.go's deemixAll, retry, etc.) - rather than an empty response.
+	// This is what actually swaps into #notifications first, before the SSE
+	// stream catches up with the same content a moment later; an empty body
+	// would blank the bell out to nothing the instant the request completes,
+	// since the button's hx-target="#notifications" hx-swap="innerHTML" has
+	// nothing else to put there.
+	w.WriteHeader(http.StatusAccepted)
+	h.Tmpl.RenderPartial(w, "partials/notifications.html", map[string]any{"Notifications": h.Notifications.List(user.ID)})
+}
+
+// onlyRealItems filters out entries with no PlaylistItemID: a smart
+// (dynamically-generated) playlist's items have none and can't be
+// reordered/removed individually, same filter playlists.ts applies before
+// shuffling/sorting/deduping.
+func onlyRealItems(tracks []plex.Track) []plex.Track {
+	out := make([]plex.Track, 0, len(tracks))
+	for _, t := range tracks {
+		if t.PlaylistItemID != 0 {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// sortKeys are the fields a playlist can be sorted on, and how to read each
+// one off a Track - ports playlists.ts's SORT_KEYS. Values are returned as
+// `any` (string or int64) so sortTracks's comparator can dispatch on type
+// the same way the original's readKey(a)/readKey(b) does.
+var sortKeys = map[string]func(plex.Track) any{
+	"title":    func(t plex.Track) any { return t.Title },
+	"artist":   func(t plex.Track) any { return firstNonEmpty(t.GrandparentTitle, t.OriginalTitle) },
+	"album":    func(t plex.Track) any { return t.ParentTitle },
+	"year":     func(t plex.Track) any { return int64(t.Year) },
+	"duration": func(t plex.Track) any { return t.Duration },
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// sortTracks ports POST /api/playlists/:id/sort: reorder a playlist by one
+// of sortKeys. Form fields: by, direction ("asc"/"desc", default asc).
+func (h *PlaylistsHandler) sortTracks(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
+	plexID := chi.URLParam(r, "plexId")
+	_ = r.ParseForm()
+	by := r.FormValue("by")
+	readKey, ok := sortKeys[by]
+	if !ok {
+		names := make([]string, 0, len(sortKeys))
+		for k := range sortKeys {
+			names = append(names, k)
+		}
+		sort.Strings(names)
+		http.Error(w, "by must be one of: "+strings.Join(names, ", "), http.StatusBadRequest)
+		return
+	}
+	descending := r.FormValue("direction") == "desc"
+
+	client, userServer, err := h.client(user)
+	if err != nil || userServer == nil {
+		http.Error(w, "no server selected", http.StatusBadRequest)
+		return
+	}
+
+	h.Queue.Enqueue(user.ID, "Sort playlist", notifications.TypeAction, func(notificationID string) error {
+		tracks, err := client.GetPlaylistTracks(plexID)
+		if err != nil {
+			return err
+		}
+		sorted := onlyRealItems(tracks)
+		sort.SliceStable(sorted, func(i, j int) bool {
+			left, right := readKey(sorted[i]), readKey(sorted[j])
+			var less bool
+			if ls, ok := left.(string); ok {
+				less = strings.ToLower(ls) < strings.ToLower(right.(string))
+			} else {
+				less = left.(int64) < right.(int64)
+			}
+			if descending {
+				return !less
+			}
+			return less
+		})
+		if err := applyTrackOrder(client, plexID, sorted); err != nil {
+			return err
+		}
+		touchTrackedPlaylist(h.DB, user.ID, plexID)
+		status := notifications.StatusSuccess
+		detail := fmt.Sprintf("Sorted %d tracks by %s", len(sorted), by)
+		h.Notifications.Update(user.ID, notificationID, notifications.Patch{Status: &status, Detail: &detail})
+		return nil
+	})
+	// 202 Accepted (matches playlists.ts's res.status(202).json(...) for
+	// these same endpoints), with the notifications fragment rendered
+	// immediately into the body - same as every other action-queue trigger
+	// (missing.go's deemixAll, retry, etc.) - rather than an empty response.
+	// This is what actually swaps into #notifications first, before the SSE
+	// stream catches up with the same content a moment later; an empty body
+	// would blank the bell out to nothing the instant the request completes,
+	// since the button's hx-target="#notifications" hx-swap="innerHTML" has
+	// nothing else to put there.
+	w.WriteHeader(http.StatusAccepted)
+	h.Tmpl.RenderPartial(w, "partials/notifications.html", map[string]any{"Notifications": h.Notifications.List(user.ID)})
+}
+
+// dedupe ports POST /api/playlists/:id/dedupe: remove repeated tracks,
+// keeping the first occurrence of each so the playlist's order is otherwise
+// untouched. Duplicates are judged by Plex ratingKey (the same track added
+// twice), not by title, so two genuinely different recordings of a song are
+// both kept.
+func (h *PlaylistsHandler) dedupe(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
+	plexID := chi.URLParam(r, "plexId")
+	client, userServer, err := h.client(user)
+	if err != nil || userServer == nil {
+		http.Error(w, "no server selected", http.StatusBadRequest)
+		return
+	}
+
+	h.Queue.Enqueue(user.ID, "Remove duplicates", notifications.TypeAction, func(notificationID string) error {
+		tracks, err := client.GetPlaylistTracks(plexID)
+		if err != nil {
+			return err
+		}
+		seen := map[string]bool{}
+		var duplicateItemIDs []string
+		for _, t := range tracks {
+			if t.PlaylistItemID == 0 || t.RatingKey == "" {
+				continue
+			}
+			if seen[t.RatingKey] {
+				duplicateItemIDs = append(duplicateItemIDs, strconv.Itoa(t.PlaylistItemID))
+				continue
+			}
+			seen[t.RatingKey] = true
+		}
+		if len(duplicateItemIDs) > 0 {
+			if err := client.RemoveMultipleFromPlaylist(plexID, duplicateItemIDs); err != nil {
+				return err
+			}
+		}
+		touchTrackedPlaylist(h.DB, user.ID, plexID)
+		status := notifications.StatusSuccess
+		detail := fmt.Sprintf("Removed %d duplicate(s)", len(duplicateItemIDs))
+		h.Notifications.Update(user.ID, notificationID, notifications.Patch{Status: &status, Detail: &detail})
+		return nil
+	})
+	// 202 Accepted (matches playlists.ts's res.status(202).json(...) for
+	// these same endpoints), with the notifications fragment rendered
+	// immediately into the body - same as every other action-queue trigger
+	// (missing.go's deemixAll, retry, etc.) - rather than an empty response.
+	// This is what actually swaps into #notifications first, before the SSE
+	// stream catches up with the same content a moment later; an empty body
+	// would blank the bell out to nothing the instant the request completes,
+	// since the button's hx-target="#notifications" hx-swap="innerHTML" has
+	// nothing else to put there.
+	w.WriteHeader(http.StatusAccepted)
+	h.Tmpl.RenderPartial(w, "partials/notifications.html", map[string]any{"Notifications": h.Notifications.List(user.ID)})
+}
+
+// split ports POST /api/playlists/:id/split: copy a chosen set of tracks
+// (by ratingKey, form field "trackId", repeatable) into a brand-new
+// playlist named by the "name" form field. The original is untouched -
+// "split" here means "peel a subset off into its own playlist", matching
+// what PlaylistEditor.tsx's handleSplitSelected actually does (one new
+// playlist from the current selection), not a multi-group operation - v2's
+// route accepted an array of {name, trackIds} groups, but no caller in the
+// real app ever sent more than one group, so that generality isn't ported.
+func (h *PlaylistsHandler) split(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
+	_ = r.ParseForm()
+	name := strings.TrimSpace(r.FormValue("name"))
+	trackIDs := r.Form["trackId"]
+	if name == "" {
+		http.Error(w, "name is required", http.StatusBadRequest)
+		return
+	}
+	if len(trackIDs) == 0 {
+		http.Error(w, "select at least one track to split off", http.StatusBadRequest)
+		return
+	}
+
+	client, userServer, err := h.client(user)
+	if err != nil || userServer == nil || !userServer.LibraryID.Valid {
+		http.Error(w, "no server/library selected", http.StatusBadRequest)
+		return
+	}
+
+	h.Queue.Enqueue(user.ID, "Split playlist", notifications.TypeAction, func(notificationID string) error {
+		machineID, err := client.GetMachineIdentifier()
+		if err != nil {
+			return err
+		}
+		trackURIs := make([]string, len(trackIDs))
+		for i, key := range trackIDs {
+			trackURIs[i] = client.BuildTrackURI(key, machineID)
+		}
+		libraryURI := client.BuildLibraryURI(userServer.LibraryID.String, machineID)
+		if _, err := client.CreatePlaylist(name, libraryURI, trackURIs); err != nil {
+			return err
+		}
+		status := notifications.StatusSuccess
+		detail := fmt.Sprintf("Split %d track(s) into %q", len(trackURIs), name)
+		h.Notifications.Update(user.ID, notificationID, notifications.Patch{Status: &status, Detail: &detail})
+		return nil
+	})
+	// 202 Accepted (matches playlists.ts's res.status(202).json(...) for
+	// these same endpoints), with the notifications fragment rendered
+	// immediately into the body - same as every other action-queue trigger
+	// (missing.go's deemixAll, retry, etc.) - rather than an empty response.
+	// This is what actually swaps into #notifications first, before the SSE
+	// stream catches up with the same content a moment later; an empty body
+	// would blank the bell out to nothing the instant the request completes,
+	// since the button's hx-target="#notifications" hx-swap="innerHTML" has
+	// nothing else to put there.
+	w.WriteHeader(http.StatusAccepted)
+	h.Tmpl.RenderPartial(w, "partials/notifications.html", map[string]any{"Notifications": h.Notifications.List(user.ID)})
+}
+
+// rename ports PUT /api/playlists/:id: renames a playlist in Plex itself
+// (not just this app's own record of it) so the new name shows up in every
+// real Plex client too, matching playlists.ts's PUT /:id. Synchronous, not
+// queued - a single rename call is fast enough that the original route
+// didn't queue it either.
+func (h *PlaylistsHandler) rename(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
+	plexID := chi.URLParam(r, "plexId")
+	_ = r.ParseForm()
+	name := strings.TrimSpace(r.FormValue("name"))
+	if name == "" {
+		http.Error(w, "name cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	client, userServer, err := h.client(user)
+	if err != nil || userServer == nil {
+		http.Error(w, "no server selected", http.StatusBadRequest)
+		return
+	}
+	if err := client.RenamePlaylist(plexID, name); err != nil {
+		slog.Error("rename: failed to rename playlist in Plex", "error", err)
+		http.Error(w, "Failed to rename playlist", http.StatusBadGateway)
+		return
+	}
+	if tracked, err := db.GetPlaylistByPlexID(h.DB, user.ID, plexID); err == nil && tracked != nil {
+		if err := db.RenamePlaylistRow(h.DB, tracked.ID, name); err != nil {
+			slog.Warn("rename: failed to update tracked playlist row", "error", err)
+		}
+	}
+	// Back to this same playlist's editor, not home - the user is mid-edit,
+	// not done with it just because they renamed it.
+	w.Header().Set("HX-Redirect", "/playlists/"+plexID)
+	w.WriteHeader(http.StatusOK)
+}
+
+// maxCoverUploadSize mirrors multer's 5MB limit in routes/playlists.ts's
+// upload middleware for POST /:id/cover.
+const maxCoverUploadSize = 5 << 20
+
+// uploadCover ports POST /api/playlists/:id/cover: upload a local image
+// file as a playlist's poster. Synchronous, not queued - a single-file
+// upload is fast enough that the original route didn't queue it either.
+func (h *PlaylistsHandler) uploadCover(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
+	plexID := chi.URLParam(r, "plexId")
+
+	if err := r.ParseMultipartForm(maxCoverUploadSize); err != nil {
+		http.Error(w, "cover image too large (max 5MB)", http.StatusRequestEntityTooLarge)
+		return
+	}
+	file, header, err := r.FormFile("cover")
+	if err != nil {
+		http.Error(w, "No file uploaded", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+	body, err := io.ReadAll(io.LimitReader(file, maxCoverUploadSize+1))
+	if err != nil {
+		http.Error(w, "failed to read uploaded file", http.StatusInternalServerError)
+		return
+	}
+	if len(body) > maxCoverUploadSize {
+		http.Error(w, "cover image too large (max 5MB)", http.StatusRequestEntityTooLarge)
+		return
+	}
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "image/jpeg"
+	}
+
+	client, userServer, err := h.client(user)
+	if err != nil || userServer == nil {
+		http.Error(w, "No server configured", http.StatusBadRequest)
+		return
+	}
+	if err := client.UploadPlaylistPosterBytes(plexID, body, contentType); err != nil {
+		slog.Error("failed to upload playlist cover", "error", err, "playlistId", plexID)
+		http.Error(w, "Failed to upload cover", http.StatusBadGateway)
+		return
+	}
+	// Back to this same playlist's editor, not home - same reasoning as
+	// rename above.
+	w.Header().Set("HX-Redirect", "/playlists/"+plexID)
+	w.WriteHeader(http.StatusOK)
+}
 
 // shareForm renders the "share with another Playlist Lab user" picker
 // (share-targets ported from routes/playlists.ts's GET /share-targets):

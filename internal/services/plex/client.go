@@ -530,7 +530,15 @@ func (c *Client) UploadPlaylistPoster(playlistID, imageURL string) error {
 	if contentType == "" {
 		contentType = "image/jpeg"
 	}
+	return c.UploadPlaylistPosterBytes(playlistID, body, contentType)
+}
 
+// UploadPlaylistPosterBytes is UploadPlaylistPoster's shared upload half,
+// split out so a directly-uploaded file (playlists.go's cover-upload form,
+// which has the bytes and content type already - no image URL to fetch) can
+// reuse it instead of round-tripping through a URL fetch that would never
+// hit the network.
+func (c *Client) UploadPlaylistPosterBytes(playlistID string, body []byte, contentType string) error {
 	req, err := http.NewRequest(http.MethodPost, c.ServerURL+"/library/metadata/"+url.PathEscape(playlistID)+"/posters", bytes.NewReader(body))
 	if err != nil {
 		return err

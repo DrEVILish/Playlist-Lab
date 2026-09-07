@@ -87,6 +87,15 @@ func TouchPlaylist(sqlDB *sql.DB, id int64) error {
 	return err
 }
 
+// RenamePlaylistRow updates this app's own record of a tracked playlist's
+// name after the caller has already renamed it in Plex itself - the two
+// must be kept in sync or this app's name (shown on the home page) drifts
+// from what every real Plex client displays.
+func RenamePlaylistRow(sqlDB *sql.DB, id int64, name string) error {
+	_, err := sqlDB.Exec("UPDATE playlists SET name = ?, updated_at = ? WHERE id = ?", name, time.Now().Unix(), id)
+	return err
+}
+
 func DeletePlaylistRow(sqlDB *sql.DB, id int64) error {
 	_, err := sqlDB.Exec("DELETE FROM playlists WHERE id = ?", id)
 	return err

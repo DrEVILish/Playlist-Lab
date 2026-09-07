@@ -152,3 +152,27 @@ func TestPlaylistCascadeDelete(t *testing.T) {
 		t.Fatalf("expected missing_tracks cascade-deleted with playlist, got %d", trackCount)
 	}
 }
+
+func TestRenamePlaylistRow(t *testing.T) {
+	sqlDB := newTestDB(t)
+	u, _ := CreateUser(sqlDB, "plex1", "u1", "tok1", "")
+	pl, err := CreatePlaylistRow(sqlDB, u.ID, "rk-1", "Old Name", "spotify", "")
+	if err != nil {
+		t.Fatalf("CreatePlaylistRow: %v", err)
+	}
+	before := pl.UpdatedAt
+
+	if err := RenamePlaylistRow(sqlDB, pl.ID, "New Name"); err != nil {
+		t.Fatalf("RenamePlaylistRow: %v", err)
+	}
+	got, err := GetPlaylistByID(sqlDB, pl.ID)
+	if err != nil || got == nil {
+		t.Fatalf("GetPlaylistByID: %v", err)
+	}
+	if got.Name != "New Name" {
+		t.Errorf("name = %q, want %q", got.Name, "New Name")
+	}
+	if got.UpdatedAt < before {
+		t.Errorf("updated_at = %d, want it bumped to at least %d", got.UpdatedAt, before)
+	}
+}
