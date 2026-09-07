@@ -94,7 +94,7 @@ func (h *AdminHandler) render(w http.ResponseWriter, r *http.Request, errMsg str
 
 	lidarrCfg := h.Lidarr.GetConfig()
 
-	h.Tmpl.RenderPage(w, "admin", map[string]any{
+	h.Tmpl.RenderPage(w, r, "admin", map[string]any{
 		"User":  user,
 		"Error": errMsg,
 		"Stats": map[string]int{

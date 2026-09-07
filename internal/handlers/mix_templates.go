@@ -175,7 +175,7 @@ func (h *MixTemplatesHandler) renderList(w http.ResponseWriter, userID int64) {
 
 func (h *MixTemplatesHandler) list(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
-	h.Tmpl.RenderPage(w, "mix_templates", map[string]any{"User": user})
+	h.Tmpl.RenderPage(w, r, "mix_templates", map[string]any{"User": user})
 }
 
 // listFragment backs the page's hx-trigger="load" fetch of the saved-mixes

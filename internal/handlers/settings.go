@@ -91,7 +91,7 @@ func (h *SettingsHandler) page(w http.ResponseWriter, r *http.Request) {
 	isAdmin, _ := db.IsAdmin(h.DB, user.ID)
 	userServer, _ := db.GetUserServer(h.DB, user.ID)
 
-	h.Tmpl.RenderPage(w, "settings", map[string]any{
+	h.Tmpl.RenderPage(w, r, "settings", map[string]any{
 		"User":      user,
 		"IsAdmin":   isAdmin,
 		"Matching":  matching.SettingsFromJSON(matchingJSON),

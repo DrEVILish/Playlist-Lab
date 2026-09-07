@@ -86,7 +86,7 @@ func (h *ImportHandler) page(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.Tmpl.RenderPage(w, "import", map[string]any{
+	h.Tmpl.RenderPage(w, r, "import", map[string]any{
 		"User": user, "HasServer": userServer != nil && userServer.LibraryID.Valid,
 		"Sources": sources,
 	})

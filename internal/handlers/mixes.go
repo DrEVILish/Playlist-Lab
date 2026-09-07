@@ -56,7 +56,7 @@ func (h *MixesHandler) page(w http.ResponseWriter, r *http.Request) {
 		data["Genres"] = client.GetLibraryGenres(userServer.LibraryID.String)
 		data["Moods"] = client.GetLibraryMoods(userServer.LibraryID.String)
 	}
-	h.Tmpl.RenderPage(w, "mixes", data)
+	h.Tmpl.RenderPage(w, r, "mixes", data)
 }
 
 // quickMixMeta holds the copy shown in the Quick Mix Settings modal (title,

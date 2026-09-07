@@ -124,7 +124,7 @@ func groupMissingTracks(dbConn *sql.DB, tracks []db.MissingTrack) []missingGroup
 // against GET /missing/list, matching cross_import.html's pattern.
 func (h *MissingHandler) page(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
-	h.Tmpl.RenderPage(w, "missing", map[string]any{"User": user})
+	h.Tmpl.RenderPage(w, r, "missing", map[string]any{"User": user})
 }
 
 // list renders GET /missing/list: every missing track grouped by playlist.

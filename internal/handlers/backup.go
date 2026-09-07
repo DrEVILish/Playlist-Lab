@@ -50,7 +50,7 @@ func (h *BackupHandler) page(w http.ResponseWriter, r *http.Request) {
 			data["Playlists"] = playlists
 		}
 	}
-	h.Tmpl.RenderPage(w, "backup_restore", data)
+	h.Tmpl.RenderPage(w, r, "backup_restore", data)
 }
 
 // backupTrack/backupPlaylist/backupFile mirror BackupRestorePage.tsx's

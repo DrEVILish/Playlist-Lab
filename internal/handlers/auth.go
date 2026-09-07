@@ -36,7 +36,7 @@ func (h *AuthHandler) loginPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	h.Tmpl.RenderPage(w, "login", nil)
+	h.Tmpl.RenderPage(w, r, "login", nil)
 }
 
 // start begins the Plex PIN flow and returns an HTMX fragment: a link to

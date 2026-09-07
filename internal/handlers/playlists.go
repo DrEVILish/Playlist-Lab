@@ -93,7 +93,7 @@ func (h *PlaylistsHandler) index(w http.ResponseWriter, r *http.Request) {
 	plexPlaylists, err := client.GetPlaylists()
 	if err != nil {
 		slog.Error("failed to fetch playlists from Plex", "error", err)
-		h.Tmpl.RenderPage(w, "home", map[string]any{"User": user, "PlexError": true})
+		h.Tmpl.RenderPage(w, r, "home", map[string]any{"User": user, "PlexError": true})
 		return
 	}
 
@@ -187,7 +187,7 @@ func (h *PlaylistsHandler) index(w http.ResponseWriter, r *http.Request) {
 	rows = filterRows(rows, f)
 	sortRows(rows, q.Get("sort"), q.Get("dir"))
 
-	h.Tmpl.RenderPage(w, "home", map[string]any{
+	h.Tmpl.RenderPage(w, r, "home", map[string]any{
 		"User": user, "Playlists": rows, "TotalPlaylists": totalPlaylists,
 		"TotalMissing": totalMissing, "TotalScheduled": totalScheduled, "TotalAttention": totalAttention,
 		"Sort": q.Get("sort"), "Dir": q.Get("dir"),
@@ -400,8 +400,23 @@ func (h *PlaylistsHandler) editor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.Tmpl.RenderPage(w, "editor", map[string]any{
+	// Same lookup clone() uses: GetPlaylists() has no per-item Get, only a
+	// full list, but the editor page is opened rarely enough (once per
+	// playlist visited) that fetching it isn't worth adding a dedicated
+	// client method for.
+	name := plexID
+	if playlists, err := client.GetPlaylists(); err == nil {
+		for _, p := range playlists {
+			if p.RatingKey == plexID {
+				name = p.Title
+				break
+			}
+		}
+	}
+
+	h.Tmpl.RenderPage(w, r, "editor", map[string]any{
 		"PlexID": plexID,
+		"Name":   name,
 		"Tracks": toTrackRows(tracks),
 	})
 }

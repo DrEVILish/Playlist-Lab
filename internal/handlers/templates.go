@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/drevilish/playlist-lab/internal/auth"
 )
 
 // tmplFuncs are available to every page/partial template. "now" backs the
@@ -176,13 +178,32 @@ func LoadTemplates(fsys fs.FS) (*Templates, error) {
 	return &Templates{pages: pages, partials: partials}, nil
 }
 
-func (t *Templates) RenderPage(w http.ResponseWriter, name string, data any) {
+// RenderPage renders name inside the shared "base" layout, which reads
+// .User from data to decide whether to show the header/footer chrome at
+// all (see layout.html) - so every caller needs it there. Rather than
+// leaving that as an easy-to-forget convention (found the hard way: editor
+// and setup's RenderPage calls never set it, silently losing their header
+// and footer entirely once layout.html started gating on it), RenderPage
+// fills it in here from the request's own session if the caller's data
+// didn't already set it, the same value every caller that does set it
+// explicitly already computes via auth.CurrentUser(r). A caller passing
+// nil (login's RenderPage(w, r, "login", nil) - genuinely no user) still
+// gets a real, possibly-nil User key rather than a template lookup on a
+// bare nil interface.
+func (t *Templates) RenderPage(w http.ResponseWriter, r *http.Request, name string, data any) {
 	tmpl, ok := t.pages[name]
 	if !ok {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	execute(w, tmpl, "base", data)
+	m, ok := data.(map[string]any)
+	if !ok {
+		m = map[string]any{}
+	}
+	if _, exists := m["User"]; !exists {
+		m["User"] = auth.CurrentUser(r)
+	}
+	execute(w, tmpl, "base", m)
 }
 
 func (t *Templates) RenderPartial(w http.ResponseWriter, name string, data any) {

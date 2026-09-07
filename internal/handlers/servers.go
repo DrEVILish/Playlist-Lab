@@ -60,7 +60,7 @@ func (h *ServersHandler) setupPage(w http.ResponseWriter, r *http.Request) {
 	for i, s := range servers {
 		options[i] = option{Value: encodeServerOption(s), Name: s.Name}
 	}
-	h.Tmpl.RenderPage(w, "setup", map[string]any{"Servers": options})
+	h.Tmpl.RenderPage(w, r, "setup", map[string]any{"Servers": options})
 }
 
 func (h *ServersHandler) setupLibraries(w http.ResponseWriter, r *http.Request) {

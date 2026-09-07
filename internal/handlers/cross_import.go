@@ -77,7 +77,7 @@ func (h *CrossImportHandler) page(w http.ResponseWriter, r *http.Request) {
 	userServer, _ := db.GetUserServer(h.DB, user.ID)
 	jobs, _ := db.GetCrossImportJobs(h.DB, user.ID)
 
-	h.Tmpl.RenderPage(w, "cross_import", map[string]any{
+	h.Tmpl.RenderPage(w, r, "cross_import", map[string]any{
 		"User": user, "HasServer": userServer != nil,
 		"TargetConnected": connected, "TargetName": target.Meta().Name,
 		"Jobs": jobs,

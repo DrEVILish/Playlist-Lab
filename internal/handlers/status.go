@@ -62,7 +62,7 @@ func (h *StatusHandler) page(w http.ResponseWriter, r *http.Request) {
 
 	userServer, err := db.GetUserServer(h.DB, user.ID)
 	if err != nil || userServer == nil || !userServer.LibraryID.Valid {
-		h.Tmpl.RenderPage(w, "status", data)
+		h.Tmpl.RenderPage(w, r, "status", data)
 		return
 	}
 
@@ -70,7 +70,7 @@ func (h *StatusHandler) page(w http.ResponseWriter, r *http.Request) {
 	plexPlaylists, err := client.GetPlaylists()
 	if err != nil {
 		data["PlexError"] = true
-		h.Tmpl.RenderPage(w, "status", data)
+		h.Tmpl.RenderPage(w, r, "status", data)
 		return
 	}
 
@@ -134,5 +134,5 @@ func (h *StatusHandler) page(w http.ResponseWriter, r *http.Request) {
 	data["Succeeded"] = succeeded
 	data["Failed"] = failed
 	data["SmartCount"] = smartCount
-	h.Tmpl.RenderPage(w, "status", data)
+	h.Tmpl.RenderPage(w, r, "status", data)
 }
