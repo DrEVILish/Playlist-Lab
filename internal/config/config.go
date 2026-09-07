@@ -9,6 +9,13 @@ import (
 	"strings"
 )
 
+// defaultSessionSecret is the fallback used when SESSION_SECRET is unset. It
+// must match utils/encryption.ts's fallback exactly (see the SessionSecret
+// field doc), so it can never be changed - only guarded against in
+// production, where a well-known key protecting stored OAuth tokens/API
+// keys would be a real vulnerability.
+const defaultSessionSecret = "default-secret-change-in-production"
+
 type Config struct {
 	NodeEnv      string
 	Port         string
@@ -77,7 +84,7 @@ func Load() Config {
 		// encrypted by the Node server in the production database this
 		// binary reads at cutover - a different default here would make
 		// every such value permanently undecryptable.
-		SessionSecret: getEnv("SESSION_SECRET", "default-secret-change-in-production"),
+		SessionSecret: getEnv("SESSION_SECRET", defaultSessionSecret),
 		TrustProxy:    getBool("TRUST_PROXY", false),
 		CookieSecure:  getBool("COOKIE_SECURE", false),
 
@@ -114,6 +121,13 @@ func Load() Config {
 
 func (c Config) IsProduction() bool {
 	return c.NodeEnv == "production"
+}
+
+// UsingDefaultSessionSecret reports whether SESSION_SECRET was left unset,
+// meaning session cookies and the AES key that encrypts stored OAuth
+// tokens/API keys are protected by a value published in this repo's source.
+func (c Config) UsingDefaultSessionSecret() bool {
+	return c.SessionSecret == defaultSessionSecret
 }
 
 func getEnv(key, fallback string) string {

@@ -46,6 +46,10 @@ import (
 
 func main() {
 	cfg := config.Load()
+	if cfg.IsProduction() && cfg.UsingDefaultSessionSecret() {
+		slog.Error("SESSION_SECRET must be set to a non-default value in production; refusing to start with a publicly-known key protecting session cookies and encrypted OAuth tokens/API keys")
+		os.Exit(1)
+	}
 
 	// Mirrors utils/logger.ts: stdout (for the systemd journal, unchanged)
 	// plus size-rotated ./logs/combined.log and ./logs/error.log, so any

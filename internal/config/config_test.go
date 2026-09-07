@@ -53,3 +53,19 @@ func TestGetBool_GarbageValueFallsBackToDefault(t *testing.T) {
 		t.Errorf("garbage value with default=false: got %v, want false", got)
 	}
 }
+
+// cmd/server/main.go refuses to boot in production when this reports true, so
+// a wrong answer either bricks a correctly-configured deploy or lets an
+// unconfigured one serve with a key published in this repo.
+func TestUsingDefaultSessionSecret(t *testing.T) {
+	if got := (Config{SessionSecret: defaultSessionSecret}).UsingDefaultSessionSecret(); !got {
+		t.Errorf("with the fallback value: got %v, want true", got)
+	}
+	if got := (Config{SessionSecret: "a-real-secret"}).UsingDefaultSessionSecret(); got {
+		t.Errorf("with a real secret: got %v, want false", got)
+	}
+	t.Setenv("SESSION_SECRET", "from-the-environment")
+	if got := Load().UsingDefaultSessionSecret(); got {
+		t.Errorf("with SESSION_SECRET set: got %v, want false", got)
+	}
+}
