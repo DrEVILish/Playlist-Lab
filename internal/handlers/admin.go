@@ -1,12 +1,12 @@
 // Package handlers: admin.go ports the user-management + stats slice of
-// routes/admin.ts to HTMX. Deemix/Lidarr server-wide config, the log
-// viewer/level control, background-job status, and the all-users schedule
-// list are all still TS-only - each is its own separate service integration
-// with its own admin UI surface, and porting all of them alongside Settings
-// in one pass would have ballooned this well past the "user management +
-// server-wide settings" ask; they're a natural follow-up pass each, wired
-// through the existing deemixService/lidarrService/scheduler already
-// constructed in cmd/server/main.go.
+// routes/admin.ts to HTMX, plus the Deemix ARL and Lidarr URL/API-key admin
+// config (both stored via internal/db/admin_config.go, same as Node's
+// configService did). The log viewer/level control, background-job status,
+// and the all-users schedule list are still TS-only - each is its own
+// separate service integration with its own admin UI surface; they're a
+// natural follow-up pass each, wired through the existing
+// deemixService/lidarrService/scheduler already constructed in
+// cmd/server/main.go.
 package handlers
 
 import (
@@ -23,8 +23,18 @@ import (
 	"github.com/drevilish/playlist-lab/internal/db"
 	"github.com/drevilish/playlist-lab/internal/services/actionqueue"
 	deemixsvc "github.com/drevilish/playlist-lab/internal/services/deemix"
+	lidarrsvc "github.com/drevilish/playlist-lab/internal/services/lidarr"
 	"github.com/drevilish/playlist-lab/internal/services/matching"
 	"github.com/drevilish/playlist-lab/internal/services/notifications"
+)
+
+// Admin config keys, persisted via internal/db/admin_config.go - read once at
+// startup (cmd/server/main.go) to seed the Deemix/Lidarr services' Config,
+// and written here whenever the admin saves the form.
+const (
+	configKeyDeemixArl    = "deemix_arl"
+	configKeyLidarrURL    = "lidarr_url"
+	configKeyLidarrAPIKey = "lidarr_api_key"
 )
 
 type AdminHandler struct {
@@ -33,6 +43,7 @@ type AdminHandler struct {
 	Notifications *notifications.Store
 	Queue         *actionqueue.Queue
 	Deemix        *deemixsvc.Service
+	Lidarr        *lidarrsvc.Service
 }
 
 func RegisterAdmin(r chi.Router, mw *auth.Middleware, h *AdminHandler) {
@@ -47,6 +58,9 @@ func RegisterAdmin(r chi.Router, mw *auth.Middleware, h *AdminHandler) {
 		r.Post("/admin/users/{userID}/delete", h.deleteUser)
 		r.Post("/admin/missing/deemix-download", h.deemixDownload)
 		r.Post("/admin/missing/deemix-all", h.deemixAll)
+		r.Post("/admin/deemix/arl", h.saveDeemixArl)
+		r.Post("/admin/deemix/arl/check", h.checkDeemixArl)
+		r.Post("/admin/lidarr/config", h.saveLidarrConfig)
 	})
 }
 
@@ -78,6 +92,8 @@ func (h *AdminHandler) render(w http.ResponseWriter, r *http.Request, errMsg str
 		}
 	}
 
+	lidarrCfg := h.Lidarr.GetConfig()
+
 	h.Tmpl.RenderPage(w, "admin", map[string]any{
 		"User":  user,
 		"Error": errMsg,
@@ -89,6 +105,10 @@ func (h *AdminHandler) render(w http.ResponseWriter, r *http.Request, errMsg str
 		},
 		"Users":        users,
 		"MissingStats": missingStats,
+		"DeemixArl":    h.Deemix.ARL(),
+		"ArlStatus":    h.Deemix.LastArlCheck(),
+		"LidarrURL":    lidarrCfg.URL,
+		"LidarrAPIKey": lidarrCfg.APIKey,
 	})
 }
 
@@ -292,4 +312,47 @@ func (h *AdminHandler) deemixAll(w http.ResponseWriter, r *http.Request) {
 	})
 
 	h.Tmpl.RenderPartial(w, "partials/notifications.html", map[string]any{"Notifications": h.Notifications.List(admin.ID)})
+}
+
+// saveDeemixArl ports PUT /api/admin/deemix-arl: persists the Deezer ARL
+// deemix-server logs in with, drops the cached session so the next download
+// uses it, and - same as the original - tests it immediately so a mistyped
+// or already-expired ARL is caught here instead of by the next user who
+// clicks Deemix.
+func (h *AdminHandler) saveDeemixArl(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	arl := strings.TrimSpace(r.FormValue("arl"))
+	if err := db.SetAdminConfig(h.DB, configKeyDeemixArl, arl); err != nil {
+		h.render(w, r, err.Error())
+		return
+	}
+	h.Deemix.SetARL(arl)
+	h.Deemix.CheckArl()
+	h.render(w, r, "")
+}
+
+// checkDeemixArl ports POST /api/admin/deemix-arl/check: re-tests the
+// configured ARL against deemix-server right now, rather than waiting for
+// the daily job.
+func (h *AdminHandler) checkDeemixArl(w http.ResponseWriter, r *http.Request) {
+	h.Deemix.CheckArl()
+	h.render(w, r, "")
+}
+
+// saveLidarrConfig ports PUT /api/admin/lidarr-config: persists the Lidarr
+// URL and API key used to find/monitor artists and trigger searches.
+func (h *AdminHandler) saveLidarrConfig(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	lidarrURL := strings.TrimSuffix(strings.TrimSpace(r.FormValue("url")), "/")
+	apiKey := strings.TrimSpace(r.FormValue("apiKey"))
+	if err := db.SetAdminConfig(h.DB, configKeyLidarrURL, lidarrURL); err != nil {
+		h.render(w, r, err.Error())
+		return
+	}
+	if err := db.SetAdminConfig(h.DB, configKeyLidarrAPIKey, apiKey); err != nil {
+		h.render(w, r, err.Error())
+		return
+	}
+	h.Lidarr.SetConfig(lidarrURL, apiKey)
+	h.render(w, r, "")
 }

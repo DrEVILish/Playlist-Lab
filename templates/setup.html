@@ -1,17 +1,31 @@
 {{define "content"}}
-<main class="setup">
-  <h1>Select your Plex server</h1>
-  <form hx-post="/servers/select" hx-target="body" hx-swap="outerHTML">
-    <label>Server
-      <select name="server" hx-get="/setup/libraries" hx-target="#libraries" hx-trigger="change">
-        <option value="">-- choose a server --</option>
-        {{range .Servers}}
-        <option value="{{.Value}}">{{.Name}}</option>
-        {{end}}
-      </select>
-    </label>
-    <div id="libraries"></div>
-    <button type="submit">Save</button>
-  </form>
-</main>
+<link rel="stylesheet" href="/static/css/pages/SettingsPage.css">
+<div class="page-container settings-page">
+  <div class="page-header">
+    <h1 class="page-title">Plex Server</h1>
+  </div>
+  <section class="settings-section">
+    <div class="settings-section-header">
+      <h2>Plex Server</h2>
+      <p>Connect Playlist Lab to your Plex Media Server and choose a music library.</p>
+    </div>
+    <form hx-post="/servers/select" hx-target="body" hx-swap="outerHTML">
+      <div class="settings-field-group">
+        <div class="settings-field">
+          <label class="settings-label">Server</label>
+          <select name="server" class="settings-select" hx-get="/setup/libraries" hx-target="#libraries" hx-trigger="change">
+            <option value="">Select a server...</option>
+            {{range .Servers}}
+            <option value="{{.Value}}">{{.Name}}</option>
+            {{end}}
+          </select>
+        </div>
+        <div id="libraries" class="settings-field"></div>
+      </div>
+      <div class="settings-actions">
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </section>
+</div>
 {{end}}

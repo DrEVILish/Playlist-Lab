@@ -1,17 +1,25 @@
 // Package handlers: import.go ports routes/import.ts to HTMX for the
 // sources that currently have a Go SourceAdapter (see cmd/server/main.go's
-// registry wiring): deezer, listenbrainz, and youtube (public-playlist
-// scraping). Node's import.ts pulls tracks via bespoke scraper functions
-// (scrapeDeezerPlaylist etc.) rather than the adapters.Registry - but the Go
-// port already built each of those scrapers as a SourceAdapter for
-// cross-import, so importsvc.ImportPlaylist reuses that registry instead of
-// re-deriving a second lookup mechanism (see importsvc's package doc).
+// registry wiring): deezer, listenbrainz, youtube (public-playlist
+// scraping), youtube-music (unauthenticated innertube browse), spotify
+// (per-user token or client-credentials Web API), plus the chart sources
+// aria/billboard/lastfm. Node's import.ts pulls tracks via bespoke scraper
+// functions (scrapeDeezerPlaylist etc.) rather than the adapters.Registry -
+// but the Go port already built each of those scrapers as a SourceAdapter
+// for cross-import, so importsvc.ImportPlaylist reuses that registry
+// instead of re-deriving a second lookup mechanism (see importsvc's
+// package doc).
 //
-// Spotify/Apple/Tidal/Amazon/Qobuz only exist as Go TargetAdapters so far
-// (cross-import's targets), not sources, and the chart scrapers
-// (aria/billboard/lastfm) and file-import (m3u/csv/pls/xspf) parsers don't
-// exist in Go at all yet - so those routes/import.ts sources are left
-// unregistered here rather than faked. Add each once its scraper lands.
+// Apple/Tidal/Amazon/Qobuz do have registered SourceAdapters (chromedp
+// browser scrape, see cmd/server/main.go) but are deliberately left out of
+// importSources below: every chromedp-backed adapter in this rewrite is
+// logic-verified against the original Puppeteer source only, never run
+// against a real page (no Chrome/Chromium binary in the sandbox this was
+// built in - see docs/GO_REWRITE.md's "Known gaps"), so surfacing them here
+// would offer a source nobody has confirmed actually works yet. Add each
+// once verified against a real browser. File-based import (m3u/m3u8/pls/
+// xspf/csv/txt) is a separate upload form (startFileImport below), not one
+// of these dropdown sources, so it isn't in this list either.
 //
 // Like mixes.go and cross_import.go, importing runs as a background
 // action-queue job reported through the notification bell - no separate
@@ -64,7 +72,7 @@ const maxImportFileSize = 10 << 20
 // importSources lists, in display order, the source IDs registered in
 // main.go that are actually reachable from this page.
 var importSources = []string{
-	"deezer", "listenbrainz", "youtube", "aria", "billboard", "lastfm",
+	"deezer", "listenbrainz", "youtube", "youtube-music", "spotify", "aria", "billboard", "lastfm",
 }
 
 func (h *ImportHandler) page(w http.ResponseWriter, r *http.Request) {

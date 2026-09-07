@@ -7,8 +7,16 @@
 // generation schedules aren't creatable from this UI either). Actually
 // running a schedule (due or manual) is scheduler.Run/RunDue, wired into the
 // cron scheduler in cmd/server/main.go - this file only owns CRUD + the
-// manual "Run Now"/"Run All" triggers, which just call scheduler.Run in the
-// background the same way the TS route did (fire-and-forget, log on error).
+// manual "Run Now"/"Run All" triggers, which call scheduler.Run in the
+// background (fire-and-forget) same as the TS route, but - unlike an
+// earlier version of this file - also wrap it with a notification bell
+// entry (runSingleSchedule's addNotification/updateNotification in
+// schedule-checker-job.ts), so a manual run's success/failure is visible
+// instead of only ever reaching the server log. scheduler.Run itself stays
+// notification-free since RunDue (the unattended cron path) reuses it too,
+// and the original never notifies for those automatic runs either -
+// runSingleSchedule is a manual-only wrapper in the TS version, not
+// something the cron job also goes through.
 package handlers
 
 import (
@@ -22,13 +30,62 @@ import (
 
 	"github.com/drevilish/playlist-lab/internal/auth"
 	"github.com/drevilish/playlist-lab/internal/db"
+	"github.com/drevilish/playlist-lab/internal/services/notifications"
 	"github.com/drevilish/playlist-lab/internal/services/scheduler"
 )
 
 type SchedulesHandler struct {
-	DB   *sql.DB
-	Tmpl *Templates
-	Deps scheduler.Deps
+	DB            *sql.DB
+	Tmpl          *Templates
+	Deps          scheduler.Deps
+	Notifications *notifications.Store
+}
+
+// scheduleDisplayName is a best-effort notification title for a schedule -
+// ports scheduleDisplayName() in schedule-checker-job.ts. Doesn't need to
+// match the executor's own playlist-name resolution exactly, just be
+// recognizable to the user who triggered it.
+func (h *SchedulesHandler) scheduleDisplayName(s db.Schedule) string {
+	if s.PlaylistID.Valid {
+		if playlist, err := db.GetPlaylistByID(h.DB, s.PlaylistID.Int64); err == nil && playlist != nil {
+			return playlist.Name
+		}
+	}
+	if name := s.ParsedConfig().PlaylistName; name != "" {
+		return name
+	}
+	if s.ScheduleType == "mix_generation" {
+		return "Scheduled mix"
+	}
+	return "Scheduled playlist refresh"
+}
+
+// runScheduleWithNotification wraps one scheduler.Run call with a
+// notification bell entry, ponytail: start/success/error only, not the
+// original's per-track "Fetching tracks.../Matching..." live progress -
+// that needs a progress callback threaded through scheduler.Run and
+// executePlaylistRefresh, which RunDue's unattended cron callers have no use
+// for; add it if a manual run's silence mid-refresh becomes a real complaint.
+func (h *SchedulesHandler) runScheduleWithNotification(s db.Schedule) {
+	startDetail := "Starting..."
+	if s.ScheduleType == "mix_generation" {
+		startDetail = "Generating mix"
+	}
+	notification := h.Notifications.Add(s.UserID, notifications.TypeSchedule, h.scheduleDisplayName(s), startDetail, notifications.StatusInProgress, nil)
+
+	if err := scheduler.Run(h.Deps, s); err != nil {
+		slog.Error("manual schedule run failed", "scheduleId", s.ID, "error", err)
+		status := notifications.StatusError
+		detail := err.Error()
+		h.Notifications.Update(s.UserID, notification.ID, notifications.Patch{Status: &status, Detail: &detail})
+		return
+	}
+	status, progress := notifications.StatusSuccess, 100
+	detail := "Refreshed"
+	if s.ScheduleType == "mix_generation" {
+		detail = "Generated"
+	}
+	h.Notifications.Update(s.UserID, notification.ID, notifications.Patch{Status: &status, Progress: &progress, Detail: &detail})
 }
 
 func RegisterSchedules(r chi.Router, mw *auth.Middleware, h *SchedulesHandler) {
@@ -204,11 +261,7 @@ func (h *SchedulesHandler) runOne(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "schedule not found", http.StatusNotFound)
 		return
 	}
-	go func(s db.Schedule) {
-		if err := scheduler.Run(h.Deps, s); err != nil {
-			slog.Error("manual schedule run failed", "scheduleId", s.ID, "error", err)
-		}
-	}(*sched)
+	go h.runScheduleWithNotification(*sched)
 	w.WriteHeader(http.StatusAccepted)
 }
 
@@ -232,9 +285,7 @@ func (h *SchedulesHandler) runAll(w http.ResponseWriter, r *http.Request) {
 			sem <- struct{}{}
 			go func(s db.Schedule) {
 				defer func() { <-sem }()
-				if err := scheduler.Run(h.Deps, s); err != nil {
-					slog.Error("run-all schedule failed", "scheduleId", s.ID, "error", err)
-				}
+				h.runScheduleWithNotification(s)
 			}(s)
 		}
 	}()

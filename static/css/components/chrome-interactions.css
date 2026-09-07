@@ -34,6 +34,17 @@ details.header-actions-menu:not([open]) > .header-actions-popover,
 details.notification-center:not([open]) > .notification-panel {
   display: none;
 }
+/* .header-actions-popover is `position: fixed` in HeaderActions.css, sized
+   for React's JS-computed menuStyle (usePopover) - with no top/left set that
+   resolves to its in-flow static position rather than actually anchoring
+   under the button. Same fix as .th-filter-menu below: absolute against the
+   <details>'s own relative positioning. */
+details.header-actions-menu > .header-actions-popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 0.25rem;
+}
 
 /* Playlists page bulk-actions bar: hidden until at least one row checkbox
    is checked, via :has() rather than JS-tracked selection state.

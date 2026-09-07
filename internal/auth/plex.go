@@ -14,7 +14,24 @@ import (
 	"time"
 )
 
-const plexAPIBase = "https://plex.tv/api/v2"
+// plexAPIBase and plexUsersURL are vars, not consts, purely so tests can
+// point a PlexClient at a fake httptest server instead of the real plex.tv
+// (restoring the original value afterward) - never reassigned outside tests.
+var (
+	plexAPIBase  = "https://plex.tv/api/v2"
+	plexUsersURL = "https://plex.tv/api/users"
+)
+
+// SetPlexAPIBaseForTest points every PlexClient method at a fake plex.tv
+// server for the rest of the calling test, returning a restore func to
+// defer. Exists so other packages' tests (e.g. handlers' auth tests, which
+// exercise handleLogin's Plex-Home/friends membership branching) can avoid a
+// real network call without this package exposing the vars directly.
+func SetPlexAPIBaseForTest(apiBase, usersURL string) (restore func()) {
+	prevAPI, prevUsers := plexAPIBase, plexUsersURL
+	plexAPIBase, plexUsersURL = apiBase, usersURL
+	return func() { plexAPIBase, plexUsersURL = prevAPI, prevUsers }
+}
 
 type PlexClient struct {
 	ClientID    string
@@ -293,7 +310,7 @@ func (c *PlexClient) GetServers(authToken string) ([]PlexServer, error) {
 // attribute out rather than pulling in an XML-parsing dependency for one
 // field.
 func (c *PlexClient) GetFriends(authToken string) ([]int, error) {
-	req, err := http.NewRequest(http.MethodGet, "https://plex.tv/api/users", nil)
+	req, err := http.NewRequest(http.MethodGet, plexUsersURL, nil)
 	if err != nil {
 		return nil, err
 	}

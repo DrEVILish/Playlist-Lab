@@ -107,6 +107,18 @@ var tmplFuncs = template.FuncMap{
 		}
 		return "▲"
 	},
+	// toggleDir backs the mobile playlists sortbar's standalone direction
+	// button (PlaylistsPage.tsx's setSortDir toggle) - unlike sortArrow/
+	// SortHref, it flips the direction regardless of which column is
+	// active, since the mobile sort key (a <select>) and direction (this
+	// button) are independent controls, not one combined toggle-on-click
+	// per column like the desktop table's headers.
+	"toggleDir": func(curDir string) string {
+		if curDir == "desc" {
+			return "asc"
+		}
+		return "desc"
+	},
 	"joinFloats": func(items []float64) string {
 		parts := make([]string, len(items))
 		for i, f := range items {

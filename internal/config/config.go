@@ -52,10 +52,10 @@ type Config struct {
 
 	// Deemix (services/deemix.ts). DeemixURL/DeemixConfigPath/ServiceName
 	// point at our own local deemix-server install and are pure env config.
-	// DeemixArl is also DB-persisted admin config on the Node side
-	// (Settings > Admin > Deemix, editable without touching .env) - that
-	// admin UI hasn't been ported to Go yet, so this only reads the env var
-	// fallback for now; same value, just missing the in-app edit path.
+	// DeemixArl here is only the startup fallback used when admin_config has
+	// no "deemix_arl" row yet - once the admin saves it via /admin (Deemix
+	// tab), cmd/server/main.go's admin_config lookup takes over and this
+	// value is never read again, matching Node's configService behavior.
 	DeemixURL              string
 	DeemixConfigPath       string
 	DeemixServiceName      string
@@ -63,8 +63,8 @@ type Config struct {
 	EnableDeemixArlCheck   bool
 	DeemixArlCheckSchedule string
 
-	// Lidarr (services/lidarr.ts) - same admin-DB-override caveat as
-	// DeemixArl above, env var only for now.
+	// Lidarr (services/lidarr.ts) - same admin_config-overrides-env-fallback
+	// behavior as DeemixArl above ("lidarr_url"/"lidarr_api_key" keys).
 	LidarrURL    string
 	LidarrAPIKey string
 }

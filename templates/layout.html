@@ -168,7 +168,19 @@
                open/close disclosure; hx-ext="sse" keeps pushing new HTML
                into #notifications whether the panel is open or not. -->
           <details class="notification-center">
-            <summary class="notification-bell" aria-label="Notifications" title="Notifications"></summary>
+            <!-- Bell icon copied verbatim from NotificationCenter.tsx - this
+                 summary had no content at all before, rendering as an empty
+                 clickable blank spot in the header. The badge count/spinner
+                 on the closed button don't update live (they're inside
+                 NotificationCenter.tsx's own state, not the #notifications
+                 SSE-swapped fragment below) - a known, already-flagged
+                 remaining gap, not addressed here. -->
+            <summary class="notification-bell" aria-label="Notifications" title="Notifications">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+            </summary>
             <!-- id="notifications" wraps both the header's Clear
                  complete/Clear all actions and the item list, not just the
                  list: those buttons are conditional on what's in the feed

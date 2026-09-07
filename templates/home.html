@@ -58,49 +58,57 @@
                the rest of the current query string via .Query.With, so
                applying one filter/sort never silently drops another. -->
           <th class="col-name">
-            <span class="th-label">Playlist</span>
-            <details class="th-filter">
-              <summary class="th-filter-btn{{if .Filter.Search}} active{{end}}" title="Search"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
-              <form class="th-filter-menu" method="get" action="/">
-                {{range $k, $v := .Query}}{{if ne $k "q"}}<input type="hidden" name="{{$k}}" value="{{index $v 0}}">{{end}}{{end}}
-                <input type="search" name="q" value="{{.Filter.Search}}" placeholder="Search playlists..." class="form-input" autofocus>
-                <button type="submit" class="btn btn-primary btn-small" style="margin-top:0.375rem">Search</button>
-              </form>
-            </details>
+            <div class="th-with-filter">
+              <span class="th-label">Playlist</span>
+              <details class="th-filter">
+                <summary class="th-filter-btn{{if .Filter.Search}} active{{end}}" title="Search"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+                <form class="th-filter-menu" method="get" action="/">
+                  {{range $k, $v := .Query}}{{if ne $k "q"}}<input type="hidden" name="{{$k}}" value="{{index $v 0}}">{{end}}{{end}}
+                  <input type="search" name="q" value="{{.Filter.Search}}" placeholder="Search playlists..." class="form-input" autofocus>
+                  <button type="submit" class="btn btn-primary btn-small" style="margin-top:0.375rem">Search</button>
+                </form>
+              </details>
+            </div>
           </th>
           <th class="sortable">
-            <a href="{{.Query.SortHref "source"}}"><span class="th-label">Source</span> <span class="sort-arrow">{{sortArrow "source" $.Sort $.Dir}}</span></a>
-            <details class="th-filter">
-              <summary class="th-filter-btn{{if .Filter.Source}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
-              <div class="th-filter-menu">
-                <a class="th-filter-option{{if not .Filter.Source}} active{{end}}" href="{{.Query.With "fSource" ""}}">All sources</a>
-                {{range .Sources}}<a class="th-filter-option{{if eq . $.Filter.Source}} active{{end}}" href="{{$.Query.With "fSource" .}}">{{.}}</a>{{end}}
-              </div>
-            </details>
+            <div class="th-with-filter">
+              <a href="{{.Query.SortHref "source"}}"><span class="th-label">Source</span> <span class="sort-arrow">{{sortArrow "source" $.Sort $.Dir}}</span></a>
+              <details class="th-filter">
+                <summary class="th-filter-btn{{if .Filter.Source}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+                <div class="th-filter-menu">
+                  <a class="th-filter-option{{if not .Filter.Source}} active{{end}}" href="{{.Query.With "fSource" ""}}">All sources</a>
+                  {{range .Sources}}<a class="th-filter-option{{if eq . $.Filter.Source}} active{{end}}" href="{{$.Query.With "fSource" .}}">{{.}}</a>{{end}}
+                </div>
+              </details>
+            </div>
           </th>
           <th class="sortable"><a href="{{.Query.SortHref "tracks"}}"><span class="th-label">Tracks</span> <span class="sort-arrow">{{sortArrow "tracks" $.Sort $.Dir}}</span></a></th>
           <th class="sortable"><a href="{{.Query.SortHref "duration"}}"><span class="th-label">Duration</span> <span class="sort-arrow">{{sortArrow "duration" $.Sort $.Dir}}</span></a></th>
           <th class="sortable">
-            <a href="{{.Query.SortHref "missing"}}"><span class="th-label">Missing Tracks</span> <span class="sort-arrow">{{sortArrow "missing" $.Sort $.Dir}}</span></a>
-            <details class="th-filter">
-              <summary class="th-filter-btn{{if .Filter.Missing}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
-              <div class="th-filter-menu">
-                <a class="th-filter-option{{if not .Filter.Missing}} active{{end}}" href="{{.Query.With "fMissing" ""}}">Any missing</a>
-                <a class="th-filter-option{{if eq .Filter.Missing "has"}} active{{end}}" href="{{.Query.With "fMissing" "has"}}">Has missing tracks</a>
-                <a class="th-filter-option{{if eq .Filter.Missing "none"}} active{{end}}" href="{{.Query.With "fMissing" "none"}}">No missing tracks</a>
-              </div>
-            </details>
+            <div class="th-with-filter">
+              <a href="{{.Query.SortHref "missing"}}"><span class="th-label">Missing Tracks</span> <span class="sort-arrow">{{sortArrow "missing" $.Sort $.Dir}}</span></a>
+              <details class="th-filter">
+                <summary class="th-filter-btn{{if .Filter.Missing}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+                <div class="th-filter-menu">
+                  <a class="th-filter-option{{if not .Filter.Missing}} active{{end}}" href="{{.Query.With "fMissing" ""}}">Any missing</a>
+                  <a class="th-filter-option{{if eq .Filter.Missing "has"}} active{{end}}" href="{{.Query.With "fMissing" "has"}}">Has missing tracks</a>
+                  <a class="th-filter-option{{if eq .Filter.Missing "none"}} active{{end}}" href="{{.Query.With "fMissing" "none"}}">No missing tracks</a>
+                </div>
+              </details>
+            </div>
           </th>
           <th>
-            <span class="th-label">Schedule</span>
-            <details class="th-filter">
-              <summary class="th-filter-btn{{if .Filter.Schedule}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
-              <div class="th-filter-menu">
-                <a class="th-filter-option{{if not .Filter.Schedule}} active{{end}}" href="{{.Query.With "fSchedule" ""}}">Any schedule</a>
-                <a class="th-filter-option{{if eq .Filter.Schedule "on"}} active{{end}}" href="{{.Query.With "fSchedule" "on"}}">Scheduled</a>
-                <a class="th-filter-option{{if eq .Filter.Schedule "off"}} active{{end}}" href="{{.Query.With "fSchedule" "off"}}">Not scheduled</a>
-              </div>
-            </details>
+            <div class="th-with-filter">
+              <span class="th-label">Schedule</span>
+              <details class="th-filter">
+                <summary class="th-filter-btn{{if .Filter.Schedule}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+                <div class="th-filter-menu">
+                  <a class="th-filter-option{{if not .Filter.Schedule}} active{{end}}" href="{{.Query.With "fSchedule" ""}}">Any schedule</a>
+                  <a class="th-filter-option{{if eq .Filter.Schedule "on"}} active{{end}}" href="{{.Query.With "fSchedule" "on"}}">Scheduled</a>
+                  <a class="th-filter-option{{if eq .Filter.Schedule "off"}} active{{end}}" href="{{.Query.With "fSchedule" "off"}}">Not scheduled</a>
+                </div>
+              </details>
+            </div>
           </th>
           <th><span class="th-label">Next Run</span></th>
           <th><span class="th-label">Last Run</span></th>
@@ -143,48 +151,78 @@
           <td>{{if .DBID}}{{dateFromUnix .CreatedAt}}{{else}}—{{end}}</td>
           <!-- .icon-btn is a 26x26 icon box (PlaylistsPage.css): it holds an
                SVG, not a text label - text overflows and collides. Icon paths
-               are copied from apps/web/src/components/icons.tsx verbatim. -->
-          <td class="row-actions">
-            <a class="icon-btn" href="/playlists/{{.PlexID}}" title="Edit tracks" aria-label="Edit tracks in {{.Name}}">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            </a>
-            <button type="button" class="icon-btn" hx-get="/playlists/{{.PlexID}}/share" hx-target="#modal-root" hx-swap="innerHTML" title="Share with another Playlist Lab user" aria-label="Share {{.Name}} with another Playlist Lab user">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-            </button>
-            {{if .DBID}}
-            <button type="button" class="icon-btn" hx-get="/playlists/{{.PlexID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML" title="{{if .ScheduleID}}Manage schedule{{else}}Create schedule{{end}}" aria-label="Schedule {{.Name}}">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            </button>
-            {{if .ScheduleID}}
-            <!-- Reimport ("re-fetch from source now") only reaches
-                 scheduler.Run, which needs a real schedules row for its
-                 execution-history bookkeeping - so this only shows when one
-                 already exists (row.ScheduleID != 0), same restriction
-                 PlaylistsPage.tsx applies via isReimportable(), just enforced
-                 by data availability here instead of a source-name allowlist. -->
-            <button type="button" class="icon-btn" hx-post="/schedules/{{.ScheduleID}}/run" hx-confirm="Re-fetch &quot;{{.Name}}&quot; from its source now?" title="Re-fetch this playlist from its original source now" aria-label="Re-import {{.Name}} from its source">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-            </button>
-            {{end}}
-            <!-- /backup/export keys its "id" query params off the Plex
-                 rating key (see backup.go's export(), matched against
-                 p.RatingKey), not the internal DB row id - .PlexID here,
-                 not .DBID. -->
-            <a class="icon-btn" href="/backup/export?id={{.PlexID}}" title="Download a JSON backup of this playlist" aria-label="Download a backup of {{.Name}}">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
-            </a>
-            <button type="button" class="icon-btn" hx-post="/playlists/{{.PlexID}}/clone" hx-confirm="Duplicate &quot;{{.Name}}&quot;?" title="Duplicate this playlist" aria-label="Duplicate {{.Name}}">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            </button>
-            {{end}}
-            <button type="button" class="icon-btn icon-btn-danger" hx-delete="/playlists/{{.PlexID}}" hx-confirm="Delete &quot;{{.Name}}&quot; from Plex? This cannot be undone." title="Delete from Plex" aria-label="Delete {{.Name}} from Plex">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-            </button>
-          </td>
+               are copied from apps/web/src/components/icons.tsx verbatim.
+               Shared with the mobile card list below (playlistRowActions),
+               since both views offer the exact same per-playlist actions. -->
+          <td class="row-actions">{{template "playlistRowActions" .}}</td>
         </tr>
         {{end}}
       </tbody>
     </table>
+    </div>
+
+    <!-- Mobile card list: PlaylistsPage.tsx swaps in this view entirely
+         (isMobile ? ... : <table>) below a 768px JS media-query check -
+         server-rendered HTML can't branch on viewport width, so both views
+         render and @media rules in PlaylistsPage.css pick one (see
+         ".playlists-table-container"/".playlists-cards" there). Each card's
+         expand/collapse is a checkbox-hack (input#card-toggle-X + label),
+         the same no-JS pattern as the admin tabs and the mobile nav drawer
+         elsewhere in this app, replacing React's isCardExpanded state. -->
+    <div class="playlists-sortbar">
+      <label for="mobile-sort">Sort</label>
+      <select id="mobile-sort" onchange="location.href=this.value">
+        <option value="{{.Query.With "sort" "name"}}"{{if eq .Sort "name"}} selected{{end}}>Name</option>
+        <option value="{{.Query.With "sort" "source"}}"{{if eq .Sort "source"}} selected{{end}}>Source</option>
+        <option value="{{.Query.With "sort" "tracks"}}"{{if eq .Sort "tracks"}} selected{{end}}>Tracks</option>
+        <option value="{{.Query.With "sort" "duration"}}"{{if eq .Sort "duration"}} selected{{end}}>Duration</option>
+        <option value="{{.Query.With "sort" "missing"}}"{{if eq .Sort "missing"}} selected{{end}}>Missing Tracks</option>
+        <option value="{{.Query.With "sort" "dateAdded"}}"{{if eq .Sort "dateAdded"}} selected{{end}}>Date Added</option>
+      </select>
+      <a href="{{.Query.With "dir" (toggleDir .Dir)}}" title="{{if eq .Dir "desc"}}Descending - tap for ascending{{else}}Ascending - tap for descending{{end}}" aria-label="Sort direction: {{if eq .Dir "desc"}}descending{{else}}ascending{{end}}">{{if eq .Dir "desc"}}▼{{else}}▲{{end}}</a>
+    </div>
+    <div class="playlists-cards">
+      {{range .Playlists}}
+      <div class="playlist-card{{if .NeedsAttention}} row-attention{{end}}">
+        <input type="checkbox" id="card-toggle-{{.PlexID}}" class="playlist-card-toggle" hidden>
+        <div class="playlist-card-header">
+          <input type="checkbox" name="id" value="{{.PlexID}}" class="row-select" aria-label="Select {{.Name}}">
+          <label for="card-toggle-{{.PlexID}}" class="playlist-card-header-label">
+            <div class="playlist-cover">{{if .CoverURL}}<img src="{{.CoverURL}}" alt="" loading="lazy">{{end}}</div>
+            <div class="playlist-card-title">
+              <span class="playlist-name">{{.Name}}</span>
+              <span class="playlist-card-summary">{{.TrackCount}} tracks &middot; {{formatDuration .Duration}}{{if .MissingCount}} &middot; {{.MissingCount}} missing{{end}}</span>
+            </div>
+            <span class="playlist-card-chevron">&#9662;</span>
+          </label>
+        </div>
+        <div class="playlist-card-details">
+          <div class="playlist-card-detail-row">
+            <span class="playlist-card-detail-label">Source</span>
+            {{if eq .Source "plex"}}<span class="playlist-source-label">&mdash;</span>
+            {{else if .SourceURL}}<a href="{{.SourceURL}}" target="_blank" rel="noopener noreferrer" class="playlist-source-link">{{.Source}} &#8599;</a>
+            {{else}}<span class="playlist-source-label">{{.Source}}</span>{{end}}
+          </div>
+          <div class="playlist-card-detail-row">
+            <span class="playlist-card-detail-label">Schedule</span>
+            {{if not .DBID}}<span class="playlist-source-label" title="This playlist wasn't imported through Playlist Lab, so it can't be scheduled yet">&mdash;</span>
+            {{else if .ScheduleID}}<button type="button" class="badge-button{{if .ScheduleFailed}} warn{{end}}" hx-get="/playlists/{{.PlexID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">{{if .NextRun}}{{.NextRun}}{{else}}scheduled{{end}}</button>
+            {{else}}<button type="button" class="badge-button" hx-get="/playlists/{{.PlexID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">+ Schedule</button>{{end}}
+          </div>
+          {{if .ScheduleID}}
+          <div class="playlist-card-detail-row">
+            <span class="playlist-card-detail-label">Next / Last Run</span>
+            <span>{{if .NextRun}}{{.NextRun}}{{else}}&mdash;{{end}} / {{if .LastRun}}{{dateFromUnix .LastRun}}{{else}}&mdash;{{end}}</span>
+          </div>
+          {{end}}
+          <div class="playlist-card-detail-row">
+            <span class="playlist-card-detail-label">Date Added</span>
+            <span>{{if .DBID}}{{dateFromUnix .CreatedAt}}{{else}}&mdash;{{end}}</span>
+          </div>
+          <div class="row-actions playlist-card-actions">{{template "playlistRowActions" .}}</div>
+        </div>
+      </div>
+      {{end}}
     </div>
   </form>
   <!-- "Select all" toggling every row checkbox has no pure-CSS equivalent
@@ -200,4 +238,44 @@
   {{end}}{{/* not .Playlists */}}
   {{end}}{{/* .PlexError */}}
 </div>
+{{end}}
+
+{{/* playlistRowActions is the per-playlist action button row, shared by the
+     desktop table and the mobile card list so the two views never drift out
+     of sync with each other. Takes a playlistRow as its context (the same
+     shape .Playlists ranges over above). */}}
+{{define "playlistRowActions"}}
+<a class="icon-btn" href="/playlists/{{.PlexID}}" title="Edit tracks" aria-label="Edit tracks in {{.Name}}">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+</a>
+<button type="button" class="icon-btn" hx-get="/playlists/{{.PlexID}}/share" hx-target="#modal-root" hx-swap="innerHTML" title="Share with another Playlist Lab user" aria-label="Share {{.Name}} with another Playlist Lab user">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+</button>
+{{if .DBID}}
+<button type="button" class="icon-btn" hx-get="/playlists/{{.PlexID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML" title="{{if .ScheduleID}}Manage schedule{{else}}Create schedule{{end}}" aria-label="Schedule {{.Name}}">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+</button>
+{{if .ScheduleID}}
+<!-- Reimport ("re-fetch from source now") only reaches scheduler.Run, which
+     needs a real schedules row for its execution-history bookkeeping - so
+     this only shows when one already exists (row.ScheduleID != 0), same
+     restriction PlaylistsPage.tsx applies via isReimportable(), just
+     enforced by data availability here instead of a source-name allowlist. -->
+<button type="button" class="icon-btn" hx-post="/schedules/{{.ScheduleID}}/run" hx-confirm="Re-fetch &quot;{{.Name}}&quot; from its source now?" title="Re-fetch this playlist from its original source now" aria-label="Re-import {{.Name}} from its source">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+</button>
+{{end}}
+<!-- /backup/export keys its "id" query params off the Plex rating key (see
+     backup.go's export(), matched against p.RatingKey), not the internal DB
+     row id - .PlexID here, not .DBID. -->
+<a class="icon-btn" href="/backup/export?id={{.PlexID}}" title="Download a JSON backup of this playlist" aria-label="Download a backup of {{.Name}}">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+</a>
+<button type="button" class="icon-btn" hx-post="/playlists/{{.PlexID}}/clone" hx-confirm="Duplicate &quot;{{.Name}}&quot;?" title="Duplicate this playlist" aria-label="Duplicate {{.Name}}">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+</button>
+{{end}}
+<button type="button" class="icon-btn icon-btn-danger" hx-delete="/playlists/{{.PlexID}}" hx-confirm="Delete &quot;{{.Name}}&quot; from Plex? This cannot be undone." title="Delete from Plex" aria-label="Delete {{.Name}} from Plex">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+</button>
 {{end}}

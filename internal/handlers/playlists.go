@@ -360,7 +360,12 @@ func nextRunRelative(s db.Schedule) string {
 // Node route's cleanup.
 func cleanPlaylistName(name string) string {
 	before, after, found := strings.Cut(name, " - ")
-	if !found {
+	// Node's split(' - ') only applies this cleanup when there is EXACTLY
+	// one " - " (parts.length === 2) - strings.Cut alone only looks at the
+	// first occurrence, so a second " - " later in the title (e.g.
+	// "A - A - B") would otherwise get cleaned here but left untouched by
+	// the original.
+	if !found || strings.Contains(after, " - ") {
 		return name
 	}
 	firstWord, _, _ := strings.Cut(after, " ")

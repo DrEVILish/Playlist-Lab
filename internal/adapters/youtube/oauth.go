@@ -13,11 +13,16 @@ import (
 )
 
 const (
-	authURL   = "https://accounts.google.com/o/oauth2/v2/auth"
+	authURL = "https://accounts.google.com/o/oauth2/v2/auth"
+	apiBase = "https://www.googleapis.com/youtube/v3"
+	scope   = "https://www.googleapis.com/auth/youtube.force-ssl"
+)
+
+// tokenURL/revokeURL are vars (not consts) so tests can point them at an
+// httptest.Server instead of hitting Google for real.
+var (
 	tokenURL  = "https://oauth2.googleapis.com/token"
 	revokeURL = "https://oauth2.googleapis.com/revoke"
-	apiBase   = "https://www.googleapis.com/youtube/v3"
-	scope     = "https://www.googleapis.com/auth/youtube.force-ssl"
 )
 
 type OAuthConfig struct {

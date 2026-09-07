@@ -5,6 +5,12 @@
 // plain HTTP + a SHA1-based auth header - no youtubei.js/InnerTube-library
 // dependency at all, unlike youtube-innertube-target.ts, so it ports
 // directly with no R1-style gap.
+//
+// Target also implements adapters.SourceAdapter (FetchTracks, below) for the
+// general-import "YouTube Music" option, porting scrapeYouTubeMusicPlaylist's
+// primary (non-browser) path from scrapers.ts - a public playlist's tracks
+// via the same innertube endpoint, sent unauthenticated (no cookie needed to
+// read a public playlist, same as a logged-out browser tab).
 package youtubemusic
 
 import (
@@ -52,6 +58,60 @@ func (t *Target) Meta() adapters.ServiceMeta {
 }
 
 func (t *Target) IsConfigured() bool { return true }
+
+var ytmPlaylistIDPattern = regexp.MustCompile(`[?&]list=([a-zA-Z0-9_-]+)`)
+
+// FetchTracks implements adapters.SourceAdapter, porting
+// scrapeYouTubeMusicPlaylist()'s primary path (scrapers.ts): an unauthenticated
+// "browse" call against the same innertube endpoint the OAuth-ish methods
+// above use, sent with no cookie - exactly how music.youtube.com serves a
+// public playlist to a logged-out visitor. Node's fallback to a full
+// Puppeteer scrape when this returns zero tracks is not ported (that path
+// exists for playlists the anonymous API itself can't see, which a plain
+// HTTP retry can't fix either) - matches this rewrite's accepted browser-
+// scraping-reliability tradeoff for the other chromedp-backed adapters.
+func (t *Target) FetchTracks(ctx context.Context, playlistURLOrID string, userID int64) (adapters.PlaylistInfo, []adapters.TrackInfo, error) {
+	m := ytmPlaylistIDPattern.FindStringSubmatch(playlistURLOrID)
+	if m == nil {
+		return adapters.PlaylistInfo{}, nil, fmt.Errorf("invalid YouTube Music playlist URL. Please provide a URL containing ?list=...")
+	}
+	playlistID := m[1]
+	browseID := playlistID
+	if !strings.HasPrefix(browseID, "VL") {
+		browseID = "VL" + browseID
+	}
+
+	data, err := t.ytmAPI("browse", map[string]any{"browseId": browseID}, "")
+	if err != nil {
+		return adapters.PlaylistInfo{}, nil, fmt.Errorf("failed to fetch YouTube Music playlist: %w", err)
+	}
+
+	ytmTracks := extractPlaylistTracks(data)
+	if len(ytmTracks) == 0 {
+		return adapters.PlaylistInfo{}, nil, fmt.Errorf("no tracks found in this YouTube Music playlist - it may be private or empty")
+	}
+
+	tracks := make([]adapters.TrackInfo, len(ytmTracks))
+	for i, tr := range ytmTracks {
+		artist := tr.Artist
+		if artist == "" {
+			artist = "Unknown"
+		}
+		tracks[i] = adapters.TrackInfo{Title: tr.Title, Artist: artist}
+	}
+
+	// microformat.microformatDataRenderer is a stable oEmbed-style block every
+	// browse response for a playlist page carries (verified against a real
+	// response) - simpler and more reliable than digging through whichever
+	// header renderer shape a given playlist page happens to use.
+	name, _ := digString(data, "microformat", "microformatDataRenderer", "title")
+	if name == "" {
+		name = "YouTube Music Playlist"
+	}
+	cover, _ := digString(data, "microformat", "microformatDataRenderer", "thumbnail", "thumbnails", 0, "url")
+	playlist := adapters.PlaylistInfo{ID: serviceName + "-" + playlistID, Name: name, TrackCount: len(tracks), CoverURL: cover}
+	return playlist, tracks, nil
+}
 
 func (t *Target) getCookie(userID int64) (string, error) {
 	conn, err := db.GetOAuthConnection(t.DB, userID, serviceName)
@@ -138,7 +198,32 @@ func extractTracks(data map[string]any) []ytmTrack {
 	items := digArray(data,
 		"contents", "tabbedSearchResultsRenderer", "tabs", 0, "tabRenderer", "content",
 		"sectionListRenderer", "contents", 0, "musicShelfRenderer", "contents")
+	return extractTrackItems(items)
+}
 
+// extractPlaylistTracks is extractTracks' counterpart for a "browse" response
+// (FetchTracks below) rather than a "search" one - same per-item
+// musicResponsiveListItemRenderer shape, different container path (a
+// playlist page is "twoColumnBrowseResultsRenderer", not the
+// "tabbedSearchResultsRenderer"/"singleColumnBrowseResultsRenderer" shapes
+// search results and the browse-home feed use, respectively - verified
+// against a real anonymous browse response rather than guessed). Only the
+// shelf's first page (up to ~100 tracks) is read; musicPlaylistShelfRenderer
+// paginates longer playlists via a continuation token this doesn't follow.
+// ponytail: single-page fetch, add continuation-token paging if a playlist
+// over ~100 tracks needs to import completely.
+func extractPlaylistTracks(data map[string]any) []ytmTrack {
+	items := digArray(data,
+		"contents", "twoColumnBrowseResultsRenderer", "secondaryContents",
+		"sectionListRenderer", "contents", 0, "musicPlaylistShelfRenderer", "contents")
+	return extractTrackItems(items)
+}
+
+// extractTrackItems is the per-item parsing shared by extractTracks and
+// extractPlaylistTracks - both search results and playlist entries render as
+// the same musicResponsiveListItemRenderer shape, just nested under a
+// different container.
+func extractTrackItems(items []any) []ytmTrack {
 	var tracks []ytmTrack
 	for _, item := range items {
 		renderer, _ := digMap(item, "musicResponsiveListItemRenderer")

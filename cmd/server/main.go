@@ -23,8 +23,10 @@ import (
 	"github.com/drevilish/playlist-lab/internal/adapters/listenbrainz"
 	"github.com/drevilish/playlist-lab/internal/adapters/plex"
 	"github.com/drevilish/playlist-lab/internal/adapters/qobuz"
+	"github.com/drevilish/playlist-lab/internal/adapters/spotify"
 	"github.com/drevilish/playlist-lab/internal/adapters/tidal"
 	"github.com/drevilish/playlist-lab/internal/adapters/youtube"
+	"github.com/drevilish/playlist-lab/internal/adapters/youtubemusic"
 	"github.com/drevilish/playlist-lab/internal/adapters/youtubeplain"
 	"github.com/drevilish/playlist-lab/internal/auth"
 	"github.com/drevilish/playlist-lab/internal/config"
@@ -143,10 +145,11 @@ func main() {
 	// verbatim rather than re-opened), and plain import (Phase 6e) has a
 	// Go SourceAdapter for deezer/listenbrainz/youtube (public playlist
 	// scraping) plus, as of Phase 5/5b, apple/tidal/amazon/qobuz (chromedp
-	// browser scrape - see adapters/{apple,tidal,amazon,qobuz}/source.go).
-	// Spotify's browser-scrape source (scrapeSpotifyWithBrowser) still
-	// isn't ported - left unregistered as a source rather than faked.
-	// Both handlers share one registry.
+	// browser scrape - see adapters/{apple,tidal,amazon,qobuz}/source.go),
+	// and now spotify (per-user token or client-credentials Web API,
+	// internal/adapters/spotify/source.go) and youtube-music (unauthenticated
+	// innertube browse, internal/adapters/youtubemusic/target.go's
+	// FetchTracks). Both handlers share one registry.
 	registry := adapters.NewRegistry()
 	registry.RegisterSource(plex.NewSource(sqlDB, plexClient))
 	registry.RegisterSource(deezer.NewSource())
@@ -159,6 +162,8 @@ func main() {
 	registry.RegisterSource(aria.NewSource())
 	registry.RegisterSource(billboard.NewSource())
 	registry.RegisterSource(lastfmsource.NewSource())
+	registry.RegisterSource(spotify.NewSource(sqlDB, cfg.SessionSecret, cfg.SpotifyClientID, cfg.SpotifyClientSecret))
+	registry.RegisterSource(youtubemusic.NewTarget(sqlDB, cfg.SessionSecret))
 	registry.RegisterTarget(youtube.NewTarget(sqlDB, cfg.SessionSecret, cfg.YouTubeClientID, cfg.YouTubeClientSecret, cfg.YouTubeRedirectURI))
 	handlers.RegisterCrossImport(r, mw, &handlers.CrossImportHandler{
 		DB: sqlDB, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue,
@@ -178,14 +183,26 @@ func main() {
 	// as every other plex-direct handler (playlists.go, mixes.go) rather
 	// than through the cross-import adapter registry, since neither is a
 	// cross-import source/target.
-	deemixService := deemix.New(deemix.Config{URL: cfg.DeemixURL, ARL: cfg.DeemixArl}, sqlDB, notificationStore)
-	lidarrService := lidarr.New(lidarr.Config{URL: cfg.LidarrURL, APIKey: cfg.LidarrAPIKey}, sqlDB, notificationStore)
+	deemixArl := cfg.DeemixArl
+	if v, ok, _ := db.GetAdminConfig(sqlDB, "deemix_arl"); ok {
+		deemixArl = v
+	}
+	lidarrURL, lidarrAPIKey := cfg.LidarrURL, cfg.LidarrAPIKey
+	if v, ok, _ := db.GetAdminConfig(sqlDB, "lidarr_url"); ok {
+		lidarrURL = v
+	}
+	if v, ok, _ := db.GetAdminConfig(sqlDB, "lidarr_api_key"); ok {
+		lidarrAPIKey = v
+	}
+	deemixService := deemix.New(deemix.Config{URL: cfg.DeemixURL, ARL: deemixArl}, sqlDB, notificationStore)
+	lidarrService := lidarr.New(lidarr.Config{URL: lidarrURL, APIKey: lidarrAPIKey}, sqlDB, notificationStore)
 	handlers.RegisterMissing(r, mw, &handlers.MissingHandler{
 		DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue,
 		Deemix: deemixService, Lidarr: lidarrService,
 	})
 	handlers.RegisterAdmin(r, mw, &handlers.AdminHandler{
-		DB: sqlDB, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue, Deemix: deemixService,
+		DB: sqlDB, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue,
+		Deemix: deemixService, Lidarr: lidarrService,
 	})
 
 	// Scheduling (Phase 6f): playlist-refresh + mix-generation schedules,
@@ -193,7 +210,7 @@ func main() {
 	// scheduler.Deps below and jobs.RunScheduleChecker's registration).
 	schedulerDeps := schedulerjob.Deps{DB: sqlDB, Registry: registry, Mixes: mixService, ClientID: cfg.PlexClientID}
 	handlers.RegisterSchedules(r, mw, &handlers.SchedulesHandler{
-		DB: sqlDB, Tmpl: tmpl, Deps: schedulerDeps,
+		DB: sqlDB, Tmpl: tmpl, Deps: schedulerDeps, Notifications: notificationStore,
 	})
 
 	// deemix keeps downloading across a restart of this server, but the
