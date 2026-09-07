@@ -1,0 +1,76 @@
+{{/* Admin Logs tab body, ported from AdminPage.tsx's log viewer. Rendered
+     into #admin-logs by GET /admin/logs and re-rendered in place by the
+     level/filter/limit controls, so the whole panel is one swap target and
+     the controls can't drift out of sync with the list they filter.
+
+     Entry markup mirrors the React original: a <details> whose <summary>
+     is LEVEL / timestamp / ellipsized message. React expanded to show the
+     entry's extra structured fields; slog's attributes aren't parsed out
+     here yet, so entries currently render summary-only - the same shape,
+     without the disclosure. */}}
+{{define "partials/admin_logs.html"}}
+<div id="admin-logs" class="admin-logs">
+  <div class="admin-logs-toolbar">
+    <label class="admin-logs-control">
+      Server log level
+      <select name="level" hx-post="/admin/log-level" hx-target="#admin-logs" hx-swap="outerHTML"
+        hx-include="closest .admin-logs-toolbar">
+        {{$current := .Level}}
+        {{range .Levels}}<option value="{{.}}"{{if eq . $current}} selected{{end}}>{{.}}</option>{{end}}
+      </select>
+    </label>
+
+    <label class="admin-logs-control">
+      Show only
+      <select name="filter" hx-get="/admin/logs" hx-target="#admin-logs" hx-swap="outerHTML"
+        hx-include="closest .admin-logs-toolbar">
+        <option value=""{{if eq .Filter ""}} selected{{end}}>all levels</option>
+        {{$filter := .Filter}}
+        {{range .Levels}}<option value="{{.}}"{{if eq . $filter}} selected{{end}}>{{.}} only</option>{{end}}
+      </select>
+    </label>
+
+    <label class="admin-logs-control">
+      Lines
+      <select name="limit" hx-get="/admin/logs" hx-target="#admin-logs" hx-swap="outerHTML"
+        hx-include="closest .admin-logs-toolbar">
+        {{$limit := .Limit}}
+        {{range .LimitOptions}}<option value="{{.}}"{{if eq . $limit}} selected{{end}}>{{.}}</option>{{end}}
+      </select>
+    </label>
+
+    <button type="button" class="btn btn-secondary btn-small"
+      hx-get="/admin/logs" hx-target="#admin-logs" hx-swap="outerHTML"
+      hx-include="closest .admin-logs-toolbar">Refresh</button>
+    <button type="button" class="btn btn-danger btn-small"
+      hx-post="/admin/logs/clear" hx-target="#admin-logs" hx-swap="outerHTML"
+      hx-include="closest .admin-logs-toolbar"
+      hx-confirm="Clear combined.log and delete its rotated files? This cannot be undone.">Clear logs</button>
+  </div>
+
+  {{if .Notice}}<p class="admin-logs-notice">{{.Notice}}</p>{{end}}
+
+  {{if .Truncated}}
+    <p class="admin-logs-notice">Showing the most recent {{.Limit}} matching entries - older ones exist beyond this view.</p>
+  {{end}}
+
+  {{if .Entries}}
+    <div class="admin-logs-list">
+      {{range .Entries}}
+        <details class="admin-log-entry">
+          <summary class="admin-log-summary">
+            <span class="admin-log-level admin-log-level-{{.Level}}">{{.Level}}</span>
+            <span class="admin-log-time">{{if .Timestamp}}{{.Timestamp}}{{else}}unknown time{{end}}</span>
+            <span class="admin-log-message">{{.Message}}</span>
+          </summary>
+          {{if .Service}}<pre class="admin-log-detail">service: {{.Service}}</pre>{{end}}
+        </details>
+      {{end}}
+    </div>
+  {{else}}
+    <p class="admin-deferred-note">No log entries match this filter. Note that the server log level ({{.Level}}) is also a floor for this view: entries written below it are hidden even if they are still in the file.</p>
+  {{end}}
+
+  <p class="admin-deferred-note">Not ported: the deemix-server journal (routes/admin.ts merged <code>journalctl -u deemix-server</code> output into this list). This shows Playlist Lab's own combined.log only.</p>
+</div>
+{{end}}

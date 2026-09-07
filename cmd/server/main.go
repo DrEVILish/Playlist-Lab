@@ -70,6 +70,15 @@ func main() {
 	}
 	defer sqlDB.Close()
 
+	// A level set from the admin Logs tab outranks LOG_LEVEL, and has to be
+	// reapplied here because logging.Setup ran before the database was open.
+	// Same admin_config-overrides-env pattern as deemix_arl/lidarr below.
+	if v, ok, _ := db.GetAdminConfig(sqlDB, "log_level"); ok {
+		if err := logging.SetLevel(v); err != nil {
+			slog.Warn("ignoring unusable persisted log level", "error", err)
+		}
+	}
+
 	store := session.NewStore(sqlDB)
 	stop := make(chan struct{})
 	defer close(stop)
@@ -112,6 +121,7 @@ func main() {
 	// Cover art is relayed through the server rather than linked directly -
 	// see internal/handlers/proxy.go for why.
 	handlers.RegisterProxy(r, mw, &handlers.ProxyHandler{DB: sqlDB, PlexAuth: plexClient})
+	handlers.RegisterAdminLogs(r, mw, &handlers.AdminLogsHandler{DB: sqlDB, Tmpl: tmpl, LogDir: cfg.LogDir})
 	handlers.RegisterBackup(r, mw, &handlers.BackupHandler{DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl})
 	notificationStore := notifications.NewStore()
 	handlers.RegisterNotifications(r, mw, &handlers.NotificationsHandler{Store: notificationStore, Tmpl: tmpl})

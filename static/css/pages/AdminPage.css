@@ -113,3 +113,163 @@
   width: 36px;
   flex-shrink: 0;
 }
+
+/* Tab bar: matches AdminPage.tsx's underline-style tabs (Statistics/Users/
+   Missing Tracks/Schedules/Deemix/Lidarr/Logs) - a native radio group
+   styled as an underline tab strip, with :has() picking which panel shows,
+   so no JS is needed to keep tab UI and visible panel in sync. */
+.admin-tabbar {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid var(--border-color);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-tab-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.admin-tab {
+  padding: 0.75rem 1.5rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  font-weight: 400;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.admin-tab-input:checked + .admin-tab {
+  color: var(--primary-color);
+  border-bottom-color: var(--primary-color);
+  font-weight: 500;
+}
+
+.admin-tab-input:focus-visible + .admin-tab {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+.admin-panel {
+  display: none;
+}
+
+.admin-tabbar:has(#admin-tab-stats:checked) ~ #admin-panel-stats,
+.admin-tabbar:has(#admin-tab-users:checked) ~ #admin-panel-users,
+.admin-tabbar:has(#admin-tab-missing:checked) ~ #admin-panel-missing,
+.admin-tabbar:has(#admin-tab-jobs:checked) ~ #admin-panel-jobs,
+.admin-tabbar:has(#admin-tab-deemix:checked) ~ #admin-panel-deemix,
+.admin-tabbar:has(#admin-tab-lidarr:checked) ~ #admin-panel-lidarr,
+.admin-tabbar:has(#admin-tab-logs:checked) ~ #admin-panel-logs {
+  display: block;
+}
+
+.admin-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+}
+
+.admin-stat-card h3 {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.admin-stat-value {
+  font-size: 2rem;
+  font-weight: bold;
+  color: var(--primary-color);
+}
+
+.admin-deferred-note {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+/* Admin Logs tab. AdminPage.css only ever carried .admin-log-summary and
+   .admin-log-message (the two rules with a mobile override); everything else
+   in the React viewer was inline JSX style, reproduced here so the Go
+   template can stay markup-only. Values match AdminPage.tsx's originals. */
+.admin-logs-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+  margin-bottom: 0.75rem;
+}
+
+.admin-logs-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.admin-logs-notice {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin: 0 0 0.75rem;
+}
+
+.admin-logs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  max-height: 32rem;
+  overflow-y: auto;
+}
+
+.admin-log-entry {
+  background-color: var(--surface-hover);
+  border-radius: 4px;
+  padding: 0.625rem 0.75rem;
+}
+
+.admin-log-summary {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  cursor: default;
+}
+
+.admin-log-level {
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--warning);
+}
+
+.admin-log-level-error { color: var(--error); }
+.admin-log-level-debug,
+.admin-log-level-info { color: var(--text-secondary); }
+
+.admin-log-time {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-log-message {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  min-width: 0;
+}
+
+.admin-log-detail {
+  margin-top: 0.5rem;
+  padding: 0.625rem;
+  background-color: var(--surface);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  overflow-x: auto;
+}
