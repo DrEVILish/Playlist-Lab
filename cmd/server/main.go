@@ -116,7 +116,7 @@ func main() {
 
 	handlers.RegisterAuth(r, &handlers.AuthHandler{
 		DB: sqlDB, Plex: plexClient, Auth: mw, Store: store,
-		Secure: secure, Tmpl: tmpl, BaseURL: cfg.PublicURL,
+		Secure: secure, Tmpl: tmpl,
 	})
 	handlers.RegisterServers(r, mw, &handlers.ServersHandler{DB: sqlDB, Plex: plexClient, Tmpl: tmpl})
 	handlers.RegisterSettings(r, mw, &handlers.SettingsHandler{DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl})

@@ -3,13 +3,12 @@
 // (Gemini/Grok) API keys, and a library-scan trigger. The Plex server/
 // library picker already has its own page (servers.go's setup flow). The
 // editable "Server Configuration" (public URL) section is deliberately not
-// ported: Node's version is a runtime-mutable value read by every OAuth
-// redirect-URL construction site, and this Go port's config.PublicURL is
-// loaded once at startup from env - making it live-editable would mean
-// threading a mutable override through every one of those call sites, which
-// is real scope (and a real way to break live OAuth flows if done
-// carelessly), not a settings-page addition. Reverse Proxy Setup and About
-// are static reference text, ported as-is.
+// ported: every OAuth/login redirect-URL construction site (auth.go,
+// cross_import.go) builds its callback URL from the request's own
+// scheme+host (baseURLOf/schemeOf in cross_import.go) rather than a fixed
+// configured domain, so there's no PublicURL value left for a settings
+// field to edit. Reverse Proxy Setup and About are static reference text,
+// ported as-is.
 package handlers
 
 import (

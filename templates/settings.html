@@ -164,12 +164,12 @@
           <h3>Reverse Proxy Setup</h3>
           <p class="settings-hint">If you're running Playlist Lab behind a reverse proxy (Nginx, Apache, Caddy, etc.):</p>
           <ol class="settings-hint" style="margin-left:1.5rem;margin-top:0.5rem">
-            <li>Set <code>PUBLIC_URL</code> to your public domain (e.g. <code>https://playlist-lab.example.com</code>)</li>
             <li>Set <code>TRUST_PROXY=true</code> in your <code>.env</code> file</li>
-            <li>Configure your reverse proxy to forward headers (<code>X-Forwarded-Proto</code>, <code>X-Forwarded-Host</code>)</li>
+            <li>Configure your reverse proxy to forward the <code>Host</code> and <code>X-Forwarded-Proto</code> headers</li>
             <li>Update OAuth app redirect URIs to match your public URL</li>
             <li>Restart the server</li>
           </ol>
+          <p class="settings-hint">Login and OAuth callback URLs are built from the request itself (scheme + host), not a fixed configured domain - so this works automatically for whatever hostname a visitor actually used, including a LAN IP alongside a public domain.</p>
         </div>
         <div class="settings-subsection" style="margin-top:1.5rem">
           <h3>About</h3>

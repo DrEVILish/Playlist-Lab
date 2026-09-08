@@ -20,7 +20,6 @@ type Config struct {
 	NodeEnv      string
 	Port         string
 	Host         string
-	PublicURL    string
 	DatabasePath string
 	LogLevel     string
 	LogDir       string
@@ -74,7 +73,6 @@ func Load() Config {
 		NodeEnv:      getEnv("NODE_ENV", "development"),
 		Port:         getEnv("PORT", "3001"),
 		Host:         getEnv("HOST", "0.0.0.0"),
-		PublicURL:    getEnv("PUBLIC_URL", "http://127.0.0.1:3001"),
 		DatabasePath: getEnv("DATABASE_PATH", "./data/playlist-lab.db"),
 		LogLevel:     getEnv("LOG_LEVEL", "info"),
 		LogDir:       getEnv("LOG_DIR", "./logs"),

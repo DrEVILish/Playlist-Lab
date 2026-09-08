@@ -509,9 +509,26 @@ func (h *CrossImportHandler) oauthRevoke(w http.ResponseWriter, r *http.Request)
 	h.oauthServices(w, r)
 }
 
+// schemeOf reports the scheme the client actually used, even when this
+// process itself only ever speaks plain HTTP behind a TLS-terminating
+// reverse proxy (this app's real deployment) - r.TLS is nil in that case,
+// so a proxy is expected to forward what it saw via X-Forwarded-Proto.
 func schemeOf(r *http.Request) string {
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+		return proto
+	}
 	if r.TLS != nil {
 		return "https"
 	}
 	return "http"
+}
+
+// baseURLOf builds this request's own scheme://host, for constructing a
+// redirect/callback URL that will actually resolve back to whatever
+// hostname the client used (LAN IP, public domain, etc.) instead of a
+// single statically-configured value that can only ever be right for one
+// of them - see auth.go's login flow, which hit exactly this bug via a
+// PUBLIC_URL config default of http://127.0.0.1:3001.
+func baseURLOf(r *http.Request) string {
+	return schemeOf(r) + "://" + r.Host
 }

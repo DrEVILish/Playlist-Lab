@@ -15,13 +15,12 @@ import (
 )
 
 type AuthHandler struct {
-	DB      *sql.DB
-	Plex    *auth.PlexClient
-	Auth    *auth.Middleware
-	Store   *session.Store
-	Secure  bool
-	Tmpl    *Templates
-	BaseURL string
+	DB     *sql.DB
+	Plex   *auth.PlexClient
+	Auth   *auth.Middleware
+	Store  *session.Store
+	Secure bool
+	Tmpl   *Templates
 }
 
 func RegisterAuth(r chi.Router, h *AuthHandler) {
@@ -50,7 +49,7 @@ func (h *AuthHandler) start(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to start authentication", http.StatusInternalServerError)
 		return
 	}
-	authURL := h.Plex.AuthURL(pin.Code, h.BaseURL+"/auth/callback")
+	authURL := h.Plex.AuthURL(pin.Code, baseURLOf(r)+"/auth/callback")
 	h.Tmpl.RenderPartial(w, "partials/auth_pending.html", map[string]any{
 		"AuthURL":   authURL,
 		"PinID":     pin.ID,
@@ -71,7 +70,7 @@ func (h *AuthHandler) poll(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("failed to poll Plex auth", "error", err)
 		h.Tmpl.RenderPartial(w, "partials/auth_pending.html", map[string]any{
-			"AuthURL": h.Plex.AuthURL(code, h.BaseURL+"/auth/callback"),
+			"AuthURL": h.Plex.AuthURL(code, baseURLOf(r)+"/auth/callback"),
 			"PinID":   pinID, "Code": code, "Error": "Failed to check authentication status.",
 		})
 		return
@@ -83,7 +82,7 @@ func (h *AuthHandler) poll(w http.ResponseWriter, r *http.Request) {
 	if pin.AuthToken == "" {
 		// Not yet authorized - keep polling.
 		h.Tmpl.RenderPartial(w, "partials/auth_pending.html", map[string]any{
-			"AuthURL": h.Plex.AuthURL(code, h.BaseURL+"/auth/callback"),
+			"AuthURL": h.Plex.AuthURL(code, baseURLOf(r)+"/auth/callback"),
 			"PinID":   pinID, "Code": code,
 		})
 		return
