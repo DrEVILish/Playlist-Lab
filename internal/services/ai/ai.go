@@ -22,11 +22,26 @@ import (
 )
 
 const (
-	geminiAPIBase = "https://generativelanguage.googleapis.com/v1"
-	geminiModel   = "gemini-2.0-flash-exp"
-	grokAPIBase   = "https://api.x.ai/v1"
-	grokModel     = "grok-beta"
+	geminiModel = "gemini-2.0-flash-exp"
+	grokModel   = "grok-beta"
 )
+
+// geminiAPIBase/grokAPIBase are vars, not consts, purely so tests can point
+// them at a fake httptest server instead of the real APIs - same pattern
+// and reasoning as auth.SetPlexAPIBaseForTest. Never reassigned outside
+// tests.
+var (
+	geminiAPIBase = "https://generativelanguage.googleapis.com/v1"
+	grokAPIBase   = "https://api.x.ai/v1"
+)
+
+// SetAPIBasesForTest points both providers at fake servers for the rest of
+// the calling test, returning a restore func to defer.
+func SetAPIBasesForTest(gemini, grok string) (restore func()) {
+	prevGemini, prevGrok := geminiAPIBase, grokAPIBase
+	geminiAPIBase, grokAPIBase = gemini, grok
+	return func() { geminiAPIBase, grokAPIBase = prevGemini, prevGrok }
+}
 
 // AuthError mirrors the TS code's "re-throw auth errors instead of falling
 // back to keyword extraction" behavior for 400/401/403 responses.

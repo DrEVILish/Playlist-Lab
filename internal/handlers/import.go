@@ -63,6 +63,7 @@ func RegisterImport(r chi.Router, mw *auth.Middleware, h *ImportHandler) {
 		r.Get("/import", h.page)
 		r.Post("/import", h.startImport)
 		r.Post("/import/file", h.startFileImport)
+		r.Post("/import/ai", h.startAIImport)
 	})
 }
 

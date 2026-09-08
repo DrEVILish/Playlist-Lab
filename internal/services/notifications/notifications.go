@@ -52,6 +52,11 @@ type Patch struct {
 	Status   *Status
 	Detail   *string
 	Progress *int
+	// Title lets a job rename its own notification once it learns a better
+	// one - e.g. AI generation starts as "AI Generated Playlist" and
+	// updates to the AI-chosen name once that call returns, matching
+	// ai.ts's updateNotification(..., { title: playlistName, ... }).
+	Title *string
 }
 
 const maxPerUser = 50
@@ -131,6 +136,9 @@ func (s *Store) Update(userID int64, id string, patch Patch) {
 		}
 		if patch.Progress != nil {
 			list[i].Progress = patch.Progress
+		}
+		if patch.Title != nil {
+			list[i].Title = *patch.Title
 		}
 		list[i].UpdatedAt = time.Now()
 		found = true
