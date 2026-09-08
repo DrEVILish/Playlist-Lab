@@ -54,6 +54,13 @@
   text-align: left;
   transition: background 0.15s;
   color: var(--text-primary);
+  /* These are <a> elements (jumping to an #anchor further down the page,
+     or a real page for Plex Server/Admin), not <button>s - color alone
+     doesn't stop a browser from also drawing its default link underline,
+     which made every nav item look like a plain hyperlink list instead of
+     the sidebar-nav chips the hover/active background rules above are
+     clearly meant to style. */
+  text-decoration: none;
 }
 
 .settings-nav-item:hover { background-color: var(--surface-hover); }
