@@ -27,6 +27,17 @@ var notificationTypeLabels = map[string]string{
 	"mix":            "Mix generation",
 }
 
+// serviceLogos are the ServiceMeta.Icon values with a real logo file under
+// static/service-logos/ (restored from apps/web/public/service-logos/,
+// deleted along with the rest of the v2 frontend) - matches ServiceIcon.tsx's
+// LOGO_MAP exactly, including which services it deliberately left out
+// (aria/billboard/lastfm chart sources never had a brand asset).
+var serviceLogos = map[string]bool{
+	"amazon": true, "apple": true, "deezer": true, "listenbrainz": true,
+	"plex": true, "qobuz": true, "spotify": true, "tidal": true,
+	"youtube": true, "youtube-music": true,
+}
+
 var tmplFuncs = template.FuncMap{
 	"now": time.Now,
 	// notificationTypeLabel backs the bell's per-item title line, matching
@@ -66,6 +77,28 @@ var tmplFuncs = template.FuncMap{
 	// add backs 1-based row numbers in list partials (e.g. cross-import's
 	// playlist list falling back to a plain index when there's no cover art).
 	"add": func(a, b int) int { return a + b },
+	// serviceLogo backs the import-page source picker (ServiceMeta.Icon is
+	// an internal id like "deezer"/"youtube-music", not literal display
+	// text - it used to render as the id string itself before this
+	// existed). Mirrors ServiceIcon.tsx's LOGO_MAP: services with a real
+	// logo file get its static path, everything else (aria/billboard/
+	// lastfm chart sources have no brand asset, same as the original) gets
+	// "" so the template falls back to a plain initials badge.
+	"serviceLogo": func(icon string) string {
+		if serviceLogos[icon] {
+			return "/static/service-logos/" + icon + ".png"
+		}
+		return ""
+	},
+	// initials backs that same fallback badge - first two letters of the
+	// service name, upper-cased, matching ServiceIcon.tsx's FallbackIcon.
+	"initials": func(name string) string {
+		r := []rune(strings.ToUpper(name))
+		if len(r) > 2 {
+			r = r[:2]
+		}
+		return string(r)
+	},
 	// join/joinFloats back the mix-template edit form's comma-separated
 	// inputs (genres, moods, decades, ...) - the inverse of the handler's
 	// commaListToAny/commaListToFloats parsing on submit.

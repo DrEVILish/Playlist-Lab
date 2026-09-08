@@ -59,7 +59,24 @@
 }
 
 .source-tab-icon {
-  font-size: 1rem;
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+/* Chart sources with no brand logo (aria/billboard/lastfm) - a small
+   initials badge instead of an <img>, matching ServiceIcon.tsx's
+   FallbackIcon rather than leaving them with no icon at all. */
+.source-tab-icon-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #374151;
+  color: #fff;
+  border-radius: 4px;
+  font-size: 0.625rem;
+  font-weight: 700;
 }
 
 /* Go port: source picker is a native radio group (label styled as

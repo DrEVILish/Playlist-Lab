@@ -41,7 +41,12 @@
       {{range $i, $s := .Sources}}
       <input type="radio" name="source" id="source-{{$s.ID}}" value="{{$s.ID}}" class="source-tab-input" {{if eq $i 0}}checked{{end}}>
       <label for="source-{{$s.ID}}" class="source-tab">
-        <span class="source-tab-icon">{{$s.Icon}}</span>{{$s.Name}}
+        {{if serviceLogo $s.Icon}}
+        <img class="source-tab-icon" src="{{serviceLogo $s.Icon}}" alt="">
+        {{else}}
+        <span class="source-tab-icon source-tab-icon-fallback">{{initials $s.Name}}</span>
+        {{end}}
+        {{$s.Name}}
       </label>
       {{end}}
     </div>
