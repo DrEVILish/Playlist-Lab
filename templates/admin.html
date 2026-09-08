@@ -61,7 +61,7 @@
           {{range .Users}}
           <tr style="border-top: 1px solid var(--border);">
             <td style="padding:0.5rem;">{{.PlexUsername}}</td>
-            <td style="padding:0.5rem;">{{if .LastLogin}}{{.LastLogin}}{{else}}never{{end}}</td>
+            <td style="padding:0.5rem;">{{if .LastLogin}}{{dateFromUnixMilli .LastLogin}}{{else}}never{{end}}</td>
             <td style="padding:0.5rem;">{{if .IsEnabled}}Enabled{{else}}Disabled{{end}}</td>
             <td style="padding:0.5rem;">{{if .IsAdmin}}Admin{{else}}-{{end}}</td>
             <td style="padding:0.5rem;">{{if .HasServer}}Configured{{else}}-{{end}}</td>
@@ -88,30 +88,9 @@
   <section id="admin-panel-missing" class="admin-panel card">
     <h2>Most Common Missing Tracks</h2>
     <p class="settings-hint">Tracks that multiple users are missing from their libraries.</p>
-    {{if not .MissingStats}}
-    <p class="settings-hint">No missing tracks reported.</p>
-    {{else}}
-    <div class="settings-actions" style="margin-bottom:0.75rem;">
-      <button class="btn btn-secondary" hx-post="/admin/missing/deemix-all" hx-target="#notifications" hx-swap="innerHTML" hx-confirm="Queue a deemix search for all {{len .MissingStats}} missing track(s)?">Deemix All</button>
+    <div id="admin-missing-list" hx-get="/admin/missing-list" hx-trigger="revealed" hx-swap="innerHTML">
+      <p class="admin-deferred-note">Loading missing tracks...</p>
     </div>
-    <div class="admin-cards">
-      {{range .MissingStats}}
-      <div class="admin-card">
-        <div class="admin-card-title">
-          <span class="admin-card-name">{{.Title}}</span>
-          <span class="admin-card-summary">{{.Artist}} · missing for {{.Count}} user(s)</span>
-        </div>
-        <div class="admin-card-actions">
-          <form hx-post="/admin/missing/deemix-download" hx-target="#notifications" hx-swap="innerHTML">
-            <input type="hidden" name="title" value="{{.Title}}">
-            <input type="hidden" name="artist" value="{{.Artist}}">
-            <button type="submit" class="btn btn-secondary btn-sm">Deemix</button>
-          </form>
-        </div>
-      </div>
-      {{end}}
-    </div>
-    {{end}}
   </section>
 
   <!-- Deferred: Schedules/Logs tabs have no Go backend yet (background-job

@@ -1,0 +1,36 @@
+{{/* Most Common Missing Tracks list, split out of admin.html into its own
+     lazy-loaded (hx-trigger="revealed") fragment: rendering all rows
+     up front on every /admin load regardless of which tab is active was
+     needless work on a library with hundreds of distinct missing tracks,
+     and - reproduced independently twice - having that much markup
+     present at initial paint made the .admin-tabbar itself render blank
+     in headless Chromium when this tab's :has() selector matched (a
+     :has()-plus-large-sibling-subtree rendering issue, not a logic bug -
+     every other tab's panel content was fine). Loading it on reveal
+     instead keeps the tab bar's initial paint small regardless. */}}
+{{define "partials/admin_missing.html"}}
+{{if not .MissingStats}}
+<p class="settings-hint">No missing tracks reported.</p>
+{{else}}
+<div class="settings-actions" style="margin-bottom:0.75rem;">
+  <button class="btn btn-secondary" hx-post="/admin/missing/deemix-all" hx-target="#notifications" hx-swap="innerHTML" hx-confirm="Queue a deemix search for all {{len .MissingStats}} missing track(s)?">Deemix All</button>
+</div>
+<div class="admin-cards">
+  {{range .MissingStats}}
+  <div class="admin-card">
+    <div class="admin-card-title">
+      <span class="admin-card-name">{{.Title}}</span>
+      <span class="admin-card-summary">{{.Artist}} · missing for {{.Count}} user(s)</span>
+    </div>
+    <div class="admin-card-actions">
+      <form hx-post="/admin/missing/deemix-download" hx-target="#notifications" hx-swap="innerHTML">
+        <input type="hidden" name="title" value="{{.Title}}">
+        <input type="hidden" name="artist" value="{{.Artist}}">
+        <button type="submit" class="btn btn-secondary btn-sm">Deemix</button>
+      </form>
+    </div>
+  </div>
+  {{end}}
+</div>
+{{end}}
+{{end}}

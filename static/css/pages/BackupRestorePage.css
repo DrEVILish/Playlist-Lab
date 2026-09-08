@@ -1,3 +1,11 @@
+/* <main class="page-container backup-page"> - .page-container alone has
+   no padding (base.css), same root cause as .mixes/.missing/.mix-templates/
+   status.html fixed elsewhere this session: the heading sat flush against
+   the header with nothing padding it. */
+.backup-page {
+  padding: 0.875rem;
+}
+
 .backup-card {
   background: linear-gradient(145deg, var(--surface) 0%, var(--surface-elevated, var(--surface)) 100%);
   border: 1px solid var(--border);

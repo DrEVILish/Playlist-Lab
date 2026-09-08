@@ -56,6 +56,7 @@ func RegisterAdmin(r chi.Router, mw *auth.Middleware, h *AdminHandler) {
 		r.Use(mw.RequireAuth)
 		r.Use(mw.RequireAdmin)
 		r.Get("/admin", h.page)
+		r.Get("/admin/missing-list", h.missingList)
 		r.Post("/admin/users/{userID}/enable", h.enableUser)
 		r.Post("/admin/users/{userID}/disable", h.disableUser)
 		r.Post("/admin/users/{userID}/promote", h.promoteUser)
@@ -74,6 +75,15 @@ func (h *AdminHandler) page(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "")
 }
 
+// missingList backs the Missing Tracks tab's lazy-loaded (hx-trigger=
+// "revealed") fragment - split out of the main page render so hundreds of
+// rows aren't built into every /admin load regardless of which tab is
+// active, same pattern Schedules/Logs already use in this file.
+func (h *AdminHandler) missingList(w http.ResponseWriter, r *http.Request) {
+	missingStats, _ := db.GetMissingTrackStats(h.DB)
+	h.Tmpl.RenderPartial(w, "partials/admin_missing.html", map[string]any{"MissingStats": missingStats})
+}
+
 // render loads the current stats/users list and re-renders the admin page,
 // optionally with an error banner from a just-failed action - every action
 // handler below funnels back through here so the users table it shows is
@@ -84,7 +94,6 @@ func (h *AdminHandler) render(w http.ResponseWriter, r *http.Request, errMsg str
 	userCount, _ := db.GetUserCount(h.DB)
 	playlistCount, _ := db.GetPlaylistCount(h.DB)
 	missingCount, _ := db.GetMissingTrackCount(h.DB)
-	missingStats, _ := db.GetMissingTrackStats(h.DB)
 	users, err := db.GetAllUsers(h.DB)
 	if err != nil && errMsg == "" {
 		errMsg = err.Error()
@@ -110,7 +119,6 @@ func (h *AdminHandler) render(w http.ResponseWriter, r *http.Request, errMsg str
 			"TotalMissing":   missingCount,
 		},
 		"Users":               users,
-		"MissingStats":        missingStats,
 		"DeemixArl":           h.Deemix.ARL(),
 		"ArlStatus":           h.Deemix.LastArlCheck(),
 		"LidarrURL":           lidarrCfg.URL,

@@ -2,7 +2,12 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 0;
+  /* padding:0 left the title flush against the header, same root cause
+     as .mixes/.missing/.mix-templates/status.html/backup-page fixed
+     elsewhere this session - box-sizing:border-box (base.css, global)
+     means this comes out of the existing height:100% rather than
+     overflowing it. */
+  padding: 0.875rem;
   width: 100%;
   overflow: hidden;
 }
