@@ -1,0 +1,22 @@
+{{/* Search candidates for one review row, ported from the same idea as
+     track_search_results.html but selecting a candidate re-matches this
+     one row (POST .../select) instead of adding a track to a playlist. */}}
+{{define "partials/import_review_candidates.html"}}
+{{if not .Results}}
+  {{if .Query}}<p class="settings-hint">No matches.</p>{{end}}
+{{else}}
+  <ul class="track-search-list">
+    {{range .Results}}
+    <li>
+      <form hx-post="/import/review/{{$.SessionID}}/track/{{$.Index}}/select" hx-target="#import-review" hx-swap="outerHTML">
+        <input type="hidden" name="ratingKey" value="{{.RatingKey}}">
+        <input type="hidden" name="title" value="{{.Title}}">
+        <input type="hidden" name="artist" value="{{.Artist}}">
+        <input type="hidden" name="album" value="{{.Album}}">
+        <button type="submit" class="btn btn-secondary btn-small">{{.Title}} &mdash; {{.Artist}}{{if .Album}} ({{.Album}}){{end}}</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+{{end}}
+{{end}}

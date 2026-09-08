@@ -1,0 +1,76 @@
+{{/* Import review list, ported from ImportPage.tsx's editable match-review
+     table (handlePreview's result). Structurally the same shape as
+     cross_import_review.html - a per-row skip toggle and a "Search" reveal
+     for re-matching - reused deliberately rather than invented fresh, since
+     that pattern already exists and works in this app. */}}
+{{define "partials/import_review.html"}}
+{{$sid := .SessionID}}
+<div id="import-review">
+  <h2 class="step-section-title">Review matches</h2>
+
+  <div class="review-summary">
+    <div class="review-summary-item"><span class="review-summary-count">{{.TotalCount}}</span> total</div>
+    <div class="review-summary-item" style="color:var(--success);"><span class="review-summary-count">{{.MatchedCount}}</span> matched</div>
+    <div class="review-summary-item" style="color:var(--warning);"><span class="review-summary-count">{{.UnmatchedCount}}</span> unmatched</div>
+    <div class="review-summary-item" style="color:var(--text-muted);"><span class="review-summary-count">{{.SkippedCount}}</span> skipped</div>
+  </div>
+
+  <div class="review-track-list">
+    {{range $i, $t := .Tracks}}
+    {{$status := "unmatched"}}
+    {{if $t.Skipped}}{{$status = "skipped"}}{{else if $t.Matched}}{{$status = "matched"}}{{end}}
+    <div class="review-track-item {{$status}}">
+      <div class="review-track-source">
+        <div class="review-track-title">{{$t.Title}}</div>
+        <div class="review-track-artist">{{$t.Artist}}</div>
+      </div>
+
+      <div class="review-track-target">
+        {{if $t.Matched}}
+        <div class="review-track-title">{{$t.PlexTitle}}</div>
+        <div class="review-track-artist">{{$t.PlexArtist}}</div>
+        {{else}}
+        <span class="review-track-unmatched-label">Unmatched</span>
+        {{end}}
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:0.375rem;align-items:flex-end;">
+        <form hx-post="/import/review/{{$sid}}/track/{{$i}}/skip" hx-target="#import-review" hx-swap="outerHTML">
+          <button type="submit" class="btn btn-secondary btn-small">{{if $t.Skipped}}Unskip{{else}}Skip{{end}}</button>
+        </form>
+        <details class="ci-search">
+          <summary class="btn btn-secondary btn-small">Search</summary>
+          <form hx-get="/import/review/{{$sid}}/track/{{$i}}/search" hx-target="#import-candidates-{{$i}}" hx-swap="innerHTML">
+            <input class="input" type="text" name="q" placeholder="Search…" value="{{$t.Title}} {{$t.Artist}}">
+            <button type="submit" class="btn btn-primary btn-small">Go</button>
+          </form>
+          <div id="import-candidates-{{$i}}"></div>
+        </details>
+      </div>
+    </div>
+    {{end}}
+  </div>
+
+  <form hx-post="/import/confirm/{{$sid}}" hx-target="#notifications" hx-swap="innerHTML" class="import-confirm-form">
+    <div class="form-section">
+      <label class="form-label" for="import-confirm-name">Playlist name</label>
+      <input class="form-input" type="text" id="import-confirm-name" name="playlistName" value="{{.PlaylistName}}" required>
+    </div>
+    <div class="form-section">
+      <label><input type="checkbox" name="overwriteExisting" value="true"> Replace an existing playlist with this name</label>
+    </div>
+    <div class="form-section">
+      <label><input type="checkbox" name="keepExistingCover" value="true"> Keep the existing playlist's cover art</label>
+    </div>
+    <button type="submit" class="btn btn-primary">Confirm Import ({{.MatchedCount}} tracks)</button>
+  </form>
+</div>
+<style>
+  /* Same disclosure-triangle removal cross_import_review.html's own inline
+     style carries for the identical .ci-search pattern - duplicated rather
+     than shared, since it's two rules and this partial doesn't otherwise
+     depend on that one. */
+  .ci-search summary { list-style: none; cursor: pointer; display: inline-block; }
+  .ci-search summary::-webkit-details-marker { display: none; }
+</style>
+{{end}}

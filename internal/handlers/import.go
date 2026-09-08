@@ -21,10 +21,13 @@
 // xspf/csv/txt) is a separate upload form (startFileImport below), not one
 // of these dropdown sources, so it isn't in this list either.
 //
-// Like mixes.go and cross_import.go, importing runs as a background
-// action-queue job reported through the notification bell - no separate
-// preview/confirm round trip, since import.ts itself has no review step
-// either (unmatched tracks just land in missing_tracks, same as here).
+// The dropdown/URL import above and file import below still run
+// synchronously to a fire-and-forget queued job, same as before. The
+// primary way to import a specific known playlist - paste a URL, review
+// what matched, fix anything wrong, then confirm - is import_review.go's
+// preview/review/confirm flow (routes/import.ts's POST /preview + /match +
+// /confirm, ImportPage.tsx's real caller of all three), which was missing
+// entirely from this port until it was added there.
 package handlers
 
 import (
@@ -43,6 +46,7 @@ import (
 	"github.com/drevilish/playlist-lab/internal/db"
 	"github.com/drevilish/playlist-lab/internal/services/actionqueue"
 	"github.com/drevilish/playlist-lab/internal/services/fileimport"
+	"github.com/drevilish/playlist-lab/internal/services/importreview"
 	"github.com/drevilish/playlist-lab/internal/services/importsvc"
 	"github.com/drevilish/playlist-lab/internal/services/notifications"
 	"github.com/drevilish/playlist-lab/internal/services/plex"
@@ -55,6 +59,8 @@ type ImportHandler struct {
 	Notifications *notifications.Store
 	Queue         *actionqueue.Queue
 	Registry      *adapters.Registry
+	// Reviews backs the preview/review/confirm flow in import_review.go.
+	Reviews *importreview.Store
 }
 
 func RegisterImport(r chi.Router, mw *auth.Middleware, h *ImportHandler) {

@@ -1,5 +1,10 @@
 {{define "content"}}
 <link rel="stylesheet" href="/static/css/pages/ImportPage.css">
+<!-- The review-track-list/.review-summary rules the new preview/review flow
+     below uses only exist in CrossImportPage.css today - reused as-is
+     rather than duplicated, since cross-import's review step and this one
+     are the same visual concept. -->
+<link rel="stylesheet" href="/static/css/pages/CrossImportPage.css">
 <main class="import page-container">
   <div class="page-header import-header">
     <h1 class="page-title import-title">Import a Playlist</h1>
@@ -21,8 +26,17 @@
   <!-- Source picker: React drove this with useState + onClick handlers over
        a button list; a native radio group does the same "pick one" job with
        no JS, and its own value doubles as the form's submitted "source"
-       field (see .source-tab-input rules appended to ImportPage.css). -->
-  <form hx-post="/import" hx-target="#notifications" hx-swap="innerHTML">
+       field (see .source-tab-input rules appended to ImportPage.css).
+
+       Posts to /import/preview, not /import directly: ImportPage.tsx's
+       handlePreview is what every chart/search/URL import in the real app
+       actually calls - fetch and match synchronously, show the results,
+       let the user fix anything wrong, then POST /import/confirm/:sessionId
+       (import_review.go) actually creates the playlist. The old fire-and-
+       forget /import handler (import.go's startImport) is left registered
+       and working underneath this - nothing currently calls it from the
+       UI, but removing a working, tested endpoint isn't this change's job. -->
+  <form hx-post="/import/preview" hx-target="#import-review-container" hx-swap="innerHTML">
     <div class="source-tabs">
       {{range $i, $s := .Sources}}
       <input type="radio" name="source" id="source-{{$s.ID}}" value="{{$s.ID}}" class="source-tab-input" {{if eq $i 0}}checked{{end}}>
@@ -42,9 +56,10 @@
         <label class="form-label" for="import-playlist-name">Playlist name (optional)</label>
         <input class="form-input" type="text" id="import-playlist-name" name="playlistName" placeholder="Defaults to the source playlist's name">
       </div>
-      <button type="submit" class="btn btn-primary">Import</button>
+      <button type="submit" class="btn btn-primary">Preview &amp; Import</button>
     </section>
   </form>
+  <div id="import-review-container"></div>
   {{end}}
 
   <section class="import-form">

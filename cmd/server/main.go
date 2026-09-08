@@ -36,6 +36,7 @@ import (
 	"github.com/drevilish/playlist-lab/internal/services/actionqueue"
 	"github.com/drevilish/playlist-lab/internal/services/crossimport"
 	"github.com/drevilish/playlist-lab/internal/services/deemix"
+	"github.com/drevilish/playlist-lab/internal/services/importreview"
 	"github.com/drevilish/playlist-lab/internal/services/jobs"
 	"github.com/drevilish/playlist-lab/internal/services/lidarr"
 	"github.com/drevilish/playlist-lab/internal/services/mixes"
@@ -173,9 +174,10 @@ func main() {
 	})
 	importHandler := &handlers.ImportHandler{
 		DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue,
-		Registry: registry,
+		Registry: registry, Reviews: importreview.NewStore(),
 	}
 	handlers.RegisterImport(r, mw, importHandler)
+	handlers.RegisterImportReview(r, mw, importHandler)
 	handlers.RegisterPlexHome(r, mw, importHandler)
 	handlers.RegisterCharts(r, mw, &handlers.ChartsHandler{
 		DB: sqlDB, SessionSecret: cfg.SessionSecret,
