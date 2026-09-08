@@ -436,8 +436,8 @@
      cell) is well under the ~40-44px minimum comfortable tap target - the
      mobile card list has room to grow these back out. */
   .icon-btn {
-    width: 34px;
-    height: 34px;
+    width: 40px;
+    height: 40px;
   }
 }
 

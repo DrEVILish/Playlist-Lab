@@ -1,6 +1,6 @@
 {{define "content"}}
 <link rel="stylesheet" href="/static/css/components/MissingTracksPanel.css">
-<main class="missing">
+<div class="missing">
   <h1 class="page-title">Missing Tracks</h1>
 
   <div id="retry-status" hx-get="/missing/retry-status" hx-trigger="every 2s" hx-swap="innerHTML"></div>
@@ -15,5 +15,5 @@
   </div>
 
   <div id="missing-list" hx-get="/missing/list" hx-trigger="load" hx-swap="innerHTML"></div>
-</main>
+</div>
 {{end}}

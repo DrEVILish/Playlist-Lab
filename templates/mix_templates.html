@@ -3,7 +3,7 @@
 <link rel="stylesheet" href="/static/css/components/SaveTemplateModal.css">
 <link rel="stylesheet" href="/static/css/components/EditTemplateModal.css">
 <link rel="stylesheet" href="/static/css/components/DeleteTemplateDialog.css">
-<main class="mix-templates page-container">
+<div class="mix-templates page-container">
   <div class="page-header">
     <h1 class="page-title">Mix Templates</h1>
     <button type="button" class="btn btn-primary btn-small"
@@ -13,5 +13,5 @@
   </div>
 
   <div id="mix-templates-list" hx-get="/mix-templates/list" hx-trigger="load" hx-swap="innerHTML"></div>
-</main>
+</div>
 {{end}}

@@ -144,6 +144,19 @@ p {
 .btn:hover { transform: translateY(-1px); }
 .btn:active { transform: translateY(0); }
 
+/* Keyboard-only users got no visible focus indicator on any button/icon-
+   button/link-styled-as-button in the app - only .input/select replace the
+   browser's default outline with something visible (a box-shadow ring
+   above). Reusing that same ring here rather than just re-enabling the
+   default outline, so keyboard focus looks like part of this theme
+   instead of a generic browser blue rectangle. */
+.btn:focus-visible,
+.icon-btn:focus-visible,
+a:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(91, 155, 213, 0.4);
+}
+
 .btn-small {
   padding: 0.375rem 0.75rem;
   font-size: 0.75rem;

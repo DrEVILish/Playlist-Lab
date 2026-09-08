@@ -59,6 +59,13 @@
   .missing-track-actions {
     justify-content: flex-start;
   }
+
+  /* 32x30 (the desktop size) is under the ~40px minimum comfortable tap
+     target. */
+  .missing-track-more > summary {
+    width: 40px;
+    height: 40px;
+  }
 }
 
 /* Compact (mobile card list) - a track is one line with a single Retry

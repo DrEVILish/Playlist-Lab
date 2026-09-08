@@ -1,6 +1,6 @@
 {{define "content"}}
 <link rel="stylesheet" href="/static/css/pages/EditorPage.css">
-<main class="editor">
+<div class="editor">
   <p><a href="/">&larr; Back to library</a></p>
   <h1>{{.Name}}</h1>
 
@@ -118,7 +118,7 @@
     </table>
     </div>
   </form>
-</main>
+</div>
 <script>
 (function () {
   const plexId = {{.PlexID}};

@@ -8,7 +8,7 @@
   <div class="advanced-mix-modal" style="max-width:460px">
     <div class="advanced-mix-header">
       <h2 class="advanced-mix-title">{{if .Schedule}}Manage Schedule{{else}}Create Schedule{{end}} — {{.PlaylistName}}</h2>
-      <button type="button" class="advanced-mix-close" onclick="document.getElementById('modal-root').innerHTML=''">&times;</button>
+      <button type="button" class="advanced-mix-close" onclick="document.getElementById('modal-root').innerHTML=''" aria-label="Close">&times;</button>
     </div>
 
     <form {{if .Schedule}}hx-put="/schedules/{{.Schedule.ID}}"{{else}}hx-post="/schedules"{{end}} hx-swap="none">

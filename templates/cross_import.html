@@ -5,7 +5,7 @@
      "connected service" row this page renders isn't unstyled (it's also
      used directly by the Settings page, which already links its own CSS). -->
 <link rel="stylesheet" href="/static/css/pages/SettingsPage.css">
-<main class="cross-import-page">
+<div class="cross-import-page">
   <div class="cross-import-header">
     <h1 class="cross-import-title">Export to YouTube</h1>
     <p class="cross-import-description">Export your Plex playlists to YouTube</p>
@@ -41,5 +41,5 @@
     <h2 class="step-section-title">Import History</h2>
     <div id="cross-import-history" hx-get="/cross-import/history" hx-trigger="load" hx-swap="innerHTML"></div>
   </section>
-</main>
+</div>
 {{end}}

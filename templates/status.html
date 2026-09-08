@@ -1,6 +1,6 @@
 {{define "content"}}
 <link rel="stylesheet" href="/static/css/pages/PlaylistsPage.css">
-<main class="page-container status-page">
+<div class="page-container status-page">
   <h1 class="page-title">Status &amp; Reports</h1>
 
   {{if .PlexError}}
@@ -42,11 +42,11 @@
     <div class="status-row"><span>Plex smart playlists</span><span>{{.SmartCount}} of {{.TotalPlaylists}}</span></div>
   </section>
   {{end}}
-</main>
+</div>
 <style>
 .status-row { display: flex; justify-content: space-between; padding: 0.375rem 0; border-bottom: 1px solid var(--border); }
 .status-row:last-child { border-bottom: none; }
-main.page-container section.card { margin-top: 1.5rem; }
-main.page-container section.card h3 { margin: 0 0 0.5rem; }
+.status-page section.card { margin-top: 1.5rem; }
+.status-page section.card h3 { margin: 0 0 0.5rem; }
 </style>
 {{end}}
