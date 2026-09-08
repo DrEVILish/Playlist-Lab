@@ -167,7 +167,21 @@ func main() {
 	registry.RegisterSource(lastfmsource.NewSource())
 	registry.RegisterSource(spotify.NewSource(sqlDB, cfg.SessionSecret, cfg.SpotifyClientID, cfg.SpotifyClientSecret))
 	registry.RegisterSource(youtubemusic.NewTarget(sqlDB, cfg.SessionSecret))
-	registry.RegisterTarget(youtube.NewTarget(sqlDB, cfg.SessionSecret, cfg.YouTubeClientID, cfg.YouTubeClientSecret, cfg.YouTubeRedirectURI))
+	// Same admin_config-overrides-env pattern as deemix_arl/lidarr below -
+	// lets an admin paste Google OAuth credentials into /admin instead of
+	// editing .env and restarting (routes/youtube-config.ts's approach).
+	youtubeClientID, youtubeClientSecret, youtubeRedirectURI := cfg.YouTubeClientID, cfg.YouTubeClientSecret, cfg.YouTubeRedirectURI
+	if v, ok, _ := db.GetAdminConfig(sqlDB, "youtube_client_id"); ok {
+		youtubeClientID = v
+	}
+	if v, ok, _ := db.GetAdminConfig(sqlDB, "youtube_client_secret"); ok {
+		youtubeClientSecret = v
+	}
+	if v, ok, _ := db.GetAdminConfig(sqlDB, "youtube_redirect_uri"); ok {
+		youtubeRedirectURI = v
+	}
+	youtubeTarget := youtube.NewTarget(sqlDB, cfg.SessionSecret, youtubeClientID, youtubeClientSecret, youtubeRedirectURI)
+	registry.RegisterTarget(youtubeTarget)
 	handlers.RegisterCrossImport(r, mw, &handlers.CrossImportHandler{
 		DB: sqlDB, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue,
 		Registry: registry, Sessions: crossimport.NewStore(),
@@ -208,7 +222,7 @@ func main() {
 	})
 	handlers.RegisterAdmin(r, mw, &handlers.AdminHandler{
 		DB: sqlDB, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue,
-		Deemix: deemixService, Lidarr: lidarrService,
+		Deemix: deemixService, Lidarr: lidarrService, YouTube: youtubeTarget,
 	})
 
 	// Scheduling (Phase 6f): playlist-refresh + mix-generation schedules,

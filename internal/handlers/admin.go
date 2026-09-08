@@ -19,6 +19,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	youtubetarget "github.com/drevilish/playlist-lab/internal/adapters/youtube"
 	"github.com/drevilish/playlist-lab/internal/auth"
 	"github.com/drevilish/playlist-lab/internal/db"
 	"github.com/drevilish/playlist-lab/internal/services/actionqueue"
@@ -32,9 +33,12 @@ import (
 // startup (cmd/server/main.go) to seed the Deemix/Lidarr services' Config,
 // and written here whenever the admin saves the form.
 const (
-	configKeyDeemixArl    = "deemix_arl"
-	configKeyLidarrURL    = "lidarr_url"
-	configKeyLidarrAPIKey = "lidarr_api_key"
+	configKeyDeemixArl       = "deemix_arl"
+	configKeyLidarrURL       = "lidarr_url"
+	configKeyLidarrAPIKey    = "lidarr_api_key"
+	configKeyYouTubeClientID = "youtube_client_id"
+	configKeyYouTubeSecret   = "youtube_client_secret"
+	configKeyYouTubeRedirect = "youtube_redirect_uri"
 )
 
 type AdminHandler struct {
@@ -44,6 +48,7 @@ type AdminHandler struct {
 	Queue         *actionqueue.Queue
 	Deemix        *deemixsvc.Service
 	Lidarr        *lidarrsvc.Service
+	YouTube       *youtubetarget.Target
 }
 
 func RegisterAdmin(r chi.Router, mw *auth.Middleware, h *AdminHandler) {
@@ -61,6 +66,7 @@ func RegisterAdmin(r chi.Router, mw *auth.Middleware, h *AdminHandler) {
 		r.Post("/admin/deemix/arl", h.saveDeemixArl)
 		r.Post("/admin/deemix/arl/check", h.checkDeemixArl)
 		r.Post("/admin/lidarr/config", h.saveLidarrConfig)
+		r.Post("/admin/youtube/config", h.saveYouTubeConfig)
 	})
 }
 
@@ -103,12 +109,16 @@ func (h *AdminHandler) render(w http.ResponseWriter, r *http.Request, errMsg str
 			"TotalPlaylists": playlistCount,
 			"TotalMissing":   missingCount,
 		},
-		"Users":        users,
-		"MissingStats": missingStats,
-		"DeemixArl":    h.Deemix.ARL(),
-		"ArlStatus":    h.Deemix.LastArlCheck(),
-		"LidarrURL":    lidarrCfg.URL,
-		"LidarrAPIKey": lidarrCfg.APIKey,
+		"Users":               users,
+		"MissingStats":        missingStats,
+		"DeemixArl":           h.Deemix.ARL(),
+		"ArlStatus":           h.Deemix.LastArlCheck(),
+		"LidarrURL":           lidarrCfg.URL,
+		"LidarrAPIKey":        lidarrCfg.APIKey,
+		"YouTubeClientID":     h.YouTube.OAuth.ClientID,
+		"YouTubeClientSecret": h.YouTube.OAuth.ClientSecret,
+		"YouTubeRedirectURI":  h.YouTube.OAuth.RedirectURI,
+		"YouTubeConfigured":   h.YouTube.IsConfigured(),
 	})
 }
 
@@ -354,5 +364,44 @@ func (h *AdminHandler) saveLidarrConfig(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	h.Lidarr.SetConfig(lidarrURL, apiKey)
+	h.render(w, r, "")
+}
+
+// saveYouTubeConfig ports routes/youtube-config.ts's POST /credentials:
+// saves the Google OAuth client id/secret/redirect URI YouTube import
+// matching needs. Unlike the Node version (which wrote these into .env and
+// required a restart), they're persisted via admin_config like Deemix/
+// Lidarr above and applied to the already-constructed youtube.Target
+// in-place, so the change takes effect on the very next OAuth attempt.
+func (h *AdminHandler) saveYouTubeConfig(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	clientID := strings.TrimSpace(r.FormValue("clientId"))
+	clientSecret := strings.TrimSpace(r.FormValue("clientSecret"))
+	redirectURI := strings.TrimSpace(r.FormValue("redirectUri"))
+	if clientID == "" || clientSecret == "" || redirectURI == "" {
+		h.render(w, r, "Missing required fields: Client ID, Client Secret, Redirect URI")
+		return
+	}
+	if !strings.Contains(clientID, ".apps.googleusercontent.com") {
+		h.render(w, r, "Invalid Client ID format. Should end with .apps.googleusercontent.com")
+		return
+	}
+	if !strings.Contains(redirectURI, "/cross-import/oauth/youtube/callback") {
+		h.render(w, r, "Invalid Redirect URI. Should end with /cross-import/oauth/youtube/callback")
+		return
+	}
+	if err := db.SetAdminConfig(h.DB, configKeyYouTubeClientID, clientID); err != nil {
+		h.render(w, r, err.Error())
+		return
+	}
+	if err := db.SetAdminConfig(h.DB, configKeyYouTubeSecret, clientSecret); err != nil {
+		h.render(w, r, err.Error())
+		return
+	}
+	if err := db.SetAdminConfig(h.DB, configKeyYouTubeRedirect, redirectURI); err != nil {
+		h.render(w, r, err.Error())
+		return
+	}
+	h.YouTube.OAuth = youtubetarget.OAuthConfig{ClientID: clientID, ClientSecret: clientSecret, RedirectURI: redirectURI}
 	h.render(w, r, "")
 }

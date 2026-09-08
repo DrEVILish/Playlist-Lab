@@ -164,6 +164,7 @@
 .admin-tabbar:has(#admin-tab-jobs:checked) ~ #admin-panel-jobs,
 .admin-tabbar:has(#admin-tab-deemix:checked) ~ #admin-panel-deemix,
 .admin-tabbar:has(#admin-tab-lidarr:checked) ~ #admin-panel-lidarr,
+.admin-tabbar:has(#admin-tab-youtube:checked) ~ #admin-panel-youtube,
 .admin-tabbar:has(#admin-tab-logs:checked) ~ #admin-panel-logs {
   display: block;
 }
