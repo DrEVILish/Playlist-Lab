@@ -51,7 +51,6 @@ func InsertMatchedTrackIntoPlaylist(sqlDB *sql.DB, client *plex.Client, target P
 			slog.Error("[Matching] Failed to persist new Plex playlist id", "error", err, "trackId", track.ID)
 			return false
 		}
-		plexPlaylistID = newPlaylist.RatingKey
 	} else {
 		if err := client.AddToPlaylist(plexPlaylistID, []string{trackURI}); err != nil {
 			if !strings.Contains(err.Error(), "not found") && !strings.Contains(err.Error(), "404") {
@@ -68,7 +67,6 @@ func InsertMatchedTrackIntoPlaylist(sqlDB *sql.DB, client *plex.Client, target P
 				slog.Error("[Matching] Failed to persist recreated Plex playlist id", "error", err, "trackId", track.ID)
 				return false
 			}
-			plexPlaylistID = newPlaylist.RatingKey
 		} else if track.AfterTrackKey.Valid && track.AfterTrackKey.String != "" {
 			// Non-fatal: the track is still in the playlist, just not
 			// necessarily at its original position.

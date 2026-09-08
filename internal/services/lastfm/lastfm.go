@@ -69,7 +69,7 @@ type rawArtist struct {
 }
 
 func (a rawArtist) toArtist() Artist {
-	return Artist{Name: a.Name, PlayCount: a.PlayCount, Listeners: a.Listeners, MBID: a.MBID, URL: a.URL}
+	return Artist(a)
 }
 
 // GetTopArtists ports getTopArtists (lastfm.ts:33-63) using chart.gettopartists.

@@ -35,7 +35,6 @@ var (
 	bracketsPattern   = regexp.MustCompile(`\s*\[[^\]]*\]`)
 	dashSuffixPattern = regexp.MustCompile(`(?i)\s*-\s*(?:remaster|remastered|version|edit|mix|demo|bonus)(?:\s|$)`)
 	hasParensPattern  = regexp.MustCompile(`\([^)]+\)`)
-	whitespacePattern = regexp.MustCompile(`\s+`)
 )
 
 // cleanTrackTitle removes ALL parenthetical/bracketed content and common

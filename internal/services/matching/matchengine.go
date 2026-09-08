@@ -2,6 +2,7 @@ package matching
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/drevilish/playlist-lab/internal/services/limiter"
 	"github.com/drevilish/playlist-lab/internal/services/plex"
@@ -270,6 +271,13 @@ func matchOneTrack(track Track, client *plex.Client, libraryID string, settings 
 				if _, ok := err.(*plex.AuthError); ok {
 					return MatchedTrack{}, err
 				}
+				// Any other error (rating key vanished from Plex, a
+				// transient network blip, ...) falls through to a fresh
+				// search below rather than failing the whole match - but
+				// silently, with nothing logged, a real Plex outage would
+				// look identical to "this remembered match just needed
+				// re-searching" in the logs.
+				slog.Warn("remembered-match lookup failed, falling back to fresh search", "ratingKey", ratingKey, "error", err)
 			}
 			if details != nil {
 				return MatchedTrack{

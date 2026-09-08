@@ -193,7 +193,11 @@ func resolveArtistKey(serverURL, token, clientID, libraryID, name string) (strin
 }
 
 func formLabel(mixType string) string {
-	return strings.Title(strings.ReplaceAll(mixType, "-", " ")) + " Mix"
+	words := strings.Fields(strings.ReplaceAll(mixType, "-", " "))
+	for i, w := range words {
+		words[i] = strings.ToUpper(w[:1]) + w[1:]
+	}
+	return strings.Join(words, " ") + " Mix"
 }
 
 // run does the actual Plex work for one generate request: builds the mix
