@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -28,6 +29,27 @@ func RegisterAuth(r chi.Router, h *AuthHandler) {
 	r.Post("/auth/start", h.start)
 	r.Post("/auth/poll", h.poll)
 	r.Post("/auth/logout", h.logout)
+	r.Get("/auth/callback", h.callback)
+}
+
+// callback is where Plex redirects the popup/tab after the user approves
+// sign-in (the AuthURL forwardUrl built in start/poll below) - v2 served
+// this as a static apps/web/public/plex-callback.html; this route never
+// existed in the Go port, so it 404'd for every real login. The actual
+// login completion happens via /auth/poll on the original tab, not here -
+// this page only has to tell the user that and get out of the way.
+func (h *AuthHandler) callback(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, `<!doctype html><html><head><meta charset="utf-8">
+<title>Signed in - Playlist Lab</title></head>
+<body style="font-family:system-ui,sans-serif;background:#0a1018;color:#e8ecf1;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
+<div style="text-align:center;max-width:22rem">
+<p style="font-size:2rem">&#10003;</p>
+<h1 style="font-size:1.25rem">Signed in with Plex</h1>
+<p>You can close this tab and return to Playlist Lab - it will finish logging you in automatically.</p>
+</div>
+<script>setTimeout(function(){ window.close(); }, 1500);</script>
+</body></html>`)
 }
 
 func (h *AuthHandler) loginPage(w http.ResponseWriter, r *http.Request) {
