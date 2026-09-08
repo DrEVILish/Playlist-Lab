@@ -10,7 +10,11 @@
 .mobile-nav-checkbox:not(:checked) ~ .mobile-nav { display: none; }
 .mobile-nav-checkbox:checked ~ .mobile-nav-overlay { display: block; }
 .mobile-nav-checkbox:checked ~ .mobile-nav { display: flex; left: 0; }
-.mobile-nav-checkbox:checked ~ .mobile-nav-toggle { display: none; }
+/* The toggle button lives inside header-left now (templates/layout.html),
+   not as a sibling of the checkbox, so it can't be hidden via a ~
+   selector while the drawer is open - the drawer's overlay already sits
+   above it (z-index) and has its own explicit close (X) button, so a
+   visible-but-covered hamburger underneath is harmless. */
 label.mobile-nav-toggle { display: none; }
 @media (max-width: 768px) {
   label.mobile-nav-toggle { display: block; }

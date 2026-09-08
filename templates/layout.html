@@ -55,11 +55,12 @@
     {{if .User}}
     <!-- Mobile nav: React toggled a slide-out panel with useState; here a
          checkbox hack drives the same open/close purely in CSS (no JS
-         needed for a single boolean UI-only toggle). -->
+         needed for a single boolean UI-only toggle). The checkbox has to
+         live here, a sibling of .mobile-nav/.mobile-nav-overlay below, for
+         their :checked ~ selectors to work - the visible toggle *button*
+         is a separate label for this same checkbox, rendered inside
+         header-left further down. -->
     <input type="checkbox" id="mobile-nav-toggle" class="mobile-nav-checkbox">
-    <label for="mobile-nav-toggle" class="mobile-nav-toggle" aria-label="Open navigation menu">
-      <span class="hamburger"><span></span><span></span><span></span></span>
-    </label>
     <label for="mobile-nav-toggle" class="mobile-nav-overlay" aria-hidden="true"></label>
 
     <nav class="mobile-nav">
@@ -102,6 +103,20 @@
     <header class="header">
       <div class="header-content">
         <div class="header-left">
+          <!-- Second <label for="mobile-nav-toggle"> pointing at the same
+               checkbox declared above (line ~59) - HTML allows more than
+               one label per control, and clicking either toggles it. Kept
+               as a second label rather than moving the original here:
+               the checkbox has to stay a sibling of .mobile-nav/
+               .mobile-nav-overlay up in .layout for their ~ (general
+               sibling) CSS rules to keep working, but the toggle *button*
+               needs to render inside header-left (matching Header.tsx,
+               which nested <MobileNav>'s toggle here) so it sits on the
+               header's row instead of stacking above it as .layout's own
+               flex child. -->
+          <label for="mobile-nav-toggle" class="mobile-nav-toggle" aria-label="Open navigation menu">
+            <span class="hamburger"><span></span><span></span><span></span></span>
+          </label>
           <a href="/" class="header-logo">
             <img src="/static/logo.svg" alt="Playlist Lab" class="header-logo-icon">
             <h1><span class="logo-playlist">Playlist </span><span class="logo-lab">Lab</span></h1>
