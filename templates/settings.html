@@ -137,9 +137,21 @@
           <h2>Library Scan</h2>
           <p>Trigger Plex to scan for new or changed files in your library.</p>
         </div>
-        <form hx-post="/settings/scan-library" hx-target="#library-scan-result" hx-swap="innerHTML">
-          <button type="submit" class="btn btn-primary">Scan Library</button>
-        </form>
+        <div class="settings-scan">
+          <form hx-post="/settings/scan-library" hx-target="#library-scan-result" hx-swap="innerHTML">
+            <button type="submit" class="btn btn-primary">Scan Entire Library</button>
+          </form>
+          <div class="settings-scan-folder">
+            <label class="settings-label">Scan a specific folder</label>
+            <div id="library-folders" hx-get="/settings/library-folders" hx-trigger="revealed" hx-swap="innerHTML">
+              <p class="settings-loading">Loading folders...</p>
+            </div>
+            <form hx-post="/settings/scan-library" hx-target="#library-scan-result" hx-swap="innerHTML" class="settings-input-group">
+              <input type="text" name="path" class="settings-input settings-input--mono" placeholder="/music/Artist or C:\Music\Artist">
+              <button type="submit" class="btn btn-secondary">Scan Folder</button>
+            </form>
+          </div>
+        </div>
         <div id="library-scan-result"></div>
       </section>
       {{end}}

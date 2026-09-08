@@ -49,6 +49,7 @@ func RegisterSettings(r chi.Router, mw *auth.Middleware, h *SettingsHandler) {
 		r.Post("/settings/ai", h.saveAI)
 		r.Post("/settings/ai/test", h.testAI)
 		r.Post("/settings/scan-library", h.scanLibrary)
+		r.Get("/settings/library-folders", h.libraryFolders)
 	})
 }
 
@@ -112,8 +113,37 @@ func (h *SettingsHandler) scanLibrary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	client := plex.NewClient(userServer.ServerURL, plex.ResolveToken(user.PlexToken, userServer.AccessToken.String), h.PlexAuth.ClientID, "Playlist Lab")
-	err = client.ScanLibrary(userServer.LibraryID.String, "")
-	h.renderAlert(w, "Library scan triggered.", err)
+	path := r.FormValue("path")
+	err = client.ScanLibrary(userServer.LibraryID.String, path)
+	if err != nil {
+		h.renderAlert(w, "", err)
+		return
+	}
+	if path != "" {
+		h.renderAlert(w, "Scan triggered for "+path+".", nil)
+		return
+	}
+	h.renderAlert(w, "Library scan triggered.", nil)
+}
+
+// libraryFolders ports GET /api/servers/library-folders: lists the
+// selected library's on-disk root folders, so scan-library's "scan a
+// specific folder" option (SettingsPage.tsx's LibraryScanSection) has
+// something to pick from instead of requiring a hand-typed path.
+func (h *SettingsHandler) libraryFolders(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
+	userServer, err := db.GetUserServer(h.DB, user.ID)
+	if err != nil || userServer == nil || !userServer.LibraryID.Valid {
+		h.Tmpl.RenderPartial(w, "partials/library_folders.html", map[string]any{"Error": errNoLibrarySelected.Error()})
+		return
+	}
+	client := plex.NewClient(userServer.ServerURL, plex.ResolveToken(user.PlexToken, userServer.AccessToken.String), h.PlexAuth.ClientID, "Playlist Lab")
+	folders, err := client.GetLibraryFolders(userServer.LibraryID.String)
+	if err != nil {
+		h.Tmpl.RenderPartial(w, "partials/library_folders.html", map[string]any{"Error": err.Error()})
+		return
+	}
+	h.Tmpl.RenderPartial(w, "partials/library_folders.html", map[string]any{"Folders": folders})
 }
 
 func (h *SettingsHandler) saveMatching(w http.ResponseWriter, r *http.Request) {

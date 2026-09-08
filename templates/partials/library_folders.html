@@ -1,0 +1,22 @@
+{{/* Library folder picker, ported from SettingsPage.tsx's
+     LibraryScanSection: lists the selected library's on-disk root folders
+     so "scan a specific folder" has something to click instead of
+     requiring a hand-typed path. Loaded on reveal (see settings.html's
+     hx-trigger="revealed") since it's a Plex API round trip nobody using
+     the plain "Scan Library" button needs to pay for. */}}
+{{define "partials/library_folders.html"}}
+{{if .Error}}
+<p class="settings-hint">Couldn't load folders: {{.Error}}</p>
+{{else if not .Folders}}
+<p class="settings-hint">No folders found for this library.</p>
+{{else}}
+<div class="settings-folder-list">
+  {{range .Folders}}
+  <form hx-post="/settings/scan-library" hx-target="#library-scan-result" hx-swap="innerHTML">
+    <input type="hidden" name="path" value="{{.Path}}">
+    <button type="submit" class="settings-folder-button" title="Scan this folder">{{.Path}}</button>
+  </form>
+  {{end}}
+</div>
+{{end}}
+{{end}}
