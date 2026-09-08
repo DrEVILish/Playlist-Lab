@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -232,6 +233,77 @@ func decodeUsersArrayOrWrapped(resp *http.Response) ([]int, error) {
 		ids[i] = u.ID
 	}
 	return ids, nil
+}
+
+// HomeUser is the display shape routes/plex-home.ts's GET /users mapped
+// each raw plex.tv home-user record to - id (uuid preferred over the
+// numeric account id, matching the TS route's own fallback), display name,
+// and thumbnail.
+type HomeUser struct {
+	ID       string
+	Title    string
+	Username string
+	Thumb    string
+}
+
+// GetHomeUsersDetailed is GetHomeUsers' fuller sibling: the admin/home-users
+// UI (unlike GetHomeUsers' callers, which only ever needed membership
+// checks by numeric id) needs a name and thumbnail to render a picker.
+// Kept separate rather than changing GetHomeUsers' return type, since that
+// one is already relied on elsewhere for a plain int comparison.
+func (c *PlexClient) GetHomeUsersDetailed(adminToken string) ([]HomeUser, error) {
+	req, err := http.NewRequest(http.MethodGet, plexAPIBase+"/home/users", nil)
+	if err != nil {
+		return nil, err
+	}
+	c.headers(req, adminToken)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get home users: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, fmt.Errorf("invalid or expired Plex token")
+	}
+
+	var raw json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, err
+	}
+	type rawUser struct {
+		UUID     string `json:"uuid"`
+		ID       int    `json:"id"`
+		Title    string `json:"title"`
+		Username string `json:"username"`
+		Thumb    string `json:"thumb"`
+	}
+	toHomeUsers := func(users []rawUser) []HomeUser {
+		out := make([]HomeUser, len(users))
+		for i, u := range users {
+			id := u.UUID
+			if id == "" {
+				id = strconv.Itoa(u.ID)
+			}
+			name := u.Username
+			if name == "" {
+				name = u.Title
+			}
+			out[i] = HomeUser{ID: id, Title: u.Title, Username: name, Thumb: u.Thumb}
+		}
+		return out
+	}
+
+	var arr []rawUser
+	if err := json.Unmarshal(raw, &arr); err == nil {
+		return toHomeUsers(arr), nil
+	}
+	var wrapped2 struct {
+		Users []rawUser `json:"users"`
+	}
+	if err := json.Unmarshal(raw, &wrapped2); err != nil {
+		return nil, err
+	}
+	return toHomeUsers(wrapped2.Users), nil
 }
 
 type PlexConnection struct {

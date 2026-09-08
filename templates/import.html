@@ -85,6 +85,18 @@
     </form>
   </section>
 
+  <!-- Plex Home import, ported from ImportFromPlexHome.tsx: copy another
+       Plex Home user's playlist into this account. Loaded on reveal, not
+       with the page - listing home users is a plex.tv API round trip
+       nobody importing from a chart/file/AI prompt needs to pay for. -->
+  <section class="import-form">
+    <h2 class="progress-title">Import from a Plex Home user</h2>
+    <p class="form-hint">Copy a playlist from another Plex Home user on this server into your own account.</p>
+    <div hx-get="/import/plex-home/users" hx-trigger="revealed" hx-swap="outerHTML">
+      <p class="settings-hint">Loading Plex Home users...</p>
+    </div>
+  </section>
+
   {{end}}
 </main>
 {{end}}

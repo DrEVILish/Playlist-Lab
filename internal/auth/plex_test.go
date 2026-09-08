@@ -3,6 +3,7 @@ package auth
 import (
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -107,6 +108,80 @@ func TestDecodeUsersArrayOrWrapped(t *testing.T) {
 		}
 		if len(ids) != 1 || ids[0] != 3 {
 			t.Fatalf("got %v", ids)
+		}
+	})
+}
+
+// GetHomeUsersDetailed must handle both response shapes plex.tv sends
+// (decodeUsersArrayOrWrapped's own two branches, above) and prefer uuid
+// over the numeric id, and username over title - matching
+// routes/plex-home.ts's GET /users mapping exactly.
+func TestGetHomeUsersDetailed(t *testing.T) {
+	t.Run("bare array, prefers uuid and username", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`[{"uuid":"u-1","id":1,"title":"Kid Profile","username":"kid","thumb":"https://example.com/t.png"}]`))
+		}))
+		defer srv.Close()
+
+		c := NewPlexClient("test-client-id", "Playlist Lab")
+		restore := SetPlexAPIBaseForTest(srv.URL, srv.URL+"/")
+		defer restore()
+
+		users, err := c.GetHomeUsersDetailed("admin-token")
+		if err != nil {
+			t.Fatalf("GetHomeUsersDetailed: %v", err)
+		}
+		if len(users) != 1 {
+			t.Fatalf("got %d users, want 1", len(users))
+		}
+		got := users[0]
+		if got.ID != "u-1" {
+			t.Errorf("ID = %q, want the uuid preferred over the numeric id", got.ID)
+		}
+		if got.Username != "kid" {
+			t.Errorf("Username = %q, want the username field", got.Username)
+		}
+		if got.Thumb != "https://example.com/t.png" {
+			t.Errorf("Thumb = %q, want it carried through", got.Thumb)
+		}
+	})
+
+	t.Run("wrapped object, falls back to numeric id and title", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"users":[{"id":7,"title":"Guest Profile"}]}`))
+		}))
+		defer srv.Close()
+
+		c := NewPlexClient("test-client-id", "Playlist Lab")
+		restore := SetPlexAPIBaseForTest(srv.URL, srv.URL+"/")
+		defer restore()
+
+		users, err := c.GetHomeUsersDetailed("admin-token")
+		if err != nil {
+			t.Fatalf("GetHomeUsersDetailed: %v", err)
+		}
+		if len(users) != 1 || users[0].ID != "7" {
+			t.Fatalf("got %+v, want ID \"7\" (no uuid, falls back to the numeric id)", users)
+		}
+		if users[0].Username != "Guest Profile" {
+			t.Errorf("Username = %q, want it to fall back to title when username is empty", users[0].Username)
+		}
+	})
+
+	t.Run("unauthorized token", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+		}))
+		defer srv.Close()
+
+		c := NewPlexClient("test-client-id", "Playlist Lab")
+		restore := SetPlexAPIBaseForTest(srv.URL, srv.URL+"/")
+		defer restore()
+
+		if _, err := c.GetHomeUsersDetailed("bad-token"); err == nil {
+			t.Fatal("want an error for a 401 response, got nil")
 		}
 	})
 }

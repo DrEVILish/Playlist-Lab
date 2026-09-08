@@ -171,10 +171,12 @@ func main() {
 		DB: sqlDB, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue,
 		Registry: registry, Sessions: crossimport.NewStore(),
 	})
-	handlers.RegisterImport(r, mw, &handlers.ImportHandler{
+	importHandler := &handlers.ImportHandler{
 		DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue,
 		Registry: registry,
-	})
+	}
+	handlers.RegisterImport(r, mw, importHandler)
+	handlers.RegisterPlexHome(r, mw, importHandler)
 	handlers.RegisterCharts(r, mw, &handlers.ChartsHandler{
 		DB: sqlDB, SessionSecret: cfg.SessionSecret,
 		SpotifyClientID: cfg.SpotifyClientID, SpotifyClientSecret: cfg.SpotifyClientSecret,
