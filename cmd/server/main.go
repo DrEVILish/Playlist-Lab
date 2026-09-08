@@ -129,9 +129,11 @@ func main() {
 	handlers.RegisterNotifications(r, mw, &handlers.NotificationsHandler{Store: notificationStore, Tmpl: tmpl})
 
 	actionQueue := actionqueue.New(notificationStore)
-	handlers.RegisterPlaylists(r, mw, &handlers.PlaylistsHandler{
+	playlistsHandler := &handlers.PlaylistsHandler{
 		DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue,
-	})
+	}
+	handlers.RegisterPlaylists(r, mw, playlistsHandler)
+	handlers.RegisterExport(r, mw, playlistsHandler)
 	mixService := mixes.New()
 	handlers.RegisterMixes(r, mw, &handlers.MixesHandler{
 		DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue, Mixes: mixService,

@@ -45,6 +45,23 @@
           onchange="this.closest('form').requestSubmit()">
       </label>
     </form>
+
+    <!-- Plain (non-htmx) form: the response is the actual file with
+         Content-Disposition: attachment, which a real form submit downloads
+         natively - an htmx-intercepted request would instead try to swap
+         the file's raw bytes into some element as if it were an HTML
+         fragment. -->
+    <form class="editor-export-form" method="post" action="/playlists/{{$plexId}}/export">
+      <select name="format" class="settings-input" aria-label="Export format">
+        <option value="m3u8">M3U8 (UTF-8)</option>
+        <option value="m3u">M3U</option>
+        <option value="pls">PLS</option>
+        <option value="xspf">XSPF</option>
+        <option value="csv">CSV</option>
+        <option value="txt">TXT (Artist - Title)</option>
+      </select>
+      <button type="submit" class="btn btn-secondary btn-small">Export</button>
+    </form>
   </div>
 
   <!-- Split: PlaylistEditor.tsx's handleSplitSelected copies the checked

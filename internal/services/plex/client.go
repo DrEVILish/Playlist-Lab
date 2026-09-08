@@ -74,6 +74,25 @@ type media struct {
 	AudioCodec      string `json:"audioCodec"`
 	Bitrate         int    `json:"bitrate"`
 	AudioSampleRate int    `json:"audioSampleRate"`
+	Part            []part `json:"Part"`
+}
+
+// part is a track's on-disk file location, used by playlist export
+// (export.go) to write real file paths into M3U/PLS/XSPF output - the
+// reason a whole Media/Part struct exists on Track beyond just the codec
+// Codec() reads.
+type part struct {
+	File string `json:"file"`
+}
+
+// FilePath returns this track's first Media/Part's on-disk path, or "" if
+// Plex has none (e.g. a track whose file was removed from disk but not yet
+// rescanned out of the library).
+func (t Track) FilePath() string {
+	if len(t.Media) == 0 || len(t.Media[0].Part) == 0 {
+		return ""
+	}
+	return t.Media[0].Part[0].File
 }
 
 type Track struct {
