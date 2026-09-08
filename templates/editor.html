@@ -1,4 +1,5 @@
 {{define "content"}}
+<link rel="stylesheet" href="/static/css/pages/EditorPage.css">
 <main class="editor">
   <p><a href="/">&larr; Back to library</a></p>
   <h1>{{.Name}}</h1>
@@ -86,6 +87,7 @@
       <input type="text" name="name" placeholder="New playlist name" class="settings-input" required>
       <button type="submit" class="btn btn-secondary btn-small">Split Checked Tracks Into New Playlist</button>
     </div>
+    <div class="editor-tracks-container">
     <table id="tracks">
       <thead><tr><th></th><th></th><th>Title</th><th>Artist</th><th>Album</th><th>Codec</th><th></th></tr></thead>
       <tbody>
@@ -114,6 +116,7 @@
         {{end}}
       </tbody>
     </table>
+    </div>
   </form>
 </main>
 <script>
