@@ -2,7 +2,18 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 100vh;
+  text-align: center;
+  /* .layout-main (its parent, Layout.css) is already a flex:1 column
+     filling the exact viewport height left over from the (hidden, on this
+     page) header/footer - stretching to fill that with flex:1 centers
+     within the real available space. A fixed min-height:100vh here instead
+     double-counted the viewport (this page's own 100vh nested inside a
+     parent that's already sized to the viewport), which pushed the card
+     below true center and, on mobile browsers where 100vh includes space
+     the address bar can hide/show, made the vertical centering drift. */
+  flex: 1;
+  width: 100%;
+  min-height: 0;
   padding: 2rem;
   background: radial-gradient(ellipse at 50% 30%, rgba(91, 155, 213, 0.06) 0%, transparent 60%),
               var(--background);
