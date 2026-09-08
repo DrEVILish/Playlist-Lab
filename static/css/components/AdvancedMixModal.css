@@ -22,6 +22,24 @@
   flex-direction: column;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
   border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+/* Every real modal partial wraps .advanced-mix-content/.advanced-mix-actions
+   in a <form> (schedule_form.html, mix_advanced_form.html, etc.), which sits
+   between them and .advanced-mix-modal in the DOM - a plain <form> has no
+   display:flex of its own, so it silently broke the flex column chain
+   above: .advanced-mix-content's flex:1/min-height:0 (further down) had
+   nothing to size against, so it never shrank to fit and never scrolled,
+   and the whole modal just grew past its own max-height instead - cut off
+   at the bottom of the viewport on any form tall enough to need it (which
+   is most of them, on a phone). Making the form itself part of the flex
+   column restores the chain without touching a single partial. */
+.advanced-mix-modal > form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .advanced-mix-header {
@@ -59,13 +77,19 @@
 
 .advanced-mix-close:hover { background-color: var(--surface-hover); color: var(--text-primary); }
 
-.advanced-mix-content { 
-  padding: 1.5rem 2rem; 
-  display: flex; 
-  flex-direction: column; 
+.advanced-mix-content {
+  padding: 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
   gap: 1.25rem;
   overflow-y: auto;
   flex: 1;
+  /* Flex items default to min-height:auto, which floors this at its own
+     content height and blocks overflow-y:auto from ever kicking in - the
+     modal (bounded by max-height above) would just grow past the
+     viewport instead of scrolling internally, on any form long enough to
+     need it (easy to hit on mobile, where the viewport is short). */
+  min-height: 0;
 }
 
 .form-group { display: flex; flex-direction: column; gap: 0.5rem; }
@@ -387,4 +411,7 @@
   .tag-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
   .advanced-mix-actions { flex-direction: column; gap: 0.75rem; }
   .btn-generate, .btn-schedule, .btn-cancel { width: 100%; }
+  /* 32px is under the ~44px touch-target guideline (Apple HIG/Material) -
+     fine with a mouse cursor, easy to mis-tap on a phone. */
+  .advanced-mix-close { width: 44px; height: 44px; font-size: 2rem; }
 }

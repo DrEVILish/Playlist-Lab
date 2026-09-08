@@ -70,7 +70,7 @@
         {{end}}{{end}}
       </div>
 
-      <div class="modal-actions" style="padding:1rem 2rem;display:flex;gap:0.5rem;justify-content:flex-end">
+      <div class="advanced-mix-actions">
         {{if .Schedule}}
         <button type="button" class="btn btn-secondary" hx-post="/schedules/{{.Schedule.ID}}/run" hx-swap="none" onclick="document.getElementById('modal-root').innerHTML=''">Run Now</button>
         <button type="button" class="btn btn-secondary" style="color:var(--error)" hx-delete="/schedules/{{.Schedule.ID}}" hx-swap="none" hx-confirm="Delete this schedule?">Delete Schedule</button>
