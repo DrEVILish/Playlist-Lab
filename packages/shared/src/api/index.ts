@@ -1116,18 +1116,6 @@ export class APIClient {
     return data.homeUsers;
   }
 
-  // Migration methods
-  async migrateDesktopData(data: any): Promise<{
-    playlists: number;
-    schedules: number;
-    missingTracks: number;
-  }> {
-    return this.request('/api/migrate/desktop', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
   // Mix Template methods
   async getMixTemplates(): Promise<{ templates: any[] }> {
     return this.request('/api/mix-templates');

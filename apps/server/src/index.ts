@@ -82,7 +82,6 @@ import playlistsRoutes from './routes/playlists';
 import missingRoutes from './routes/missing';
 import notificationsRoutes from './routes/notifications';
 import adminRoutes from './routes/admin';
-import migrateRoutes from './routes/migrate';
 import importRoutes, { importSessions, cancelledSessions, progressState } from './routes/import';
 import mixesRoutes from './routes/mixes';
 import schedulesRoutes from './routes/schedules';
@@ -798,7 +797,6 @@ app.use('/api/playlists', exportRoutes); // Export routes under /api/playlists/e
 app.use('/api/missing', missingRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/migrate', migrateRoutes);
 app.use('/api/import', importRoutes);
 app.use('/api/import', aiRoutes); // AI generation under /api/import/ai
 app.use('/api/mixes', mixesRoutes);
