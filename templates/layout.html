@@ -334,6 +334,24 @@
         downOnOverlay = false;
       });
     })();
+
+    // Action-menu <details> (the header "Actions" menu above, and the
+    // missing-tracks row's "More actions" menu, partials/missing_list.html)
+    // only close when their own <summary> is clicked again, not when a
+    // button/form inside the popover is - so picking any one action left
+    // the menu sitting open over the page. Delegated on document rather
+    // than attached per-button, so a menu item added later is covered
+    // automatically. Deliberately not applied to every <details> in the
+    // app: the column filter menus (.th-filter) hold checkboxes meant to
+    // stay open across multiple selections, and search-reveal <details>
+    // (.ci-search) get removed wholesale when their pick swaps the page
+    // section around them, so there's nothing left to explicitly close.
+    document.addEventListener('click', function (e) {
+      var item = e.target.closest('.header-actions-item, .missing-track-more-menu button');
+      if (!item) return;
+      var menu = item.closest('details.header-actions-menu, details.missing-track-more');
+      if (menu) menu.removeAttribute('open');
+    });
   </script>
 </body>
 </html>
