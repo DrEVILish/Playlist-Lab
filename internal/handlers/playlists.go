@@ -47,6 +47,8 @@ func RegisterPlaylists(r chi.Router, mw *auth.Middleware, h *PlaylistsHandler) {
 		r.Post("/playlists/{plexId}/split", h.split)
 		r.Put("/playlists/{plexId}/rename", h.rename)
 		r.Post("/playlists/{plexId}/cover", h.uploadCover)
+		r.Get("/playlists/{plexId}/search-tracks", h.searchTracks)
+		r.Post("/playlists/{plexId}/tracks", h.addTracks)
 		r.Post("/playlists/merge", h.merge)
 		r.Get("/playlists/{plexId}/share", h.shareForm)
 		r.Post("/playlists/{plexId}/share", h.share)
@@ -1033,6 +1035,81 @@ func (h *PlaylistsHandler) uploadCover(w http.ResponseWriter, r *http.Request) {
 	}
 	// Back to this same playlist's editor, not home - same reasoning as
 	// rename above.
+	w.Header().Set("HX-Redirect", "/playlists/"+plexID)
+	w.WriteHeader(http.StatusOK)
+}
+
+// searchTracks ports GET /api/search: the editor page's "search your
+// library for a track to add" box, backed by the same
+// plex.Client.SearchTrack every other search path in this app already
+// uses. Renders a partial (checkboxes + an Add form) rather than JSON,
+// since this whole app is server-rendered HTML.
+func (h *PlaylistsHandler) searchTracks(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
+	plexID := chi.URLParam(r, "plexId")
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" {
+		h.Tmpl.RenderPartial(w, "partials/track_search_results.html", map[string]any{"PlexID": plexID})
+		return
+	}
+
+	client, userServer, err := h.client(user)
+	if err != nil || userServer == nil {
+		http.Error(w, "no server selected", http.StatusBadRequest)
+		return
+	}
+	tracks, err := client.SearchTrack(q, userServer.LibraryID.String, "", "")
+	if err != nil {
+		slog.Error("track search failed", "error", err, "query", q)
+		http.Error(w, "search failed", http.StatusBadGateway)
+		return
+	}
+	// Same 20-result cap as GET /api/search/tracks (the more targeted of
+	// the two v2 search endpoints - this box searches by a single combined
+	// query, matching what the editor's search field actually sends, not
+	// GET /api/search's separate artist/track/album fields, which no
+	// caller in this app used with more than one of those at once anyway).
+	if len(tracks) > 20 {
+		tracks = tracks[:20]
+	}
+
+	h.Tmpl.RenderPartial(w, "partials/track_search_results.html", map[string]any{
+		"PlexID": plexID, "Query": q, "Results": toTrackRows(tracks),
+	})
+}
+
+// addTracks ports POST /api/playlists/:id/tracks: add the tracks checked in
+// the search results (by ratingKey) to this playlist.
+func (h *PlaylistsHandler) addTracks(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
+	plexID := chi.URLParam(r, "plexId")
+	_ = r.ParseForm()
+	trackIDs := r.Form["trackId"]
+	if len(trackIDs) == 0 {
+		http.Error(w, "select at least one track to add", http.StatusBadRequest)
+		return
+	}
+
+	client, userServer, err := h.client(user)
+	if err != nil || userServer == nil {
+		http.Error(w, "no server selected", http.StatusBadRequest)
+		return
+	}
+	machineID, err := client.GetMachineIdentifier()
+	if err != nil {
+		http.Error(w, "Failed to reach Plex server", http.StatusBadGateway)
+		return
+	}
+	trackURIs := make([]string, len(trackIDs))
+	for i, key := range trackIDs {
+		trackURIs[i] = client.BuildTrackURI(key, machineID)
+	}
+	if err := client.AddToPlaylist(plexID, trackURIs); err != nil {
+		slog.Error("failed to add tracks to playlist", "error", err, "playlistId", plexID)
+		http.Error(w, "Failed to add tracks", http.StatusBadGateway)
+		return
+	}
+	touchTrackedPlaylist(h.DB, user.ID, plexID)
 	w.Header().Set("HX-Redirect", "/playlists/"+plexID)
 	w.WriteHeader(http.StatusOK)
 }

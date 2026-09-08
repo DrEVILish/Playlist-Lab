@@ -1,0 +1,29 @@
+{{/* Track search results for the editor page's "add tracks" box, ported
+     from PlaylistEditor.tsx's search results list. Rendered into
+     #search-results by GET /playlists/{plexId}/search-tracks. Wraps its own
+     checkboxes in a form posting straight to POST /playlists/{plexId}/tracks,
+     the same "checkboxes native to a form, no JS needed" technique the
+     split/bulk-delete forms elsewhere in this app already use. */}}
+{{define "partials/track_search_results.html"}}
+<div id="search-results">
+  {{if .Query}}
+    {{if not .Results}}
+      <p class="settings-hint">No tracks found for "{{.Query}}".</p>
+    {{else}}
+      <form hx-post="/playlists/{{.PlexID}}/tracks" hx-target="body" hx-swap="outerHTML">
+        <ul class="track-search-list">
+          {{range .Results}}
+          <li>
+            <label>
+              <input type="checkbox" name="trackId" value="{{.RatingKey}}">
+              {{.Title}} &mdash; {{.Artist}}{{if .Album}} ({{.Album}}){{end}}
+            </label>
+          </li>
+          {{end}}
+        </ul>
+        <button type="submit" class="btn btn-secondary btn-small">Add Checked Tracks</button>
+      </form>
+    {{end}}
+  {{end}}
+</div>
+{{end}}

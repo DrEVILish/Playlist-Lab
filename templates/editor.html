@@ -64,6 +64,17 @@
     </form>
   </div>
 
+  <!-- Add tracks: PlaylistEditor.tsx's library search box (GET /api/search),
+       ported as an htmx search-as-you-navigate form - hx-get re-fetches
+       #search-results on every keystroke (debounced) rather than needing a
+       separate "Search" button click. -->
+  <div class="editor-add-tracks">
+    <input type="search" class="settings-input" placeholder="Search your library to add a track..."
+      hx-get="/playlists/{{$plexId}}/search-tracks" hx-trigger="input changed delay:400ms, search"
+      hx-target="#search-results" hx-swap="outerHTML" name="q">
+    <div id="search-results"></div>
+  </div>
+
   <!-- Split: PlaylistEditor.tsx's handleSplitSelected copies the checked
        tracks into a brand-new playlist named here; the source playlist is
        untouched. The table lives inside this same form (like home.html's
