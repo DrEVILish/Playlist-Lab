@@ -6,6 +6,7 @@
 package main
 
 import (
+	"database/sql"
 	"log/slog"
 	"net/http"
 	"os"
@@ -30,6 +31,7 @@ import (
 	"github.com/drevilish/playlist-lab/internal/adapters/youtubeplain"
 	"github.com/drevilish/playlist-lab/internal/auth"
 	"github.com/drevilish/playlist-lab/internal/config"
+	"github.com/drevilish/playlist-lab/internal/crypto"
 	"github.com/drevilish/playlist-lab/internal/db"
 	"github.com/drevilish/playlist-lab/internal/handlers"
 	"github.com/drevilish/playlist-lab/internal/logging"
@@ -72,6 +74,8 @@ func main() {
 		os.Exit(1)
 	}
 	defer sqlDB.Close()
+
+	reencryptLegacySpotifyCredentials(sqlDB, cfg.SessionSecret)
 
 	// A level set from the admin Logs tab outranks LOG_LEVEL, and has to be
 	// reapplied here because logging.Setup ran before the database was open.
@@ -166,6 +170,17 @@ func main() {
 	registry.RegisterSource(billboard.NewSource())
 	registry.RegisterSource(lastfmsource.NewSource())
 	registry.RegisterSource(spotify.NewSource(sqlDB, cfg.SessionSecret, cfg.SpotifyClientID, cfg.SpotifyClientSecret))
+	// Spotify's Web API 403s a client-credentials token on most playlist
+	// reads unless the app is in Extended Quota Mode (a Spotify-side
+	// approval, not something this app can route around) - the source
+	// above worked for nothing until the user's own OAuth token is used
+	// instead. spotify.Target already implements the full OAuthCapable
+	// flow (GetOAuthURL/HandleOAuthCallback/HasValidConnection); it just
+	// sat unregistered, so "Connect Spotify" never appeared next to
+	// YouTube's under Connected Services. Registering it as a target is
+	// what makes cross_import.go's existing generic OAuth routes
+	// (/cross-import/oauth/spotify/...) available for it.
+	registry.RegisterTarget(spotify.NewTarget(sqlDB, cfg.SessionSecret, cfg.SpotifyRedirectURI))
 	registry.RegisterSource(youtubemusic.NewTarget(sqlDB, cfg.SessionSecret))
 	// Same admin_config-overrides-env pattern as deemix_arl/lidarr below -
 	// lets an admin paste Google OAuth credentials into /admin instead of
@@ -298,5 +313,64 @@ func main() {
 	if err := http.ListenAndServe(addr, r); err != nil {
 		slog.Error("server exited", "error", err)
 		os.Exit(1)
+	}
+}
+
+// legacyDefaultSessionSecret is config.defaultSessionSecret's value,
+// duplicated here (it's unexported there, and this is the one legitimate
+// reason to reference it: recovering from having used it). Not a secret
+// itself - it's the well-known fallback published in this repo's source,
+// which is exactly why UsingDefaultSessionSecret's production guard exists.
+const legacyDefaultSessionSecret = "default-secret-change-in-production"
+
+// reencryptLegacySpotifyCredentials self-heals the one concrete cost of
+// rotating SESSION_SECRET during the v2->v3 cutover: any user who'd
+// already saved their own Spotify app Client ID/Secret (encrypted under
+// whatever secret was in effect at the time - the published default,
+// pre-rotation) can no longer have them decrypted under the new secret.
+// Runs on every startup but is a no-op once done: it only touches a row
+// whose stored value fails to decrypt with the current secret but
+// succeeds with the legacy default, re-encrypting it under the current
+// secret so the credential survives without the user re-entering it.
+func reencryptLegacySpotifyCredentials(sqlDB *sql.DB, currentSecret string) {
+	if currentSecret == legacyDefaultSessionSecret {
+		return
+	}
+	users, err := db.GetAllUsers(sqlDB)
+	if err != nil {
+		slog.Error("reencryptLegacySpotifyCredentials: failed to list users", "error", err)
+		return
+	}
+	for _, u := range users {
+		creds, err := db.GetSpotifyCredentials(sqlDB, u.ID)
+		if err != nil || creds == nil {
+			continue
+		}
+		if _, err := crypto.Decrypt(creds.ClientID, currentSecret); err == nil {
+			continue // already readable under the current secret
+		}
+		clientID, err := crypto.Decrypt(creds.ClientID, legacyDefaultSessionSecret)
+		if err != nil {
+			continue // not the legacy-secret case either; leave it alone
+		}
+		clientSecret, err := crypto.Decrypt(creds.ClientSecret, legacyDefaultSessionSecret)
+		if err != nil {
+			continue
+		}
+		newID, err := crypto.Encrypt(clientID, currentSecret)
+		if err != nil {
+			slog.Error("reencryptLegacySpotifyCredentials: re-encrypt failed", "userID", u.ID, "error", err)
+			continue
+		}
+		newSecret, err := crypto.Encrypt(clientSecret, currentSecret)
+		if err != nil {
+			slog.Error("reencryptLegacySpotifyCredentials: re-encrypt failed", "userID", u.ID, "error", err)
+			continue
+		}
+		if err := db.SaveSpotifyCredentials(sqlDB, u.ID, newID, newSecret); err != nil {
+			slog.Error("reencryptLegacySpotifyCredentials: save failed", "userID", u.ID, "error", err)
+			continue
+		}
+		slog.Info("reencryptLegacySpotifyCredentials: recovered Spotify credentials after SESSION_SECRET rotation", "userID", u.ID)
 	}
 }

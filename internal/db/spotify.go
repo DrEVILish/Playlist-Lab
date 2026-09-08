@@ -26,6 +26,16 @@ func GetSpotifyCredentials(sqlDB *sql.DB, userID int64) (*SpotifyCredentials, er
 	return &SpotifyCredentials{ClientID: clientID.String, ClientSecret: clientSecret.String}, nil
 }
 
+// SaveSpotifyCredentials stores a user's own Spotify app Client ID/Secret
+// (both already encrypted by the caller). Used by the Settings save
+// handler once it exists, and by main.go's one-time re-encryption of
+// credentials left over from a SESSION_SECRET rotation.
+func SaveSpotifyCredentials(sqlDB *sql.DB, userID int64, encClientID, encClientSecret string) error {
+	_, err := sqlDB.Exec("UPDATE users SET spotify_client_id = ?, spotify_client_secret = ? WHERE id = ?",
+		encClientID, encClientSecret, userID)
+	return err
+}
+
 // SpotifyTokens holds a user's Spotify OAuth tokens (both encrypted) and
 // the access token's expiry, all stored directly on the users table for
 // backward compatibility with the original schema (unlike every other
