@@ -6,6 +6,19 @@
   padding: 0.875rem 0.875rem 0;
 }
 
+/* status.html (unlike home.html, which has no <h1> at all - .playlists-
+   stats' own top/side padding above is the first thing in .page-container
+   either way) puts a <h1 class="page-title"> before .playlists-stats -
+   .page-container itself has no padding, so that heading sat flush
+   against the header with nothing to give it the same inset its own
+   stats bar gets a few lines down. Padding just the heading, not the
+   whole container, avoids doubling up with .playlists-stats' padding
+   right below it. */
+.status-page .page-title {
+  padding: 0.875rem 0.875rem 0;
+  margin-bottom: 0;
+}
+
 .playlists-stat {
   display: flex;
   align-items: baseline;

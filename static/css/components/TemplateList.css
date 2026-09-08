@@ -1,3 +1,14 @@
+/* <main class="mix-templates page-container"> (templates/mix_templates.html)
+   - .page-container itself has no padding (base.css), only
+   .settings-page.page-container does (SettingsPage.css) - mix_templates.html
+   uses .page-container alone, so it never got any and its heading sat
+   flush against the header, same root cause as .mixes/.missing fixed
+   elsewhere this session. Matches SettingsPage.css's own page-container
+   padding value for consistency. */
+.mix-templates.page-container {
+  padding: 0.875rem;
+}
+
 /* Template List Container */
 .template-list {
   display: flex;
