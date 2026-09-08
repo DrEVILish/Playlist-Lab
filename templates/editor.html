@@ -2,6 +2,10 @@
 <link rel="stylesheet" href="/static/css/pages/EditorPage.css">
 <div class="editor">
   <p><a href="/">&larr; Back to library</a></p>
+  {{if .PlexError}}
+  <h1>Couldn't load this playlist</h1>
+  <p class="error-message">Couldn't reach your Plex server to load this playlist's tracks. Check your connection and try again.</p>
+  {{else}}
   <h1>{{.Name}}</h1>
 
   {{$plexId := .PlexID}}
@@ -118,7 +122,9 @@
     </table>
     </div>
   </form>
+  {{end}}
 </div>
+{{if not .PlexError}}
 <script>
 (function () {
   const plexId = {{.PlexID}};
@@ -151,4 +157,5 @@
   });
 })();
 </script>
+{{end}}
 {{end}}

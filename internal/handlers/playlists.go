@@ -406,7 +406,7 @@ func (h *PlaylistsHandler) editor(w http.ResponseWriter, r *http.Request) {
 	tracks, err := client.GetPlaylistTracks(plexID)
 	if err != nil {
 		slog.Error("failed to fetch playlist tracks", "error", err, "plexId", plexID)
-		http.Error(w, "Failed to load playlist", http.StatusBadGateway)
+		h.Tmpl.RenderPage(w, r, "editor", map[string]any{"PlexError": true})
 		return
 	}
 
