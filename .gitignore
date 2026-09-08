@@ -12,6 +12,7 @@ jspm_packages/
 # Build outputs
 dist/
 build/
+bin/
 scripts/release/
 packages/*/dist
 apps/*/dist

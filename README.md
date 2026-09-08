@@ -1,6 +1,6 @@
 ## Playlist Lab
 
-Feel free to donate 
+Feel free to donate
 [Tip Jar](https://www.paypal.com/donate/?business=6H5L2S8SAQWBW&no_recurring=0&currency_code=AUD)
 
 A comprehensive music playlist management system with Plex Media Server integration. Import playlists from multiple sources, generate smart mixes, and sync them to your Plex server.
@@ -8,139 +8,75 @@ A comprehensive music playlist management system with Plex Media Server integrat
 ## Features
 
 ### Core Features
-- **Multi-Source Import**: Import playlists from Spotify, Apple Music, and more
+- **Multi-Source Import**: Import playlists from Spotify, Apple Music, Tidal, Qobuz, Amazon Music, Deezer, ListenBrainz, YouTube Music, and chart sources (ARIA, Billboard)
+- **Import Review**: Preview matched/unmatched tracks, manually re-match individual tracks, then confirm before a playlist is created
 - **Smart Playlist Generation**: Create dynamic playlists based on genres, moods, and listening patterns
+- **AI Playlist Generation**: Describe a playlist in plain language via Gemini or Grok
 - **Plex Integration**: Seamless sync with Plex Media Server
 - **Multi-User Support**: Manage playlists for multiple Plex users and share between them
 - **Playlist Sharing**: Share playlists between Plex Home users
 - **Scheduling**: Automatically update playlists on a schedule
-- **Missing Track Detection**: Identify and track songs not available in your library
+- **Missing Track Detection**: Identify missing tracks, with optional Deemix/Lidarr acquisition
 
-### Import Features
-- **Import Queue System**: Background processing with real-time progress tracking
-- **Queue Management**: View pending, processing, and completed imports
-- **Retry Failed Imports**: Easily retry imports that failed with one click
-- **Cancel Pending Imports**: Cancel imports before they start processing
-- **Import History**: Track all imports with success/failure status and timestamps
-- **Non-Blocking UI**: Continue browsing and working while imports process in background
-- **Spotify Search**: Search Spotify's entire catalog, not just your playlists
-- **OAuth Authentication**: Secure popup-based OAuth for Spotify (no session loss)
-- **Batch Import**: Import multiple playlists at once
-- **Progress Tracking**: Real-time import progress with detailed status
+### Playlist Editing
+- **Shuffle, Sort, Dedupe, Split, Rename**: Full in-place playlist editing
+- **Cover Upload**: Set a custom playlist cover image
+- **Export**: Export any playlist to M3U, M3U8, PLS, XSPF, CSV, or TXT
+- **Search & Add**: Search your Plex library and add tracks directly
 
-### Export Features
-- **Modern Export System**: Complete rewrite for better performance and reliability
-- **Progress Tracking**: Real-time export progress updates
-- **Enhanced Error Handling**: Improved recovery from export failures
-- **Batch Export**: Export multiple playlists efficiently
+### Admin
+- **User Management**: Enable/disable/promote/delete users
+- **Deemix / Lidarr / YouTube OAuth**: Configure missing-track acquisition and YouTube import credentials from the admin panel, no server restart required
+- **Log Viewer**: Browse and filter server logs
+- **Schedules**: View and manage every user's schedules in one place
 
-### Schedule Management
-- **Run Now**: Execute any individual schedule immediately
-- **Run All**: Execute all schedules at once with one click
-- **Manual Testing**: Test schedules without waiting for scheduled time
-- **Flexible Control**: More options for schedule management
+## Technology Stack
 
-### Chart Playlists
-- **ARIA Charts**: Australian charts with "Latest" option
-- **Billboard Charts**: US charts with "Latest" option
-- **Up-to-Date**: Always get the most current chart playlists
-- **Multiple Sources**: Support for various chart providers
-
-### User Experience
-- **Responsive PWA**: Works on desktop, tablet, and mobile browsers
-- **Installable**: Add to home screen on mobile devices for app-like experience
-- **System Tray App**: Easy server management on Windows/macOS/Linux (installer versions)
-- **Cross-Platform**: Available as web app and desktop app
-
-## Applications
-
-This is a monorepo containing multiple applications:
-
-### Server (Multi-User Web Server) - **Actively Maintained**
-- **Location**: `apps/server/`
-- **Type**: Express.js REST API with SQLite database
-- **Features**: Multi-user authentication, playlist management, Plex integration, scheduling
-- **Deployment**: Can be deployed anywhere (VPS, cloud, local network)
-- **Port**: 3001 (configurable)
-
-### Web App (Responsive PWA) - **Actively Maintained**
-- **Location**: `apps/web/`
-- **Type**: React Progressive Web App (PWA)
-- **Features**: Full-featured interface, works on desktop and mobile browsers
-- **Responsive**: Adapts to any screen size (desktop, tablet, mobile)
-- **Installable**: Add to home screen on mobile devices for app-like experience
-- **Access**: Connect to any Playlist Lab server
-- **Platforms**: Any device with a modern browser
+- **Backend**: Go, chi router, `html/template`, SQLite (modernc.org/sqlite, no cgo)
+- **Frontend**: HTMX, server-rendered templates - no separate frontend build or JS framework
+- **Browser scraping**: chromedp (headless Chromium) for sources with no public playlist-read API (Apple Music, Tidal, Qobuz, Amazon Music, ARIA charts)
 
 ## Quick Start
 
-### Server Installation
-
-**Option 1: Windows Installer**
-```cmd
-# Download and run the installer
-PlaylistLabServer-Setup-X.X.X.exe
-```
-
-**Option 2: Docker (Recommended for Development)**
-```bash
-# Quick start
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Access at http://localhost:3001
-```
-
-**Option 3: Manual Installation**
-```bash
-# Build shared package
-cd packages/shared && npm install && npm run build && cd ../..
-
-# Build server
-cd apps/server && npm install && npm run build && cd ../..
-
-# Build web app
-cd apps/web && npm install && npm run build && cd ../..
-
-# Start server
-cd apps/server && npm start
-```
-
-### Web App on Mobile
-
-The web app is fully responsive and works on mobile devices through your browser:
-
-**iOS (iPhone/iPad)**
-1. Open Safari and navigate to your server URL
-2. Tap Share → "Add to Home Screen"
-3. App icon appears on home screen with full-screen app experience
-
-**Android**
-1. Open Chrome and navigate to your server URL
-2. Tap menu → "Install app" or "Add to Home Screen"
-3. App icon appears in app drawer with full-screen app experience
-
-The PWA provides an app-like experience with offline support and push notifications.
-
 ### Prerequisites
-- Node.js 18+
-- npm or yarn
-- Git
-- Plex Media Server with authentication token
+- Go 1.26+
+- A Plex Media Server with an authentication token
+- (Optional) A system Chromium/Chrome binary, for the browser-scraping import sources
 
-### Third-Party Service Requirements
+### Build and Run
+```bash
+git clone https://github.com/AuXBoX/playlist-lab.git
+cd playlist-lab
+go build -o bin/playlist-lab-server ./cmd/server
+SESSION_SECRET=$(openssl rand -hex 32) ./bin/playlist-lab-server
+# Serves on http://localhost:3001
+```
+
+See `.env.example` for the full list of environment variables (database path, session secret, OAuth credentials, Deemix/Lidarr config, etc.) - copy it to `.env` and the binary will pick it up via the systemd unit's `EnvironmentFile`, or export the variables directly.
+
+### Running as a systemd service
+```ini
+[Unit]
+Description=Playlist Lab Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/playlist-lab-server
+EnvironmentFile=/opt/playlist-lab-server/.env
+ExecStart=/opt/playlist-lab-server/bin/playlist-lab-server
+Restart=on-failure
+RestartSec=10
+Environment=NODE_ENV=production
+Environment=PORT=3001
+
+[Install]
+WantedBy=multi-user.target
+```
 
 ### Reverse Proxy Support
 
-Playlist Lab works seamlessly behind reverse proxies (Nginx, Apache, Caddy, etc.). 
-
-**Configuration:**
-Set `PUBLIC_URL` in your `.env` file to your public domain:
-```env
-PUBLIC_URL=https://playlist-lab.yourdomain.com
-```
+Playlist Lab works seamlessly behind reverse proxies (Nginx, Apache, Caddy, etc.) - see `deployment/nginx.conf`, `deployment/apache.conf`, and `deployment/caddy.conf` for working examples.
 
 **Example Nginx Configuration:**
 ```nginx
@@ -154,47 +90,6 @@ location / {
 ```
 
 This ensures OAuth callbacks and other features work correctly with your reverse proxy setup.
-
-### Setup
-```bash
-# Clone repository
-git clone https://github.com/yourusername/playlist-lab.git
-cd playlist-lab
-
-# Build shared package
-cd packages/shared && npm install && npm run build && cd ../..
-
-# Start development servers (in separate terminals)
-cd apps/server && npm install && npm run dev  # Server on port 3001
-cd apps/web && npm install && npm run dev     # Web app on port 5173
-```
-
-## Technology Stack
-
-- **Backend**: Node.js, Express.js, SQLite, TypeScript
-- **Frontend**: React, TypeScript, Vite, PWA
-- **Testing**: Jest, fast-check (property-based testing)
-- **Build**: TypeScript, Vite
-
-### Server Installers
-The Windows/macOS/Linux server installers include a system tray application for easy server management. The server runs as a background service and is accessed via web browser at `http://localhost:3001`.
-
-**Installation Methods:**
-- **Windows**: Run the `.exe` installer - includes system tray app, creates Start Menu shortcuts, optionally starts on boot
-- **macOS**: Install the `.dmg` or `.pkg` - includes system tray app, creates an application bundle in Applications
-- **Linux**: Install the `.deb` (Debian/Ubuntu) or `.rpm` (Fedora/RHEL) - includes systemd service and tray app
-- **Docker**: Use `docker-compose up -d` (recommended for development and cloud deployments)
-- **Manual**: Build and run the server directly (see Quick Start)
-- **VPS/Cloud**: Deploy using the deployment scripts in `deployment/`
-
-**System Tray Features:**
-- Start/stop/restart server
-- Open web interface in browser
-- Change server port
-- View server status
-- Exit tray application
-
-**Access**: After installation, open your browser to `http://localhost:3001` or use the tray app to open the interface.
 
 ## License
 
