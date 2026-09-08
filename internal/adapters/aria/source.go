@@ -104,7 +104,7 @@ const scrapeJS = `(() => {
       if (parts.length >= 2) tracks.push({ title: parts[0].trim(), artist: parts[1].trim() });
     }
   }
-  return { name: chartName, tracks };
+  return JSON.stringify({ name: chartName, tracks });
 })()`
 
 func (s *Source) FetchTracks(ctx context.Context, playlistURLOrID string, userID int64) (adapters.PlaylistInfo, []adapters.TrackInfo, error) {
