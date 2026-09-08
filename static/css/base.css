@@ -133,6 +133,12 @@ p {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  /* .btn is applied to real <button>s everywhere except cross_import.html's
+     "Connect YouTube" (an <a> so it can be a plain navigable link) - an
+     anchor carries a default underline a button never would, so without
+     this override that one link looked broken/half-styled next to every
+     other .btn in the app. */
+  text-decoration: none;
 }
 
 .btn:hover { transform: translateY(-1px); }
