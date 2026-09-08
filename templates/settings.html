@@ -5,15 +5,29 @@
     <h1 class="page-title">Settings</h1>
   </div>
 
+  <!-- One section visible at a time instead of a single long scrolling
+       page - same native radio + CSS :has() tab pattern admin.html already
+       uses, reusing .settings-nav-item's existing (previously dead)
+       --active styling instead of inventing a second tab look. "Plex
+       Server" and "Admin" stay real links since they navigate to a
+       different page entirely, not a section of this one. -->
   <div class="settings-layout">
     <nav class="settings-nav">
       <a href="/setup" class="settings-nav-item"><span class="settings-nav-label">Plex Server</span><span class="settings-nav-desc">Server &amp; library</span></a>
-      <a href="#matching" class="settings-nav-item"><span class="settings-nav-label">Matching</span><span class="settings-nav-desc">Track matching</span></a>
-      <a href="#mixes" class="settings-nav-item"><span class="settings-nav-label">Mixes</span><span class="settings-nav-desc">Mix generation</span></a>
-      <a href="#ai" class="settings-nav-item"><span class="settings-nav-label">AI Features</span><span class="settings-nav-desc">Gemini / Grok</span></a>
-      <a href="#connected-services" class="settings-nav-item"><span class="settings-nav-label">Connected Services</span><span class="settings-nav-desc">OAuth connections</span></a>
-      {{if .HasServer}}<a href="#library-scan" class="settings-nav-item"><span class="settings-nav-label">Library Scan</span><span class="settings-nav-desc">Refresh Plex library</span></a>{{end}}
-      <a href="#server-info" class="settings-nav-item"><span class="settings-nav-label">Server Info</span><span class="settings-nav-desc">Reverse proxy, about</span></a>
+      <input type="radio" name="settingstab" id="settings-tab-matching" class="settings-tab-input" checked>
+      <label for="settings-tab-matching" class="settings-nav-item"><span class="settings-nav-label">Matching</span><span class="settings-nav-desc">Track matching</span></label>
+      <input type="radio" name="settingstab" id="settings-tab-mixes" class="settings-tab-input">
+      <label for="settings-tab-mixes" class="settings-nav-item"><span class="settings-nav-label">Mixes</span><span class="settings-nav-desc">Mix generation</span></label>
+      <input type="radio" name="settingstab" id="settings-tab-ai" class="settings-tab-input">
+      <label for="settings-tab-ai" class="settings-nav-item"><span class="settings-nav-label">AI Features</span><span class="settings-nav-desc">Gemini / Grok</span></label>
+      <input type="radio" name="settingstab" id="settings-tab-services" class="settings-tab-input">
+      <label for="settings-tab-services" class="settings-nav-item"><span class="settings-nav-label">Connected Services</span><span class="settings-nav-desc">OAuth connections</span></label>
+      {{if .HasServer}}
+      <input type="radio" name="settingstab" id="settings-tab-scan" class="settings-tab-input">
+      <label for="settings-tab-scan" class="settings-nav-item"><span class="settings-nav-label">Library Scan</span><span class="settings-nav-desc">Refresh Plex library</span></label>
+      {{end}}
+      <input type="radio" name="settingstab" id="settings-tab-info" class="settings-tab-input">
+      <label for="settings-tab-info" class="settings-nav-item"><span class="settings-nav-label">Server Info</span><span class="settings-nav-desc">Reverse proxy, about</span></label>
       {{if .IsAdmin}}<a href="/admin" class="settings-nav-item"><span class="settings-nav-label">Admin</span><span class="settings-nav-desc">Users & server admin</span></a>{{end}}
     </nav>
 

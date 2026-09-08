@@ -65,12 +65,34 @@
 
 .settings-nav-item:hover { background-color: var(--surface-hover); }
 
-.settings-nav-item--active {
+.settings-nav-item--active,
+/* .settings-nav-item--active was never applied by anything (a plain <a>
+   anchor list has no notion of "current section") - the actual active
+   state below reuses its exact look via the checkbox-hack :checked+label
+   sibling selector now that each section-jump item is a real tab. */
+.settings-tab-input:checked + .settings-nav-item {
   background-color: rgba(91, 155, 213, 0.1);
 }
 
-.settings-nav-item--active .settings-nav-label {
+.settings-nav-item--active .settings-nav-label,
+.settings-tab-input:checked + .settings-nav-item .settings-nav-label {
   color: var(--primary-color);
+}
+
+/* Tab wiring: only the section matching the checked radio renders, so
+   Settings is one screen-height section at a time instead of a single
+   page with every section stacked (Matching/Mixes/AI/Connected Services/
+   Library Scan/Server Info back to back) that you scroll through
+   regardless of which one you came here for. */
+.settings-tab-input { position: absolute; opacity: 0; pointer-events: none; }
+.settings-section { display: none; }
+.settings-nav:has(#settings-tab-matching:checked) ~ .settings-content #matching,
+.settings-nav:has(#settings-tab-mixes:checked) ~ .settings-content #mixes,
+.settings-nav:has(#settings-tab-ai:checked) ~ .settings-content #ai,
+.settings-nav:has(#settings-tab-services:checked) ~ .settings-content #connected-services,
+.settings-nav:has(#settings-tab-scan:checked) ~ .settings-content #library-scan,
+.settings-nav:has(#settings-tab-info:checked) ~ .settings-content #server-info {
+  display: block;
 }
 
 .settings-nav-label { font-size: 0.9rem; font-weight: 500; }
