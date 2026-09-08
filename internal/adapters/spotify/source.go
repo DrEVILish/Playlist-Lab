@@ -12,17 +12,16 @@ import (
 	"github.com/drevilish/playlist-lab/internal/adapters"
 )
 
-// Source ports the API half of adapters/spotify-source.ts's fetchTracks: the
-// user's own OAuth token first (same GetToken every other Spotify call
-// uses), falling back to the Client Credentials grant (GetClientCredentialsToken,
+// Source ports adapters/spotify-source.ts's fetchTracks in full: the user's
+// own OAuth token first (same GetToken every other Spotify call uses),
+// falling back to the Client Credentials grant (GetClientCredentialsToken,
 // already used by the charts feature) when there's no token or Spotify
-// rejects it as expired/invalid. spotify-source.ts's own final fallback -
-// scraping the open.spotify.com web page with Puppeteer when even that
-// fails - is not ported (chromedp/browser-scraping gap, same as every other
-// unported scrape-fallback leaf in this codebase); a playlist neither an
-// app-provided token nor the user's own can read is a rare enough case that
-// documenting the gap beats guessing at page-scraping logic nobody asked
-// for yet.
+// rejects it as expired/invalid, and finally to scraping the public
+// open.spotify.com web page (scrape.go) when even that fails - which,
+// since Spotify's Nov 2024 API changes 403 client-credentials tokens on
+// most playlist reads for apps outside Extended Quota Mode, is now the
+// path that actually runs for most "import someone else's public
+// playlist by URL" cases, not a rare fallback for an edge case.
 type Source struct {
 	DB              *sql.DB
 	Secret          string
@@ -159,15 +158,15 @@ func (s *Source) FetchTracks(ctx context.Context, playlistURLOrID string, userID
 	}
 
 	token, err := GetClientCredentialsToken(s.DB, s.Secret, userID, s.AppClientID, s.AppClientSecret)
-	if err != nil {
-		return adapters.PlaylistInfo{}, nil, err
+	if err == nil && token != "" {
+		if playlist, tracks, _, err := s.fetchWithToken(playlistID, token); err == nil {
+			return playlist, tracks, nil
+		}
+		// Falls through to scraping below - most commonly a 403 from
+		// Spotify's Extended Quota Mode restriction on client-credentials
+		// tokens, but any API failure is worth one more try via the
+		// public web page rather than failing the whole import.
 	}
-	if token == "" {
-		return adapters.PlaylistInfo{}, nil, fmt.Errorf("Spotify client credentials not configured")
-	}
-	playlist, tracks, _, err := s.fetchWithToken(playlistID, token)
-	if err != nil {
-		return adapters.PlaylistInfo{}, nil, err
-	}
-	return playlist, tracks, nil
+
+	return fetchTracksByScraping(ctx, playlistID)
 }
