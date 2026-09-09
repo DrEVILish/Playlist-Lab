@@ -60,19 +60,27 @@ func GetUserMissingTracks(sqlDB *sql.DB, userID int64) ([]MissingTrack, error) {
 	return out, rows.Err()
 }
 
-// AddMissingTracks inserts a batch of missing-track rows for one playlist,
-// matching database.ts's addMissingTracks. Each insert is independent (no
-// dedup/upsert - the Node version doesn't do one here either; that only
-// happens for manual_matches).
+// AddMissingTracks replaces one playlist's missing-track rows with a fresh
+// batch. Both callers (a scheduled refresh, a first import) pass the
+// complete current unmatched set for that playlist run, not an incremental
+// delta - inserting on top of whatever the previous run left behind (the
+// original Node port's behavior) duplicated every still-missing track once
+// per run instead of just updating its added_at, which is what actually
+// surfaced as literal duplicate rows in the missing-tracks list once it
+// became directly visible in the Playlists table's inline expando.
 func AddMissingTracks(sqlDB *sql.DB, userID, playlistID int64, tracks []NewMissingTrack) error {
-	if len(tracks) == 0 {
-		return nil
-	}
 	tx, err := sqlDB.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+
+	if _, err := tx.Exec(`DELETE FROM missing_tracks WHERE playlist_id = ?`, playlistID); err != nil {
+		return err
+	}
+	if len(tracks) == 0 {
+		return tx.Commit()
+	}
 
 	now := time.Now().Unix()
 	stmt, err := tx.Prepare(
