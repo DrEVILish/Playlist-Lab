@@ -206,12 +206,20 @@ func (h *PlaylistsHandler) index(w http.ResponseWriter, r *http.Request) {
 	sources := distinctSources(rows)
 	totalPlaylists := len(rows)
 	rows = filterRows(rows, f)
-	sortRows(rows, q.Get("sort"), q.Get("dir"))
+	// Default (no explicit ?sort=) is newest-added first, not whatever
+	// order Plex happened to return - a column header click still starts
+	// its own asc/desc toggle from scratch via SortHref, unaffected by
+	// this default.
+	sortKey, dir := q.Get("sort"), q.Get("dir")
+	if sortKey == "" {
+		sortKey, dir = "dateAdded", "desc"
+	}
+	sortRows(rows, sortKey, dir)
 
 	h.Tmpl.RenderPage(w, r, "home", map[string]any{
 		"User": user, "Playlists": rows, "TotalPlaylists": totalPlaylists,
 		"TotalMissing": totalMissing, "TotalScheduled": totalScheduled, "TotalAttention": totalAttention,
-		"Sort": q.Get("sort"), "Dir": q.Get("dir"),
+		"Sort": sortKey, "Dir": dir,
 		"Filter": f, "Sources": sources,
 		"Query": queryState(q),
 	})
