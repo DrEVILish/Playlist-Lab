@@ -149,6 +149,12 @@ p {
   transition: all 0.2s ease;
   display: inline-flex;
   align-items: center;
+  /* Flex items default to justify-content:flex-start - invisible on a
+     button sized to its own content, but every full-width .btn (the login
+     button, "Backup Selected Playlist(s)", the settings Save/Reset row on
+     mobile, ...) left its label pinned to the left edge instead of
+     centered like a normal button. */
+  justify-content: center;
   gap: 0.5rem;
   /* .btn is applied to real <button>s everywhere except cross_import.html's
      "Connect YouTube" (an <a> so it can be a plain navigable link) - an
@@ -334,15 +340,29 @@ a:focus-visible {
   box-shadow: var(--glow-sm);
 }
 
-/* Page Layout */
+/* Page Layout
+   Every page's own CSS used to hand-roll this padding itself (each one
+   independently re-discovering that .page-container had none, at
+   inconsistent values - 0.875rem here, 1.5rem there) since .page-container
+   is a flex item of .layout-main (a flex column) and defaults to
+   min-width:auto, refusing to shrink below its widest child's min-content
+   (a data table) rather than scrolling within itself - the editor page's
+   640px-wide tracks table forced the whole page 800px+ wide on a 390px
+   phone. One definition here fixes both at once for every page carrying
+   this class. */
 .page-container {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  padding: 0;
+  padding: 0.875rem;
   margin: 0 auto;
   width: 100%;
+}
+
+@media (min-width: 769px) {
+  .page-container { padding: 1.5rem; }
 }
 
 .page-container > h1 {
@@ -374,6 +394,14 @@ a:focus-visible {
   color: var(--text-primary);
   margin-bottom: 1rem;
 }
+
+/* Every page styles its own checkboxes (Settings' toggles, Home's row
+   selects) individually, but plain unstyled ones - Backup & Restore's
+   playlist picker - fell back to the browser's raw white checkbox with no
+   theming at all. One rule here covers every checkbox the app doesn't
+   already style more specifically (accent-color doesn't touch size, so it
+   can't fight Home's deliberately touch-sized .row-select). */
+input[type="checkbox"] { accent-color: var(--primary-color); }
 
 /* Form Groups */
 .form-group { margin-bottom: 1.5rem; }

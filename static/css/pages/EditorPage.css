@@ -12,7 +12,6 @@
 .editor {
   max-width: 1100px;
   margin: 0 auto;
-  padding: 1.5rem;
 }
 
 .editor h1 { margin: 0.5rem 0 1.5rem; }
@@ -104,8 +103,6 @@
 #tracks button:hover { background: rgba(239, 83, 80, 0.08); }
 
 @media (max-width: 768px) {
-  .editor { padding: 1rem; }
-
   /* Native drag-and-drop (the reordering script in editor.html) doesn't
      fire from touch input at all, so the handle is just dead weight on a
      phone - hiding it recovers the column space instead of showing a

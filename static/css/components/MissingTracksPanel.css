@@ -4,14 +4,6 @@
   font-size: 0.875rem;
 }
 
-/* <main class="missing"> (templates/missing.html) - same gap as .mixes in
-   GenerateMixesPage.css: neither page wraps its content in .page-container
-   like home/settings/admin do, so neither ever got that class's own page
-   padding and both read as jammed flush against the header above. */
-.missing {
-  padding: 1.5rem;
-}
-
 .missing-tracks-toolbar {
   display: flex;
   justify-content: space-between;

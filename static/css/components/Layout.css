@@ -1,6 +1,15 @@
 .layout {
   min-height: 100vh;
   max-height: 100vh;
+  /* 100vh on mobile Safari/Chrome is the *largest* possible viewport,
+     ignoring the browser's own address bar/toolbar chrome - this shell is
+     capped to exactly that height with its content scrolling inside, so
+     the bottom of every page ends up hidden behind that chrome until the
+     user scrolls the page's own inner .layout-main, not the outer frame.
+     100dvh tracks the actual visible viewport instead; older browsers
+     without dvh support just keep using the vh values above. */
+  min-height: 100dvh;
+  max-height: 100dvh;
   display: flex;
   flex-direction: column;
   background-color: var(--background);

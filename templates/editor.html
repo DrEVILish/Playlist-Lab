@@ -1,6 +1,11 @@
 {{define "content"}}
+<!-- SettingsPage.css owns .settings-input/.settings-select, reused here
+     (rename field, sort/export dropdowns, search box, split-name field)
+     rather than duplicated - without it every one of those rendered as an
+     unstyled browser-default white control on this page's dark theme. -->
+<link rel="stylesheet" href="/static/css/pages/SettingsPage.css">
 <link rel="stylesheet" href="/static/css/pages/EditorPage.css">
-<div class="editor">
+<div class="editor page-container">
   <p><a href="/">&larr; Back to library</a></p>
   {{if .PlexError}}
   <h1>Couldn't load this playlist</h1>

@@ -133,6 +133,12 @@
   cursor: pointer;
   transition: all 0.2s ease;
   box-shadow: 0 4px 16px rgba(91, 155, 213, 0.3);
+  /* base.css's mobile rule turns every <button> into display:inline-flex
+     (for the 44px touch-target min-height), which drops the native
+     button's centered text-align in favor of flex's default
+     justify-content:flex-start - left-pinning this label on phones. */
+  display: flex;
+  justify-content: center;
 }
 
 .login-btn:hover:not(:disabled) {
