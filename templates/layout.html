@@ -81,7 +81,11 @@
              close the drawer covering the modal it just opened. -->
         <button type="button" class="mobile-nav-link" hx-get="/playlists/shared-with-me" hx-target="#modal-root" hx-swap="innerHTML"
           onclick="document.getElementById('mobile-nav-toggle').checked=false">Shared With Me</button>
-        <a class="mobile-nav-link" href="/cross-import">Cross-Import</a>
+        <!-- Labeled to match what the page actually does (its own <h1> and
+             the "Import History"/"Connect to YouTube" copy below it) - the
+             route is a Plex-to-YouTube export flow, not a general
+             multi-service cross-import hub, despite the URL's name. -->
+        <a class="mobile-nav-link" href="/cross-import">Export to YouTube</a>
         <a class="mobile-nav-link" href="/mix-templates">Mix Templates</a>
         <a class="mobile-nav-link" href="/backup">Backup / Restore</a>
         <a class="mobile-nav-link" href="/status">Status</a>
@@ -385,6 +389,31 @@
       var menu = item.closest('details.header-actions-menu, details.missing-track-more');
       if (menu) menu.removeAttribute('open');
     });
+
+    // Settings and Admin's tab bars (.admin-tabbar) are plain radio+CSS -
+    // no JS needed to switch panels - but that also means the active tab
+    // lives nowhere but transient DOM state: a reload always lands back on
+    // the first tab, and there's no way to link or bookmark, say,
+    // Settings > AI Features. Reading/writing the URL hash fixes both
+    // without needing real per-tab routes, and works for every page that
+    // uses this component since every tab input's id already follows
+    // "{page}-tab-{slug}" (settings-tab-matching, admin-tab-users, ...).
+    (function () {
+      var bar = document.querySelector('.admin-tabbar');
+      if (!bar) return;
+      var inputs = bar.querySelectorAll('.admin-tab-input');
+      var slugOf = function (input) { return input.id.replace(/^[a-z]+-tab-/, ''); };
+      var hash = location.hash.slice(1);
+      if (hash) {
+        for (var i = 0; i < inputs.length; i++) {
+          if (slugOf(inputs[i]) === hash) { inputs[i].checked = true; break; }
+        }
+      }
+      bar.addEventListener('change', function (e) {
+        if (!e.target.classList.contains('admin-tab-input')) return;
+        history.replaceState(null, '', '#' + slugOf(e.target));
+      });
+    })();
   </script>
 </body>
 </html>
