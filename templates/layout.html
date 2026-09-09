@@ -47,6 +47,44 @@
     // preference - it is not something any individual handler should have
     // to opt into.
     htmx.config.noSwap = [204, 304, '4xx', '5xx'];
+
+    // Global click feedback for every hx-* button/form in the app: with
+    // none of this, clicking Retry/Delete/Rematch/... gave no visible sign
+    // the click registered until the response eventually swapped in,
+    // which reads as broken on anything slower than instant (a Plex
+    // search, a deemix/Lidarr lookup) and invites impatient double-clicks.
+    // Every button in elt (or elt itself, if it IS a button) is disabled
+    // for the request's duration, and whichever one was actually clicked
+    // (the form's submitter, for a <form>) gets a spinner via .is-loading.
+    // Wrapped in DOMContentLoaded because this whole script block runs in
+    // <head>, before <body> (and therefore document.body) exists yet -
+    // referencing it unguarded here throws immediately and silently kills
+    // the rest of the script tag, this listener included.
+    document.addEventListener('DOMContentLoaded', function () {
+      document.body.addEventListener('submit', function (e) {
+        if (e.submitter) e.target.__submitter = e.submitter;
+      }, true);
+
+      function loadingButtons(elt) {
+        var btns = Array.from(elt.querySelectorAll('button, input[type=submit]'));
+        if (elt.matches('button, input[type=submit]')) btns.push(elt);
+        return btns;
+      }
+
+      htmx.on('htmx:beforeRequest', function (e) {
+        var elt = e.detail.elt;
+        var btn = elt.matches('button, input[type=submit]') ? elt
+          : (elt.__submitter || elt.querySelector('button[type=submit], input[type=submit]'));
+        elt.__loadingBtn = btn;
+        loadingButtons(elt).forEach(function (b) { b.disabled = true; });
+        if (btn) btn.classList.add('is-loading');
+      });
+      htmx.on('htmx:afterRequest', function (e) {
+        var elt = e.detail.elt;
+        loadingButtons(elt).forEach(function (b) { b.disabled = false; });
+        if (elt.__loadingBtn) elt.__loadingBtn.classList.remove('is-loading');
+      });
+    });
   </script>
 </head>
 <body>
@@ -133,19 +171,17 @@
                were only ever reachable as modals inside GenerateMixesPage
                (SaveTemplateModal/EditTemplateModal), never as a page. They
                are kept because this port did build both as real pages, and
-               a page with no nav entry is unreachable. Import
-               and Generate already exist as full pages, so - following this
-               project's established plain-link precedent rather than
-               reproducing React's portal-modal pattern - they just navigate
-               there. Shared With Me loads into #modal-root like every other
-               modal-shaped feature (schedule/share forms), now that sharing
-               itself is built. -->
+               a page with no nav entry is unreachable. All five now open as
+               a modal (via IsModalRequest/RenderModal - each still exists as
+               a real page too, at the same URL, for a direct visit/bookmark/
+               refresh) rather than navigating away, matching React's own
+               portal-modal pattern for these buttons. -->
           <nav class="header-actions">
-            <a class="btn btn-secondary btn-small" href="/import">Import</a>
-            <a class="btn btn-secondary btn-small" href="/mixes">Generate</a>
+            <button type="button" class="btn btn-secondary btn-small" hx-get="/import" hx-target="#modal-root" hx-swap="innerHTML">Import</button>
+            <button type="button" class="btn btn-secondary btn-small" hx-get="/mixes" hx-target="#modal-root" hx-swap="innerHTML">Generate</button>
             <button type="button" class="btn btn-secondary btn-small" hx-get="/playlists/shared-with-me" hx-target="#modal-root" hx-swap="innerHTML">Shared With Me</button>
-            <a class="btn btn-secondary btn-small" href="/backup">Backup / Restore</a>
-            <a class="btn btn-secondary btn-small" href="/status">Status</a>
+            <button type="button" class="btn btn-secondary btn-small" hx-get="/backup" hx-target="#modal-root" hx-swap="innerHTML">Backup / Restore</button>
+            <button type="button" class="btn btn-secondary btn-small" hx-get="/status" hx-target="#modal-root" hx-swap="innerHTML">Status</button>
           </nav>
         </div>
 

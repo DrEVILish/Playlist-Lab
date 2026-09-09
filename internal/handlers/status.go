@@ -59,10 +59,17 @@ func formatDurationHM(ms int) string {
 func (h *StatusHandler) page(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
 	data := map[string]any{"User": user}
+	render := func() {
+		if IsModalRequest(r) {
+			h.Tmpl.RenderModal(w, r, "status", "Status", data)
+			return
+		}
+		h.Tmpl.RenderPage(w, r, "status", data)
+	}
 
 	userServer, err := db.GetUserServer(h.DB, user.ID)
 	if err != nil || userServer == nil || !userServer.LibraryID.Valid {
-		h.Tmpl.RenderPage(w, r, "status", data)
+		render()
 		return
 	}
 
@@ -70,7 +77,7 @@ func (h *StatusHandler) page(w http.ResponseWriter, r *http.Request) {
 	plexPlaylists, err := client.GetPlaylists()
 	if err != nil {
 		data["PlexError"] = true
-		h.Tmpl.RenderPage(w, r, "status", data)
+		render()
 		return
 	}
 
@@ -134,5 +141,5 @@ func (h *StatusHandler) page(w http.ResponseWriter, r *http.Request) {
 	data["Succeeded"] = succeeded
 	data["Failed"] = failed
 	data["SmartCount"] = smartCount
-	h.Tmpl.RenderPage(w, r, "status", data)
+	render()
 }

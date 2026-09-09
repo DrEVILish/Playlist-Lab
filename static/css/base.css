@@ -167,6 +167,37 @@ p {
 .btn:hover { transform: translateY(-1px); }
 .btn:active { transform: translateY(0); }
 
+/* Global click feedback (see layout.html's htmx:beforeRequest/afterRequest
+   listeners): every disabled button dims instead of looking identical to
+   an enabled one, and whichever button was actually clicked additionally
+   gets a spinner appended after its label for the request's duration. */
+button:disabled,
+input[type=submit]:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn.is-loading,
+button.is-loading {
+  position: relative;
+}
+
+.is-loading::after {
+  content: "";
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  flex-shrink: 0;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: btn-spin 0.6s linear infinite;
+}
+
+@keyframes btn-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Keyboard-only users got no visible focus indicator on any button/icon-
    button/link-styled-as-button in the app - only .input/select replace the
    browser's default outline with something visible (a box-shadow ring

@@ -93,10 +93,15 @@ func (h *ImportHandler) page(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.Tmpl.RenderPage(w, r, "import", map[string]any{
+	data := map[string]any{
 		"User": user, "HasServer": userServer != nil && userServer.LibraryID.Valid,
 		"Sources": sources,
-	})
+	}
+	if IsModalRequest(r) {
+		h.Tmpl.RenderModal(w, r, "import", "Import", data)
+		return
+	}
+	h.Tmpl.RenderPage(w, r, "import", data)
 }
 
 // startImport enqueues a fetch+match+create-playlist job for one source

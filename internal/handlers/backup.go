@@ -50,6 +50,10 @@ func (h *BackupHandler) page(w http.ResponseWriter, r *http.Request) {
 			data["Playlists"] = playlists
 		}
 	}
+	if IsModalRequest(r) {
+		h.Tmpl.RenderModal(w, r, "backup_restore", "Backup / Restore", data)
+		return
+	}
 	h.Tmpl.RenderPage(w, r, "backup_restore", data)
 }
 

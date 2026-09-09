@@ -12,6 +12,13 @@
   backdrop-filter: blur(8px);
 }
 
+/* A full page opened as a modal (Import/Generate/Backup-Restore/Status)
+   carries its own tables/forms sized for a full-width page, not a 700px
+   dialog - wider than the default so that content isn't cramped. */
+.advanced-mix-modal.page-modal {
+  max-width: 960px;
+}
+
 .advanced-mix-modal {
   background: var(--gradient-card);
   border-radius: var(--radius-xl);

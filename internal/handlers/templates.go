@@ -229,6 +229,47 @@ func (t *Templates) RenderPage(w http.ResponseWriter, r *http.Request, name stri
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	execute(w, tmpl, "base", pageData(r, data))
+}
+
+// RenderModal renders name's own "content" block (the same template a full
+// page load would use, skipping layout.html's header/footer chrome) wrapped
+// in the app's standard modal chrome, for a header button that opens a page
+// as a modal instead of navigating to it - see IsModalRequest, which the
+// page's own handler checks to decide which of RenderPage/RenderModal to
+// call. Reuses the page's existing template and data-building code
+// unchanged; only the final render call branches.
+func (t *Templates) RenderModal(w http.ResponseWriter, r *http.Request, name, title string, data any) {
+	tmpl, ok := t.pages[name]
+	if !ok {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	var buf strings.Builder
+	if err := tmpl.ExecuteTemplate(&buf, "content", pageData(r, data)); err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	t.RenderPartial(w, "partials/page_modal.html", map[string]any{
+		"Title": title,
+		"Body":  template.HTML(buf.String()),
+	})
+}
+
+// IsModalRequest reports whether r should be answered with RenderModal
+// instead of RenderPage - true for the htmx-driven header buttons (which
+// send the standard HX-Request header), false for a plain browser
+// navigation/refresh, so a bookmarked or directly-visited URL still gets
+// the full page rather than a bare modal fragment with no chrome around it.
+func IsModalRequest(r *http.Request) bool {
+	return r.Header.Get("HX-Request") == "true"
+}
+
+// pageData ensures data (RenderPage/RenderModal's map[string]any, or nil)
+// has a "User" key, filling it in from the request's session if the caller
+// didn't already set one - see RenderPage's original doc comment for why
+// this can't just be left to each caller.
+func pageData(r *http.Request, data any) map[string]any {
 	m, ok := data.(map[string]any)
 	if !ok {
 		m = map[string]any{}
@@ -236,7 +277,7 @@ func (t *Templates) RenderPage(w http.ResponseWriter, r *http.Request, name stri
 	if _, exists := m["User"]; !exists {
 		m["User"] = auth.CurrentUser(r)
 	}
-	execute(w, tmpl, "base", m)
+	return m
 }
 
 func (t *Templates) RenderPartial(w http.ResponseWriter, name string, data any) {

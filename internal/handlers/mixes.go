@@ -56,6 +56,10 @@ func (h *MixesHandler) page(w http.ResponseWriter, r *http.Request) {
 		data["Genres"] = client.GetLibraryGenres(userServer.LibraryID.String)
 		data["Moods"] = client.GetLibraryMoods(userServer.LibraryID.String)
 	}
+	if IsModalRequest(r) {
+		h.Tmpl.RenderModal(w, r, "mixes", "Generate Mixes", data)
+		return
+	}
 	h.Tmpl.RenderPage(w, r, "mixes", data)
 }
 
