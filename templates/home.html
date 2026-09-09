@@ -1,5 +1,6 @@
 {{define "content"}}
 <link rel="stylesheet" href="/static/css/pages/PlaylistsPage.css">
+<link rel="stylesheet" href="/static/css/components/MissingTracksPanel.css">
 <div class="page-container">
   <div class="playlists-stats">
     <div class="playlists-stat">
@@ -57,9 +58,9 @@
                being portalled to document.body. Every option link carries
                the rest of the current query string via .Query.With, so
                applying one filter/sort never silently drops another. -->
-          <th class="col-name">
+          <th class="col-name sortable">
             <div class="th-with-filter">
-              <span class="th-label">Playlist</span>
+              <a href="{{.Query.SortHref "name"}}"><span class="th-label">Playlist</span> <span class="sort-arrow">{{sortArrow "name" $.Sort $.Dir}}</span></a>
               <details class="th-filter">
                 <summary class="th-filter-btn{{if .Filter.Search}} active{{end}}" title="Search"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
                 <form class="th-filter-menu" method="get" action="/">
@@ -82,8 +83,34 @@
               </details>
             </div>
           </th>
-          <th class="sortable"><a href="{{.Query.SortHref "tracks"}}"><span class="th-label">Tracks</span> <span class="sort-arrow">{{sortArrow "tracks" $.Sort $.Dir}}</span></a></th>
-          <th class="sortable"><a href="{{.Query.SortHref "duration"}}"><span class="th-label">Duration</span> <span class="sort-arrow">{{sortArrow "duration" $.Sort $.Dir}}</span></a></th>
+          <th class="sortable">
+            <div class="th-with-filter">
+              <a href="{{.Query.SortHref "tracks"}}"><span class="th-label">Tracks</span> <span class="sort-arrow">{{sortArrow "tracks" $.Sort $.Dir}}</span></a>
+              <details class="th-filter">
+                <summary class="th-filter-btn{{if or .Filter.TracksMin .Filter.TracksMax}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+                <form class="th-filter-menu" method="get" action="/">
+                  {{range $k, $v := .Query}}{{if and (ne $k "fTracksMin") (ne $k "fTracksMax")}}<input type="hidden" name="{{$k}}" value="{{index $v 0}}">{{end}}{{end}}
+                  <input type="number" min="0" name="fTracksMin" value="{{.Filter.TracksMin}}" placeholder="Min tracks" class="form-input">
+                  <input type="number" min="0" name="fTracksMax" value="{{.Filter.TracksMax}}" placeholder="Max tracks" class="form-input" style="margin-top:0.375rem">
+                  <button type="submit" class="btn btn-primary btn-small" style="margin-top:0.375rem">Apply</button>
+                </form>
+              </details>
+            </div>
+          </th>
+          <th class="sortable">
+            <div class="th-with-filter">
+              <a href="{{.Query.SortHref "duration"}}"><span class="th-label">Duration</span> <span class="sort-arrow">{{sortArrow "duration" $.Sort $.Dir}}</span></a>
+              <details class="th-filter">
+                <summary class="th-filter-btn{{if or .Filter.DurationMin .Filter.DurationMax}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+                <form class="th-filter-menu" method="get" action="/">
+                  {{range $k, $v := .Query}}{{if and (ne $k "fDurationMin") (ne $k "fDurationMax")}}<input type="hidden" name="{{$k}}" value="{{index $v 0}}">{{end}}{{end}}
+                  <input type="number" min="0" name="fDurationMin" value="{{.Filter.DurationMin}}" placeholder="Min minutes" class="form-input">
+                  <input type="number" min="0" name="fDurationMax" value="{{.Filter.DurationMax}}" placeholder="Max minutes" class="form-input" style="margin-top:0.375rem">
+                  <button type="submit" class="btn btn-primary btn-small" style="margin-top:0.375rem">Apply</button>
+                </form>
+              </details>
+            </div>
+          </th>
           <th class="sortable">
             <div class="th-with-filter">
               <a href="{{.Query.SortHref "missing"}}"><span class="th-label">Missing Tracks</span> <span class="sort-arrow">{{sortArrow "missing" $.Sort $.Dir}}</span></a>
@@ -97,9 +124,9 @@
               </details>
             </div>
           </th>
-          <th>
+          <th class="sortable">
             <div class="th-with-filter">
-              <span class="th-label">Schedule</span>
+              <a href="{{.Query.SortHref "schedule"}}"><span class="th-label">Schedule</span> <span class="sort-arrow">{{sortArrow "schedule" $.Sort $.Dir}}</span></a>
               <details class="th-filter">
                 <summary class="th-filter-btn{{if .Filter.Schedule}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
                 <div class="th-filter-menu">
@@ -110,9 +137,48 @@
               </details>
             </div>
           </th>
-          <th><span class="th-label">Next Run</span></th>
-          <th><span class="th-label">Last Run</span></th>
-          <th class="sortable"><a href="{{.Query.SortHref "dateAdded"}}"><span class="th-label">Date Added</span> <span class="sort-arrow">{{sortArrow "dateAdded" $.Sort $.Dir}}</span></a></th>
+          <th class="sortable">
+            <div class="th-with-filter">
+              <a href="{{.Query.SortHref "nextRun"}}"><span class="th-label">Next Run</span> <span class="sort-arrow">{{sortArrow "nextRun" $.Sort $.Dir}}</span></a>
+              <details class="th-filter">
+                <summary class="th-filter-btn{{if .Filter.NextRun}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+                <div class="th-filter-menu">
+                  <a class="th-filter-option{{if not .Filter.NextRun}} active{{end}}" href="{{.Query.With "fNextRun" ""}}">Any</a>
+                  <a class="th-filter-option{{if eq .Filter.NextRun "due"}} active{{end}}" href="{{.Query.With "fNextRun" "due"}}">Due now</a>
+                  <a class="th-filter-option{{if eq .Filter.NextRun "upcoming"}} active{{end}}" href="{{.Query.With "fNextRun" "upcoming"}}">Upcoming</a>
+                  <a class="th-filter-option{{if eq .Filter.NextRun "none"}} active{{end}}" href="{{.Query.With "fNextRun" "none"}}">Not scheduled</a>
+                </div>
+              </details>
+            </div>
+          </th>
+          <th class="sortable">
+            <div class="th-with-filter">
+              <a href="{{.Query.SortHref "lastRun"}}"><span class="th-label">Last Run</span> <span class="sort-arrow">{{sortArrow "lastRun" $.Sort $.Dir}}</span></a>
+              <details class="th-filter">
+                <summary class="th-filter-btn{{if .Filter.LastRun}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+                <div class="th-filter-menu">
+                  <a class="th-filter-option{{if not .Filter.LastRun}} active{{end}}" href="{{.Query.With "fLastRun" ""}}">Any</a>
+                  <a class="th-filter-option{{if eq .Filter.LastRun "success"}} active{{end}}" href="{{.Query.With "fLastRun" "success"}}">Succeeded</a>
+                  <a class="th-filter-option{{if eq .Filter.LastRun "failed"}} active{{end}}" href="{{.Query.With "fLastRun" "failed"}}">Failed</a>
+                  <a class="th-filter-option{{if eq .Filter.LastRun "never"}} active{{end}}" href="{{.Query.With "fLastRun" "never"}}">Never run</a>
+                </div>
+              </details>
+            </div>
+          </th>
+          <th class="sortable">
+            <div class="th-with-filter">
+              <a href="{{.Query.SortHref "dateAdded"}}"><span class="th-label">Date Added</span> <span class="sort-arrow">{{sortArrow "dateAdded" $.Sort $.Dir}}</span></a>
+              <details class="th-filter">
+                <summary class="th-filter-btn{{if or .Filter.AddedAfter .Filter.AddedBefore}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+                <form class="th-filter-menu" method="get" action="/">
+                  {{range $k, $v := .Query}}{{if and (ne $k "fAddedAfter") (ne $k "fAddedBefore")}}<input type="hidden" name="{{$k}}" value="{{index $v 0}}">{{end}}{{end}}
+                  <input type="date" name="fAddedAfter" value="{{.Filter.AddedAfter}}" class="form-input">
+                  <input type="date" name="fAddedBefore" value="{{.Filter.AddedBefore}}" class="form-input" style="margin-top:0.375rem">
+                  <button type="submit" class="btn btn-primary btn-small" style="margin-top:0.375rem">Apply</button>
+                </form>
+              </details>
+            </div>
+          </th>
           <th class="col-actions">{{if .Filter.Active}}<a class="btn btn-secondary btn-small" href="/" title="Clear all filters">Clear</a>{{end}}</th>
         </tr>
       </thead>
@@ -136,12 +202,24 @@
           <td>{{.TrackCount}}</td>
           <td>{{formatDuration .Duration}}</td>
           <td>
-            {{if .MissingCount}}<span class="badge-button warn">{{.MissingCount}}</span>{{else if .DBID}}0{{else}}—{{end}}
+            <!-- Expands an inline row (below) scoped to just this playlist's
+                 missing tracks via GET /missing/list?playlistId=, instead of
+                 navigating away to the full /missing page. -->
+            {{if .MissingCount}}<button type="button" class="badge-button warn" hx-get="/missing/list?playlistId={{.DBID}}" hx-target="#missing-row-{{.DBID}}-content" hx-swap="innerHTML" hx-on:click="document.getElementById('missing-row-{{.DBID}}').classList.toggle('is-open')">{{.MissingCount}}</button>
+            {{else if .DBID}}0{{else}}—{{end}}
           </td>
           <td>
+            <!-- Shows the schedule's run interval (daily/weekly/fortnightly/
+                 monthly), not a duplicate of the Next Run column next to it -
+                 text-transform:capitalize on the raw lowercase Frequency
+                 value, same convention status.html already uses rather than
+                 a template helper. Reuses the same hx-get the row-actions
+                 icon and mobile card's "+ Schedule" button already open,
+                 so clicking either the badge or "off" opens the edit/create
+                 schedule modal. -->
             {{if not .DBID}}—
-            {{else if .ScheduleID}}<span class="badge-button{{if .ScheduleFailed}} warn{{end}}" title="Next run">{{if .NextRun}}{{.NextRun}}{{else}}scheduled{{end}}</span>
-            {{else}}<span style="color:var(--text-secondary)">off</span>{{end}}
+            {{else if .ScheduleID}}<button type="button" class="badge-button{{if .ScheduleFailed}} warn{{end}}" style="text-transform:capitalize" title="Edit schedule" hx-get="/playlists/{{.PlexID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">{{.Frequency}}</button>
+            {{else}}<button type="button" class="badge-button" style="color:var(--text-secondary)" title="Create schedule" hx-get="/playlists/{{.PlexID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">off</button>{{end}}
           </td>
           <td>{{if .NextRun}}{{.NextRun}}{{else}}—{{end}}</td>
           <td>
@@ -156,10 +234,74 @@
                since both views offer the exact same per-playlist actions. -->
           <td class="row-actions">{{template "playlistRowActions" .}}</td>
         </tr>
+        {{if .MissingCount}}
+        <tr id="missing-row-{{.DBID}}" class="missing-row">
+          <td colspan="11"><div id="missing-row-{{.DBID}}-content" class="missing-tracks-scope"></div></td>
+        </tr>
+        {{end}}
         {{end}}
       </tbody>
     </table>
     </div>
+    <script>
+      // Drag-to-reorder columns: native HTML5 drag-and-drop, no library.
+      // Order persists per-browser in localStorage (column identity is just
+      // its position in the server-rendered markup, which is stable across
+      // reloads) and is replayed onto every row so header and body stay in
+      // sync - the missing-tracks expando row is a single colspan cell, so
+      // it's unaffected by reordering.
+      (function () {
+        var table = document.querySelector(".playlists-table");
+        if (!table || !table.tHead) return;
+        var storageKey = "playlistsColumnOrder";
+        var headerRow = table.tHead.rows[0];
+        var colCount = headerRow.cells.length;
+
+        // Snapshot every row's cells in their original, server-rendered
+        // order before any dragging happens - "order" below is always a
+        // permutation of these original positions, so it composes across
+        // repeated drags and survives being re-applied from a fresh (i.e.
+        // original-order) reload.
+        var originalCells = Array.from(table.rows).map(function (row) {
+          return Array.from(row.cells);
+        });
+
+        function applyOrder(order) {
+          Array.from(table.rows).forEach(function (row, r) {
+            var cells = originalCells[r];
+            if (!cells || cells.length !== order.length) return;
+            order.forEach(function (i) { row.appendChild(cells[i]); });
+          });
+        }
+
+        var order = Array.from({ length: colCount }, function (_, i) { return i; });
+        try {
+          var saved = JSON.parse(localStorage.getItem(storageKey) || "null");
+          if (saved && saved.length === colCount) order = saved;
+        } catch (e) {}
+        applyOrder(order);
+
+        var dragSrc = null;
+        Array.from(headerRow.cells).forEach(function (th) {
+          if (th.classList.contains("col-select") || th.classList.contains("col-actions")) return;
+          th.draggable = true;
+          th.addEventListener("dragstart", function (e) {
+            dragSrc = th;
+            e.dataTransfer.effectAllowed = "move";
+          });
+          th.addEventListener("dragover", function (e) { e.preventDefault(); });
+          th.addEventListener("drop", function (e) {
+            e.preventDefault();
+            if (!dragSrc || dragSrc === th) return;
+            var from = Array.from(headerRow.cells).indexOf(dragSrc);
+            var to = Array.from(headerRow.cells).indexOf(th);
+            order.splice(to, 0, order.splice(from, 1)[0]);
+            applyOrder(order);
+            localStorage.setItem(storageKey, JSON.stringify(order));
+          });
+        });
+      })();
+    </script>
 
     <!-- Mobile card list: PlaylistsPage.tsx swaps in this view entirely
          (isMobile ? ... : <table>) below a 768px JS media-query check -
@@ -169,6 +311,17 @@
          expand/collapse is a checkbox-hack (input#card-toggle-X + label),
          the same no-JS pattern as the admin tabs and the mobile nav drawer
          elsewhere in this app, replacing React's isCardExpanded state. -->
+    <!-- Mobile has no equivalent of the desktop table's per-column search
+         popover (.th-filter, hidden below 768px along with the whole
+         table) - with 170+ playlists on a real library, that left phones
+         with no way to search at all, only sort. Same hidden-filter-carry
+         technique as .th-filter-menu above so a search doesn't drop
+         whatever sort is already applied. -->
+    <form class="playlists-mobile-search" method="get" action="/">
+      {{range $k, $v := .Query}}{{if ne $k "q"}}<input type="hidden" name="{{$k}}" value="{{index $v 0}}">{{end}}{{end}}
+      <input type="search" name="q" value="{{.Filter.Search}}" placeholder="Search playlists...">
+      <button type="submit" class="btn btn-secondary btn-small">Search</button>
+    </form>
     <div class="playlists-sortbar">
       <label for="mobile-sort">Sort</label>
       <select id="mobile-sort" onchange="location.href=this.value">
@@ -177,6 +330,9 @@
         <option value="{{.Query.With "sort" "tracks"}}"{{if eq .Sort "tracks"}} selected{{end}}>Tracks</option>
         <option value="{{.Query.With "sort" "duration"}}"{{if eq .Sort "duration"}} selected{{end}}>Duration</option>
         <option value="{{.Query.With "sort" "missing"}}"{{if eq .Sort "missing"}} selected{{end}}>Missing Tracks</option>
+        <option value="{{.Query.With "sort" "schedule"}}"{{if eq .Sort "schedule"}} selected{{end}}>Schedule</option>
+        <option value="{{.Query.With "sort" "nextRun"}}"{{if eq .Sort "nextRun"}} selected{{end}}>Next Run</option>
+        <option value="{{.Query.With "sort" "lastRun"}}"{{if eq .Sort "lastRun"}} selected{{end}}>Last Run</option>
         <option value="{{.Query.With "sort" "dateAdded"}}"{{if eq .Sort "dateAdded"}} selected{{end}}>Date Added</option>
       </select>
       <a href="{{.Query.With "dir" (toggleDir .Dir)}}" title="{{if eq .Dir "desc"}}Descending - tap for ascending{{else}}Ascending - tap for descending{{end}}" aria-label="Sort direction: {{if eq .Dir "desc"}}descending{{else}}ascending{{end}}">{{if eq .Dir "desc"}}▼{{else}}▲{{end}}</a>
@@ -206,7 +362,7 @@
           <div class="playlist-card-detail-row">
             <span class="playlist-card-detail-label">Schedule</span>
             {{if not .DBID}}<span class="playlist-source-label" title="This playlist wasn't imported through Playlist Lab, so it can't be scheduled yet">&mdash;</span>
-            {{else if .ScheduleID}}<button type="button" class="badge-button{{if .ScheduleFailed}} warn{{end}}" hx-get="/playlists/{{.PlexID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">{{if .NextRun}}{{.NextRun}}{{else}}scheduled{{end}}</button>
+            {{else if .ScheduleID}}<button type="button" class="badge-button{{if .ScheduleFailed}} warn{{end}}" style="text-transform:capitalize" hx-get="/playlists/{{.PlexID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">{{.Frequency}}</button>
             {{else}}<button type="button" class="badge-button" hx-get="/playlists/{{.PlexID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">+ Schedule</button>{{end}}
           </div>
           {{if .ScheduleID}}

@@ -353,6 +353,10 @@
   background: var(--surface-hover);
   color: var(--text-primary);
   cursor: pointer;
+  /* Now also used as an <a> (the Missing Tracks count, linking to /missing)
+     alongside its original <button>/<span> uses - an anchor needs this
+     explicitly or it picks up the browser's default underline. */
+  text-decoration: none;
 }
 
 .badge-button:hover {
@@ -542,6 +546,23 @@
 }
 
 
+.playlists-mobile-search {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.playlists-mobile-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+  font: inherit;
+}
+
 .playlists-sortbar {
   display: flex;
   align-items: center;
@@ -579,9 +600,24 @@
    same 768px breakpoint every other mobile/desktop switch in this app uses
    (base.css, MobileNav.css) - see home.html's comment for why both exist in
    the DOM simultaneously instead of one being conditionally rendered. */
+.playlists-table thead th[draggable="true"] {
+  cursor: grab;
+}
+
+.missing-row {
+  display: none;
+}
+.missing-row.is-open {
+  display: table-row;
+}
+.missing-row > td {
+  padding: 0;
+  background: var(--surface-alt, var(--surface));
+}
+
 @media (max-width: 768px) {
   .playlists-table-container { display: none; }
 }
 @media (min-width: 769px) {
-  .playlists-sortbar, .playlists-cards { display: none; }
+  .playlists-mobile-search, .playlists-sortbar, .playlists-cards { display: none; }
 }

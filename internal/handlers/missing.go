@@ -127,10 +127,16 @@ func (h *MissingHandler) page(w http.ResponseWriter, r *http.Request) {
 	h.Tmpl.RenderPage(w, r, "missing", map[string]any{"User": user})
 }
 
-// list renders GET /missing/list: every missing track grouped by playlist.
+// list renders GET /missing/list: every missing track grouped by playlist,
+// or (with ?playlistId=) just that one playlist's, for the Playlists table's
+// inline expando row.
 func (h *MissingHandler) list(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
-	h.renderGroups(w, user.ID)
+	var playlistID int64
+	if raw := r.URL.Query().Get("playlistId"); raw != "" {
+		playlistID, _ = strconv.ParseInt(raw, 10, 64)
+	}
+	h.renderGroups(w, user.ID, playlistID)
 }
 
 func (h *MissingHandler) renderRetryStatus(w http.ResponseWriter, userID int64) {
@@ -664,7 +670,7 @@ func (h *MissingHandler) rematch(w http.ResponseWriter, r *http.Request) {
 	_ = db.RecordManualMatch(h.DB, user.ID, track.Title, track.Artist, track.Album.String, ratingKey)
 	slog.Info("Missing track manually rematched", "userId", user.ID, "trackId", trackID, "ratingKey", ratingKey)
 
-	h.renderGroups(w, user.ID)
+	h.renderGroups(w, user.ID, scopeParam(r))
 }
 
 // replaceSimilar ports POST /:id/replace-similar: seeds off one of the
@@ -732,12 +738,33 @@ func (h *MissingHandler) replaceSimilar(w http.ResponseWriter, r *http.Request) 
 	slog.Info("Replaced missing track with sonically similar match", "userId", user.ID, "trackId", trackID,
 		"original", track.Artist+" - "+track.Title, "replacement", replacement.GrandparentTitle+" - "+replacement.Title)
 
-	h.renderGroups(w, user.ID)
+	h.renderGroups(w, user.ID, scopeParam(r))
 }
 
-func (h *MissingHandler) renderGroups(w http.ResponseWriter, userID int64) {
+// renderGroups renders every missing track grouped by playlist, or (with
+// playlistID != 0) just that one playlist's, for the inline expando row.
+func (h *MissingHandler) renderGroups(w http.ResponseWriter, userID, playlistID int64) {
 	tracks, _ := db.GetUserMissingTracks(h.DB, userID)
-	h.Tmpl.RenderPartial(w, "partials/missing_list.html", map[string]any{"Groups": groupMissingTracks(h.DB, tracks), "TotalCount": len(tracks)})
+	if playlistID != 0 {
+		filtered := make([]db.MissingTrack, 0, len(tracks))
+		for _, t := range tracks {
+			if t.PlaylistID == playlistID {
+				filtered = append(filtered, t)
+			}
+		}
+		tracks = filtered
+	}
+	h.Tmpl.RenderPartial(w, "partials/missing_list.html", map[string]any{"Groups": groupMissingTracks(h.DB, tracks), "TotalCount": len(tracks), "Scope": playlistID})
+}
+
+// scopeParam reads the listScope query param that the Playlists table's
+// inline expando adds to every action URL in partials/missing_list.html, so
+// the response stays scoped to that one playlist instead of replacing the
+// whole (differently-targeted) /missing page's list. Absent on the full
+// /missing page, which keeps its original unscoped behavior.
+func scopeParam(r *http.Request) int64 {
+	id, _ := strconv.ParseInt(r.URL.Query().Get("listScope"), 10, 64)
+	return id
 }
 
 // deleteTrack ports DELETE /:id.
@@ -756,7 +783,7 @@ func (h *MissingHandler) deleteTrack(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	h.renderGroups(w, user.ID)
+	h.renderGroups(w, user.ID, scopeParam(r))
 }
 
 // clearPlaylist ports DELETE /playlist/:playlistId.
@@ -780,5 +807,5 @@ func (h *MissingHandler) clearPlaylist(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	h.renderGroups(w, user.ID)
+	h.renderGroups(w, user.ID, scopeParam(r))
 }

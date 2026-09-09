@@ -80,7 +80,9 @@ type playlistRow struct {
 	CreatedAt      int64 // unix seconds; zero if DBID is 0
 	MissingCount   int
 	ScheduleID     int64  // 0 if no refresh schedule exists for this playlist
+	Frequency      string // "daily"/"weekly"/"fortnightly"/"monthly"; empty if no schedule
 	NextRun        string // display string ("in 3d", "due", ""), see scheduler.NextRun
+	NextRunAt      int64  // unix seconds backing NextRun's display string, for sorting; 0 if none
 	LastRun        int64  // unix seconds of the schedule's most recent run; 0 if never run
 	LastRunStatus  string // "success"/"failed"/"running"; empty if never run
 	ScheduleFailed bool
@@ -167,7 +169,8 @@ func (h *PlaylistsHandler) index(w http.ResponseWriter, r *http.Request) {
 			row.MissingCount = missingCountByPlaylistID[t.ID]
 			if s, ok := scheduleByPlaylistID[t.ID]; ok {
 				row.ScheduleID = s.ID
-				row.NextRun = nextRunRelative(s)
+				row.Frequency = s.Frequency
+				row.NextRun, row.NextRunAt = nextRunRelative(s)
 				last := latestStatus[s.ID]
 				row.ScheduleFailed = last.Status == "failed"
 				row.LastRun = last.StartedAt
@@ -185,10 +188,18 @@ func (h *PlaylistsHandler) index(w http.ResponseWriter, r *http.Request) {
 	// above - filtering only narrows the table below them.
 	q := r.URL.Query()
 	f := rowFilter{
-		Search:   strings.TrimSpace(q.Get("q")),
-		Source:   q.Get("fSource"),
-		Missing:  q.Get("fMissing"),
-		Schedule: q.Get("fSchedule"),
+		Search:      strings.TrimSpace(q.Get("q")),
+		Source:      q.Get("fSource"),
+		Missing:     q.Get("fMissing"),
+		Schedule:    q.Get("fSchedule"),
+		TracksMin:   q.Get("fTracksMin"),
+		TracksMax:   q.Get("fTracksMax"),
+		DurationMin: q.Get("fDurationMin"),
+		DurationMax: q.Get("fDurationMax"),
+		NextRun:     q.Get("fNextRun"),
+		LastRun:     q.Get("fLastRun"),
+		AddedAfter:  q.Get("fAddedAfter"),
+		AddedBefore: q.Get("fAddedBefore"),
 	}
 	// Built from the unfiltered set: filtering by a source must not collapse
 	// the dropdown down to only the source already chosen.
@@ -247,14 +258,24 @@ func (q queryState) SortHref(key string) string {
 // request rather than holding client-side table state), so the filters ride
 // the same query-string mechanism instead of needing their own.
 type rowFilter struct {
-	Search   string // matches playlist name, case-insensitive
-	Source   string // exact source id ("spotify", "plex", ...); "" = any
-	Missing  string // "has" | "none"; "" = any
-	Schedule string // "on" | "off"; "" = any
+	Search      string // matches playlist name, case-insensitive
+	Source      string // exact source id ("spotify", "plex", ...); "" = any
+	Missing     string // "has" | "none"; "" = any
+	Schedule    string // "on" | "off"; "" = any
+	TracksMin   string // inclusive; "" = unbounded. Kept as the raw form string
+	TracksMax   string // (not int) so an empty/invalid input redisplays as typed.
+	DurationMin string // minutes, inclusive; "" = unbounded
+	DurationMax string // minutes, inclusive; "" = unbounded
+	NextRun     string // "due" | "upcoming" | "none"; "" = any
+	LastRun     string // "success" | "failed" | "never"; "" = any
+	AddedAfter  string // yyyy-mm-dd, inclusive; "" = unbounded
+	AddedBefore string // yyyy-mm-dd, inclusive; "" = unbounded
 }
 
 func (f rowFilter) Active() bool {
-	return f.Search != "" || f.Source != "" || f.Missing != "" || f.Schedule != ""
+	return f.Search != "" || f.Source != "" || f.Missing != "" || f.Schedule != "" ||
+		f.TracksMin != "" || f.TracksMax != "" || f.DurationMin != "" || f.DurationMax != "" ||
+		f.NextRun != "" || f.LastRun != "" || f.AddedAfter != "" || f.AddedBefore != ""
 }
 
 func filterRows(rows []playlistRow, f rowFilter) []playlistRow {
@@ -290,9 +311,73 @@ func filterRows(rows []playlistRow, f rowFilter) []playlistRow {
 				continue
 			}
 		}
+		if min, ok := parseIntFilter(f.TracksMin); ok && row.TrackCount < min {
+			continue
+		}
+		if max, ok := parseIntFilter(f.TracksMax); ok && row.TrackCount > max {
+			continue
+		}
+		durationMin := row.Duration / 60000
+		if min, ok := parseIntFilter(f.DurationMin); ok && durationMin < int64(min) {
+			continue
+		}
+		if max, ok := parseIntFilter(f.DurationMax); ok && durationMin > int64(max) {
+			continue
+		}
+		switch f.NextRun {
+		case "due":
+			if row.NextRunAt == 0 || row.NextRunAt > time.Now().Unix() {
+				continue
+			}
+		case "upcoming":
+			if row.NextRunAt == 0 || row.NextRunAt <= time.Now().Unix() {
+				continue
+			}
+		case "none":
+			if row.NextRunAt != 0 {
+				continue
+			}
+		}
+		switch f.LastRun {
+		case "success", "failed":
+			if row.LastRunStatus != f.LastRun {
+				continue
+			}
+		case "never":
+			if row.LastRun != 0 {
+				continue
+			}
+		}
+		if t, ok := parseDateFilter(f.AddedAfter); ok && row.CreatedAt < t.Unix() {
+			continue
+		}
+		if t, ok := parseDateFilter(f.AddedBefore); ok && row.CreatedAt >= t.AddDate(0, 0, 1).Unix() {
+			continue
+		}
 		out = append(out, row)
 	}
 	return out
+}
+
+// parseIntFilter parses a rowFilter min/max form field, "" (unset) reporting
+// ok=false so the caller leaves that bound unenforced rather than treating a
+// blank input as zero.
+func parseIntFilter(raw string) (int, bool) {
+	if raw == "" {
+		return 0, false
+	}
+	n, err := strconv.Atoi(raw)
+	return n, err == nil
+}
+
+// parseDateFilter parses a rowFilter date form field (yyyy-mm-dd, the
+// browser's native <input type=date> format).
+func parseDateFilter(raw string) (time.Time, bool) {
+	if raw == "" {
+		return time.Time{}, false
+	}
+	t, err := time.Parse("2006-01-02", raw)
+	return t, err == nil
 }
 
 // distinctSources lists the sources present so the Source filter only
@@ -330,6 +415,16 @@ func sortRows(rows []playlistRow, sortKey, dir string) {
 			return rows[i].Duration < rows[j].Duration
 		case "missing":
 			return rows[i].MissingCount < rows[j].MissingCount
+		// ScheduleID/NextRunAt/LastRun are 0 for an unscheduled/never-run
+		// playlist, so - same as every other numeric column above - it
+		// simply sorts first ascending, last descending rather than being
+		// pinned to one end regardless of direction.
+		case "schedule":
+			return rows[i].ScheduleID < rows[j].ScheduleID
+		case "nextRun":
+			return rows[i].NextRunAt < rows[j].NextRunAt
+		case "lastRun":
+			return rows[i].LastRun < rows[j].LastRun
 		case "dateAdded":
 			return rows[i].CreatedAt < rows[j].CreatedAt
 		default:
@@ -346,23 +441,25 @@ func sortRows(rows []playlistRow, sortKey, dir string) {
 
 // nextRunRelative ports scheduleTime.ts's getNextRunRelative: a compact
 // "due"/"<1h"/"5h"/"3d" form of a schedule's next run, for the playlist
-// table's Schedule column.
-func nextRunRelative(s db.Schedule) string {
+// table's Schedule column. Also returns the raw next-run time as unix
+// seconds (0 if none) - the Next Run column sorts on that, since the
+// display string doesn't compare chronologically ("5h" < "3d" as text).
+func nextRunRelative(s db.Schedule) (string, int64) {
 	next, ok := scheduler.NextRun(s, time.Now())
 	if !ok {
-		return ""
+		return "", 0
 	}
 	diff := time.Until(next)
 	if diff <= 0 {
-		return "due"
+		return "due", next.Unix()
 	}
 	if diff < time.Hour {
-		return "<1h"
+		return "<1h", next.Unix()
 	}
 	if diff < 24*time.Hour {
-		return fmt.Sprintf("%dh", int(diff.Round(time.Hour).Hours()))
+		return fmt.Sprintf("%dh", int(diff.Round(time.Hour).Hours())), next.Unix()
 	}
-	return fmt.Sprintf("%dd", int(diff.Round(24*time.Hour).Hours()/24))
+	return fmt.Sprintf("%dd", int(diff.Round(24*time.Hour).Hours()/24)), next.Unix()
 }
 
 // cleanPlaylistName strips a duplicated leading prefix Plex sometimes
