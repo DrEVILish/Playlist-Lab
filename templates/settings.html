@@ -184,7 +184,7 @@
           </form>
           <div class="settings-scan-folder">
             <label class="settings-label">Scan a specific folder</label>
-            <div id="library-folders" hx-get="/settings/library-folders" hx-trigger="revealed" hx-swap="innerHTML">
+            <div id="library-folders" hx-get="/settings/library-folders" hx-trigger="revealed, change from:#settings-tab-scan" hx-swap="innerHTML">
               <p class="settings-loading">Loading folders...</p>
             </div>
             <form hx-post="/settings/scan-library" hx-target="#library-scan-result" hx-swap="innerHTML" class="settings-input-group">
@@ -225,7 +225,7 @@
           <h2>Statistics</h2>
           <p>Usage across every user of this Playlist Lab instance.</p>
         </div>
-        <div id="settings-panel-admin-stats" hx-get="/admin/stats" hx-trigger="revealed" hx-swap="innerHTML">
+        <div id="settings-panel-admin-stats" hx-get="/admin/stats" hx-trigger="revealed, change from:#settings-tab-admin-stats" hx-swap="innerHTML">
           <p class="admin-deferred-note">Loading statistics...</p>
         </div>
       </section>
@@ -235,7 +235,7 @@
           <h2>User Management</h2>
           <p>Plex Home members are auto-approved. Other users need manual approval.</p>
         </div>
-        <div id="settings-panel-admin-users" hx-get="/admin/users-list" hx-trigger="revealed" hx-swap="innerHTML">
+        <div id="settings-panel-admin-users" hx-get="/admin/users-list" hx-trigger="revealed, change from:#settings-tab-admin-users" hx-swap="innerHTML">
           <p class="admin-deferred-note">Loading users...</p>
         </div>
       </section>
@@ -245,7 +245,7 @@
           <h2>Most Common Missing Tracks</h2>
           <p>Tracks that multiple users are missing from their libraries.</p>
         </div>
-        <div id="settings-panel-admin-missing" hx-get="/admin/missing-list" hx-trigger="revealed" hx-swap="innerHTML">
+        <div id="settings-panel-admin-missing" hx-get="/admin/missing-list" hx-trigger="revealed, change from:#settings-tab-admin-missing" hx-swap="innerHTML">
           <p class="admin-deferred-note">Loading missing tracks...</p>
         </div>
       </section>
@@ -254,7 +254,7 @@
         <div class="settings-section-header">
           <h2>Schedules</h2>
         </div>
-        <div id="admin-schedules" hx-get="/admin/schedules" hx-trigger="revealed" hx-swap="outerHTML">
+        <div id="admin-schedules" hx-get="/admin/schedules" hx-trigger="revealed, change from:#settings-tab-admin-jobs" hx-swap="outerHTML">
           <p class="admin-deferred-note">Loading schedules...</p>
         </div>
       </section>
@@ -264,7 +264,7 @@
           <h2>Deemix</h2>
           <p>The Deezer ARL token the local deemix-server logs in with to queue downloads for missing tracks. Get it from a browser logged into deezer.com: DevTools &rarr; Application/Storage &rarr; Cookies &rarr; <code>arl</code>.</p>
         </div>
-        <div id="settings-panel-admin-deemix" hx-get="/admin/deemix" hx-trigger="revealed" hx-swap="innerHTML">
+        <div id="settings-panel-admin-deemix" hx-get="/admin/deemix" hx-trigger="revealed, change from:#settings-tab-admin-deemix" hx-swap="innerHTML">
           <p class="admin-deferred-note">Loading...</p>
         </div>
       </section>
@@ -274,7 +274,7 @@
           <h2>Lidarr</h2>
           <p>A second missing-track acquisition path alongside Deemix. Finds (or adds and monitors) a track's artist in Lidarr and triggers a search across Lidarr's own configured indexers - Lidarr's indexers and download client still need to be set up in Lidarr itself.</p>
         </div>
-        <div id="settings-panel-admin-lidarr" hx-get="/admin/lidarr" hx-trigger="revealed" hx-swap="innerHTML">
+        <div id="settings-panel-admin-lidarr" hx-get="/admin/lidarr" hx-trigger="revealed, change from:#settings-tab-admin-lidarr" hx-swap="innerHTML">
           <p class="admin-deferred-note">Loading...</p>
         </div>
       </section>
@@ -284,7 +284,7 @@
           <h2>YouTube</h2>
           <p>Google OAuth credentials used for the "YouTube" cross-import target (playlists created on a user's YouTube account) and for matching against YouTube-hosted tracks. Create an OAuth client under APIs &amp; Services &rarr; Credentials in <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a>, enabling the YouTube Data API v3, and add the redirect URI below to it as an authorized redirect URI.</p>
         </div>
-        <div id="settings-panel-admin-youtube" hx-get="/admin/youtube" hx-trigger="revealed" hx-swap="innerHTML">
+        <div id="settings-panel-admin-youtube" hx-get="/admin/youtube" hx-trigger="revealed, change from:#settings-tab-admin-youtube" hx-swap="innerHTML">
           <p class="admin-deferred-note">Loading...</p>
         </div>
       </section>
@@ -296,7 +296,7 @@
         <!-- Loaded on first reveal rather than with the page: reading and
              parsing up to 1000 log lines is real work, and Logs is not the
              tab anyone lands on first. -->
-        <div id="admin-logs" hx-get="/admin/logs" hx-trigger="revealed" hx-swap="outerHTML">
+        <div id="admin-logs" hx-get="/admin/logs" hx-trigger="revealed, change from:#settings-tab-admin-logs" hx-swap="outerHTML">
           <p class="admin-deferred-note">Loading logs...</p>
         </div>
       </section>

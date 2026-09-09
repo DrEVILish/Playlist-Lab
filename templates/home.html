@@ -7,18 +7,18 @@
       <span class="playlists-stat-value">{{.TotalPlaylists}}</span>
       <span class="playlists-stat-label">Playlists</span>
     </div>
-    <div class="playlists-stat">
+    <a class="playlists-stat playlists-stat-link" href="{{.Query.With "fSchedule" "on"}}">
       <span class="playlists-stat-value">{{.TotalScheduled}}</span>
       <span class="playlists-stat-label">Scheduled</span>
-    </div>
-    <div class="playlists-stat{{if .TotalMissing}} warn{{end}}">
+    </a>
+    <a class="playlists-stat playlists-stat-link{{if .TotalMissing}} warn{{end}}" href="/missing">
       <span class="playlists-stat-value">{{.TotalMissing}}</span>
       <span class="playlists-stat-label">Missing Tracks</span>
-    </div>
-    <div class="playlists-stat{{if .TotalAttention}} warn{{end}}">
+    </a>
+    <a class="playlists-stat playlists-stat-link{{if .TotalAttention}} warn{{end}}" href="{{.Query.With "fAttention" "1"}}">
       <span class="playlists-stat-value">{{.TotalAttention}}</span>
       <span class="playlists-stat-label">Needs Attention</span>
-    </div>
+    </a>
   </div>
 
   {{if .PlexError}}
@@ -188,11 +188,7 @@
           <td class="col-select"><input type="checkbox" name="id" value="{{.PlexID}}" class="row-select" aria-label="Select {{.Name}}"></td>
           <td class="playlist-name-cell">
             <div class="playlist-cover">{{if .CoverURL}}<img src="{{.CoverURL}}" alt="" loading="lazy">{{end}}</div>
-            <!-- The real table renders the name as a plain <span> (see
-                 PlaylistsPage.tsx); as an <a> it picks up the global blue
-                 underlined link styling and stops matching. Navigation to the
-                 track editor is the row's Edit icon, same as upstream. -->
-            <span class="playlist-name">{{.Name}}</span>
+            <a class="playlist-name" href="/playlists/{{.PlexID}}" title="Edit tracks in {{.Name}}">{{.Name}}</a>
           </td>
           <td>
             {{if eq .Source "plex"}}<span class="playlist-source-label">—</span>

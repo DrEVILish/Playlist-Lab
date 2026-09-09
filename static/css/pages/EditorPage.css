@@ -33,7 +33,16 @@
 }
 
 .editor-toolbar .settings-input { width: auto; min-width: 0; }
-.editor-rename-form .settings-input { width: 220px; max-width: 40vw; }
+.editor-rename-form .settings-input { width: 32ch; max-width: min(60vw, 480px); }
+
+.editor-missing {
+  margin-bottom: 1.5rem;
+}
+
+.editor-missing summary {
+  cursor: pointer;
+  font-weight: 600;
+}
 
 .editor-add-tracks {
   margin-bottom: 1.5rem;

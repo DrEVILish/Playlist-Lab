@@ -29,9 +29,15 @@
 
 .playlists-stat.warn .playlists-stat-value { color: var(--warning); }
 
-.playlists-stat-button {
+.playlists-stat-button,
+.playlists-stat-link {
   cursor: pointer;
   color: inherit;
+  text-decoration: none;
+}
+
+.playlists-stat-link:hover {
+  border-color: var(--primary-color);
 }
 
 .playlists-stat-button:disabled {
@@ -187,6 +193,12 @@
   white-space: nowrap;
   min-width: 0;
   flex: 1 1 auto;
+  color: inherit;
+  text-decoration: none;
+}
+
+.playlist-name:hover {
+  text-decoration: underline;
 }
 
 .playlist-name-editable {

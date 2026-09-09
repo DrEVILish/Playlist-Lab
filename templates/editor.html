@@ -5,6 +5,7 @@
      unstyled browser-default white control on this page's dark theme. -->
 <link rel="stylesheet" href="/static/css/pages/SettingsPage.css">
 <link rel="stylesheet" href="/static/css/pages/EditorPage.css">
+<link rel="stylesheet" href="/static/css/components/MissingTracksPanel.css">
 <div class="editor page-container">
   <p><a href="/">&larr; Back to library</a></p>
   {{if .PlexError}}
@@ -73,6 +74,16 @@
       <button type="submit" class="btn btn-secondary btn-small">Export</button>
     </form>
   </div>
+
+  {{if .DBID}}
+  <!-- Reuses the same partial/endpoint as the dashboard's per-row missing
+       expando (GET /missing/list?playlistId=) so a user editing a playlist
+       doesn't have to leave the page to see what's missing from it. -->
+  <details class="editor-missing">
+    <summary>Missing Tracks</summary>
+    <div class="missing-tracks-scope" hx-get="/missing/list?playlistId={{.DBID}}" hx-trigger="toggle from:closest details once" hx-swap="innerHTML"></div>
+  </details>
+  {{end}}
 
   <!-- Add tracks: PlaylistEditor.tsx's library search box (GET /api/search),
        ported as an htmx search-as-you-navigate form - hx-get re-fetches

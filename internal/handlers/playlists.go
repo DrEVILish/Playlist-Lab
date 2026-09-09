@@ -200,6 +200,7 @@ func (h *PlaylistsHandler) index(w http.ResponseWriter, r *http.Request) {
 		LastRun:     q.Get("fLastRun"),
 		AddedAfter:  q.Get("fAddedAfter"),
 		AddedBefore: q.Get("fAddedBefore"),
+		Attention:   q.Get("fAttention"),
 	}
 	// Built from the unfiltered set: filtering by a source must not collapse
 	// the dropdown down to only the source already chosen.
@@ -278,12 +279,13 @@ type rowFilter struct {
 	LastRun     string // "success" | "failed" | "never"; "" = any
 	AddedAfter  string // yyyy-mm-dd, inclusive; "" = unbounded
 	AddedBefore string // yyyy-mm-dd, inclusive; "" = unbounded
+	Attention   string // "1" = only rows with NeedsAttention; "" = any
 }
 
 func (f rowFilter) Active() bool {
 	return f.Search != "" || f.Source != "" || f.Missing != "" || f.Schedule != "" ||
 		f.TracksMin != "" || f.TracksMax != "" || f.DurationMin != "" || f.DurationMax != "" ||
-		f.NextRun != "" || f.LastRun != "" || f.AddedAfter != "" || f.AddedBefore != ""
+		f.NextRun != "" || f.LastRun != "" || f.AddedAfter != "" || f.AddedBefore != "" || f.Attention != ""
 }
 
 func filterRows(rows []playlistRow, f rowFilter) []playlistRow {
@@ -297,6 +299,9 @@ func filterRows(rows []playlistRow, f rowFilter) []playlistRow {
 			continue
 		}
 		if f.Source != "" && row.Source != f.Source {
+			continue
+		}
+		if f.Attention == "1" && !row.NeedsAttention {
 			continue
 		}
 		switch f.Missing {
@@ -529,10 +534,16 @@ func (h *PlaylistsHandler) editor(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var dbID int64
+	if p, err := db.GetPlaylistByPlexID(h.DB, user.ID, plexID); err == nil && p != nil {
+		dbID = p.ID
+	}
+
 	h.Tmpl.RenderPage(w, r, "editor", map[string]any{
 		"PlexID": plexID,
 		"Name":   name,
 		"Tracks": toTrackRows(tracks),
+		"DBID":   dbID,
 	})
 }
 
