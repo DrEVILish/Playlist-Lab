@@ -167,6 +167,11 @@
   font-weight: 400;
   white-space: nowrap;
   flex-shrink: 0;
+  /* Settings' "Plex Server"/"Admin" tabs are real <a> (they navigate away)
+     while every other tab here is a <label> - a bare <a> carries the
+     browser's default underline, which no <label> ever would, so those
+     two looked broken/half-styled next to their siblings. */
+  text-decoration: none;
 }
 
 .admin-tab-input:checked + .admin-tab {

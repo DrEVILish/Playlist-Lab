@@ -61,7 +61,14 @@
           {{range .Users}}
           <tr>
             <td>{{.PlexUsername}}</td>
-            <td>{{if .LastLogin}}{{dateFromUnixMilli .LastLogin}}{{else}}never{{end}}</td>
+            <!-- ge .LastLogin 946684800000: some users cut over from the old
+                 Node server with last_login stored in *seconds*, not
+                 milliseconds - dateFromUnixMilli on one of those renders a
+                 nonsense "Jan 1970" date instead of throwing, so a plain
+                 truthiness check doesn't catch it. Treat anything before
+                 year 2000 in ms as bad data and fall back to "never"
+                 rather than guess at re-deriving the real value. -->
+            <td>{{if ge .LastLogin 946684800000}}{{dateFromUnixMilli .LastLogin}}{{else}}never{{end}}</td>
             <td>{{if .IsEnabled}}Enabled{{else}}Disabled{{end}}</td>
             <td>{{if .IsAdmin}}Admin{{else}}-{{end}}</td>
             <td>{{if .HasServer}}Configured{{else}}-{{end}}</td>
