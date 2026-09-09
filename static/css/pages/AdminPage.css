@@ -127,30 +127,29 @@
   -webkit-overflow-scrolling: touch;
 }
 
-@media (max-width: 768px) {
-  /* 8 tabs (Statistics/Users/Missing Tracks/Schedules/Deemix/Lidarr/
-     YouTube/Logs) never fit a phone-width screen - overflow-x:auto above
-     already makes the bar swipeable, but with no visual cue at all it
-     just looks like "Missing Tracks" is the last tab, cut off mid-word,
-     rather than a strip with more to scroll to. A mask-image fade was
-     tried first and abandoned - it rendered the whole bar blank in
-     testing rather than just fading its edges, not worth chasing further
-     for a purely cosmetic hint. position:sticky on a pseudo-element
-     pinned to the scroll container's own right edge is the standard
-     "scroll shadow" technique and doesn't have that failure mode. */
-  .admin-tabbar { position: relative; }
-  .admin-tabbar::after {
-    content: '';
-    position: sticky;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    width: 24px;
-    flex-shrink: 0;
-    margin-left: -24px;
-    background: linear-gradient(to right, transparent, var(--background));
-    pointer-events: none;
-  }
+/* Settings+Admin merged into one bar now runs to ~15 tabs, which overflows
+   even a wide desktop window, not just phone width - so this cue used to be
+   mobile-only but now needs to apply everywhere overflow-x:auto above can
+   kick in. With no visual cue at all it just looks like the last visible
+   tab (e.g. "Users") is the final one, cut off mid-strip, rather than a
+   strip with more to scroll to. A mask-image fade was tried first and
+   abandoned - it rendered the whole bar blank in testing rather than just
+   fading its edges, not worth chasing further for a purely cosmetic hint.
+   position:sticky on a pseudo-element pinned to the scroll container's own
+   right edge is the standard "scroll shadow" technique and doesn't have
+   that failure mode. */
+.admin-tabbar { position: relative; }
+.admin-tabbar::after {
+  content: '';
+  position: sticky;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 24px;
+  flex-shrink: 0;
+  margin-left: -24px;
+  background: linear-gradient(to right, transparent, var(--background));
+  pointer-events: none;
 }
 
 .admin-tab-input {
