@@ -219,13 +219,20 @@ func (h *SettingsHandler) saveAI(w http.ResponseWriter, r *http.Request) {
 	if provider != "gemini" && provider != "grok" {
 		provider = "gemini"
 	}
-	if err := db.SaveGeminiAPIKey(h.DB, user.ID, r.FormValue("geminiApiKey")); err != nil {
-		h.renderAlert(w, "", err)
-		return
+	// The form never echoes a saved key back (templates/settings.html), so a
+	// blank submission means "unchanged", not "clear the key" - only write
+	// a key when the field actually carries a new value.
+	if key := r.FormValue("geminiApiKey"); key != "" {
+		if err := db.SaveGeminiAPIKey(h.DB, user.ID, key); err != nil {
+			h.renderAlert(w, "", err)
+			return
+		}
 	}
-	if err := db.SaveGrokAPIKey(h.DB, user.ID, r.FormValue("grokApiKey")); err != nil {
-		h.renderAlert(w, "", err)
-		return
+	if key := r.FormValue("grokApiKey"); key != "" {
+		if err := db.SaveGrokAPIKey(h.DB, user.ID, key); err != nil {
+			h.renderAlert(w, "", err)
+			return
+		}
 	}
 	err := db.SaveAIProvider(h.DB, user.ID, provider)
 	h.renderAlert(w, "AI settings saved", err)

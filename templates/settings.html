@@ -43,9 +43,10 @@
           <div class="settings-field-group">
             <div class="settings-field">
               <label class="settings-label">Minimum match score
-                <span class="settings-value-badge">{{.Matching.MinMatchScore}}</span>
+                <span class="settings-value-badge" id="match-score-badge">{{.Matching.MinMatchScore}}</span>
               </label>
-              <input type="range" name="minMatchScore" min="0" max="1" step="0.05" value="{{.Matching.MinMatchScore}}" class="settings-range">
+              <input type="range" name="minMatchScore" min="0" max="1" step="0.05" value="{{.Matching.MinMatchScore}}" class="settings-range"
+                oninput="document.getElementById('match-score-badge').textContent = this.value">
               <div class="settings-range-labels"><span>Loose</span><span>Strict</span></div>
             </div>
             <div class="settings-field">
@@ -119,13 +120,18 @@
                 <option value="grok" {{if eq .AI.Provider "grok"}}selected{{end}}>Grok</option>
               </select>
             </div>
+            <!-- Never echoes the saved key back into the page (view-source
+                 on a type="password" field still shows its value= in plain
+                 text) - an empty field with a "already set" placeholder
+                 instead, and saveAI leaves the stored key untouched when
+                 this is submitted blank, matching the convention. -->
             <div class="settings-field">
               <label class="settings-label">Gemini API Key</label>
-              <input type="password" class="settings-input" name="geminiApiKey" value="{{.AI.GeminiAPIKey}}" placeholder="Enter your Gemini API key">
+              <input type="password" class="settings-input" name="geminiApiKey" placeholder="{{if .AI.GeminiAPIKey}}Key saved - leave blank to keep{{else}}Enter your Gemini API key{{end}}">
             </div>
             <div class="settings-field">
               <label class="settings-label">Grok API Key</label>
-              <input type="password" class="settings-input" name="grokApiKey" value="{{.AI.GrokAPIKey}}" placeholder="Enter your Grok API key">
+              <input type="password" class="settings-input" name="grokApiKey" placeholder="{{if .AI.GrokAPIKey}}Key saved - leave blank to keep{{else}}Enter your Grok API key{{end}}">
             </div>
           </div>
           <div class="settings-actions">

@@ -1,8 +1,4 @@
-﻿.settings-page.page-container {
-  padding: 0.875rem;
-}
-
-.settings-welcome {
+﻿.settings-welcome {
   padding: 1rem 1.25rem;
   background-color: rgba(91, 155, 213, 0.06);
   border-left: 3px solid var(--primary-color);
@@ -68,7 +64,13 @@
 .settings-section-header a { color: var(--primary-color); text-decoration: none; }
 .settings-section-header a:hover { text-decoration: underline; }
 
-.settings-field-group { display: flex; flex-direction: column; gap: 1.25rem; margin-bottom: 1.5rem; }
+/* Matching's slider and the AI Features key inputs otherwise stretch to
+   the full width of a wide desktop window (1300px+) - unreadable line
+   length and, worse, a match-score slider whose 0-to-1 range is spread
+   across that whole width makes fine adjustment nearly impossible. The
+   Mixes tab's card grid (.settings-mix-grid) already wraps at a sane
+   width per-card, so it's intentionally left unconstrained here. */
+.settings-field-group { display: flex; flex-direction: column; gap: 1.25rem; margin-bottom: 1.5rem; max-width: 640px; }
 .settings-field { display: flex; flex-direction: column; gap: 0.5rem; }
 
 .settings-label {
