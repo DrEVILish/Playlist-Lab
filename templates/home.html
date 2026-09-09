@@ -281,20 +281,47 @@
         } catch (e) {}
         applyOrder(order);
 
+        function clearDropMarkers() {
+          Array.from(headerRow.cells).forEach(function (c) {
+            c.classList.remove("drop-before", "drop-after");
+          });
+        }
+
         var dragSrc = null;
         Array.from(headerRow.cells).forEach(function (th) {
           if (th.classList.contains("col-select") || th.classList.contains("col-actions")) return;
           th.draggable = true;
           th.addEventListener("dragstart", function (e) {
             dragSrc = th;
+            th.classList.add("dragging");
             e.dataTransfer.effectAllowed = "move";
           });
-          th.addEventListener("dragover", function (e) { e.preventDefault(); });
-          th.addEventListener("drop", function (e) {
+          th.addEventListener("dragend", function () {
+            th.classList.remove("dragging");
+            clearDropMarkers();
+          });
+          // Shows which side of this header the dragged column will land on
+          // (based on cursor position within it), so the drop target is
+          // visible before the user releases rather than only after.
+          th.addEventListener("dragover", function (e) {
             e.preventDefault();
             if (!dragSrc || dragSrc === th) return;
+            clearDropMarkers();
+            var before = e.clientX - th.getBoundingClientRect().left < th.offsetWidth / 2;
+            th.classList.add(before ? "drop-before" : "drop-after");
+          });
+          th.addEventListener("dragleave", function () {
+            th.classList.remove("drop-before", "drop-after");
+          });
+          th.addEventListener("drop", function (e) {
+            e.preventDefault();
+            clearDropMarkers();
+            if (!dragSrc || dragSrc === th) return;
+            var before = e.clientX - th.getBoundingClientRect().left < th.offsetWidth / 2;
             var from = Array.from(headerRow.cells).indexOf(dragSrc);
             var to = Array.from(headerRow.cells).indexOf(th);
+            if (!before) to += 1;
+            if (from < to) to -= 1;
             order.splice(to, 0, order.splice(from, 1)[0]);
             applyOrder(order);
             localStorage.setItem(storageKey, JSON.stringify(order));

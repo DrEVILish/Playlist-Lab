@@ -604,6 +604,20 @@
   cursor: grab;
 }
 
+.playlists-table thead th.dragging {
+  opacity: 0.4;
+}
+
+/* Drop-position feedback: a colored bar on whichever side of the hovered
+   header the dragged column will land on, shown while dragging over it. */
+.playlists-table thead th.drop-before {
+  box-shadow: inset 3px 0 0 0 var(--primary-color);
+}
+
+.playlists-table thead th.drop-after {
+  box-shadow: inset -3px 0 0 0 var(--primary-color);
+}
+
 .missing-row {
   display: none;
 }
