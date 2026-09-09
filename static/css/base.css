@@ -122,6 +122,23 @@ p {
 }
 
 /* Buttons */
+/* Styled wrapper for a native <input type="file">: the OS-drawn "Choose
+   File" button doesn't take a background-color, so it stays whatever gray
+   the browser and OS default to no matter what theme the rest of the page
+   uses - this hides the real input and lets a normal .btn label trigger it
+   instead. Shared here (not per-page) since import.html and
+   backup_restore.html both need it. */
+.file-input-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.file-input {
+  display: none;
+}
+
 .btn {
   padding: 0.625rem 1.25rem;
   border: none;

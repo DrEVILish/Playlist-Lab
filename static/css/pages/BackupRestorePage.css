@@ -94,17 +94,6 @@
   width: 100%;
 }
 
-.file-input-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-}
-
-.file-input {
-  display: none;
-}
-
 .status-message {
   padding: 1rem;
   margin-bottom: 1rem;

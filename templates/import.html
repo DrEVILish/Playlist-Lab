@@ -72,7 +72,10 @@
     <form hx-post="/import/file" hx-target="#notifications" hx-swap="innerHTML" hx-encoding="multipart/form-data">
       <div class="form-section">
         <label class="form-label" for="import-file">Playlist file (M3U, M3U8, PLS, XSPF, CSV, or TXT)</label>
-        <input class="form-input" type="file" id="import-file" name="file" accept=".m3u,.m3u8,.pls,.xspf,.csv,.txt" required>
+        <label class="btn btn-secondary file-input-label">
+          Choose File
+          <input class="file-input" type="file" id="import-file" name="file" accept=".m3u,.m3u8,.pls,.xspf,.csv,.txt" required>
+        </label>
       </div>
       <div class="form-section">
         <label class="form-label" for="import-file-name">Playlist name (optional)</label>
