@@ -46,26 +46,26 @@
     <h2>User Management</h2>
     <p class="settings-hint">Plex Home members are auto-approved. Other users need manual approval.</p>
     <div class="table-responsive">
-      <table style="width:100%; border-collapse: collapse;">
+      <table class="admin-users-table">
         <thead>
           <tr>
-            <th style="text-align:left; padding:0.5rem;">Username</th>
-            <th style="text-align:left; padding:0.5rem;">Last Login</th>
-            <th style="text-align:left; padding:0.5rem;">Status</th>
-            <th style="text-align:left; padding:0.5rem;">Admin</th>
-            <th style="text-align:left; padding:0.5rem;">Server</th>
-            <th style="text-align:left; padding:0.5rem;">Actions</th>
+            <th>Username</th>
+            <th>Last Login</th>
+            <th>Status</th>
+            <th>Admin</th>
+            <th>Server</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {{range .Users}}
-          <tr style="border-top: 1px solid var(--border);">
-            <td style="padding:0.5rem;">{{.PlexUsername}}</td>
-            <td style="padding:0.5rem;">{{if .LastLogin}}{{dateFromUnixMilli .LastLogin}}{{else}}never{{end}}</td>
-            <td style="padding:0.5rem;">{{if .IsEnabled}}Enabled{{else}}Disabled{{end}}</td>
-            <td style="padding:0.5rem;">{{if .IsAdmin}}Admin{{else}}-{{end}}</td>
-            <td style="padding:0.5rem;">{{if .HasServer}}Configured{{else}}-{{end}}</td>
-            <td style="padding:0.5rem; display:flex; gap:0.4rem; flex-wrap:wrap;">
+          <tr>
+            <td>{{.PlexUsername}}</td>
+            <td>{{if .LastLogin}}{{dateFromUnixMilli .LastLogin}}{{else}}never{{end}}</td>
+            <td>{{if .IsEnabled}}Enabled{{else}}Disabled{{end}}</td>
+            <td>{{if .IsAdmin}}Admin{{else}}-{{end}}</td>
+            <td>{{if .HasServer}}Configured{{else}}-{{end}}</td>
+            <td class="admin-users-actions">
               {{if .IsEnabled}}
               <button class="btn btn-secondary btn-sm" hx-post="/admin/users/{{.ID}}/disable" hx-target="body" hx-swap="outerHTML">Disable</button>
               {{else}}
@@ -76,7 +76,7 @@
               {{else}}
               <button class="btn btn-secondary btn-sm" hx-post="/admin/users/{{.ID}}/promote" hx-target="body" hx-swap="outerHTML">Make Admin</button>
               {{end}}
-              <button class="btn btn-secondary btn-sm" style="color:var(--error)" hx-post="/admin/users/{{.ID}}/delete" hx-target="body" hx-swap="outerHTML" hx-confirm="Delete this user and all their data? This can't be undone.">Delete</button>
+              <button class="btn btn-secondary btn-sm admin-users-delete" hx-post="/admin/users/{{.ID}}/delete" hx-target="body" hx-swap="outerHTML" hx-confirm="Delete this user and all their data? This can't be undone.">Delete</button>
             </td>
           </tr>
           {{end}}

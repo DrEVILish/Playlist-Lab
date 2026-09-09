@@ -301,6 +301,31 @@
   overflow-x: auto;
 }
 
+.admin-users-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-users-table th,
+.admin-users-table td {
+  text-align: left;
+  padding: 0.5rem;
+}
+
+.admin-users-table tbody tr {
+  border-top: 1px solid var(--border-color);
+}
+
+.admin-users-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.admin-users-delete {
+  color: var(--error);
+}
+
 .admin-schedules-subheading {
   margin: 1.5rem 0 0.75rem;
 }
