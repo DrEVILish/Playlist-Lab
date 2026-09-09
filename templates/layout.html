@@ -245,6 +245,40 @@
        supplies every behaviour beyond that, so the fragment needs no
        close/focus/keyboard wiring of its own. -->
   <div id="modal-root"></div>
+
+  <!-- Themed replacement for the browser's native confirm() popup that
+       hx-confirm triggers by default - every hx-confirm="..." attribute in
+       the app (Delete user, Deemix All, Remove Duplicates, etc.) already
+       works unmodified; htmx just asks this dialog for the yes/no instead
+       of window.confirm, so every one of those call sites gets the app's
+       own dark theme instead of an OS-chrome popup for free. -->
+  <dialog id="confirm-dialog" class="confirm-dialog">
+    <p id="confirm-dialog-question"></p>
+    <div class="confirm-dialog-actions">
+      <button type="button" class="btn btn-secondary" id="confirm-dialog-cancel">Cancel</button>
+      <button type="button" class="btn btn-primary" id="confirm-dialog-ok">OK</button>
+    </div>
+  </dialog>
+  <script>
+    (function () {
+      var dialog = document.getElementById('confirm-dialog');
+      var question = document.getElementById('confirm-dialog-question');
+      document.body.addEventListener('htmx:confirm', function (e) {
+        if (!e.detail.question) return;
+        e.preventDefault();
+        question.textContent = e.detail.question;
+        dialog.showModal();
+        function cleanup() {
+          document.getElementById('confirm-dialog-ok').removeEventListener('click', onOk);
+          document.getElementById('confirm-dialog-cancel').removeEventListener('click', onCancel);
+        }
+        function onOk() { cleanup(); dialog.close(); e.detail.issueRequest(true); }
+        function onCancel() { cleanup(); dialog.close(); }
+        document.getElementById('confirm-dialog-ok').addEventListener('click', onOk);
+        document.getElementById('confirm-dialog-cancel').addEventListener('click', onCancel);
+      });
+    })();
+  </script>
   <script>
     // The behaviour Modal.tsx used to own, applied once here to whatever is
     // currently in #modal-root instead of being re-implemented per partial:
