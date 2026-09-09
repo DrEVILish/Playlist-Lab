@@ -31,74 +31,24 @@
   color: var(--success);
 }
 
-.settings-layout { display: flex; gap: 1.5rem; align-items: flex-start; }
-
-.settings-nav {
-  flex-shrink: 0;
-  width: 200px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.settings-nav-item {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 0.75rem 1rem;
-  background: none;
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.15s;
-  color: var(--text-primary);
-  /* These are <a> elements (jumping to an #anchor further down the page,
-     or a real page for Plex Server/Admin), not <button>s - color alone
-     doesn't stop a browser from also drawing its default link underline,
-     which made every nav item look like a plain hyperlink list instead of
-     the sidebar-nav chips the hover/active background rules above are
-     clearly meant to style. */
-  text-decoration: none;
-}
-
-.settings-nav-item:hover { background-color: var(--surface-hover); }
-
-.settings-nav-item--active,
-/* .settings-nav-item--active was never applied by anything (a plain <a>
-   anchor list has no notion of "current section") - the actual active
-   state below reuses its exact look via the checkbox-hack :checked+label
-   sibling selector now that each section-jump item is a real tab. */
-.settings-tab-input:checked + .settings-nav-item {
-  background-color: rgba(91, 155, 213, 0.1);
-}
-
-.settings-nav-item--active .settings-nav-label,
-.settings-tab-input:checked + .settings-nav-item .settings-nav-label {
-  color: var(--primary-color);
-}
-
 /* Tab wiring: only the section matching the checked radio renders, so
    Settings is one screen-height section at a time instead of a single
    page with every section stacked (Matching/Mixes/AI/Connected Services/
    Library Scan/Server Info back to back) that you scroll through
-   regardless of which one you came here for. */
-.settings-tab-input { position: absolute; opacity: 0; pointer-events: none; }
+   regardless of which one you came here for. Uses admin.html's own
+   .admin-tabbar/.admin-tab-input classes (AdminPage.css), so the two
+   admin-facing pages share one tab look instead of two. */
 .settings-section { display: none; }
-.settings-nav:has(#settings-tab-matching:checked) ~ .settings-content #matching,
-.settings-nav:has(#settings-tab-mixes:checked) ~ .settings-content #mixes,
-.settings-nav:has(#settings-tab-ai:checked) ~ .settings-content #ai,
-.settings-nav:has(#settings-tab-services:checked) ~ .settings-content #connected-services,
-.settings-nav:has(#settings-tab-scan:checked) ~ .settings-content #library-scan,
-.settings-nav:has(#settings-tab-info:checked) ~ .settings-content #server-info {
+.admin-tabbar:has(#settings-tab-matching:checked) ~ .settings-content #matching,
+.admin-tabbar:has(#settings-tab-mixes:checked) ~ .settings-content #mixes,
+.admin-tabbar:has(#settings-tab-ai:checked) ~ .settings-content #ai,
+.admin-tabbar:has(#settings-tab-services:checked) ~ .settings-content #connected-services,
+.admin-tabbar:has(#settings-tab-scan:checked) ~ .settings-content #library-scan,
+.admin-tabbar:has(#settings-tab-info:checked) ~ .settings-content #server-info {
   display: block;
 }
 
-.settings-nav-label { font-size: 0.9rem; font-weight: 500; }
-.settings-nav-desc { font-size: 0.75rem; color: var(--text-secondary); }
-
-.settings-content { flex: 1; min-width: 0; }
+.settings-content { min-width: 0; }
 
 .settings-section {
   background: var(--gradient-card);
@@ -273,17 +223,6 @@
 .settings-slider-label { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: var(--text-primary); }
 
 @media (max-width: 768px) {
-  /* Desktop sets align-items: flex-start for the side-by-side sidebar +
-     content layout. In the column layout below, flex-start makes every
-     child (including settings-content, which holds the whole tab body)
-     size to its own content's max-content width instead of stretching to
-     the column - so a single unwrapped long string (a username, a track
-     title) silently widens the entire settings/admin content past the
-     viewport instead of wrapping. */
-  .settings-layout { flex-direction: column; align-items: stretch; }
-  .settings-nav { width: 100%; flex-direction: row; flex-wrap: wrap; gap: 4px; }
-  .settings-nav-item { flex: 1; min-width: 120px; }
-  .settings-nav-desc { display: none; }
   .settings-mix-grid { grid-template-columns: 1fr; }
   .settings-actions { flex-wrap: wrap; }
   .settings-section { padding: 1.1rem; }
