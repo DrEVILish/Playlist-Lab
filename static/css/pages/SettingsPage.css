@@ -32,25 +32,48 @@
    page with every section stacked (Matching/Mixes/AI/Connected Services/
    Library Scan/Server Info back to back) that you scroll through
    regardless of which one you came here for. Uses admin.html's own
-   .admin-tabbar/.admin-tab-input classes (AdminPage.css), so the two
-   admin-facing pages share one tab look instead of two. */
+   .admin-tabbar/.admin-tab-input classes (AdminPage.css) - Settings and
+   Admin used to be two separately-navigated pages with two different tab
+   bars; every former /admin tab now lives in this same bar/radio group
+   (settings.html, admin-only sections gated server-side by .IsAdmin) so
+   there's truly only one kind of tab, not two pages pretending to match. */
 .settings-section { display: none; }
 .admin-tabbar:has(#settings-tab-matching:checked) ~ .settings-content #matching,
 .admin-tabbar:has(#settings-tab-mixes:checked) ~ .settings-content #mixes,
 .admin-tabbar:has(#settings-tab-ai:checked) ~ .settings-content #ai,
 .admin-tabbar:has(#settings-tab-services:checked) ~ .settings-content #connected-services,
 .admin-tabbar:has(#settings-tab-scan:checked) ~ .settings-content #library-scan,
-.admin-tabbar:has(#settings-tab-info:checked) ~ .settings-content #server-info {
+.admin-tabbar:has(#settings-tab-info:checked) ~ .settings-content #server-info,
+.admin-tabbar:has(#settings-tab-admin-stats:checked) ~ .settings-content #admin-stats,
+.admin-tabbar:has(#settings-tab-admin-users:checked) ~ .settings-content #admin-users,
+.admin-tabbar:has(#settings-tab-admin-missing:checked) ~ .settings-content #admin-missing,
+.admin-tabbar:has(#settings-tab-admin-jobs:checked) ~ .settings-content #admin-jobs,
+.admin-tabbar:has(#settings-tab-admin-deemix:checked) ~ .settings-content #admin-deemix,
+.admin-tabbar:has(#settings-tab-admin-lidarr:checked) ~ .settings-content #admin-lidarr,
+.admin-tabbar:has(#settings-tab-admin-youtube:checked) ~ .settings-content #admin-youtube,
+.admin-tabbar:has(#settings-tab-admin-logs:checked) ~ .settings-content #admin-logs {
   display: block;
 }
 
 .settings-content { min-width: 0; }
 
+/* Every tab used to share one full-bleed-width card regardless of what it
+   held, so a simple form (Matching, AI Features, Server Info, a single
+   Deemix/Lidarr/YouTube config form) left most of the card empty on any
+   normal desktop window while only a table/grid tab (Mixes) actually used
+   the width. Cap the card to the fields' own width by default; tabs that
+   hold something that genuinely wants the space (a grid, a table, a log
+   viewer) opt back out via .settings-section--wide. */
 .settings-section {
   background: var(--gradient-card);
   border-radius: var(--radius-lg);
   padding: 1.75rem;
   border: 1px solid var(--border);
+  max-width: 900px;
+}
+
+.settings-section--wide {
+  max-width: none;
 }
 
 .settings-section-header {

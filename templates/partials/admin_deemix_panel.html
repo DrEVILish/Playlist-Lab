@@ -1,0 +1,20 @@
+{{define "partials/admin_deemix_panel.html"}}
+<form hx-post="/admin/deemix/arl" hx-target="#settings-panel-admin-deemix" hx-swap="innerHTML">
+  <div class="settings-field-group">
+    <div class="settings-field">
+      <label class="settings-label">Deezer ARL</label>
+      <input type="password" name="arl" class="settings-input" value="{{.DeemixArl}}" placeholder="paste ARL token here" autocomplete="off">
+    </div>
+  </div>
+  {{if .Error}}<div class="settings-alert settings-alert--error">{{.Error}}</div>{{end}}
+  {{if .ArlStatus}}
+  <div class="settings-alert settings-alert--{{if .ArlStatus.OK}}success{{else}}error{{end}}">
+    {{if .ArlStatus.OK}}ARL working - last checked {{relativeTime .ArlStatus.At}}.{{else}}ARL not working: {{.ArlStatus.Error}} (checked {{relativeTime .ArlStatus.At}}){{end}}
+  </div>
+  {{end}}
+  <div class="settings-actions">
+    <button type="submit" class="btn btn-primary">Save ARL</button>
+    <button type="submit" formaction="/admin/deemix/arl/check" class="btn btn-secondary">Test ARL</button>
+  </div>
+</form>
+{{end}}

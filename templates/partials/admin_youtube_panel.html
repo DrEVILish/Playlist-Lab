@@ -1,0 +1,25 @@
+{{define "partials/admin_youtube_panel.html"}}
+<form hx-post="/admin/youtube/config" hx-target="#settings-panel-admin-youtube" hx-swap="innerHTML">
+  <div class="settings-field-group">
+    <div class="settings-field">
+      <label class="settings-label">Client ID</label>
+      <input type="text" name="clientId" class="settings-input" value="{{.YouTubeClientID}}" placeholder="123456789-abc.apps.googleusercontent.com" autocomplete="off">
+    </div>
+    <div class="settings-field">
+      <label class="settings-label">Client Secret</label>
+      <input type="password" name="clientSecret" class="settings-input" value="{{.YouTubeClientSecret}}" autocomplete="off">
+    </div>
+    <div class="settings-field">
+      <label class="settings-label">Redirect URI</label>
+      <input type="text" name="redirectUri" class="settings-input" value="{{.YouTubeRedirectURI}}" placeholder="https://your-domain/cross-import/oauth/youtube/callback">
+    </div>
+  </div>
+  {{if .Error}}<div class="settings-alert settings-alert--error">{{.Error}}</div>{{end}}
+  <div class="settings-alert settings-alert--{{if .YouTubeConfigured}}success{{else}}error{{end}}">
+    {{if .YouTubeConfigured}}YouTube OAuth is configured.{{else}}YouTube OAuth is not configured - cross-import to YouTube and YouTube track matching will be unavailable until it is.{{end}}
+  </div>
+  <div class="settings-actions">
+    <button type="submit" class="btn btn-primary">Save YouTube Config</button>
+  </div>
+</form>
+{{end}}

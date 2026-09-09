@@ -123,7 +123,6 @@ func main() {
 		Secure: secure, Tmpl: tmpl,
 	})
 	handlers.RegisterServers(r, mw, &handlers.ServersHandler{DB: sqlDB, Plex: plexClient, Tmpl: tmpl})
-	handlers.RegisterSettings(r, mw, &handlers.SettingsHandler{DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl})
 	handlers.RegisterStatus(r, mw, &handlers.StatusHandler{DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl})
 	// Cover art is relayed through the server rather than linked directly -
 	// see internal/handlers/proxy.go for why.
@@ -239,6 +238,13 @@ func main() {
 		DB: sqlDB, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue,
 		Deemix: deemixService, Lidarr: lidarrService, YouTube: youtubeTarget,
 	})
+	// Settings' admin-only tabs (Statistics/Users/.../YouTube) are gated by
+	// .IsAdmin in settings.html, not by a separate page - see admin.go's
+	// package comment - but each one's actual content still lazy-loads
+	// from AdminHandler's own routes above (same hx-trigger="revealed"
+	// pattern the rest of this file already uses), so SettingsHandler
+	// itself needs no Deemix/Lidarr/YouTube handles of its own.
+	handlers.RegisterSettings(r, mw, &handlers.SettingsHandler{DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl})
 
 	// Scheduling (Phase 6f): playlist-refresh + mix-generation schedules,
 	// closing out the schedule-checker job deferred through Phase 4/5 (see

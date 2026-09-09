@@ -6,13 +6,13 @@
     <h1 class="page-title">Settings</h1>
   </div>
 
-  <!-- Horizontal underline tab bar, matching admin.html's pattern exactly
-       (same .admin-tabbar/.admin-tab classes, same native-radio +
-       CSS :has() wiring) rather than Settings' own left-sidebar look - the
-       two admin-facing pages having different tab conventions was flagged
-       as a real inconsistency. "Plex Server" and "Admin" stay real <a>
-       tabs since they navigate to a different page entirely, not a
-       section of this one; .admin-tab styles either element the same way. -->
+  <!-- Single tab bar, single radio group, for every "My Settings" tab plus
+       (only for an admin, appended after a visual divider) every former
+       /admin tab - having Settings and Admin as two separately-navigated
+       pages with their own tab bars was the actual complaint being fixed
+       here, not just a styling mismatch. "Plex Server" stays a real <a>
+       tab since it navigates to a different page entirely, not a section
+       of this one; .admin-tab styles it the same as every label-tab. -->
   <div class="admin-tabbar">
     <a href="/setup" class="admin-tab">Plex Server</a>
     <input type="radio" name="settingstab" id="settings-tab-matching" class="admin-tab-input" checked>
@@ -29,7 +29,27 @@
     {{end}}
     <input type="radio" name="settingstab" id="settings-tab-info" class="admin-tab-input">
     <label for="settings-tab-info" class="admin-tab">Server Info</label>
-    {{if .IsAdmin}}<a href="/admin" class="admin-tab">Admin</a>{{end}}
+
+    {{if .IsAdmin}}
+    <span class="admin-tabbar-divider" aria-hidden="true"></span>
+    <span class="admin-tabbar-group-label">Administration</span>
+    <input type="radio" name="settingstab" id="settings-tab-admin-stats" class="admin-tab-input">
+    <label for="settings-tab-admin-stats" class="admin-tab admin-tab--admin">Statistics</label>
+    <input type="radio" name="settingstab" id="settings-tab-admin-users" class="admin-tab-input">
+    <label for="settings-tab-admin-users" class="admin-tab admin-tab--admin">Users</label>
+    <input type="radio" name="settingstab" id="settings-tab-admin-missing" class="admin-tab-input">
+    <label for="settings-tab-admin-missing" class="admin-tab admin-tab--admin">Missing Tracks</label>
+    <input type="radio" name="settingstab" id="settings-tab-admin-jobs" class="admin-tab-input">
+    <label for="settings-tab-admin-jobs" class="admin-tab admin-tab--admin">Schedules</label>
+    <input type="radio" name="settingstab" id="settings-tab-admin-deemix" class="admin-tab-input">
+    <label for="settings-tab-admin-deemix" class="admin-tab admin-tab--admin">Deemix</label>
+    <input type="radio" name="settingstab" id="settings-tab-admin-lidarr" class="admin-tab-input">
+    <label for="settings-tab-admin-lidarr" class="admin-tab admin-tab--admin">Lidarr</label>
+    <input type="radio" name="settingstab" id="settings-tab-admin-youtube" class="admin-tab-input">
+    <label for="settings-tab-admin-youtube" class="admin-tab admin-tab--admin">YouTube</label>
+    <input type="radio" name="settingstab" id="settings-tab-admin-logs" class="admin-tab-input">
+    <label for="settings-tab-admin-logs" class="admin-tab admin-tab--admin">Logs</label>
+    {{end}}
   </div>
 
     <div class="settings-content">
@@ -67,7 +87,7 @@
         <div id="matching-result"></div>
       </section>
 
-      <section id="mixes" class="settings-section">
+      <section id="mixes" class="settings-section settings-section--wide">
         <div class="settings-section-header">
           <h2>Mixes</h2>
           <p>Tune how each mix type is generated.</p>
@@ -198,6 +218,89 @@
           <p class="settings-hint">Playlist Lab (Go rewrite)</p>
         </div>
       </section>
+
+      {{if .IsAdmin}}
+      <section id="admin-stats" class="settings-section settings-section--wide">
+        <div class="settings-section-header">
+          <h2>Statistics</h2>
+          <p>Usage across every user of this Playlist Lab instance.</p>
+        </div>
+        <div id="settings-panel-admin-stats" hx-get="/admin/stats" hx-trigger="revealed" hx-swap="innerHTML">
+          <p class="admin-deferred-note">Loading statistics...</p>
+        </div>
+      </section>
+
+      <section id="admin-users" class="settings-section settings-section--wide">
+        <div class="settings-section-header">
+          <h2>User Management</h2>
+          <p>Plex Home members are auto-approved. Other users need manual approval.</p>
+        </div>
+        <div id="settings-panel-admin-users" hx-get="/admin/users-list" hx-trigger="revealed" hx-swap="innerHTML">
+          <p class="admin-deferred-note">Loading users...</p>
+        </div>
+      </section>
+
+      <section id="admin-missing" class="settings-section settings-section--wide">
+        <div class="settings-section-header">
+          <h2>Most Common Missing Tracks</h2>
+          <p>Tracks that multiple users are missing from their libraries.</p>
+        </div>
+        <div id="settings-panel-admin-missing" hx-get="/admin/missing-list" hx-trigger="revealed" hx-swap="innerHTML">
+          <p class="admin-deferred-note">Loading missing tracks...</p>
+        </div>
+      </section>
+
+      <section id="admin-jobs" class="settings-section settings-section--wide">
+        <div class="settings-section-header">
+          <h2>Schedules</h2>
+        </div>
+        <div id="admin-schedules" hx-get="/admin/schedules" hx-trigger="revealed" hx-swap="outerHTML">
+          <p class="admin-deferred-note">Loading schedules...</p>
+        </div>
+      </section>
+
+      <section id="admin-deemix" class="settings-section">
+        <div class="settings-section-header">
+          <h2>Deemix</h2>
+          <p>The Deezer ARL token the local deemix-server logs in with to queue downloads for missing tracks. Get it from a browser logged into deezer.com: DevTools &rarr; Application/Storage &rarr; Cookies &rarr; <code>arl</code>.</p>
+        </div>
+        <div id="settings-panel-admin-deemix" hx-get="/admin/deemix" hx-trigger="revealed" hx-swap="innerHTML">
+          <p class="admin-deferred-note">Loading...</p>
+        </div>
+      </section>
+
+      <section id="admin-lidarr" class="settings-section">
+        <div class="settings-section-header">
+          <h2>Lidarr</h2>
+          <p>A second missing-track acquisition path alongside Deemix. Finds (or adds and monitors) a track's artist in Lidarr and triggers a search across Lidarr's own configured indexers - Lidarr's indexers and download client still need to be set up in Lidarr itself.</p>
+        </div>
+        <div id="settings-panel-admin-lidarr" hx-get="/admin/lidarr" hx-trigger="revealed" hx-swap="innerHTML">
+          <p class="admin-deferred-note">Loading...</p>
+        </div>
+      </section>
+
+      <section id="admin-youtube" class="settings-section">
+        <div class="settings-section-header">
+          <h2>YouTube</h2>
+          <p>Google OAuth credentials used for the "YouTube" cross-import target (playlists created on a user's YouTube account) and for matching against YouTube-hosted tracks. Create an OAuth client under APIs &amp; Services &rarr; Credentials in <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a>, enabling the YouTube Data API v3, and add the redirect URI below to it as an authorized redirect URI.</p>
+        </div>
+        <div id="settings-panel-admin-youtube" hx-get="/admin/youtube" hx-trigger="revealed" hx-swap="innerHTML">
+          <p class="admin-deferred-note">Loading...</p>
+        </div>
+      </section>
+
+      <section id="admin-logs" class="settings-section settings-section--wide">
+        <div class="settings-section-header">
+          <h2>Logs</h2>
+        </div>
+        <!-- Loaded on first reveal rather than with the page: reading and
+             parsing up to 1000 log lines is real work, and Logs is not the
+             tab anyone lands on first. -->
+        <div id="admin-logs" hx-get="/admin/logs" hx-trigger="revealed" hx-swap="outerHTML">
+          <p class="admin-deferred-note">Loading logs...</p>
+        </div>
+      </section>
+      {{end}}
 
     </div>
 </div>

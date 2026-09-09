@@ -185,19 +185,40 @@
   outline-offset: 2px;
 }
 
-.admin-panel {
-  display: none;
+/* Settings merges every former /admin tab into this same bar (see
+   SettingsPage.css's tab-wiring comment) - a vertical divider plus a
+   small caps label marks where "my settings" ends and "administration"
+   begins, and the admin tabs themselves default to a dimmer, muted color
+   so a long admin tab list doesn't visually compete with the personal
+   tabs every user sees. The :checked override below restores full color
+   the same way the base rule above already does for every other tab. */
+.admin-tabbar-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border-color);
+  margin: 0 0.25rem;
+  flex-shrink: 0;
 }
 
-.admin-tabbar:has(#admin-tab-stats:checked) ~ #admin-panel-stats,
-.admin-tabbar:has(#admin-tab-users:checked) ~ #admin-panel-users,
-.admin-tabbar:has(#admin-tab-missing:checked) ~ #admin-panel-missing,
-.admin-tabbar:has(#admin-tab-jobs:checked) ~ #admin-panel-jobs,
-.admin-tabbar:has(#admin-tab-deemix:checked) ~ #admin-panel-deemix,
-.admin-tabbar:has(#admin-tab-lidarr:checked) ~ #admin-panel-lidarr,
-.admin-tabbar:has(#admin-tab-youtube:checked) ~ #admin-panel-youtube,
-.admin-tabbar:has(#admin-tab-logs:checked) ~ #admin-panel-logs {
-  display: block;
+.admin-tabbar-group-label {
+  display: flex;
+  align-items: center;
+  padding: 0 0.25rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.admin-tab--admin {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+.admin-tab-input:checked + .admin-tab--admin {
+  opacity: 1;
 }
 
 .admin-stats-grid {

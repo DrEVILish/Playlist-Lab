@@ -7,6 +7,13 @@
 // natural follow-up pass each, wired through the existing
 // deemixService/lidarrService/scheduler already constructed in
 // cmd/server/main.go.
+//
+// There is no standalone /admin page - its tabs live inline on /settings
+// (settings.go/settings.html), shown only to admins, so "settings" isn't
+// split across two pages with two different tab-bar conventions. Every
+// handler here renders just its own panel's fragment (this file's
+// render*Panel helpers), never a full page, so a save/action can swap that
+// one panel back in without disturbing whichever tab the admin is on.
 package handlers
 
 import (
@@ -55,8 +62,12 @@ func RegisterAdmin(r chi.Router, mw *auth.Middleware, h *AdminHandler) {
 	r.Group(func(r chi.Router) {
 		r.Use(mw.RequireAuth)
 		r.Use(mw.RequireAdmin)
-		r.Get("/admin", h.page)
+		r.Get("/admin/stats", h.statsPanel)
+		r.Get("/admin/users-list", h.usersPanel)
 		r.Get("/admin/missing-list", h.missingList)
+		r.Get("/admin/deemix", h.deemixPanel)
+		r.Get("/admin/lidarr", h.lidarrPanel)
+		r.Get("/admin/youtube", h.youtubePanel)
 		r.Post("/admin/users/{userID}/enable", h.enableUser)
 		r.Post("/admin/users/{userID}/disable", h.disableUser)
 		r.Post("/admin/users/{userID}/promote", h.promoteUser)
@@ -71,33 +82,14 @@ func RegisterAdmin(r chi.Router, mw *auth.Middleware, h *AdminHandler) {
 	})
 }
 
-func (h *AdminHandler) page(w http.ResponseWriter, r *http.Request) {
-	h.render(w, r, "")
-}
-
-// missingList backs the Missing Tracks tab's lazy-loaded (hx-trigger=
-// "revealed") fragment - split out of the main page render so hundreds of
-// rows aren't built into every /admin load regardless of which tab is
-// active, same pattern Schedules/Logs already use in this file.
-func (h *AdminHandler) missingList(w http.ResponseWriter, r *http.Request) {
-	missingStats, _ := db.GetMissingTrackStats(h.DB)
-	h.Tmpl.RenderPartial(w, "partials/admin_missing.html", map[string]any{"MissingStats": missingStats})
-}
-
-// render loads the current stats/users list and re-renders the admin page,
-// optionally with an error banner from a just-failed action - every action
-// handler below funnels back through here so the users table it shows is
-// always freshly queried rather than patched in place.
-func (h *AdminHandler) render(w http.ResponseWriter, r *http.Request, errMsg string) {
-	user := auth.CurrentUser(r)
-
+// statsPanel backs the Statistics tab's lazy-loaded (hx-trigger="revealed")
+// fragment - see missingList's comment for why these all load on reveal
+// rather than with the page.
+func (h *AdminHandler) statsPanel(w http.ResponseWriter, r *http.Request) {
 	userCount, _ := db.GetUserCount(h.DB)
 	playlistCount, _ := db.GetPlaylistCount(h.DB)
 	missingCount, _ := db.GetMissingTrackCount(h.DB)
-	users, err := db.GetAllUsers(h.DB)
-	if err != nil && errMsg == "" {
-		errMsg = err.Error()
-	}
+	users, _ := db.GetAllUsers(h.DB)
 
 	thirtyDaysAgo := time.Now().AddDate(0, 0, -30).UnixMilli()
 	activeUsers := 0
@@ -107,22 +99,77 @@ func (h *AdminHandler) render(w http.ResponseWriter, r *http.Request, errMsg str
 		}
 	}
 
-	lidarrCfg := h.Lidarr.GetConfig()
-
-	h.Tmpl.RenderPage(w, r, "admin", map[string]any{
-		"User":  user,
-		"Error": errMsg,
+	h.Tmpl.RenderPartial(w, "partials/admin_stats.html", map[string]any{
 		"Stats": map[string]int{
 			"TotalUsers":     userCount,
 			"ActiveUsers":    activeUsers,
 			"TotalPlaylists": playlistCount,
 			"TotalMissing":   missingCount,
 		},
-		"Users":               users,
-		"DeemixArl":           h.Deemix.ARL(),
-		"ArlStatus":           h.Deemix.LastArlCheck(),
-		"LidarrURL":           lidarrCfg.URL,
-		"LidarrAPIKey":        lidarrCfg.APIKey,
+	})
+}
+
+// missingList backs the Missing Tracks tab's lazy-loaded (hx-trigger=
+// "revealed") fragment - split out of the main page render so hundreds of
+// rows aren't built into every /settings load regardless of which tab is
+// active, same pattern Schedules/Logs already use in this file.
+func (h *AdminHandler) missingList(w http.ResponseWriter, r *http.Request) {
+	missingStats, _ := db.GetMissingTrackStats(h.DB)
+	h.Tmpl.RenderPartial(w, "partials/admin_missing.html", map[string]any{"MissingStats": missingStats})
+}
+
+func (h *AdminHandler) usersPanel(w http.ResponseWriter, r *http.Request) {
+	h.renderUsersPanel(w, r, "")
+}
+
+// renderUsersPanel loads the current users list and renders just the Users
+// tab's own panel, optionally with an error banner from a just-failed
+// action - every user-management handler below funnels back through here
+// so the table is always freshly queried rather than patched in place, and
+// only that one panel swaps rather than the whole settings page.
+func (h *AdminHandler) renderUsersPanel(w http.ResponseWriter, r *http.Request, errMsg string) {
+	users, err := db.GetAllUsers(h.DB)
+	if err != nil && errMsg == "" {
+		errMsg = err.Error()
+	}
+	h.Tmpl.RenderPartial(w, "partials/admin_users_panel.html", map[string]any{
+		"Error": errMsg,
+		"Users": users,
+	})
+}
+
+func (h *AdminHandler) deemixPanel(w http.ResponseWriter, r *http.Request) {
+	h.renderDeemixPanel(w, r, "")
+}
+
+func (h *AdminHandler) renderDeemixPanel(w http.ResponseWriter, r *http.Request, errMsg string) {
+	h.Tmpl.RenderPartial(w, "partials/admin_deemix_panel.html", map[string]any{
+		"Error":     errMsg,
+		"DeemixArl": h.Deemix.ARL(),
+		"ArlStatus": h.Deemix.LastArlCheck(),
+	})
+}
+
+func (h *AdminHandler) lidarrPanel(w http.ResponseWriter, r *http.Request) {
+	h.renderLidarrPanel(w, r, "")
+}
+
+func (h *AdminHandler) renderLidarrPanel(w http.ResponseWriter, r *http.Request, errMsg string) {
+	lidarrCfg := h.Lidarr.GetConfig()
+	h.Tmpl.RenderPartial(w, "partials/admin_lidarr_panel.html", map[string]any{
+		"Error":        errMsg,
+		"LidarrURL":    lidarrCfg.URL,
+		"LidarrAPIKey": lidarrCfg.APIKey,
+	})
+}
+
+func (h *AdminHandler) youtubePanel(w http.ResponseWriter, r *http.Request) {
+	h.renderYouTubePanel(w, r, "")
+}
+
+func (h *AdminHandler) renderYouTubePanel(w http.ResponseWriter, r *http.Request, errMsg string) {
+	h.Tmpl.RenderPartial(w, "partials/admin_youtube_panel.html", map[string]any{
+		"Error":               errMsg,
 		"YouTubeClientID":     h.YouTube.OAuth.ClientID,
 		"YouTubeClientSecret": h.YouTube.OAuth.ClientSecret,
 		"YouTubeRedirectURI":  h.YouTube.OAuth.RedirectURI,
@@ -137,11 +184,11 @@ func userIDParam(r *http.Request) (int64, error) {
 func (h *AdminHandler) enableUser(w http.ResponseWriter, r *http.Request) {
 	userID, err := userIDParam(r)
 	if err != nil {
-		h.render(w, r, "Invalid user ID")
+		h.renderUsersPanel(w, r, "Invalid user ID")
 		return
 	}
 	if err := db.EnableUser(h.DB, userID); err != nil {
-		h.render(w, r, err.Error())
+		h.renderUsersPanel(w, r, err.Error())
 		return
 	}
 	// Auto-assign the admin's own server config if the user doesn't have one
@@ -153,71 +200,71 @@ func (h *AdminHandler) enableUser(w http.ResponseWriter, r *http.Request) {
 			_ = db.CopyServerConfig(h.DB, admin.ID, userID)
 		}
 	}
-	h.render(w, r, "")
+	h.renderUsersPanel(w, r, "")
 }
 
 func (h *AdminHandler) disableUser(w http.ResponseWriter, r *http.Request) {
 	userID, err := userIDParam(r)
 	if err != nil {
-		h.render(w, r, "Invalid user ID")
+		h.renderUsersPanel(w, r, "Invalid user ID")
 		return
 	}
 	if admin := auth.CurrentUser(r); admin != nil && admin.ID == userID {
-		h.render(w, r, "Cannot disable your own account")
+		h.renderUsersPanel(w, r, "Cannot disable your own account")
 		return
 	}
 	if err := db.DisableUser(h.DB, userID); err != nil {
-		h.render(w, r, err.Error())
+		h.renderUsersPanel(w, r, err.Error())
 		return
 	}
-	h.render(w, r, "")
+	h.renderUsersPanel(w, r, "")
 }
 
 func (h *AdminHandler) promoteUser(w http.ResponseWriter, r *http.Request) {
 	userID, err := userIDParam(r)
 	if err != nil {
-		h.render(w, r, "Invalid user ID")
+		h.renderUsersPanel(w, r, "Invalid user ID")
 		return
 	}
 	if err := db.AddAdmin(h.DB, userID); err != nil {
-		h.render(w, r, err.Error())
+		h.renderUsersPanel(w, r, err.Error())
 		return
 	}
-	h.render(w, r, "")
+	h.renderUsersPanel(w, r, "")
 }
 
 func (h *AdminHandler) demoteUser(w http.ResponseWriter, r *http.Request) {
 	userID, err := userIDParam(r)
 	if err != nil {
-		h.render(w, r, "Invalid user ID")
+		h.renderUsersPanel(w, r, "Invalid user ID")
 		return
 	}
 	if admin := auth.CurrentUser(r); admin != nil && admin.ID == userID {
-		h.render(w, r, "Cannot revoke your own admin access")
+		h.renderUsersPanel(w, r, "Cannot revoke your own admin access")
 		return
 	}
 	if err := db.RemoveAdmin(h.DB, userID); err != nil {
-		h.render(w, r, err.Error())
+		h.renderUsersPanel(w, r, err.Error())
 		return
 	}
-	h.render(w, r, "")
+	h.renderUsersPanel(w, r, "")
 }
 
 func (h *AdminHandler) deleteUser(w http.ResponseWriter, r *http.Request) {
 	userID, err := userIDParam(r)
 	if err != nil {
-		h.render(w, r, "Invalid user ID")
+		h.renderUsersPanel(w, r, "Invalid user ID")
 		return
 	}
 	if admin := auth.CurrentUser(r); admin != nil && admin.ID == userID {
-		h.render(w, r, "Cannot delete your own account")
+		h.renderUsersPanel(w, r, "Cannot delete your own account")
 		return
 	}
 	if err := db.DeleteUser(h.DB, userID); err != nil {
-		h.render(w, r, err.Error())
+		h.renderUsersPanel(w, r, err.Error())
 		return
 	}
-	h.render(w, r, "")
+	h.renderUsersPanel(w, r, "")
 }
 
 // queueDeemixForStat ports admin.ts's queueDeemixForStat: search deemix for
@@ -341,12 +388,12 @@ func (h *AdminHandler) saveDeemixArl(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	arl := strings.TrimSpace(r.FormValue("arl"))
 	if err := db.SetAdminConfig(h.DB, configKeyDeemixArl, arl); err != nil {
-		h.render(w, r, err.Error())
+		h.renderDeemixPanel(w, r, err.Error())
 		return
 	}
 	h.Deemix.SetARL(arl)
 	h.Deemix.CheckArl()
-	h.render(w, r, "")
+	h.renderDeemixPanel(w, r, "")
 }
 
 // checkDeemixArl ports POST /api/admin/deemix-arl/check: re-tests the
@@ -354,7 +401,7 @@ func (h *AdminHandler) saveDeemixArl(w http.ResponseWriter, r *http.Request) {
 // the daily job.
 func (h *AdminHandler) checkDeemixArl(w http.ResponseWriter, r *http.Request) {
 	h.Deemix.CheckArl()
-	h.render(w, r, "")
+	h.renderDeemixPanel(w, r, "")
 }
 
 // saveLidarrConfig ports PUT /api/admin/lidarr-config: persists the Lidarr
@@ -364,15 +411,15 @@ func (h *AdminHandler) saveLidarrConfig(w http.ResponseWriter, r *http.Request) 
 	lidarrURL := strings.TrimSuffix(strings.TrimSpace(r.FormValue("url")), "/")
 	apiKey := strings.TrimSpace(r.FormValue("apiKey"))
 	if err := db.SetAdminConfig(h.DB, configKeyLidarrURL, lidarrURL); err != nil {
-		h.render(w, r, err.Error())
+		h.renderLidarrPanel(w, r, err.Error())
 		return
 	}
 	if err := db.SetAdminConfig(h.DB, configKeyLidarrAPIKey, apiKey); err != nil {
-		h.render(w, r, err.Error())
+		h.renderLidarrPanel(w, r, err.Error())
 		return
 	}
 	h.Lidarr.SetConfig(lidarrURL, apiKey)
-	h.render(w, r, "")
+	h.renderLidarrPanel(w, r, "")
 }
 
 // saveYouTubeConfig ports routes/youtube-config.ts's POST /credentials:
@@ -387,29 +434,29 @@ func (h *AdminHandler) saveYouTubeConfig(w http.ResponseWriter, r *http.Request)
 	clientSecret := strings.TrimSpace(r.FormValue("clientSecret"))
 	redirectURI := strings.TrimSpace(r.FormValue("redirectUri"))
 	if clientID == "" || clientSecret == "" || redirectURI == "" {
-		h.render(w, r, "Missing required fields: Client ID, Client Secret, Redirect URI")
+		h.renderYouTubePanel(w, r, "Missing required fields: Client ID, Client Secret, Redirect URI")
 		return
 	}
 	if !strings.Contains(clientID, ".apps.googleusercontent.com") {
-		h.render(w, r, "Invalid Client ID format. Should end with .apps.googleusercontent.com")
+		h.renderYouTubePanel(w, r, "Invalid Client ID format. Should end with .apps.googleusercontent.com")
 		return
 	}
 	if !strings.Contains(redirectURI, "/cross-import/oauth/youtube/callback") {
-		h.render(w, r, "Invalid Redirect URI. Should end with /cross-import/oauth/youtube/callback")
+		h.renderYouTubePanel(w, r, "Invalid Redirect URI. Should end with /cross-import/oauth/youtube/callback")
 		return
 	}
 	if err := db.SetAdminConfig(h.DB, configKeyYouTubeClientID, clientID); err != nil {
-		h.render(w, r, err.Error())
+		h.renderYouTubePanel(w, r, err.Error())
 		return
 	}
 	if err := db.SetAdminConfig(h.DB, configKeyYouTubeSecret, clientSecret); err != nil {
-		h.render(w, r, err.Error())
+		h.renderYouTubePanel(w, r, err.Error())
 		return
 	}
 	if err := db.SetAdminConfig(h.DB, configKeyYouTubeRedirect, redirectURI); err != nil {
-		h.render(w, r, err.Error())
+		h.renderYouTubePanel(w, r, err.Error())
 		return
 	}
 	h.YouTube.OAuth = youtubetarget.OAuthConfig{ClientID: clientID, ClientSecret: clientSecret, RedirectURI: redirectURI}
-	h.render(w, r, "")
+	h.renderYouTubePanel(w, r, "")
 }
