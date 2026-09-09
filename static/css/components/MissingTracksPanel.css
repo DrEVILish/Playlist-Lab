@@ -30,6 +30,9 @@
 .missing-track-info {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .missing-track-actions {
@@ -89,20 +92,39 @@
 
 .missing-track-title {
   font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.missing-track-sub {
-  font-size: 0.75rem;
+.missing-track-sep {
   color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  margin: 0 0.25rem;
 }
 
-.missing-track-more { position: relative; }
+.missing-track-artist,
+.missing-track-album {
+  color: var(--text-secondary);
+}
+
+/* Every action inline (desktop): the "..." menu below is redundant once
+   there's room for the buttons themselves, so the two are complementary,
+   never both visible. */
+.missing-track-more-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: nowrap;
+}
+
+.missing-track-rematch-form {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.missing-track-more { display: none; position: relative; }
+
+@media (max-width: 900px) {
+  .missing-track-more-inline { display: none; }
+  .missing-track-more { display: block; }
+}
 
 .missing-track-more > summary {
   list-style: none;
