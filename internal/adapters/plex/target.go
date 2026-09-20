@@ -48,7 +48,7 @@ func toMatchResult(m matching.MatchedTrack) adapters.MatchResult {
 // unfiltered, ungated results - a person can judge a candidate a machine
 // shouldn't auto-accept).
 func (t *Target) SearchCatalog(ctx context.Context, query string, userID int64, allowLive, allowStatic bool) ([]adapters.MatchResult, error) {
-	userServer, err := db.GetUserServer(t.DB, userID)
+	userServer, err := db.GetUserMusicServer(t.DB, userID)
 	if err != nil {
 		return nil, err
 	}

@@ -2,12 +2,12 @@
 <form hx-post="/admin/lidarr/config" hx-target="#settings-panel-admin-lidarr" hx-swap="innerHTML">
   <div class="settings-field-group">
     <div class="settings-field">
-      <label class="settings-label">Lidarr URL</label>
-      <input type="text" name="url" class="settings-input" value="{{.LidarrURL}}" placeholder="http://127.0.0.1:8686" autocomplete="off">
+      <label class="settings-label" for="lidarr-url">Lidarr URL</label>
+      <input id="lidarr-url" type="text" name="url" class="settings-input" value="{{.LidarrURL}}" placeholder="http://127.0.0.1:8686" autocomplete="off">
     </div>
     <div class="settings-field">
-      <label class="settings-label">API Key</label>
-      <input type="password" name="apiKey" class="settings-input" value="{{.LidarrAPIKey}}" placeholder="Settings > General > Security in Lidarr" autocomplete="off">
+      <label class="settings-label" for="lidarr-api-key">API Key</label>
+      <input id="lidarr-api-key" type="password" name="apiKey" class="settings-input" value="{{.LidarrAPIKey}}" placeholder="Settings > General > Security in Lidarr" autocomplete="off">
     </div>
   </div>
   {{if .Error}}<div class="settings-alert settings-alert--error">{{.Error}}</div>{{end}}

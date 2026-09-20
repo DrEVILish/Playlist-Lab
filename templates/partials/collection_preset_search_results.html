@@ -1,0 +1,24 @@
+{{/* Live search results for Browse Presets' Search section
+     (collection_preset_search.go) - reuses the exact same preset-card
+     markup collection_presets.html's static registry entries render as, so
+     a live result and a curated preset read as the same kind of thing. */}}
+{{define "partials/collection_preset_search_results.html"}}
+{{if .Error}}
+<p class="field-hint" style="color:var(--error)">{{.Error}}</p>
+{{else if not .Query}}
+<p class="field-hint">Search Trakt's public lists or TMDb's franchise collections by name.</p>
+{{else if not .Results}}
+<p class="field-hint">No results for "{{.Query}}".</p>
+{{else}}
+<div class="preset-grid">
+  {{range .Results}}
+  <div class="preset-card card">
+    <div class="preset-card-title">{{.Name}}</div>
+    {{if .Description}}<div class="preset-card-desc">{{.Description}}</div>{{end}}
+    <div class="preset-card-source">{{.Detail}}</div>
+    <button type="button" class="btn btn-secondary btn-small" hx-get="/collections/new?provider={{.Provider}}&amp;mode={{.Mode}}&amp;listId={{.ListID | urlquery}}&amp;name={{.Name | urlquery}}&amp;mediaType={{.MediaType}}" hx-target="#modal-root" hx-swap="innerHTML">Add</button>
+  </div>
+  {{end}}
+</div>
+{{end}}
+{{end}}

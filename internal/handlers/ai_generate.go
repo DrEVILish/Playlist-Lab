@@ -62,7 +62,7 @@ func (h *ImportHandler) startAIImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userServer, err := db.GetUserServer(h.DB, user.ID)
+	userServer, err := db.GetUserMusicServer(h.DB, user.ID)
 	if err != nil || userServer == nil || !userServer.LibraryID.Valid {
 		http.Error(w, "No library selected. Please go to Settings and select a music library first.", http.StatusBadRequest)
 		return

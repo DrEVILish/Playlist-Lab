@@ -15,7 +15,7 @@
   width: 100%;
   min-height: 0;
   padding: 2rem;
-  background: radial-gradient(ellipse at 50% 30%, rgba(91, 155, 213, 0.06) 0%, transparent 60%),
+  background: radial-gradient(ellipse at 50% 30%, rgba(47, 143, 255, 0.06) 0%, transparent 60%),
               var(--background);
 }
 
@@ -38,7 +38,7 @@
   width: 80px;
   height: 80px;
   margin-bottom: 1rem;
-  filter: drop-shadow(0 0 16px rgba(91, 155, 213, 0.3));
+  filter: drop-shadow(0 0 16px rgba(47, 143, 255, 0.3));
 }
 
 .login-logo h1 {
@@ -48,12 +48,9 @@
 }
 
 .login-logo .logo-playlist { color: var(--text-primary); }
-.login-logo .logo-lab {
-  background: var(--gradient-primary);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
+/* Was a --gradient-primary text-clip - gradients are banned app-wide now
+   (see base.css's token comment), flat accent-cyan instead. */
+.login-logo .logo-lab { color: var(--accent-cyan); }
 
 .login-subtitle {
   color: var(--text-secondary);
@@ -115,7 +112,7 @@
   font-size: 0.8125rem;
   margin-top: 1rem;
   padding: 0.75rem;
-  background-color: rgba(91, 155, 213, 0.06);
+  background-color: rgba(47, 143, 255, 0.06);
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
   line-height: 1.5;
@@ -124,15 +121,14 @@
 .login-btn {
   width: 100%;
   padding: 0.875rem;
-  background: var(--gradient-primary);
-  color: #ffffff;
-  border: none;
+  background: transparent;
+  color: var(--accent-cyan);
+  border: 1px solid var(--accent-cyan);
   border-radius: var(--radius-md);
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 4px 16px rgba(91, 155, 213, 0.3);
   /* base.css's mobile rule turns every <button> into display:inline-flex
      (for the 44px touch-target min-height), which drops the native
      button's centered text-align in favor of flex's default
@@ -142,8 +138,8 @@
 }
 
 .login-btn:hover:not(:disabled) {
-  box-shadow: 0 6px 24px rgba(91, 155, 213, 0.4);
-  transform: translateY(-1px);
+  background: rgba(0, 229, 255, 0.12);
+  box-shadow: 0 0 16px rgba(0, 229, 255, 0.4);
 }
 
 .login-btn:disabled {
@@ -172,3 +168,77 @@
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Shared "first impression" decorative treatment (DESIGN.md §9/§12) - Login
+   and Setup are the two confirmed opt-in surfaces for the grid-texture +
+   HUD corner-accent language, paired so they read as one moment rather than
+   two different styles. Lives here (not base.css, which stays token-only)
+   and Setup links this file just for these two classes rather than
+   duplicating the rules. A ::before overlay layer (not the element's own
+   `background` shorthand) avoids fighting whatever background the host
+   element already sets - .login-page's radial glow, .settings-page's plain
+   var(--background) - since it paints on top instead of competing for the
+   same property. */
+.hero-backdrop {
+  position: relative;
+}
+
+.hero-backdrop::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(rgba(47, 143, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(47, 143, 255, 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+  /* Slow, restrained drift - "animated" per §12 without competing with the
+     card content sitting on top of it. prefers-reduced-motion is
+     deliberately unhandled app-wide (DESIGN.md §6/§14). */
+  animation: hero-grid-drift 10s ease-in-out infinite;
+}
+
+@keyframes hero-grid-drift {
+  0%, 100% { background-position: 0 0, 0 0; opacity: 0.7; }
+  50% { background-position: 6px 6px, 6px 6px; opacity: 1; }
+}
+
+/* Every direct child needs to sit above the ::before overlay explicitly -
+   the pseudo-element is a real stacking-context sibling (z-index:0), not a
+   background, so without this the grid would paint over card content that
+   has no z-index of its own. */
+.hero-backdrop > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Thin cyan HUD-reticle corner accent, offset off two opposite corners of
+   whichever card sits on the hero backdrop (.login-card on Login, the setup
+   form's section on Setup). */
+.hero-backdrop-card {
+  position: relative;
+}
+
+.hero-backdrop-card::before,
+.hero-backdrop-card::after {
+  content: '';
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  pointer-events: none;
+}
+
+.hero-backdrop-card::before {
+  top: -8px;
+  left: -8px;
+  border-top: 2px solid var(--accent-cyan);
+  border-left: 2px solid var(--accent-cyan);
+}
+
+.hero-backdrop-card::after {
+  bottom: -8px;
+  right: -8px;
+  border-bottom: 2px solid var(--accent-cyan);
+  border-right: 2px solid var(--accent-cyan);
+}

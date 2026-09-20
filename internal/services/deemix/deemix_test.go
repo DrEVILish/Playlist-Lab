@@ -1,121 +1,66 @@
 package deemix
 
 import (
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"sync"
 	"testing"
-	"time"
 )
 
-// newTestService points a Service at an httptest server instead of a real
-// deemix-server install.
-func newTestService(t *testing.T, handler http.HandlerFunc) *Service {
-	t.Helper()
-	srv := httptest.NewServer(handler)
-	t.Cleanup(srv.Close)
-	return New(Config{URL: srv.URL, ARL: "test-arl"}, nil, nil)
+// TestQueueItem_SetAndGetRoundTrip covers the in-memory queue read/write
+// path StartDownload's poller (trackDownload) and QueueDownload's
+// already-queued check both depend on - replacing what used to be an HTTP
+// round trip to a separate deemix-server process with a plain map, so the
+// only thing left worth pinning here is that a write is visible to a
+// concurrent reader and an unknown uuid reports "not found" rather than a
+// zero value.
+func TestQueueItem_SetAndGetRoundTrip(t *testing.T) {
+	svc := New(Config{ARL: "test-arl"}, nil, nil)
+
+	svc.setQueueItem("track_1_3", QueueItem{Status: "downloading", Progress: 42, Title: "A", Artist: "B"})
+
+	item, err := svc.GetQueueItem("track_1_3")
+	if err != nil {
+		t.Fatalf("GetQueueItem: %v", err)
+	}
+	if item == nil || item.Progress != 42 || item.Status != "downloading" {
+		t.Fatalf("GetQueueItem = %+v, want Progress=42 Status=downloading", item)
+	}
+
+	missing, err := svc.GetQueueItem("track_missing_3")
+	if err != nil {
+		t.Fatalf("GetQueueItem(missing): %v", err)
+	}
+	if missing != nil {
+		t.Fatalf("GetQueueItem(missing) = %+v, want nil", missing)
+	}
 }
 
-// TestGetQueueSharesSnapshotAcrossConcurrentCallers pins the fix
-// deemix-queue-polling.test.ts calls "serves many concurrent pollers from a
-// single queue fetch": deemix-server has no per-item status endpoint, so
-// every in-flight download polling independently multiplies request volume
-// by N. getQueue must serve every caller within the TTL window from one
-// shared in-flight fetch.
-func TestGetQueueSharesSnapshotAcrossConcurrentCallers(t *testing.T) {
-	var calls int32
-	var mu sync.Mutex
-	svc := newTestService(t, func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		calls++
-		mu.Unlock()
-		queue := map[string]QueueItem{}
-		for i := 0; i < 50; i++ {
-			queue[fmt.Sprintf("track_%d_3", i)] = QueueItem{Status: "downloading", Progress: 42}
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"queue": queue})
-	})
+// TestQueueItem_ConcurrentAccess exercises the queue map under the race
+// detector - every real caller (QueueDownload's already-queued check,
+// download.go's progress reporting, trackDownload's poller) reads/writes it
+// from a different goroutine.
+func TestQueueItem_ConcurrentAccess(t *testing.T) {
+	svc := New(Config{ARL: "test-arl"}, nil, nil)
 
 	var wg sync.WaitGroup
-	results := make([]*QueueItem, 50)
 	for i := 0; i < 50; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			item, err := svc.GetQueueItem(fmt.Sprintf("track_%d_3", i))
-			if err != nil {
-				t.Errorf("GetQueueItem(%d) error: %v", i, err)
-				return
+			uuid := fmt.Sprintf("track_%d_3", i)
+			svc.setQueueItem(uuid, QueueItem{Status: "downloading", Progress: i})
+			if _, err := svc.GetQueueItem(uuid); err != nil {
+				t.Errorf("GetQueueItem(%d): %v", i, err)
 			}
-			results[i] = item
 		}(i)
 	}
 	wg.Wait()
-
-	for i, item := range results {
-		if item == nil || item.Progress != 42 {
-			t.Fatalf("result %d: expected progress 42, got %+v", i, item)
-		}
-	}
-	mu.Lock()
-	defer mu.Unlock()
-	if calls != 1 {
-		t.Fatalf("expected exactly 1 upstream request for 50 concurrent pollers, got %d", calls)
-	}
 }
 
-// TestGetQueueRefetchesAfterTTL covers the flip side: once the snapshot goes
-// stale, the next call must hit deemix-server again rather than serving a
-// frozen snapshot forever (progress has to be able to move).
-func TestGetQueueRefetchesAfterTTL(t *testing.T) {
-	var calls int32
-	var mu sync.Mutex
-	svc := newTestService(t, func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		calls++
-		mu.Unlock()
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"queue": map[string]QueueItem{"track_1_3": {Status: "downloading", Progress: 10}},
-		})
-	})
-
-	if _, err := svc.GetQueueItem("track_1_3"); err != nil {
-		t.Fatalf("first GetQueueItem: %v", err)
-	}
-	if _, err := svc.GetQueueItem("track_1_3"); err != nil {
-		t.Fatalf("second GetQueueItem: %v", err)
-	}
-	mu.Lock()
-	if calls != 1 {
-		mu.Unlock()
-		t.Fatalf("expected snapshot to be reused within the TTL, got %d upstream calls", calls)
-	}
-	mu.Unlock()
-
-	// Force the cached snapshot to look stale without a real 2s sleep.
-	svc.queueMu.Lock()
-	svc.snapshot.at = time.Now().Add(-queueSnapshotTTL - time.Second)
-	svc.queueMu.Unlock()
-
-	if _, err := svc.GetQueueItem("track_1_3"); err != nil {
-		t.Fatalf("third GetQueueItem: %v", err)
-	}
-	mu.Lock()
-	defer mu.Unlock()
-	if calls != 2 {
-		t.Fatalf("expected a refetch once the snapshot is past its TTL, got %d upstream calls", calls)
-	}
-}
-
-// TestParseTrackOrAlbumURL covers QueueDownload's fallback path: when
-// deemix-server reports an empty queue-add result, the uuid it would have
-// used is derived from the URL's own track/album id so the existing queue
-// entry can be looked up directly. Getting this parse wrong silently breaks
-// that fallback (falls through to "deemix could not queue" even though the
-// download is actually already queued and progressing).
+// TestParseTrackOrAlbumURL covers QueueDownload's URL parsing: the uuid it
+// assigns a queued download is derived from the URL's own track/album id
+// (deezer's own `${type}_${id}_${bitrate}` scheme), so getting this parse
+// wrong breaks both the initial queue and the "already queued" lookup.
 func TestParseTrackOrAlbumURL(t *testing.T) {
 	tests := []struct {
 		name    string

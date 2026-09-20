@@ -1,23 +1,17 @@
-// Package deemix ports services/deemix.ts: talking to our own local
-// deemix-server install (a REST wrapper around the deemix Deezer
-// downloader) to search for and queue missing-track acquisitions, then
-// tracking each download's progress through to a Plex library rescan and
-// auto-match back into the playlist it was downloaded for.
-//
-// deemix-server's login is a browser-style session (cookie-based, kept in
-// memory only on its side) - there is no per-request API key. So this
-// package holds one shared login session for the whole app, established
-// from the configured ARL and re-established whenever deemix-server
-// rejects a request as logged out (or after a restart, since its session
-// store is in-memory too).
+// Package deemix searches, downloads, decrypts, and tags missing tracks
+// directly from Deezer - a Go port of deemix-server's own core (the
+// deemix/deezer-js npm packages), rather than talking to a separate Node
+// process over HTTP. See dzclient.go for the Deezer API client,
+// decrypt.go for the Blowfish stream cipher, tag.go for ID3/FLAC tagging,
+// and download.go for the queue/download orchestration; this file keeps
+// the original public Service API (search, queue, poll, reconcile into a
+// Plex playlist) that the rest of the app already depends on.
 package deemix
 
 import (
-	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -35,8 +29,7 @@ import (
 // directly rather than importing the config package, so this stays testable
 // without a real environment.
 type Config struct {
-	URL string // deemix-server base URL, e.g. http://127.0.0.1:6595
-	ARL string // Deezer account ARL cookie deemix-server logs in with
+	ARL string // Deezer account ARL cookie this app logs in with
 }
 
 type SearchResult struct {
@@ -52,18 +45,20 @@ type SearchResult struct {
 	} `json:"album"`
 }
 
-// QueueItem is deemix-server's queue entry for a uuid returned by
-// QueueDownload. Status is one of inQueue|downloading|completed|withErrors|failed.
+type queueError struct {
+	Message string `json:"message"`
+}
+
+// QueueItem is one in-progress or finished download's state, keyed by uuid
+// in Service.queue. Status is one of inQueue|downloading|completed|withErrors|failed.
 type QueueItem struct {
-	Status     string `json:"status"`
-	Progress   int    `json:"progress"`
-	Title      string `json:"title"`
-	Artist     string `json:"artist"`
-	Size       int    `json:"size"`
-	Downloaded int    `json:"downloaded"`
-	Errors     []struct {
-		Message string `json:"message"`
-	} `json:"errors"`
+	Status     string       `json:"status"`
+	Progress   int          `json:"progress"`
+	Title      string       `json:"title"`
+	Artist     string       `json:"artist"`
+	Size       int          `json:"size"`
+	Downloaded int          `json:"downloaded"`
+	Errors     []queueError `json:"errors"`
 }
 
 type QueuedTrack struct {
@@ -99,7 +94,6 @@ type DownloadRequest struct {
 }
 
 const (
-	queueSnapshotTTL       = 2 * time.Second
 	pollInterval           = 3 * time.Second
 	pollMax                = 30 * time.Minute
 	reconcilePollInterval  = 30 * time.Second
@@ -109,28 +103,20 @@ const (
 	scanDedupeWindow       = 60 * time.Second
 )
 
-type queueSnapshot struct {
-	at    time.Time
-	queue map[string]QueueItem
-	err   error
-	done  chan struct{}
-}
-
-// Service holds the shared deemix-server session/queue-snapshot state and
-// the DB + notification store every download needs to report and resume
-// progress. One instance is shared app-wide (see cmd/server/main.go).
+// Service holds the shared Deezer client/queue state and the DB +
+// notification store every download needs to report and resume progress.
+// One instance is shared app-wide (see cmd/server/main.go).
 type Service struct {
 	cfg           Config
 	db            *sql.DB
 	notifications *notifications.Store
-	http          *http.Client
+	dz            *dzClient
 
-	mu            sync.Mutex
-	sessionCookie string
-	cachedBitrate string
+	settingsMu sync.RWMutex
+	settings   Settings
 
-	queueMu  sync.Mutex
-	snapshot *queueSnapshot
+	queueMu sync.Mutex
+	queue   map[string]QueueItem
 
 	reconcileMu      sync.Mutex
 	reconcileActive  int
@@ -150,93 +136,80 @@ type ArlCheckResult struct {
 }
 
 func New(cfg Config, sqlDB *sql.DB, notifStore *notifications.Store) *Service {
+	settings := DefaultSettings()
+	if sqlDB != nil {
+		settings = LoadSettings(sqlDB)
+	}
 	return &Service{
 		cfg: cfg, db: sqlDB, notifications: notifStore,
-		http:       &http.Client{Timeout: 15 * time.Second},
+		dz:         newDZClient(cfg.ARL),
+		settings:   settings,
+		queue:      map[string]QueueItem{},
 		lastScanAt: map[string]time.Time{},
 	}
 }
 
-func (s *Service) url(path string) string { return strings.TrimSuffix(s.cfg.URL, "/") + path }
-
 // ResetSession forces the next QueueDownload call to log in again.
 func (s *Service) ResetSession() {
-	s.mu.Lock()
-	s.sessionCookie = ""
-	s.mu.Unlock()
+	s.dz.setARL(s.dz.currentARL())
 }
 
-// SetARL updates the Deezer ARL deemix-server logs in with (admin settings
-// page) and drops the cached session so the next download uses it.
+// SetARL updates the Deezer ARL this app logs in with (admin settings page)
+// and drops the cached session so the next download uses it.
 func (s *Service) SetARL(arl string) {
-	s.mu.Lock()
 	s.cfg.ARL = arl
-	s.sessionCookie = ""
-	s.mu.Unlock()
+	s.dz.setARL(arl)
 }
 
 // ARL returns the currently configured Deezer ARL, for prefilling the admin
 // settings form.
 func (s *Service) ARL() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.cfg.ARL
+	return s.dz.currentARL()
+}
+
+// Settings returns a copy of the currently active download settings - used
+// both to prefill the admin settings form and internally wherever a
+// download needs a consistent snapshot to work from.
+func (s *Service) Settings() Settings {
+	s.settingsMu.RLock()
+	defer s.settingsMu.RUnlock()
+	return s.settings
+}
+
+// ReloadSettings re-reads the admin-saved Deezer download settings (naming
+// templates, tag toggles, bitrate, ...) from the DB - called after the admin
+// settings form saves so a running process picks up the change without a
+// restart, mirroring how SetARL applies immediately.
+func (s *Service) ReloadSettings() {
+	if s.db == nil {
+		return
+	}
+	settings := LoadSettings(s.db)
+	s.settingsMu.Lock()
+	s.settings = settings
+	s.settingsMu.Unlock()
 }
 
 func (s *Service) login() error {
-	if s.cfg.ARL == "" {
-		return fmt.Errorf("Deemix ARL is not configured - set DEEMIX_ARL")
-	}
-	body, _ := json.Marshal(map[string]string{"arl": s.cfg.ARL})
-	req, err := http.NewRequest(http.MethodPost, s.url("/api/loginArl"), bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	cookies := resp.Header.Values("Set-Cookie")
-	if len(cookies) == 0 {
-		return fmt.Errorf("deemix login did not return a session cookie")
-	}
-	parts := make([]string, len(cookies))
-	for i, c := range cookies {
-		parts[i], _, _ = strings.Cut(c, ";")
-	}
-	cookie := strings.Join(parts, "; ")
-
-	var data struct {
-		Status int `json:"status"`
-	}
-	raw, _ := io.ReadAll(resp.Body)
-	_ = json.Unmarshal(raw, &data)
-	if data.Status == 0 {
-		return fmt.Errorf("deemix rejected DEEMIX_ARL - it may have expired, get a fresh one from your Deezer account")
-	}
-
-	s.mu.Lock()
-	s.sessionCookie = cookie
-	s.mu.Unlock()
-	return nil
+	return s.dz.login()
 }
 
-// SearchTrack searches deemix-server's proxy of Deezer's own search
-// relevance ranking for "term" - the raw top results, caller picks one.
+// SearchTrack searches Deezer's public track-search API for "term" - the
+// raw top results, caller picks one. No login required (deezer-js's api.js
+// search_track is unauthenticated), matching this method's original
+// deemix-server-proxied behavior.
 func (s *Service) SearchTrack(term string) ([]SearchResult, error) {
-	req, err := http.NewRequest(http.MethodGet, s.url("/api/search"), nil)
+	if s.Settings().LogSearched {
+		slog.Info("[Deemix] searching", "term", term)
+	}
+	req, err := http.NewRequest(http.MethodGet, "https://api.deezer.com/search/track", nil)
 	if err != nil {
 		return nil, err
 	}
 	q := req.URL.Query()
-	q.Set("term", term)
-	q.Set("type", "track")
-	q.Set("start", "0")
-	q.Set("nb", "5")
+	q.Set("q", term)
+	q.Set("index", "0")
+	q.Set("limit", "5")
 	req.URL.RawQuery = q.Encode()
 
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -353,144 +326,6 @@ func resolveDownloadURL(match SearchResult, trackCount int, trackCountKnown bool
 	return match.Link
 }
 
-func (s *Service) getConfiguredBitrate() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.cachedBitrate != "" {
-		return s.cachedBitrate
-	}
-	// getSettings isn't ported (no admin settings UI yet in Go - see
-	// config.go's DeemixArl comment) - deemix-server's own default bitrate
-	// (3 = MP3 320) is used instead of round-tripping to fetch a value
-	// nothing here can change yet.
-	s.cachedBitrate = "3"
-	return s.cachedBitrate
-}
-
-type addToQueueResponse struct {
-	Result *bool  `json:"result"`
-	Errid  string `json:"errid"`
-	Data   struct {
-		Obj json.RawMessage `json:"obj"`
-	} `json:"data"`
-}
-
-func (s *Service) postAddToQueue(trackURL, bitrate, cookie string) (*addToQueueResponse, error) {
-	body, _ := json.Marshal(map[string]string{"url": trackURL, "bitrate": bitrate})
-	req, err := http.NewRequest(http.MethodPost, s.url("/api/addToQueue"), bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Cookie", cookie)
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	var data addToQueueResponse
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return nil, err
-	}
-	return &data, nil
-}
-
-// QueueDownload queues a track (or album) URL with deemix-server.
-//
-// fallbackURL is queued instead if trackURL produces nothing - deemix can
-// fail to build a download for a whole album while the individual track is
-// fine, and since queueing the album at all is our own optimisation rather
-// than what the user asked for, falling back gets them the track instead of
-// an error.
-func (s *Service) QueueDownload(trackURL, fallbackURL string) (QueuedTrack, error) {
-	s.mu.Lock()
-	cookie := s.sessionCookie
-	s.mu.Unlock()
-	if cookie == "" {
-		if err := s.login(); err != nil {
-			return QueuedTrack{}, err
-		}
-		s.mu.Lock()
-		cookie = s.sessionCookie
-		s.mu.Unlock()
-	}
-
-	bitrate := s.getConfiguredBitrate()
-	data, err := s.postAddToQueue(trackURL, bitrate, cookie)
-	if err != nil {
-		return QueuedTrack{}, err
-	}
-	// deemix-server answers HTTP 200 even when it rejects the job.
-	if data.Result != nil && !*data.Result && data.Errid == "NotLoggedIn" {
-		if err := s.login(); err != nil {
-			return QueuedTrack{}, err
-		}
-		s.mu.Lock()
-		cookie = s.sessionCookie
-		s.mu.Unlock()
-		data, err = s.postAddToQueue(trackURL, bitrate, cookie)
-		if err != nil {
-			return QueuedTrack{}, err
-		}
-	}
-	if data.Result != nil && !*data.Result {
-		errid := data.Errid
-		if errid == "" {
-			errid = "unknown error"
-		}
-		return QueuedTrack{}, fmt.Errorf("deemix rejected the download (%s)", errid)
-	}
-
-	if queued, ok := parseQueuedObj(data.Data.Obj); ok {
-		return queued, nil
-	}
-
-	// An empty obj (rather than a rejection) means deemix-server treated
-	// this as "already in queue" - not a real failure. deemix's uuid scheme
-	// is deterministic (`${type}_${id}_${bitrate}`), so it can be looked up
-	// directly to report its actual current state.
-	if typ, id, ok := parseTrackOrAlbumURL(trackURL); ok {
-		uuid := fmt.Sprintf("%s_%s_%s", typ, id, bitrate)
-		if existing, err := s.GetQueueItem(uuid); err == nil && existing != nil {
-			slog.Info("[Deemix] Already in deemix queue, reporting its existing state", "uuid", uuid, "status", existing.Status)
-			return QueuedTrack{UUID: uuid, Title: existing.Title, Artist: existing.Artist, AlreadyQueued: true}, nil
-		}
-	}
-
-	if fallbackURL != "" && fallbackURL != trackURL {
-		slog.Warn("[Deemix] deemix could not queue this release, retrying with the single track", "trackUrl", trackURL, "fallbackUrl", fallbackURL)
-		return s.QueueDownload(fallbackURL, "")
-	}
-
-	slog.Error("[Deemix] addToQueue returned no queued item and no matching existing queue entry", "trackUrl", trackURL, "bitrate", bitrate)
-	return QueuedTrack{}, fmt.Errorf("deemix could not queue %s - it is most likely unavailable on the configured Deezer account", trackURL)
-}
-
-func parseQueuedObj(raw json.RawMessage) (QueuedTrack, bool) {
-	if len(raw) == 0 || string(raw) == "null" {
-		return QueuedTrack{}, false
-	}
-	// obj is either a single object or an array with one object in it.
-	var single struct {
-		UUID   string `json:"uuid"`
-		Title  string `json:"title"`
-		Artist string `json:"artist"`
-	}
-	if err := json.Unmarshal(raw, &single); err == nil && single.UUID != "" {
-		return QueuedTrack{UUID: single.UUID, Title: single.Title, Artist: single.Artist}, true
-	}
-	var arr []struct {
-		UUID   string `json:"uuid"`
-		Title  string `json:"title"`
-		Artist string `json:"artist"`
-	}
-	if err := json.Unmarshal(raw, &arr); err == nil && len(arr) > 0 && arr[0].UUID != "" {
-		return QueuedTrack{UUID: arr[0].UUID, Title: arr[0].Title, Artist: arr[0].Artist}, true
-	}
-	return QueuedTrack{}, false
-}
-
 func parseTrackOrAlbumURL(u string) (typ, id string, ok bool) {
 	for _, t := range []string{"track", "album"} {
 		marker := "/" + t + "/"
@@ -511,61 +346,86 @@ func parseTrackOrAlbumURL(u string) (typ, id string, ok bool) {
 	return "", "", false
 }
 
-// getQueue fetches deemix-server's whole queue, sharing one in-flight
-// request/response across every concurrent caller within queueSnapshotTTL -
-// deemix-server has no per-item status endpoint, so N in-flight downloads
-// each independently polling the whole queue is N*N JSON work per interval
-// otherwise.
-func (s *Service) getQueue() (map[string]QueueItem, error) {
+// setQueueItem writes uuid's current state into the in-memory queue - the
+// only writer besides QueueDownload's initial insert is download.go's
+// per-track progress reporting.
+func (s *Service) setQueueItem(uuid string, item QueueItem) {
 	s.queueMu.Lock()
-	if s.snapshot != nil && time.Since(s.snapshot.at) < queueSnapshotTTL {
-		snap := s.snapshot
-		s.queueMu.Unlock()
-		<-snap.done
-		return snap.queue, snap.err
-	}
-	snap := &queueSnapshot{at: time.Now(), done: make(chan struct{})}
-	s.snapshot = snap
+	s.queue[uuid] = item
 	s.queueMu.Unlock()
-
-	// Deliberately sent without a session cookie - deemix-server's
-	// /api/getQueue performs no login check at all.
-	resp, err := http.Get(s.url("/api/getQueue"))
-	if err == nil {
-		defer resp.Body.Close()
-		var data struct {
-			Queue map[string]QueueItem `json:"queue"`
-		}
-		if decErr := json.NewDecoder(resp.Body).Decode(&data); decErr == nil {
-			snap.queue = data.Queue
-		} else {
-			err = decErr
-		}
-	}
-	snap.err = err
-	close(snap.done)
-
-	if err != nil {
-		s.queueMu.Lock()
-		if s.snapshot == snap {
-			s.snapshot = nil
-		}
-		s.queueMu.Unlock()
-	}
-	return snap.queue, err
 }
 
-// GetQueueItem reads one item's live status/progress out of the shared
-// queue snapshot.
+// GetQueueItem reads one item's live status/progress out of the in-memory
+// queue - nil, nil if it was never queued or has already been removed
+// (StartDownload's poller treats that as "vanished").
 func (s *Service) GetQueueItem(uuid string) (*QueueItem, error) {
-	queue, err := s.getQueue()
-	if err != nil {
-		return nil, err
-	}
-	if item, ok := queue[uuid]; ok {
+	s.queueMu.Lock()
+	defer s.queueMu.Unlock()
+	if item, ok := s.queue[uuid]; ok {
 		return &item, nil
 	}
 	return nil, nil
+}
+
+// QueueDownload resolves trackURL (a deezer.com track or album link) against
+// Deezer, then starts downloading it in the background - StartDownload's
+// poller (see trackDownload) picks the resulting uuid's progress up from
+// GetQueueItem exactly as it did when a separate deemix-server process ran
+// the download, so no caller elsewhere in this package needed to change.
+//
+// fallbackURL is queued instead if trackURL produces nothing - a whole
+// album can fail to resolve while the individual track is fine, and since
+// queueing the album at all is our own optimisation rather than what the
+// user asked for, falling back gets them the track instead of an error.
+func (s *Service) QueueDownload(trackURL, fallbackURL string) (QueuedTrack, error) {
+	typ, id, ok := parseTrackOrAlbumURL(trackURL)
+	if !ok {
+		return QueuedTrack{}, fmt.Errorf("not a deezer track or album URL: %s", trackURL)
+	}
+	if err := s.login(); err != nil {
+		return QueuedTrack{}, err
+	}
+
+	bitrate := s.Settings().MaxBitrate
+	uuid := fmt.Sprintf("%s_%s_%s", typ, id, bitrate)
+
+	if existing, _ := s.GetQueueItem(uuid); existing != nil {
+		slog.Info("[Deemix] Already in queue, reporting its existing state", "uuid", uuid, "status", existing.Status)
+		return QueuedTrack{UUID: uuid, Title: existing.Title, Artist: existing.Artist, AlreadyQueued: true}, nil
+	}
+
+	switch typ {
+	case "track":
+		track, err := s.dz.getTrack(id)
+		if err != nil {
+			if fallbackURL != "" && fallbackURL != trackURL {
+				return s.QueueDownload(fallbackURL, "")
+			}
+			return QueuedTrack{}, fmt.Errorf("deemix could not resolve %s: %w", trackURL, err)
+		}
+		s.setQueueItem(uuid, QueueItem{Status: "inQueue", Title: track.SNG_TITLE, Artist: track.ART_NAME, Size: 1})
+		go s.runTrackDownload(uuid, *track, bitrate)
+		return QueuedTrack{UUID: uuid, Title: track.SNG_TITLE, Artist: track.ART_NAME}, nil
+
+	case "album":
+		tracks, err := s.dz.getAlbumTracks(id)
+		if err != nil || len(tracks) == 0 {
+			if fallbackURL != "" && fallbackURL != trackURL {
+				slog.Warn("[Deemix] could not resolve album, retrying with the single track", "albumUrl", trackURL, "fallbackUrl", fallbackURL, "error", err)
+				return s.QueueDownload(fallbackURL, "")
+			}
+			if err == nil {
+				err = fmt.Errorf("album has no tracks")
+			}
+			return QueuedTrack{}, fmt.Errorf("deemix could not resolve %s: %w", trackURL, err)
+		}
+		title, artist := tracks[0].ALB_TITLE, tracks[0].ART_NAME
+		s.setQueueItem(uuid, QueueItem{Status: "inQueue", Title: title, Artist: artist, Size: len(tracks)})
+		go s.runAlbumDownload(uuid, tracks, bitrate)
+		return QueuedTrack{UUID: uuid, Title: title, Artist: artist}, nil
+	}
+
+	return QueuedTrack{}, fmt.Errorf("unsupported deezer URL: %s", trackURL)
 }
 
 // StartDownload is the one entry point for tracking a queued download:
@@ -619,7 +479,7 @@ func (s *Service) rebuildReconcileContext(userID, missingTrackID int64) *Reconci
 	if err != nil {
 		return nil
 	}
-	server, err := db.GetUserServer(s.db, userID)
+	server, err := db.GetUserMusicServer(s.db, userID)
 	if err != nil || server == nil {
 		return nil
 	}
@@ -747,10 +607,12 @@ func (s *Service) scanPlexIfQueueDrained(reconcile *ReconcileContext) {
 	if reconcile.LibraryID == "" {
 		return
 	}
-	queue, err := s.getQueue()
-	if err != nil {
-		return
+	s.queueMu.Lock()
+	queue := make(map[string]QueueItem, len(s.queue))
+	for k, v := range s.queue {
+		queue[k] = v
 	}
+	s.queueMu.Unlock()
 	for _, item := range queue {
 		if item.Status == "inQueue" || item.Status == "downloading" {
 			return
@@ -798,6 +660,7 @@ func (s *Service) runReconcileAttempts(userID int64, notificationID string, reco
 	for attempt := 1; attempt <= reconcileMaxAttempts; attempt++ {
 		tracks, err := db.GetUserMissingTracks(s.db, userID)
 		if err != nil {
+			time.Sleep(reconcilePollInterval)
 			continue
 		}
 		var track *db.MissingTrack

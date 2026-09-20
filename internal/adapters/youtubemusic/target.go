@@ -81,7 +81,7 @@ func (t *Target) FetchTracks(ctx context.Context, playlistURLOrID string, userID
 		browseID = "VL" + browseID
 	}
 
-	data, err := t.ytmAPI("browse", map[string]any{"browseId": browseID}, "")
+	data, err := t.ytmAPI(ctx, "browse", map[string]any{"browseId": browseID}, "")
 	if err != nil {
 		return adapters.PlaylistInfo{}, nil, fmt.Errorf("failed to fetch YouTube Music playlist: %w", err)
 	}
@@ -138,7 +138,7 @@ func generateSapisidHash(sapisid string) string {
 	return fmt.Sprintf("SAPISIDHASH %d_%x", timestamp, sum)
 }
 
-func (t *Target) ytmAPI(endpoint string, body map[string]any, cookie string) (map[string]any, error) {
+func (t *Target) ytmAPI(ctx context.Context, endpoint string, body map[string]any, cookie string) (map[string]any, error) {
 	sapisid := ""
 	if m := sapisidPattern.FindStringSubmatch(cookie); m != nil {
 		sapisid = m[1]
@@ -155,7 +155,7 @@ func (t *Target) ytmAPI(endpoint string, body map[string]any, cookie string) (ma
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, ytmAPI+"/"+endpoint+"?prettyPrint=false", bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ytmAPI+"/"+endpoint+"?prettyPrint=false", bytes.NewReader(payload))
 	if err != nil {
 		return nil, err
 	}
@@ -246,8 +246,8 @@ func extractTrackItems(items []any) []ytmTrack {
 	return tracks
 }
 
-func (t *Target) search(cookie, query string) ([]ytmTrack, error) {
-	data, err := t.ytmAPI("search", map[string]any{"query": query, "params": songsOnlySearchParams}, cookie)
+func (t *Target) search(ctx context.Context, cookie, query string) ([]ytmTrack, error) {
+	data, err := t.ytmAPI(ctx, "search", map[string]any{"query": query, "params": songsOnlySearchParams}, cookie)
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +269,7 @@ func (t *Target) SearchCatalog(ctx context.Context, query string, userID int64, 
 	if cookie == "" {
 		return nil, ErrNotConnected
 	}
-	tracks, err := t.search(cookie, query)
+	tracks, err := t.search(ctx, cookie, query)
 	if err != nil {
 		return nil, err
 	}
@@ -298,7 +298,7 @@ func (t *Target) MatchTracks(ctx context.Context, tracks []adapters.TrackInfo, c
 		query := strings.TrimSpace(track.Title + " " + track.Artist)
 		result := adapters.MatchResult{SourceTrack: track}
 
-		candidates, err := t.search(cookie, query)
+		candidates, err := t.search(ctx, cookie, query)
 		if err != nil {
 			slog.Warn("youtube music search failed for track", "track", track, "error", err)
 		} else if len(candidates) > 0 {
@@ -335,7 +335,7 @@ func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adap
 		}
 	}
 
-	data, err := t.ytmAPI("playlist/create", map[string]any{
+	data, err := t.ytmAPI(ctx, "playlist/create", map[string]any{
 		"title": name, "description": "", "privacyStatus": "PRIVATE", "videoIds": videoIDs,
 	}, cookie)
 	if err != nil {
@@ -358,7 +358,7 @@ func (t *Target) HandleOAuthCallback(ctx context.Context, code string, userID in
 	if cookie == "" {
 		return fmt.Errorf("no cookie provided")
 	}
-	if _, err := t.search(cookie, "test"); err != nil {
+	if _, err := t.search(ctx, cookie, "test"); err != nil {
 		return fmt.Errorf("invalid YouTube Music cookie. Please check and try again")
 	}
 

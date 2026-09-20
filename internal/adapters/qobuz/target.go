@@ -81,10 +81,10 @@ type qobuzSearchResponse struct {
 	} `json:"tracks"`
 }
 
-func (t *Target) search(token, query string, limit int) ([]qobuzTrack, error) {
+func (t *Target) search(ctx context.Context, token, query string, limit int) ([]qobuzTrack, error) {
 	u := "https://www.qobuz.com/api.json/0.2/track/search?query=" + url.QueryEscape(query) +
 		"&limit=" + strconv.Itoa(limit) + "&app_id=" + t.AppID
-	req, err := http.NewRequest(http.MethodGet, u, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func (t *Target) SearchCatalog(ctx context.Context, query string, userID int64, 
 	if token == "" {
 		return nil, ErrNotConnected
 	}
-	items, err := t.search(token, query, 10)
+	items, err := t.search(ctx, token, query, 10)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +148,7 @@ func (t *Target) MatchTracks(ctx context.Context, tracks []adapters.TrackInfo, c
 		query := strings.TrimSpace(track.Title + " " + track.Artist)
 		result := adapters.MatchResult{SourceTrack: track}
 
-		items, err := t.search(token, query, 5)
+		items, err := t.search(ctx, token, query, 5)
 		if err != nil {
 			slog.Warn("qobuz search failed for track", "track", track, "error", err)
 		} else if len(items) > 0 {
@@ -179,7 +179,7 @@ func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adap
 	}
 
 	createURL := "https://www.qobuz.com/api.json/0.2/playlist/create?name=" + url.QueryEscape(name) + "&is_public=false&app_id=" + t.AppID
-	req, _ := http.NewRequest(http.MethodPost, createURL, nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, createURL, nil)
 	req.Header.Set("X-User-Auth-Token", token)
 	resp, err := t.httpClient.Do(req)
 	if err != nil {
@@ -206,7 +206,7 @@ func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adap
 	if len(trackIDs) > 0 {
 		addURL := "https://www.qobuz.com/api.json/0.2/playlist/addTracks?playlist_id=" + playlistID +
 			"&track_ids=" + strings.Join(trackIDs, ",") + "&app_id=" + t.AppID
-		addReq, _ := http.NewRequest(http.MethodPost, addURL, nil)
+		addReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, addURL, nil)
 		addReq.Header.Set("X-User-Auth-Token", token)
 		if addResp, err := t.httpClient.Do(addReq); err == nil {
 			addResp.Body.Close()

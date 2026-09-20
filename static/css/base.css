@@ -1,10 +1,12 @@
 :root {
-  --primary-color: #5b9bd5;
-  --primary-hover: #4a8bc4;
-  --primary-dark: #3a7ab3;
-  --primary-glow: rgba(91, 155, 213, 0.2);
-  --accent-teal: #4a9ea8;
-  --accent-cyan: #3d8f99;
+  --primary-color: #2f8fff;
+  --primary-hover: #4da1ff;
+  --primary-dark: #1d6fe0;
+  --primary-glow: rgba(47, 143, 255, 0.28);
+  --accent-teal: #1fb8c4;
+  --accent-cyan: #00e5ff;
+  --font-mono: 'JetBrains Mono', source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+  --text-scale: 1;
   --background: #0a1018;
   --background-elevated: #0e1520;
   --surface: #131d2a;
@@ -13,7 +15,7 @@
   --sidebar-bg: #0c1420;
   --text-primary: #e8edf2;
   --text-secondary: #7a8fa3;
-  --text-muted: #4a5d72;
+  --text-muted: #7488a0;
   --border: #1a2a3a;
   --border-light: #243447;
   --error: #ef5350;
@@ -23,9 +25,8 @@
   --header-height: 60px;
   --card-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
   --card-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.5);
-  --glow-sm: 0 0 12px rgba(91, 155, 213, 0.12);
-  --glow-md: 0 0 20px rgba(91, 155, 213, 0.16);
-  --gradient-primary: linear-gradient(135deg, #5b9bd5 0%, #4a9ea8 100%);
+  --glow-sm: 0 0 12px rgba(47, 143, 255, 0.12);
+  --glow-md: 0 0 20px rgba(47, 143, 255, 0.16);
   --gradient-surface: linear-gradient(180deg, #131d2a 0%, #0e1520 100%);
   --gradient-card: linear-gradient(145deg, #162233 0%, #111c28 100%);
   --radius-sm: 6px;
@@ -51,13 +52,18 @@
   --bg-secondary: var(--surface);
   --bg-hover: var(--surface-hover);
   --text-tertiary: var(--text-muted);
-  --gradient-accent: var(--gradient-primary);
 }
 
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+}
+
+html {
+  /* §2/§14: one root multiplier scales every rem-based size in the app;
+     toggled by the Settings text-size control (small/medium/large). */
+  font-size: calc(100% * var(--text-scale));
 }
 
 body {
@@ -72,7 +78,15 @@ body {
 }
 
 code {
-  font-family: 'JetBrains Mono', source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+  font-family: var(--font-mono);
+}
+
+/* DESIGN.md §2: technical/telemetry values (timestamps, durations, counts,
+   IDs, file sizes, progress) use monospace with tabular figures wherever
+   they appear outside <code>, not just inside it. */
+.mono-data {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 h1 {
@@ -113,6 +127,11 @@ p {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* DESIGN.md §14: Firefox has no ::-webkit-scrollbar support, so without
+   this it falls back to the OS-default scrollbar while every other
+   browser gets the thin dark one above. */
+* { scrollbar-color: var(--border-light) transparent; scrollbar-width: thin; }
 
 /* Utility classes */
 .container {
@@ -208,7 +227,7 @@ button.is-loading {
 .icon-btn:focus-visible,
 a:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(91, 155, 213, 0.4);
+  box-shadow: 0 0 0 3px rgba(47, 143, 255, 0.4);
 }
 
 .btn-small {
@@ -216,15 +235,26 @@ a:focus-visible {
   font-size: 0.75rem;
 }
 
+/* Changed: was a solid --gradient-primary fill with white text - clashed
+   once every other control switched to the flat dark/glowing-border
+   instrument-panel language (§4), and --gradient-primary itself is gone
+   now (banned app-wide, per user direction, for ftl-themes compatibility -
+   that theme system's tokens have no gradient concept, only flat accent
+   colors + glow). Primary actions now use the same transparent-with-
+   glowing-border shape as everything else, distinguished from
+   .btn-secondary only by using the accent color instead of a neutral
+   border. Every other former --gradient-primary call site (active tab/
+   pill fills, progress bars, the .logo-lab wordmark) moved to a flat
+   var(--primary-color)/var(--accent-cyan) fill for the same reason. */
 .btn-primary {
-  background: var(--gradient-primary);
-  color: #ffffff;
-  border: 1px solid transparent;
-  box-shadow: 0 2px 8px rgba(91, 155, 213, 0.2);
+  background: transparent;
+  color: var(--accent-cyan);
+  border: 1px solid var(--accent-cyan);
 }
 
 .btn-primary:hover {
-  box-shadow: 0 4px 16px rgba(91, 155, 213, 0.3);
+  background: rgba(0, 229, 255, 0.12);
+  box-shadow: 0 0 14px rgba(0, 229, 255, 0.4);
 }
 
 .btn-secondary {
@@ -235,11 +265,13 @@ a:focus-visible {
 
 .btn-secondary:hover {
   background-color: var(--surface-hover);
-  border-color: var(--primary-color);
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
 }
 
 /* Cards */
 .card {
+  position: relative;
   background: var(--gradient-card);
   border-radius: var(--radius-lg);
   padding: 1.5rem;
@@ -251,6 +283,36 @@ a:focus-visible {
 .card:hover {
   border-color: var(--border-light);
   box-shadow: var(--card-shadow-hover);
+}
+
+/* HUD-reticle corner accent (promoted from LoginPage.css's
+   .hero-backdrop-card, which introduced this for the Login/Setup hero
+   cards) - every .card now carries the same thin cyan bracket treatment,
+   the reference instrument-panel stylesheet's universal .panel::before/
+   ::after. Purely decorative (pointer-events:none), so it never interferes
+   with a card's own content or click targets. */
+.card::before,
+.card::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+.card::before {
+  top: -1px;
+  left: -1px;
+  border-top: 2px solid var(--accent-cyan);
+  border-left: 2px solid var(--accent-cyan);
+}
+
+.card::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 2px solid var(--accent-cyan);
+  border-right: 2px solid var(--accent-cyan);
 }
 
 /* Inputs */
@@ -267,9 +329,9 @@ a:focus-visible {
 
 .input:focus {
   outline: none;
-  border-color: var(--primary-color);
+  border-color: var(--accent-cyan);
   background-color: var(--background-elevated);
-  box-shadow: 0 0 0 3px rgba(91, 155, 213, 0.1);
+  box-shadow: 0 0 0 3px rgba(47, 143, 255, 0.1), 0 0 12px rgba(0, 229, 255, 0.25);
 }
 
 .input:hover:not(:focus) {
@@ -307,14 +369,15 @@ a:focus-visible {
 .tab-button:hover {
   background-color: var(--surface-hover);
   color: var(--text-primary);
-  border-color: var(--border-light);
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.25);
 }
 
 .tab-button.active {
-  background: var(--gradient-primary);
+  background: var(--primary-color);
   color: #ffffff;
   border-color: transparent;
-  box-shadow: 0 2px 8px rgba(91, 155, 213, 0.25);
+  box-shadow: 0 2px 8px rgba(47, 143, 255, 0.25);
 }
 
 /* Grid Layouts */
@@ -387,13 +450,16 @@ a:focus-visible {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  padding: 0.875rem;
+  padding: 0;
   margin: 0 auto;
   width: 100%;
 }
 
-@media (min-width: 769px) {
-  .page-container { padding: 1.5rem; }
+/* Padding only on phone-width screens (small, not the page/generic
+   .page-container spacing this used to carry at every width) - desktop
+   stays flush at 0 per user feedback. */
+@media (max-width: 768px) {
+  .page-container { padding: 0.5rem; }
 }
 
 .page-container > h1 {
@@ -433,6 +499,7 @@ a:focus-visible {
    already style more specifically (accent-color doesn't touch size, so it
    can't fight Home's deliberately touch-sized .row-select). */
 input[type="checkbox"] { accent-color: var(--primary-color); }
+input[type="checkbox"]:checked { box-shadow: 0 0 6px rgba(0, 229, 255, 0.5); }
 
 /* Form Groups */
 .form-group { margin-bottom: 1.5rem; }
@@ -467,8 +534,20 @@ select {
 
 select:focus {
   outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(91, 155, 213, 0.1);
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 3px rgba(47, 143, 255, 0.1), 0 0 12px rgba(0, 229, 255, 0.25);
+}
+
+/* Most of the app's actual text fields carry a per-page/component class
+   (.form-input, .settings-input, .search-input, ...) rather than the bare
+   element or the .input class above, each with its own :focus rule that
+   only ever sets border-color - never box-shadow. A bare-element rule here
+   reaches every one of them for the glow specifically (box-shadow, not
+   border-color, so nothing above gets overridden) without editing the
+   dozen-plus component stylesheets that define those classes. */
+input:focus,
+textarea:focus {
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.25);
 }
 
 select option {
@@ -486,10 +565,33 @@ select option {
   font-weight: 500;
 }
 
-.badge-primary { background-color: rgba(91, 155, 213, 0.15); color: var(--primary-color); }
+.badge-primary { background-color: rgba(47, 143, 255, 0.15); color: var(--primary-color); }
 .badge-success { background-color: rgba(102, 187, 106, 0.15); color: var(--success); }
 .badge-warning { background-color: rgba(255, 167, 38, 0.15); color: var(--warning); }
 .badge-error { background-color: rgba(239, 83, 80, 0.15); color: var(--error); }
+
+/* Status Dot (DESIGN.md §8.3) - the canonical status primitive: a solid
+   dot colored by state, with a pulsing animation reserved for "in
+   progress" states. Reuse this anywhere status is currently shown as a
+   badge alone (e.g. connected/disconnected). */
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-muted);
+  display: inline-block;
+}
+
+.status-dot-success { background: var(--success); }
+.status-dot-failed { background: var(--error); }
+.status-dot-running { background: var(--primary-color); animation: status-pulse 1.2s ease-in-out infinite; }
+.status-dot-never { background: var(--text-muted); }
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
 
 /* Loading Spinner */
 .spinner {
@@ -577,6 +679,48 @@ select option {
 .table-responsive { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .mobile-only { display: none; }
 .desktop-only { display: block; }
+
+/* Wide tables/tab bars scroll horizontally on narrow screens (each page
+   sets its own overflow-x: auto on these shared marker classes - see
+   CollectionsPage.css's comment on .data-table-container - no shared rule
+   owns that property), but real mobile browsers (iOS Safari, Android
+   Chrome) render that scroll with an invisible-until-touched overlay
+   scrollbar - unlike desktop Chrome/Firefox, they ignore
+   ::-webkit-scrollbar styling entirely - so a table wider than the screen
+   just looks like its rightmost columns are permanently clipped, with
+   nothing suggesting there's more to see. A mask-image fade on whichever
+   edge still has hidden content (layout.html's shared script toggles
+   .has-scroll-left/-right based on scroll position) fixes that
+   everywhere: unlike a pseudo-element overlay, a mask is calculated
+   against the element's own visible box on every frame, so it stays
+   pinned to the edge with no sticky/flex layout tricks needed. */
+.data-table-container.has-scroll-right,
+.admin-tabbar.has-scroll-right {
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to right, black calc(100% - 24px), transparent);
+}
+.data-table-container.has-scroll-left,
+.admin-tabbar.has-scroll-left {
+  -webkit-mask-image: linear-gradient(to left, black calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to left, black calc(100% - 24px), transparent);
+}
+.data-table-container.has-scroll-left.has-scroll-right,
+.admin-tabbar.has-scroll-left.has-scroll-right {
+  -webkit-mask-image: linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent);
+}
+
+/* Generic show/hide toggle - server-rendered as the initial state (a
+   template conditionally adding/omitting this class) and/or toggled by JS
+   in response to user input (classList.toggle), instead of either side
+   writing a raw style="display:none" inline. */
+.is-hidden { display: none; }
+
+/* Recolors a button/link's text as the error color without changing its
+   shape (border, background, hover) - for a "this is destructive" cue on
+   an otherwise plain btn-secondary, smaller than committing to a full
+   btn-danger treatment. */
+.text-error { color: var(--error); }
 
 @media (max-width: 768px) {
   .mobile-only { display: block; }

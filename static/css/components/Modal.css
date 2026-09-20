@@ -20,7 +20,7 @@
   background: var(--surface);
   border-radius: 8px;
   padding: 2rem;
-  max-width: 500px;
+  max-width: 90vw;
   width: 90%;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
   position: relative;
@@ -49,7 +49,7 @@
   border: none;
   border-radius: 8px;
   padding: 1.5rem;
-  max-width: 400px;
+  max-width: 90vw;
   width: 90%;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
@@ -63,4 +63,31 @@
   justify-content: flex-end;
   gap: 0.75rem;
   margin-top: 1.25rem;
+}
+
+/* Layered submodals: an action inside an already-open modal can append a
+   second (third, ...) modal into #modal-root instead of replacing the one
+   behind it (layout.html's hx-swap="beforeend" + closeTopModal(), which
+   closes only the topmost layer) - so more than one of this app's several
+   "*-overlay" families (.modal-overlay, .advanced-mix-overlay,
+   .quick-mix-settings-overlay, .custom-mix-overlay, .save-template-overlay,
+   .edit-template-overlay) can be stacked as direct children of #modal-root
+   at once, each one a sibling <div>. Every family's inner "box" element
+   (.modal-content, .advanced-mix-modal, ...) has "modal" somewhere in its
+   class name, so [class*="modal"] targets whichever one is actually
+   present without needing a rule per family. :nth-of-type counts only
+   sibling <div>s (ignoring the odd <link rel="stylesheet"> some partials
+   emit as a preceding sibling), so this lines up with the DOM order
+   layer 1, layer 2, ... actually stack in. Every modal starts at 90vw and
+   narrows by 10vw per layer, down to a floor of max(40vw, 400px), so a
+   layer further back stays visible (partially) behind the one on top of
+   it. Desktop only - each family's own @media (max-width:768px) block
+   already takes modals to full-width below this breakpoint. */
+@media (min-width: 769px) {
+  #modal-root > div:nth-of-type(1) > [class*="modal"] { max-width: 90vw; }
+  #modal-root > div:nth-of-type(2) > [class*="modal"] { max-width: 80vw; }
+  #modal-root > div:nth-of-type(3) > [class*="modal"] { max-width: 70vw; }
+  #modal-root > div:nth-of-type(4) > [class*="modal"] { max-width: 60vw; }
+  #modal-root > div:nth-of-type(5) > [class*="modal"] { max-width: 50vw; }
+  #modal-root > div:nth-of-type(n+6) > [class*="modal"] { max-width: max(40vw, 400px); }
 }

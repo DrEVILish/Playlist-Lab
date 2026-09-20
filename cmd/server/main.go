@@ -96,6 +96,10 @@ func main() {
 		slog.Error("failed to load templates", "error", err)
 		os.Exit(1)
 	}
+	// Lets pageData (templates.go) look up the current user's saved
+	// text-size preference server-side (DESIGN.md §14) instead of every
+	// page reading it from localStorage after load.
+	tmpl.DB = sqlDB
 
 	secure := cfg.CookieSecure
 	mw := &auth.Middleware{
@@ -109,27 +113,51 @@ func main() {
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
+	// handlers.Recoverer replaces chi's default: same recover+log-stack
+	// behavior, but answers with the themed error page (DESIGN.md §10)
+	// instead of chi's plain "500 Internal Server Error" text body.
+	r.Use(handlers.Recoverer(tmpl))
 	if cfg.TrustProxy {
 		r.Use(middleware.RealIP)
 	}
 	r.Use(mw.WithSession)
 	r.Use(mw.OptionalAuth)
 
-	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServerFS(static.FS)))
+	// Themed 404/405 (DESIGN.md §10) - both run through the same top-level
+	// middleware stack above (WithSession/OptionalAuth included), so .User
+	// still renders the real header for a logged-in user who hits a bad URL.
+	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		tmpl.RenderErrorPage(w, r, http.StatusNotFound, "Page not found", "The page you're looking for doesn't exist or may have moved.")
+	})
+	r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+		tmpl.RenderErrorPage(w, r, http.StatusMethodNotAllowed, "Method not allowed", "That action isn't supported on this page.")
+	})
+
+	// go:embed files carry a zero mtime, so http.FileServerFS never emits a
+	// Last-Modified/ETag validator for them - with no Cache-Control either,
+	// browsers are left to their own heuristics for how long to keep an old
+	// build's JS/CSS around after a deploy, which is exactly the kind of
+	// "works in a clean session, breaks after a normal refresh" staleness
+	// this app hit right after each of today's live redeploys. Forcing
+	// revalidation on every load keeps every reload on the current build.
+	staticHandler := http.StripPrefix("/static/", http.FileServerFS(static.FS))
+	r.Handle("/static/*", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+		staticHandler.ServeHTTP(w, req)
+	}))
 
 	handlers.RegisterAuth(r, &handlers.AuthHandler{
 		DB: sqlDB, Plex: plexClient, Auth: mw, Store: store,
 		Secure: secure, Tmpl: tmpl,
 	})
-	handlers.RegisterServers(r, mw, &handlers.ServersHandler{DB: sqlDB, Plex: plexClient, Tmpl: tmpl})
+	notificationStore := notifications.NewStore()
+	handlers.RegisterServers(r, mw, &handlers.ServersHandler{DB: sqlDB, Plex: plexClient, Tmpl: tmpl, Notifications: notificationStore})
 	handlers.RegisterStatus(r, mw, &handlers.StatusHandler{DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl})
 	// Cover art is relayed through the server rather than linked directly -
 	// see internal/handlers/proxy.go for why.
 	handlers.RegisterProxy(r, mw, &handlers.ProxyHandler{DB: sqlDB, PlexAuth: plexClient})
-	handlers.RegisterAdminLogs(r, mw, &handlers.AdminLogsHandler{DB: sqlDB, Tmpl: tmpl, LogDir: cfg.LogDir})
-	handlers.RegisterBackup(r, mw, &handlers.BackupHandler{DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl})
-	notificationStore := notifications.NewStore()
+	handlers.RegisterAdminLogs(r, mw, &handlers.AdminLogsHandler{DB: sqlDB, Tmpl: tmpl, LogDir: cfg.LogDir, Notifications: notificationStore})
+	handlers.RegisterBackup(r, mw, &handlers.BackupHandler{DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl, Notifications: notificationStore})
 	handlers.RegisterNotifications(r, mw, &handlers.NotificationsHandler{Store: notificationStore, Tmpl: tmpl})
 
 	actionQueue := actionqueue.New(notificationStore)
@@ -198,7 +226,7 @@ func main() {
 	registry.RegisterTarget(youtubeTarget)
 	handlers.RegisterCrossImport(r, mw, &handlers.CrossImportHandler{
 		DB: sqlDB, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue,
-		Registry: registry, Sessions: crossimport.NewStore(),
+		Registry: registry, Sessions: crossimport.NewStore(), Store: store,
 	})
 	importHandler := &handlers.ImportHandler{
 		DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue,
@@ -206,10 +234,12 @@ func main() {
 	}
 	handlers.RegisterImport(r, mw, importHandler)
 	handlers.RegisterImportReview(r, mw, importHandler)
+	handlers.RegisterImportFile(r, mw, importHandler)
 	handlers.RegisterPlexHome(r, mw, importHandler)
 	handlers.RegisterCharts(r, mw, &handlers.ChartsHandler{
-		DB: sqlDB, SessionSecret: cfg.SessionSecret,
+		DB: sqlDB, Tmpl: tmpl, SessionSecret: cfg.SessionSecret,
 		SpotifyClientID: cfg.SpotifyClientID, SpotifyClientSecret: cfg.SpotifyClientSecret,
+		Notifications: notificationStore,
 	})
 
 	// Missing tracks + acquisition (Phase 6d): deemix (our local Deezer
@@ -228,7 +258,7 @@ func main() {
 	if v, ok, _ := db.GetAdminConfig(sqlDB, "lidarr_api_key"); ok {
 		lidarrAPIKey = v
 	}
-	deemixService := deemix.New(deemix.Config{URL: cfg.DeemixURL, ARL: deemixArl}, sqlDB, notificationStore)
+	deemixService := deemix.New(deemix.Config{ARL: deemixArl}, sqlDB, notificationStore)
 	lidarrService := lidarr.New(lidarr.Config{URL: lidarrURL, APIKey: lidarrAPIKey}, sqlDB, notificationStore)
 	handlers.RegisterMissing(r, mw, &handlers.MissingHandler{
 		DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue,
@@ -244,7 +274,7 @@ func main() {
 	// from AdminHandler's own routes above (same hx-trigger="revealed"
 	// pattern the rest of this file already uses), so SettingsHandler
 	// itself needs no Deemix/Lidarr/YouTube handles of its own.
-	handlers.RegisterSettings(r, mw, &handlers.SettingsHandler{DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl})
+	handlers.RegisterSettings(r, mw, &handlers.SettingsHandler{DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl, Store: store, Notifications: notificationStore})
 
 	// Scheduling (Phase 6f): playlist-refresh + mix-generation schedules,
 	// closing out the schedule-checker job deferred through Phase 4/5 (see
@@ -252,6 +282,21 @@ func main() {
 	schedulerDeps := schedulerjob.Deps{DB: sqlDB, Registry: registry, Mixes: mixService, ClientID: cfg.PlexClientID}
 	handlers.RegisterSchedules(r, mw, &handlers.SchedulesHandler{
 		DB: sqlDB, Tmpl: tmpl, Deps: schedulerDeps, Notifications: notificationStore,
+	})
+
+	// Collections (DESIGN.md §11.11): Kometa-style Plex Collection
+	// management, gated to the real Plex server owner (RequirePlexOwner),
+	// reusing the same scheduler.Deps built above for its refresh engine.
+	handlers.RegisterCollections(r, mw, &handlers.CollectionsHandler{
+		DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl, Notifications: notificationStore,
+		Queue: actionQueue, SchedulerDeps: schedulerDeps,
+	})
+
+	// Dynamic Collections (DESIGN.md §11.11 / Kometa's "dynamic_collections"
+	// feature): expands one set definition into many Collections rows -
+	// same gate, same background queue as Collections itself.
+	handlers.RegisterDynamicCollections(r, mw, &handlers.DynamicCollectionsHandler{
+		DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue,
 	})
 
 	// deemix keeps downloading across a restart of this server, but the

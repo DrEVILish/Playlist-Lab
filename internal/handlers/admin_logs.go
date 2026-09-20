@@ -12,7 +12,9 @@ package handlers
 import (
 	"bufio"
 	"database/sql"
+	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -27,6 +29,7 @@ import (
 	"github.com/drevilish/playlist-lab/internal/auth"
 	"github.com/drevilish/playlist-lab/internal/db"
 	"github.com/drevilish/playlist-lab/internal/logging"
+	"github.com/drevilish/playlist-lab/internal/services/notifications"
 )
 
 // adminLogConfigKey is the admin_config row the chosen level persists in, so
@@ -40,9 +43,10 @@ const (
 )
 
 type AdminLogsHandler struct {
-	DB     *sql.DB
-	Tmpl   *Templates
-	LogDir string
+	DB            *sql.DB
+	Tmpl          *Templates
+	LogDir        string
+	Notifications *notifications.Store
 }
 
 func RegisterAdminLogs(r chi.Router, mw *auth.Middleware, h *AdminLogsHandler) {
@@ -50,17 +54,36 @@ func RegisterAdminLogs(r chi.Router, mw *auth.Middleware, h *AdminLogsHandler) {
 		r.Use(mw.RequireAuth)
 		r.Use(mw.RequireAdmin)
 		r.Get("/admin/logs", h.list)
+		r.Get("/admin/logs/stream", h.stream)
+		r.Get("/admin/logs/export", h.exportCSV)
 		r.Post("/admin/logs/clear", h.clear)
 		r.Post("/admin/log-level", h.setLevel)
 	})
+}
+
+// logAttr is one slog key-value pair beyond the three every entry always
+// has (time/level/msg), shown in the entry's expandable detail. Previously
+// only a "service" field was pulled out by name, but nothing in this
+// codebase ever logs a "service" attr - it was dead weight ported from the
+// Node app's winston setup, and every entry's disclosure triangle expanded
+// to reveal nothing. Capturing whatever attrs a call actually logged
+// (error, path, userId, ...) makes that triangle mean something.
+type logAttr struct {
+	Key   string
+	Value string
 }
 
 type logEntry struct {
 	Level     string
 	Message   string
 	Timestamp string
-	Service   string
-	ts        time.Time
+	Attrs     []logAttr
+	// Key is a stable per-entry identifier for the "adminLogEntry" template
+	// (admin_logs.html)'s data-log-key - content-derived rather than a loop
+	// index, since the SSE live-tail (stream, below) renders one entry at a
+	// time with no list position to key off of.
+	Key string
+	ts  time.Time
 }
 
 // severity orders the levels so a configured floor can be applied to
@@ -156,26 +179,53 @@ func readLines(path string) ([]string, error) {
 // parseEntry reads one slog JSON line. A line still being written when the
 // file was read won't parse; it is surfaced as-is rather than dropped,
 // matching the Node route's handling of partial winston lines.
+//
+// Unmarshals into a generic map rather than a fixed struct so that whatever
+// extra key-value attrs a particular slog call logged (error, path,
+// userId, ...) survive into Attrs instead of being silently discarded -
+// there's no fixed schema for them, they vary per call site.
 func parseEntry(line string) logEntry {
-	var raw struct {
-		Time    time.Time `json:"time"`
-		Level   string    `json:"level"`
-		Msg     string    `json:"msg"`
-		Service string    `json:"service"`
-	}
+	var raw map[string]any
 	if err := json.Unmarshal([]byte(line), &raw); err != nil {
 		return logEntry{Level: "info", Message: line}
 	}
-	lvl := strings.ToLower(raw.Level)
+	lvl := "info"
+	if v, ok := raw["level"].(string); ok {
+		lvl = strings.ToLower(v)
+	}
 	if _, ok := severity[lvl]; !ok {
 		lvl = "info"
 	}
+	msg, _ := raw["msg"].(string)
+	var ts time.Time
+	var formatted, rawTime string
+	if v, ok := raw["time"].(string); ok {
+		rawTime = v
+		if parsed, err := time.Parse(time.RFC3339Nano, v); err == nil {
+			ts = parsed
+			formatted = parsed.Format("2006-01-02 15:04:05")
+		}
+	}
+	delete(raw, "time")
+	delete(raw, "level")
+	delete(raw, "msg")
+
+	attrs := make([]logAttr, 0, len(raw))
+	for k, v := range raw {
+		attrs = append(attrs, logAttr{Key: k, Value: fmt.Sprint(v)})
+	}
+	sort.Slice(attrs, func(i, j int) bool { return attrs[i].Key < attrs[j].Key })
+
 	return logEntry{
 		Level:     lvl,
-		Message:   raw.Msg,
-		Timestamp: raw.Time.Format("2006-01-02 15:04:05"),
-		Service:   raw.Service,
-		ts:        raw.Time,
+		Message:   msg,
+		Timestamp: formatted,
+		Attrs:     attrs,
+		// rawTime carries nanosecond precision (formatted above only goes to
+		// the second), so two entries logged within the same second still
+		// get distinct keys.
+		Key: rawTime + "|" + msg,
+		ts:  ts,
 	}
 }
 
@@ -197,6 +247,88 @@ func (h *AdminLogsHandler) list(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r.URL.Query().Get("filter"), logLimit(r.URL.Query().Get("limit")), "")
 }
 
+// stream is GET /admin/logs/stream - an SSE endpoint (DESIGN.md §11.5/§17)
+// pushing one rendered "adminLogEntry" fragment per new line the
+// internal/logging broadcaster publishes, filtered by the same severity
+// floor and optional ?filter= level readEntries/list already apply, so a
+// live-tailed entry never shows up here that the historical GET /admin/logs
+// view would have hidden. Mirrors notifications.go's stream handler.
+func (h *AdminLogsHandler) stream(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	levelFilter := r.URL.Query().Get("filter")
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	// Unlike notifications.go's stream, there's no initial payload worth
+	// sending (the historical batch is GET /admin/logs's job) - but the
+	// client's response headers otherwise never actually go out until the
+	// first Write/Flush, which without this would only happen at the first
+	// log line or the 25s keep-alive, leaving every connection looking
+	// hung until then.
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	lines, unsubscribe := logging.Subscribe()
+	defer unsubscribe()
+
+	keepAlive := time.NewTicker(25 * time.Second)
+	defer keepAlive.Stop()
+
+	for {
+		select {
+		case line, ok := <-lines:
+			if !ok {
+				return
+			}
+			e := parseEntry(line)
+			if levelFilter != "" && e.Level != levelFilter {
+				continue
+			}
+			if severity[e.Level] < severity[logging.CurrentLevel()] {
+				continue
+			}
+			var buf strings.Builder
+			if err := h.Tmpl.partials.ExecuteTemplate(&buf, "adminLogEntry", e); err != nil {
+				continue
+			}
+			writeSSEEvent(w, buf.String())
+			flusher.Flush()
+		case <-keepAlive.C:
+			fmt.Fprint(w, ": keep-alive\n\n")
+			flusher.Flush()
+		case <-r.Context().Done():
+			return
+		}
+	}
+}
+
+// exportCSV is GET /admin/logs/export - same stdlib encoding/csv approach as
+// PlaylistsHandler.exportCSV/MissingHandler.exportCSV (DESIGN.md §8.6),
+// reusing readEntries with the same ?filter=/?limit= the log viewer itself
+// is currently showing, so the download matches what's on screen.
+func (h *AdminLogsHandler) exportCSV(w http.ResponseWriter, r *http.Request) {
+	entries, _ := readEntries(h.LogDir, r.URL.Query().Get("filter"), logLimit(r.URL.Query().Get("limit")))
+
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", `attachment; filename="admin-logs.csv"`)
+	cw := csv.NewWriter(w)
+	cw.Write([]string{"Timestamp", "Level", "Message", "Attributes"})
+	for _, e := range entries {
+		attrs := make([]string, len(e.Attrs))
+		for i, a := range e.Attrs {
+			attrs[i] = a.Key + "=" + a.Value
+		}
+		cw.Write([]string{e.Timestamp, e.Level, e.Message, strings.Join(attrs, "; ")})
+	}
+	cw.Flush()
+}
+
 func logLimit(raw string) int {
 	n, err := strconv.Atoi(raw)
 	if err != nil || n < 1 {
@@ -209,17 +341,19 @@ func logLimit(raw string) int {
 }
 
 func (h *AdminLogsHandler) setLevel(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
 	_ = r.ParseForm()
 	requested := r.FormValue("level")
 	if err := logging.SetLevel(requested); err != nil {
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Set log level", err.Error(), notifications.StatusError, nil)
 		h.render(w, r.FormValue("filter"), logLimit(r.FormValue("limit")), err.Error())
 		return
 	}
 	if err := db.SetAdminConfig(h.DB, adminLogConfigKey, requested); err != nil {
 		slog.Error("failed to persist log level", "error", err)
 	}
-	user := auth.CurrentUser(r)
 	slog.Info("Log level changed by admin", "adminId", user.ID, "level", requested)
+	h.Notifications.Add(user.ID, notifications.TypeAction, "Set log level", requested, notifications.StatusSuccess, nil)
 	h.render(w, r.FormValue("filter"), logLimit(r.FormValue("limit")), "Log level set to "+requested+".")
 }
 
@@ -227,20 +361,28 @@ func (h *AdminLogsHandler) setLevel(w http.ResponseWriter, r *http.Request) {
 // running process holds them open through lumberjack, so unlinking would
 // leave it writing to a file nobody can read any more.
 func (h *AdminLogsHandler) clear(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
 	_ = r.ParseForm()
+	failed := 0
 	for _, path := range combinedLogPaths(h.LogDir) {
 		if path == filepath.Join(h.LogDir, "combined.log") {
 			if err := os.Truncate(path, 0); err != nil {
 				slog.Error("failed to clear log file", "error", err, "path", path)
+				failed++
 			}
 			continue
 		}
 		// Rotations are not held open, so they can just go.
 		if err := os.Remove(path); err != nil {
 			slog.Error("failed to remove rotated log file", "error", err, "path", path)
+			failed++
 		}
 	}
-	user := auth.CurrentUser(r)
 	slog.Info("Logs cleared by admin", "adminId", user.ID)
+	if failed > 0 {
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Clear logs", fmt.Sprintf("%d file(s) failed to clear - see server logs", failed), notifications.StatusError, nil)
+	} else {
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Clear logs", "Logs cleared", notifications.StatusSuccess, nil)
+	}
 	h.render(w, r.FormValue("filter"), logLimit(r.FormValue("limit")), "Logs cleared.")
 }

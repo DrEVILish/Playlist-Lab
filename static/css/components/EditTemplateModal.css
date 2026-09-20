@@ -28,7 +28,7 @@
 .edit-template-modal {
   background: var(--gradient-card);
   border-radius: var(--radius-xl);
-  max-width: 600px;
+  max-width: 90vw;
   width: 100%;
   max-height: 90vh;
   display: flex;
@@ -242,13 +242,13 @@
   border-radius: 50%;
   background: var(--primary-color);
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(91, 155, 213, 0.4);
+  box-shadow: 0 2px 8px rgba(47, 143, 255, 0.4);
   transition: all 0.2s ease;
 }
 
 .track-slider::-webkit-slider-thumb:hover {
   transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(91, 155, 213, 0.6);
+  box-shadow: 0 4px 12px rgba(47, 143, 255, 0.6);
 }
 
 .track-slider::-moz-range-thumb {
@@ -258,13 +258,13 @@
   background: var(--primary-color);
   cursor: pointer;
   border: none;
-  box-shadow: 0 2px 8px rgba(91, 155, 213, 0.4);
+  box-shadow: 0 2px 8px rgba(47, 143, 255, 0.4);
   transition: all 0.2s ease;
 }
 
 .track-slider::-moz-range-thumb:hover {
   transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(91, 155, 213, 0.6);
+  box-shadow: 0 4px 12px rgba(47, 143, 255, 0.6);
 }
 
 .track-slider:disabled {
@@ -397,17 +397,14 @@
 .btn-save {
   flex: 1;
   padding: 0.875rem 1.5rem;
-  background: var(--gradient-primary);
-  color: #ffffff;
-  border: none;
+  background: transparent;
+  color: var(--accent-cyan);
+  border: 1px solid var(--accent-cyan);
   border-radius: var(--radius-md);
   font-size: 0.9375rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 12px rgba(91, 155, 213, 0.3);
-  position: relative;
-  overflow: hidden;
 }
 
 .btn-save::after {
@@ -429,8 +426,8 @@
 }
 
 .btn-save:hover:not(:disabled) {
-  box-shadow: 0 4px 20px rgba(91, 155, 213, 0.4);
-  transform: translateY(-1px);
+  background: rgba(0, 229, 255, 0.12);
+  box-shadow: 0 0 14px rgba(0, 229, 255, 0.4);
 }
 
 .btn-save:disabled {

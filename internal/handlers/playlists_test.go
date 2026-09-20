@@ -10,6 +10,8 @@ import (
 
 	"github.com/drevilish/playlist-lab/internal/auth"
 	"github.com/drevilish/playlist-lab/internal/db"
+	"github.com/drevilish/playlist-lab/internal/services/actionqueue"
+	"github.com/drevilish/playlist-lab/internal/services/notifications"
 )
 
 // newFakePlexServer starts an httptest.Server standing in for a user's Plex
@@ -26,16 +28,17 @@ func newFakePlexServer(t *testing.T, handler http.HandlerFunc) *httptest.Server 
 // real plex.Client instead of erroring out as "no server selected".
 func seedUserServer(t *testing.T, sqlDB *sql.DB, userID int64, serverURL string) {
 	t.Helper()
-	if _, err := db.SaveUserServer(sqlDB, userID, "Test Server", "client-1", serverURL, "1", "Music", ""); err != nil {
+	if _, err := db.AddUserServer(sqlDB, userID, "Test Server", "client-1", serverURL, "1", "Music", "", false); err != nil {
 		t.Fatalf("SaveUserServer: %v", err)
 	}
 }
 
 func newPlaylistsHandler(sqlDB *sql.DB) *PlaylistsHandler {
 	return &PlaylistsHandler{
-		DB:       sqlDB,
-		PlexAuth: auth.NewPlexClient("test-client-id", "Playlist Lab"),
-		Tmpl:     nopTemplates(),
+		DB:            sqlDB,
+		PlexAuth:      auth.NewPlexClient("test-client-id", "Playlist Lab"),
+		Tmpl:          nopTemplates(),
+		Notifications: notifications.NewStore(),
 	}
 }
 
@@ -241,15 +244,19 @@ func TestClone_CopiesTracksIntoANewPlaylistNamedCopy(t *testing.T) {
 	})
 	seedUserServer(t, sqlDB, user.ID, srv.URL)
 
+	store := notifications.NewStore()
 	h := newPlaylistsHandler(sqlDB)
+	h.Notifications = store
+	h.Queue = actionqueue.New(store)
 	router := testRouter(sqlDB, "POST", "/playlists/{plexId}/clone", h.clone)
 	rec := authedRequest(t, sqlDB, router, user, "POST", "/playlists/rk-1/clone", "", "")
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202; body=%s", rec.Code, rec.Body.String())
 	}
-	if got := rec.Header().Get("HX-Redirect"); got != "/" {
-		t.Errorf("HX-Redirect = %q, want /", got)
+	n := waitForNotification(t, store, user.ID)
+	if n.Status != notifications.StatusSuccess {
+		t.Fatalf("notification status = %v, want success; detail=%s", n.Status, n.Detail)
 	}
 	if gotCreateQuery == "" || !strings.Contains(gotCreateQuery, "title=Original+%28Copy%29") {
 		t.Errorf("create query = %q, want a title of %q", gotCreateQuery, "Original (Copy)")

@@ -22,13 +22,15 @@ import (
 	"github.com/drevilish/playlist-lab/internal/auth"
 	"github.com/drevilish/playlist-lab/internal/db"
 	"github.com/drevilish/playlist-lab/internal/services/importsvc"
+	"github.com/drevilish/playlist-lab/internal/services/notifications"
 	"github.com/drevilish/playlist-lab/internal/services/plex"
 )
 
 type BackupHandler struct {
-	DB       *sql.DB
-	PlexAuth *auth.PlexClient
-	Tmpl     *Templates
+	DB            *sql.DB
+	PlexAuth      *auth.PlexClient
+	Tmpl          *Templates
+	Notifications *notifications.Store
 }
 
 func RegisterBackup(r chi.Router, mw *auth.Middleware, h *BackupHandler) {
@@ -42,7 +44,7 @@ func RegisterBackup(r chi.Router, mw *auth.Middleware, h *BackupHandler) {
 
 func (h *BackupHandler) page(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
-	userServer, _ := db.GetUserServer(h.DB, user.ID)
+	userServer, _ := db.GetUserMusicServer(h.DB, user.ID)
 	data := map[string]any{"User": user, "HasServer": userServer != nil && userServer.LibraryID.Valid}
 	if userServer != nil && userServer.LibraryID.Valid {
 		client := plex.NewClient(userServer.ServerURL, plex.ResolveToken(user.PlexToken, userServer.AccessToken.String), h.PlexAuth.ClientID, "Playlist Lab")
@@ -84,7 +86,7 @@ type backupFile struct {
 // not a fetch) get their tracks pulled and written out as one JSON file.
 func (h *BackupHandler) export(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
-	userServer, err := db.GetUserServer(h.DB, user.ID)
+	userServer, err := db.GetUserMusicServer(h.DB, user.ID)
 	if err != nil || userServer == nil || !userServer.LibraryID.Valid {
 		http.Error(w, "no Plex server selected", http.StatusBadRequest)
 		return
@@ -143,7 +145,7 @@ func (h *BackupHandler) export(w http.ResponseWriter, r *http.Request) {
 // restoreResults state.
 func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
-	userServer, err := db.GetUserServer(h.DB, user.ID)
+	userServer, err := db.GetUserMusicServer(h.DB, user.ID)
 	if err != nil || userServer == nil || !userServer.LibraryID.Valid {
 		http.Error(w, "no Plex server selected", http.StatusBadRequest)
 		return
@@ -201,6 +203,19 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 		}
 		results = append(results, restoreResult{Name: p.Title, Matched: result.MatchedCount, Total: result.TotalCount})
 	}
+
+	failed := 0
+	for _, res := range results {
+		if res.Error != "" {
+			failed++
+		}
+	}
+	status, detail := notifications.StatusSuccess, fmt.Sprintf("Restored %d playlist(s)", len(results)-failed)
+	if failed > 0 {
+		status = notifications.StatusError
+		detail = fmt.Sprintf("Restored %d of %d playlist(s), %d failed", len(results)-failed, len(results), failed)
+	}
+	h.Notifications.Add(user.ID, notifications.TypeAction, "Restore backup", detail, status, nil)
 
 	h.Tmpl.RenderPartial(w, "partials/backup_restore_results.html", map[string]any{"Results": results})
 }

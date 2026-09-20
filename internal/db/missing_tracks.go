@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"strings"
 	"time"
 )
 
@@ -69,6 +70,8 @@ func GetUserMissingTracks(sqlDB *sql.DB, userID int64) ([]MissingTrack, error) {
 // surfaced as literal duplicate rows in the missing-tracks list once it
 // became directly visible in the Playlists table's inline expando.
 func AddMissingTracks(sqlDB *sql.DB, userID, playlistID int64, tracks []NewMissingTrack) error {
+	tracks = dedupeMissingTracks(tracks)
+
 	tx, err := sqlDB.Begin()
 	if err != nil {
 		return err
@@ -97,6 +100,27 @@ func AddMissingTracks(sqlDB *sql.DB, userID, playlistID int64, tracks []NewMissi
 		}
 	}
 	return tx.Commit()
+}
+
+// dedupeMissingTracks drops later rows with the same normalized (case/
+// whitespace-insensitive) title+artist as an earlier one. The source track
+// list a playlist is matched against can itself list the same track more
+// than once (a scrape returning a repeated entry, a retry re-appending
+// tracks that were already unmatched); MatchPlaylist has no reason to merge
+// those, so without this every still-unmatched duplicate landed in
+// missing_tracks verbatim and rendered as 2-4 identical rows in a row.
+func dedupeMissingTracks(tracks []NewMissingTrack) []NewMissingTrack {
+	seen := make(map[string]bool, len(tracks))
+	out := make([]NewMissingTrack, 0, len(tracks))
+	for _, t := range tracks {
+		key := strings.ToLower(strings.TrimSpace(t.Title)) + "\x00" + strings.ToLower(strings.TrimSpace(t.Artist))
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, t)
+	}
+	return out
 }
 
 // MissingTrackStat mirrors database.ts's getMissingTrackStats() row: one

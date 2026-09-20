@@ -4,6 +4,14 @@
      NotificationCenter.css actually applies - this partial had been
      rendering with zero styling since Phase 4. */}}
 {{define "partials/notifications.html"}}
+<!-- The bell icon (summary) lives outside this panel, which is the only
+     part of the notification-center this SSE stream ever targets - so the
+     closed-bell badge/spinner previously never updated live at all (they
+     didn't exist in the markup). hx-swap-oob lets this same SSE payload
+     also update those two elements by id wherever they actually sit in
+     the document, without changing what #notifications itself targets. -->
+<span id="notification-bell-badge" class="notification-bell-badge" hx-swap-oob="true"{{if not .Count}} hidden{{end}}>{{.Count}}</span>
+<span id="notification-bell-spinner" class="notification-bell-spinner" hx-swap-oob="true"{{if not .HasInProgress}} hidden{{end}}></span>
 <div class="notification-panel-header">
   <span>Notifications</span>
   <span class="notification-panel-actions">
@@ -16,7 +24,7 @@
   <div class="notification-empty">No notifications</div>
   {{end}}
   {{range .Notifications}}
-  <div class="notification-item notification-item--{{.Status}}">
+  <div class="notification-item notification-item--{{.Status}}" data-id="{{.ID}}" data-status="{{.Status}}">
     <div class="notification-item-icon">
       {{if eq (printf "%v" .Status) "in-progress"}}<span class="notification-item-spinner"></span>
       {{else if eq (printf "%v" .Status) "success"}}<span class="notification-item-check">&check;</span>

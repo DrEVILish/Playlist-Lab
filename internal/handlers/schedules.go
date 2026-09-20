@@ -51,11 +51,19 @@ func (h *SchedulesHandler) scheduleDisplayName(s db.Schedule) string {
 			return playlist.Name
 		}
 	}
+	if s.CollectionID.Valid {
+		if coll, err := db.GetCollectionByID(h.DB, s.CollectionID.Int64); err == nil && coll != nil {
+			return coll.Name
+		}
+	}
 	if name := s.ParsedConfig().PlaylistName; name != "" {
 		return name
 	}
 	if s.ScheduleType == "mix_generation" {
 		return "Scheduled mix"
+	}
+	if s.ScheduleType == "collection_refresh" {
+		return "Scheduled collection refresh"
 	}
 	return "Scheduled playlist refresh"
 }
@@ -92,6 +100,14 @@ func RegisterSchedules(r chi.Router, mw *auth.Middleware, h *SchedulesHandler) {
 	r.Group(func(r chi.Router) {
 		r.Use(mw.RequireAuth)
 		r.Get("/playlists/{plexId}/schedule", h.form)
+		// DESIGN.md §11.11: Collections reuses this same modal/handler set
+		// (create/update/delete/run are already schedule-type-agnostic) -
+		// only the "open the form" step needs a collection-specific loader,
+		// since a collection has no plexId to look up by. No RequirePlexOwner
+		// here: a schedule can only ever point at a collection_id that
+		// belongs to an owner-created collection in the first place, so the
+		// ownedCollection/ownedSchedule checks below are already sufficient.
+		r.Get("/collections/{id}/schedule", h.formForCollection)
 		r.Post("/schedules", h.create)
 		r.Put("/schedules/{id}", h.update)
 		r.Delete("/schedules/{id}", h.delete)
@@ -119,6 +135,24 @@ func (h *SchedulesHandler) loadPlaylist(r *http.Request) (*db.Playlist, error) {
 	return db.GetPlaylistByPlexID(h.DB, user.ID, plexID)
 }
 
+// loadCollection resolves the {id} URL param to the current user's own
+// collection - mirrors loadPlaylist for the Collections page's Schedule
+// button (DESIGN.md §11.11).
+func (h *SchedulesHandler) loadCollection(r *http.Request) (*db.Collection, error) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		return nil, nil
+	}
+	coll, err := db.GetCollectionByID(h.DB, id)
+	if err != nil || coll == nil {
+		return nil, err
+	}
+	if coll.UserID != auth.CurrentUser(r).ID {
+		return nil, nil
+	}
+	return coll, nil
+}
+
 // form renders the create/manage modal (ScheduleModal.tsx port) for one
 // playlist - "Create Schedule" if none exists yet for it, "Manage Schedule"
 // otherwise.
@@ -141,8 +175,47 @@ func (h *SchedulesHandler) form(w http.ResponseWriter, r *http.Request) {
 	h.Tmpl.RenderPartial(w, "partials/schedule_form.html", data)
 }
 
+// formForCollection is form's Collections-page sibling - a collection has
+// no plexId to look up an existing schedule by, so it goes via
+// schedule.collection_id instead. Collections has no GetScheduleByPlaylistID
+// analog since a collection can have at most one schedule the same way a
+// playlist can; reusing db.GetUserSchedules and filtering is overkill for
+// that, so this queries directly.
+func (h *SchedulesHandler) formForCollection(w http.ResponseWriter, r *http.Request) {
+	coll, err := h.loadCollection(r)
+	if err != nil || coll == nil {
+		http.Error(w, "Collection not found", http.StatusNotFound)
+		return
+	}
+	data := map[string]any{"CollectionID": coll.ID, "CollectionName": coll.Name}
+	sched, err := db.GetScheduleByCollectionID(h.DB, coll.ID)
+	if err != nil {
+		slog.Error("failed to load schedule", "error", err)
+	}
+	if sched != nil {
+		executions, _ := db.GetScheduleExecutions(h.DB, sched.ID, 10)
+		data["Schedule"] = scheduleView{Schedule: sched, Config: sched.ParsedConfig(), Executions: executions}
+	}
+	h.Tmpl.RenderPartial(w, "partials/schedule_form.html", data)
+}
+
+// closeModalAndRefresh answers a schedule mutation for a playlist-linked
+// schedule - HX-Redirect fully reloads the Playlists page, which is already
+// how every other playlist-row mutation in this app refreshes the table.
 func closeModalAndRefresh(w http.ResponseWriter) {
 	w.Header().Set("HX-Redirect", "/")
+	w.WriteHeader(http.StatusOK)
+}
+
+// closeModalAndNotifyCollections is closeModalAndRefresh's Collections-page
+// counterpart: a full-page HX-Redirect would navigate away from the
+// Collections page entirely (its URL is /collections, not /), so instead
+// this fires an HX-Trigger event the page's own #collections-list panel
+// (hx-trigger="load, collections-changed from:body") is already listening
+// for, refreshing just that panel in place. The modal itself closes via
+// schedule_form.html's own hx-on::after-request handler either way.
+func closeModalAndNotifyCollections(w http.ResponseWriter) {
+	w.Header().Set("HX-Trigger", "collections-changed")
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -158,8 +231,11 @@ func configJSON(r *http.Request) string {
 	return string(b)
 }
 
-// create ports POST /api/schedules, scoped to playlist_refresh (the only
-// type ScheduleModal.tsx can produce - see package doc).
+// create ports POST /api/schedules. Originally scoped to playlist_refresh
+// (the only type ScheduleModal.tsx could produce); now also accepts a
+// collectionId form field for collection_refresh schedules (DESIGN.md
+// §11.11), sharing this same handler since everything past "which id was
+// submitted" is already identical between the two.
 func (h *SchedulesHandler) create(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
 	if err := r.ParseForm(); err != nil {
@@ -167,22 +243,34 @@ func (h *SchedulesHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	playlistID, _ := strconv.ParseInt(r.FormValue("playlistId"), 10, 64)
+	collectionID, _ := strconv.ParseInt(r.FormValue("collectionId"), 10, 64)
 	frequency := r.FormValue("frequency")
 	startDate := r.FormValue("startDate")
-	if playlistID == 0 || frequency == "" || startDate == "" {
-		http.Error(w, "playlistId, frequency and startDate are required", http.StatusBadRequest)
+	if (playlistID == 0 && collectionID == 0) || frequency == "" || startDate == "" {
+		http.Error(w, "playlistId (or collectionId), frequency and startDate are required", http.StatusBadRequest)
 		return
 	}
 
-	if _, err := db.CreateSchedule(h.DB, user.ID, playlistID, "playlist_refresh", frequency, startDate, configJSON(r)); err != nil {
+	scheduleType := "playlist_refresh"
+	if collectionID != 0 {
+		scheduleType = "collection_refresh"
+	}
+	if _, err := db.CreateSchedule(h.DB, user.ID, playlistID, collectionID, scheduleType, frequency, startDate, configJSON(r)); err != nil {
 		slog.Error("failed to create schedule", "error", err)
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Create schedule", err.Error(), notifications.StatusError, nil)
 		http.Error(w, "Failed to create schedule", http.StatusInternalServerError)
+		return
+	}
+	h.Notifications.Add(user.ID, notifications.TypeAction, "Create schedule", frequency, notifications.StatusSuccess, nil)
+	if collectionID != 0 {
+		closeModalAndNotifyCollections(w)
 		return
 	}
 	closeModalAndRefresh(w)
 }
 
 func (h *SchedulesHandler) update(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
 		http.Error(w, "invalid schedule id", http.StatusBadRequest)
@@ -209,13 +297,20 @@ func (h *SchedulesHandler) update(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := db.UpdateSchedule(h.DB, id, u); err != nil {
 		slog.Error("failed to update schedule", "error", err)
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Update schedule", err.Error(), notifications.StatusError, nil)
 		http.Error(w, "Failed to update schedule", http.StatusInternalServerError)
+		return
+	}
+	h.Notifications.Add(user.ID, notifications.TypeAction, "Update schedule", frequency, notifications.StatusSuccess, nil)
+	if sched.CollectionID.Valid {
+		closeModalAndNotifyCollections(w)
 		return
 	}
 	closeModalAndRefresh(w)
 }
 
 func (h *SchedulesHandler) delete(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
 		http.Error(w, "invalid schedule id", http.StatusBadRequest)
@@ -228,7 +323,13 @@ func (h *SchedulesHandler) delete(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := db.DeleteSchedule(h.DB, id); err != nil {
 		slog.Error("failed to delete schedule", "error", err)
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Delete schedule", err.Error(), notifications.StatusError, nil)
 		http.Error(w, "Failed to delete schedule", http.StatusInternalServerError)
+		return
+	}
+	h.Notifications.Add(user.ID, notifications.TypeAction, "Delete schedule", "Deleted", notifications.StatusSuccess, nil)
+	if sched.CollectionID.Valid {
+		closeModalAndNotifyCollections(w)
 		return
 	}
 	closeModalAndRefresh(w)

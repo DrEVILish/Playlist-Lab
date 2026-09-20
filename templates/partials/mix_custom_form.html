@@ -16,33 +16,33 @@
   <div class="custom-mix-modal">
     <div class="custom-mix-header">
       <h2 class="custom-mix-title">Create Custom Mix</h2>
-      <button type="button" class="custom-mix-close" onclick="document.getElementById('modal-root').innerHTML=''" aria-label="Close">&times;</button>
+      <button type="button" class="custom-mix-close" onclick="closeTopModal()" aria-label="Close">&times;</button>
     </div>
 
-    <form hx-post="/mixes/generate" hx-target="#notifications" hx-swap="innerHTML" hx-on::after:request="document.getElementById('modal-root').innerHTML=''">
+    <form hx-post="/mixes/generate" hx-target="#notifications" hx-swap="innerHTML" hx-on::after:request="closeTopModal()">
       <input type="hidden" name="mixType" value="custom">
       <div class="custom-mix-content">
         <div class="form-group">
-          <label class="form-label">Playlist Name</label>
-          <input type="text" class="form-input" name="playlistName" value="My Custom Mix">
+          <label class="form-label" for="playlist-name">Playlist Name</label>
+          <input id="playlist-name" type="text" class="form-input" name="playlistName" value="My Custom Mix">
         </div>
 
         <div class="form-group">
-          <label class="form-label">Number of Tracks</label>
-          <input type="range" class="track-slider" name="trackCount" min="10" max="500" step="10" value="50">
+          <label class="form-label" for="track-count">Number of Tracks</label>
+          <input id="track-count" type="range" class="track-slider" name="trackCount" min="10" max="500" step="10" value="50">
         </div>
 
         <div class="form-group">
-          <label class="form-label">Sort By</label>
+          <label class="form-label" for="sort-by">Sort By</label>
           <div class="sorting-inputs">
-            <select class="form-select" name="sortBy">
+            <select id="sort-by" class="form-select" name="sortBy">
               <option value="random">Random</option>
               <option value="playCount">Play Count</option>
               <option value="dateAdded">Date Added</option>
               <option value="rating">Rating</option>
               <option value="title">Title</option>
             </select>
-            <select class="form-select" name="sortDirection">
+            <select class="form-select" name="sortDirection" aria-label="Sort direction">
               <option value="desc">Descending</option>
               <option value="asc">Ascending</option>
             </select>
@@ -53,16 +53,16 @@
           <summary class="section-toggle">Time Filters</summary>
           <div class="filter-section-content">
             <div class="form-group">
-              <label class="form-label">Played in last (days)</label>
-              <input type="number" class="form-input" name="playedInLastDays" min="1" placeholder="e.g. 30">
+              <label class="form-label" for="played-in-last-days">Played in last (days)</label>
+              <input id="played-in-last-days" type="number" class="form-input" name="playedInLastDays" min="1" placeholder="e.g. 30">
             </div>
             <div class="form-group">
-              <label class="form-label">NOT played in last (days)</label>
-              <input type="number" class="form-input" name="notPlayedInLastDays" min="1" placeholder="e.g. 90">
+              <label class="form-label" for="not-played-in-last-days">NOT played in last (days)</label>
+              <input id="not-played-in-last-days" type="number" class="form-input" name="notPlayedInLastDays" min="1" placeholder="e.g. 90">
             </div>
             <div class="form-group">
-              <label class="form-label">Added in last (days)</label>
-              <input type="number" class="form-input" name="addedInLastDays" min="1" placeholder="e.g. 30">
+              <label class="form-label" for="added-in-last-days">Added in last (days)</label>
+              <input id="added-in-last-days" type="number" class="form-input" name="addedInLastDays" min="1" placeholder="e.g. 30">
             </div>
           </div>
         </details>
@@ -71,10 +71,10 @@
           <summary class="section-toggle">Release Date</summary>
           <div class="filter-section-content">
             <div class="form-group">
-              <label class="form-label">Release Year Range</label>
+              <label class="form-label" for="released-after-year">Release Year Range</label>
               <div class="year-inputs">
-                <input type="number" class="form-input" name="releasedAfterYear" min="1900" max="2100" placeholder="After, e.g. 2010">
-                <input type="number" class="form-input" name="releasedBeforeYear" min="1900" max="2100" placeholder="Before, e.g. 2020">
+                <input id="released-after-year" type="number" class="form-input" name="releasedAfterYear" min="1900" max="2100" placeholder="After, e.g. 2010">
+                <input id="released-before-year" type="number" class="form-input" name="releasedBeforeYear" min="1900" max="2100" placeholder="Before, e.g. 2020">
               </div>
             </div>
           </div>
@@ -84,17 +84,17 @@
           <summary class="section-toggle">Rating &amp; Popularity</summary>
           <div class="filter-section-content">
             <div class="form-group">
-              <label class="form-label">Rating Range (0-10)</label>
+              <label class="form-label" for="min-rating">Rating Range (0-10)</label>
               <div class="year-inputs">
-                <input type="number" class="form-input" name="minRating" min="0" max="10" step="0.5" placeholder="Min, e.g. 7.5">
-                <input type="number" class="form-input" name="maxRating" min="0" max="10" step="0.5" placeholder="Max, e.g. 9.5">
+                <input id="min-rating" type="number" class="form-input" name="minRating" min="0" max="10" step="0.5" placeholder="Min, e.g. 7.5">
+                <input id="max-rating" type="number" class="form-input" name="maxRating" min="0" max="10" step="0.5" placeholder="Max, e.g. 9.5">
               </div>
             </div>
             <div class="form-group">
-              <label class="form-label">Play Count Range</label>
+              <label class="form-label" for="min-play-count">Play Count Range</label>
               <div class="year-inputs">
-                <input type="number" class="form-input" name="minPlayCount" min="0" placeholder="Min, e.g. 5">
-                <input type="number" class="form-input" name="maxPlayCount" min="0" placeholder="Max, e.g. 100">
+                <input id="min-play-count" type="number" class="form-input" name="minPlayCount" min="0" placeholder="Min, e.g. 5">
+                <input id="max-play-count" type="number" class="form-input" name="maxPlayCount" min="0" placeholder="Max, e.g. 100">
               </div>
             </div>
             <div class="form-group">
@@ -118,24 +118,24 @@
           <summary class="section-toggle">Metadata Filters</summary>
           <div class="filter-section-content">
             <div class="form-group">
-              <label class="form-label">Include Genres (comma-separated)</label>
-              <input type="text" class="form-input" name="genres" placeholder="e.g., Rock, Pop, Jazz">
+              <label class="form-label" for="genres">Include Genres (comma-separated)</label>
+              <input id="genres" type="text" class="form-input" name="genres" placeholder="e.g., Rock, Pop, Jazz">
             </div>
             <div class="form-group">
-              <label class="form-label">Exclude Genres (comma-separated)</label>
-              <input type="text" class="form-input" name="excludeGenres" placeholder="e.g., Country, Classical">
+              <label class="form-label" for="exclude-genres">Exclude Genres (comma-separated)</label>
+              <input id="exclude-genres" type="text" class="form-input" name="excludeGenres" placeholder="e.g., Country, Classical">
             </div>
             <div class="form-group">
-              <label class="form-label">Include Moods (comma-separated)</label>
-              <input type="text" class="form-input" name="moods" placeholder="e.g., Energetic, Chill, Upbeat">
+              <label class="form-label" for="moods">Include Moods (comma-separated)</label>
+              <input id="moods" type="text" class="form-input" name="moods" placeholder="e.g., Energetic, Chill, Upbeat">
             </div>
             <div class="form-group">
-              <label class="form-label">Include Styles (comma-separated)</label>
-              <input type="text" class="form-input" name="styles" placeholder="e.g., Indie Rock, Synthpop">
+              <label class="form-label" for="styles">Include Styles (comma-separated)</label>
+              <input id="styles" type="text" class="form-input" name="styles" placeholder="e.g., Indie Rock, Synthpop">
             </div>
             <div class="form-group">
-              <label class="form-label">Artist Names (comma-separated)</label>
-              <input type="text" class="form-input" name="artistNames" placeholder="e.g., Beatles, Pink Floyd">
+              <label class="form-label" for="artist-names">Artist Names (comma-separated)</label>
+              <input id="artist-names" type="text" class="form-input" name="artistNames" placeholder="e.g., Beatles, Pink Floyd">
             </div>
           </div>
         </details>
@@ -143,7 +143,7 @@
 
       <div class="custom-mix-actions">
         <button type="submit" class="btn-generate">Generate Mix</button>
-        <button type="button" class="btn-cancel" onclick="document.getElementById('modal-root').innerHTML=''">Cancel</button>
+        <button type="button" class="btn-cancel" onclick="closeTopModal()">Cancel</button>
       </div>
     </form>
   </div>

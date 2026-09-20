@@ -37,7 +37,7 @@ func toPlaylistInfo(p plexsvc.Playlist, serverURL, token string) adapters.Playli
 }
 
 func (s *Source) ListPlaylists(ctx context.Context, userID int64) ([]adapters.PlaylistInfo, error) {
-	userServer, err := db.GetUserServer(s.DB, userID)
+	userServer, err := db.GetUserMusicServer(s.DB, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +68,7 @@ func (s *Source) ListPlaylists(ctx context.Context, userID int64) ([]adapters.Pl
 // "plex-home:{plexHomeUserId}:{playlistId}" to fetch from a Plex Home
 // managed user's library instead of the caller's own.
 func (s *Source) FetchTracks(ctx context.Context, playlistURLOrID string, userID int64) (adapters.PlaylistInfo, []adapters.TrackInfo, error) {
-	userServer, err := db.GetUserServer(s.DB, userID)
+	userServer, err := db.GetUserMusicServer(s.DB, userID)
 	if err != nil {
 		return adapters.PlaylistInfo{}, nil, err
 	}

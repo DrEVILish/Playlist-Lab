@@ -58,5 +58,26 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("running migrations: %w", err)
 	}
 
+	// Run after runMigrations, not folded into schema.sql above: on a
+	// database that predates the sessions.user_id column, an index on it
+	// would fail schema.sql's exec (which runs before the ALTER TABLE that
+	// adds the column) with "no such column". CREATE INDEX IF NOT EXISTS is
+	// idempotent either way, so this is safe to run on every startup.
+	if _, err := sqlDB.Exec("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)"); err != nil {
+		sqlDB.Close()
+		return nil, fmt.Errorf("creating sessions user_id index: %w", err)
+	}
+
+	// Same reasoning as the sessions index above: on a database that
+	// predates user_servers.is_default, this index would fail schema.sql's
+	// exec (which runs before runMigrations adds the column).
+	if _, err := sqlDB.Exec(`
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_user_servers_one_default_per_user
+		ON user_servers(user_id) WHERE is_default = 1
+	`); err != nil {
+		sqlDB.Close()
+		return nil, fmt.Errorf("creating user_servers default index: %w", err)
+	}
+
 	return sqlDB, nil
 }

@@ -1,0 +1,26 @@
+{{/* Wraps the very first /import/preview response (always the progress
+     panel - matching never finishes within one request) in the app's
+     standard modal chrome, same pattern as every other "next step" modal
+     transition here (import_file_modal.html, collection_presets.html's
+     preset-to-create-form). Every response AFTER this one - previewStatus's poll, and every
+     review-row action (skip/select/move) - re-renders only the inner
+     #import-review div via outerHTML, so this outer shell is never
+     re-emitted and never nests inside itself. It is, however, opened with
+     hx-swap="beforeend" by import.html's Preview button, so when the
+     Import page itself is open as a modal (page_modal.html, via the header
+     "Import" button) this stacks on top of it as a second layer instead of
+     replacing it - closeTopModal() (layout.html) only ever removes the
+     topmost layer, so closing this one reveals the Import modal again. */}}
+{{define "partials/import_review_modal.html"}}
+<div class="advanced-mix-overlay">
+  <div class="advanced-mix-modal">
+    <div class="advanced-mix-header">
+      <h2 class="advanced-mix-title">Import</h2>
+      <button type="button" class="advanced-mix-close" onclick="closeTopModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="advanced-mix-content">
+      {{template "partials/import_preview_progress.html" .}}
+    </div>
+  </div>
+</div>
+{{end}}

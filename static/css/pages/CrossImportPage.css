@@ -155,7 +155,7 @@
 
 .step-dot.active {
   background-color: var(--primary-color);
-  box-shadow: 0 0 6px rgba(91, 155, 213, 0.5);
+  box-shadow: 0 0 6px rgba(47, 143, 255, 0.5);
 }
 
 .step-dot.done {
@@ -250,6 +250,38 @@
 
 .service-card-badge.disconnected {
   background-color: var(--border-light);
+}
+
+/* Visible step indicator (DESIGN.md §11.7) - Connect / Choose Playlist /
+   Match / Review & Confirm. */
+.ci-step-indicator {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+}
+
+.ci-step {
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.ci-step--active {
+  color: var(--text-primary);
+  border-color: var(--primary-color);
+  background: rgba(47, 143, 255, 0.08);
+  font-weight: 600;
+}
+
+.ci-step--done {
+  color: var(--success);
+  border-color: transparent;
 }
 
 /* Step section header */
@@ -387,7 +419,7 @@
 
 .progress-bar-fill {
   height: 100%;
-  background: var(--gradient-primary);
+  background: var(--primary-color);
   border-radius: 4px;
   transition: width 0.3s ease;
 }

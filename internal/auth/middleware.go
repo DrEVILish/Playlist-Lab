@@ -67,6 +67,12 @@ func (m *Middleware) currentSessionData(r *http.Request) *session.Data {
 	if err != nil {
 		return nil
 	}
+	if data.UserID != 0 {
+		// Throttled internally (session.touchLastSeenInterval) - safe to
+		// call on every request. Powers Settings > Sessions' "last active"
+		// column (DESIGN.md §11.4).
+		m.Store.TouchLastSeen(sid, data)
+	}
 	return data
 }
 
@@ -120,6 +126,34 @@ func (m *Middleware) RequireAdmin(next http.Handler) http.Handler {
 		isAdmin, err := db.IsAdmin(m.DB, user.ID)
 		if err != nil || !isAdmin {
 			writeJSONError(w, http.StatusForbidden, "ADMIN_REQUIRED", "Admin privileges required")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// RequirePlexOwner gates the Collections page (DESIGN.md §11.11) to users
+// whose linked Plex server they actually own - Plex's own "owned" flag on
+// the account/server pairing, not this app's separate db.IsAdmin instance
+// flag (which gates unrelated things like Settings' admin tabs). Must run
+// after RequireAuth.
+func (m *Middleware) RequirePlexOwner(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := CurrentUser(r)
+		if user == nil {
+			writeJSONError(w, http.StatusUnauthorized, "AUTH_REQUIRED", "Authentication required")
+			return
+		}
+		servers, err := db.GetUserServers(m.DB, user.ID)
+		owns := false
+		for _, s := range servers {
+			if s.IsOwner {
+				owns = true
+				break
+			}
+		}
+		if err != nil || !owns {
+			writeJSONError(w, http.StatusForbidden, "PLEX_OWNER_REQUIRED", "Only the Plex server owner can manage collections")
 			return
 		}
 		next.ServeHTTP(w, r)

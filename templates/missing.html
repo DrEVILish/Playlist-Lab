@@ -1,19 +1,56 @@
 {{define "content"}}
+<link rel="stylesheet" href="/static/css/components/DataTable.css">
 <link rel="stylesheet" href="/static/css/components/MissingTracksPanel.css">
+<script src="/static/js/data-table.js"></script>
 <div class="missing page-container">
   <h1 class="page-title">Missing Tracks</h1>
 
   <div id="retry-status" hx-get="/missing/retry-status" hx-trigger="every 2s" hx-swap="innerHTML"></div>
 
+  <!-- Plain buttons, not <form>s - every action below this point uses
+       hx-post/hx-vals/hx-include directly on the triggering element rather
+       than a real <form> wrapper, because .bulk-select-scope below needs to
+       wrap #missing-list (for the sticky bulk-actions-bar's :has() check,
+       chrome-interactions.css) without illegally nesting a <form> inside
+       another - a real <form> here would make .bulk-select-scope's own
+       wrapper (if it were also a <form>) invalid, so neither wrapper is one;
+       hx-include reaches across to gather the checked checkboxes instead. -->
   <div class="missing-tracks-toolbar-actions">
-    <form hx-post="/missing/retry" hx-target="#retry-status" hx-swap="innerHTML">
-      <button type="submit" class="btn btn-primary btn-small">Retry All</button>
-    </form>
-    <form hx-post="/missing/deemix-all" hx-target="#notifications" hx-swap="innerHTML">
-      <button type="submit" class="btn btn-secondary btn-small">Deemix All</button>
-    </form>
+    <button type="button" class="btn btn-primary btn-small" hx-post="/missing/retry" hx-target="#retry-status" hx-swap="innerHTML">Retry All</button>
+    <button type="button" class="btn btn-secondary btn-small" hx-post="/missing/deemix-all" hx-target="#notifications" hx-swap="innerHTML">Deemix All</button>
+    <a class="btn btn-secondary btn-small" href="/missing/export" title="Download every missing track as CSV">Export CSV</a>
   </div>
 
-  <div id="missing-list" hx-get="/missing/list" hx-trigger="load" hx-swap="innerHTML"></div>
+  <input type="search" id="missing-search" class="form-input missing-search-input" placeholder="Filter by track title, artist, or playlist..." oninput="filterMissingTracks(this.value)">
+
+  <div class="bulk-select-scope">
+    <div id="missing-list" hx-get="/missing/list" hx-trigger="load" hx-swap="innerHTML"></div>
+    <div class="bulk-actions-bar">
+      <span class="bulk-actions-count">Selected</span>
+      <button type="button" class="btn btn-secondary btn-small" hx-post="/missing/retry" hx-include="#missing-list [name='id']:checked" hx-target="#retry-status" hx-swap="innerHTML">Retry Selected</button>
+      <button type="button" class="btn btn-secondary btn-small" style="color:var(--error)" hx-post="/missing/bulk-remove" hx-include="#missing-list [name='id']:checked" hx-target="#missing-list" hx-swap="innerHTML" hx-confirm="Remove the selected missing track(s) from the list?">Remove Selected</button>
+    </div>
+  </div>
 </div>
+<script>
+  // ponytail: plain client-side filter - 566 rows is a display-side problem,
+  // not worth a server round trip or a query-param filter pattern for.
+  function filterMissingTracks(query) {
+    query = query.trim().toLowerCase();
+    document.querySelectorAll('.missing-tracks-panel').forEach(function (panel) {
+      var anyVisible = false;
+      panel.querySelectorAll('.missing-track-row').forEach(function (row) {
+        var match = !query || (row.dataset.search || '').indexOf(query) !== -1;
+        row.classList.toggle('missing-track-hidden', !match);
+        if (match) anyVisible = true;
+      });
+      panel.classList.toggle('missing-track-hidden', query && !anyVisible);
+      if (query) {
+        panel.open = anyVisible;
+      } else {
+        panel.open = panel.dataset.defaultOpen === 'true';
+      }
+    });
+  }
+</script>
 {{end}}

@@ -5,12 +5,12 @@
       <stop offset="100%" stop-color="#162a3e"/>
     </linearGradient>
     <linearGradient id="flask" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#4fc3f7"/>
-      <stop offset="100%" stop-color="#29b6f6"/>
+      <stop offset="0%" stop-color="#2f8fff"/>
+      <stop offset="100%" stop-color="#00e5ff"/>
     </linearGradient>
     <linearGradient id="liquid" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#26c6da"/>
-      <stop offset="100%" stop-color="#00838f"/>
+      <stop offset="0%" stop-color="#00e5ff"/>
+      <stop offset="100%" stop-color="#1fb8c4"/>
     </linearGradient>
   </defs>
   <!-- Background -->
@@ -20,9 +20,9 @@
   <!-- Liquid fill -->
   <path d="M196 310 l36-72 h48 l36 72 a24 24 0 0 1-21.5 35.5 h-77 a24 24 0 0 1-21.5-35.5z" fill="url(#liquid)" opacity="0.7"/>
   <!-- Bubbles -->
-  <circle cx="240" cy="300" r="10" fill="#4fc3f7" opacity="0.6"/>
-  <circle cx="272" cy="320" r="7" fill="#4fc3f7" opacity="0.5"/>
-  <circle cx="255" cy="280" r="5" fill="#80deea" opacity="0.7"/>
+  <circle cx="240" cy="300" r="10" fill="#2f8fff" opacity="0.6"/>
+  <circle cx="272" cy="320" r="7" fill="#2f8fff" opacity="0.5"/>
+  <circle cx="255" cy="280" r="5" fill="#7ff0ff" opacity="0.7"/>
   <!-- Flask rim -->
   <rect x="212" y="96" width="88" height="12" rx="6" fill="url(#flask)"/>
 </svg>

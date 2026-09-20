@@ -95,6 +95,11 @@ func Setup(logDir, level string) (close func() error, err error) {
 		slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: levelVar()}),
 		slog.NewJSONHandler(combined, &slog.HandlerOptions{Level: levelVar()}),
 		slog.NewJSONHandler(errFile, &slog.HandlerOptions{Level: slog.LevelError}),
+		// live's JSON shape/level floor matches combined.log's handler
+		// exactly (parseEntry, admin_logs.go, parses either one the same
+		// way) - it just publishes to Subscribe()'s channels instead of a
+		// file, for the admin Logs tab's SSE live-tail (DESIGN.md §17).
+		slog.NewJSONHandler(live, &slog.HandlerOptions{Level: levelVar()}),
 	)
 	slog.SetDefault(slog.New(handler))
 

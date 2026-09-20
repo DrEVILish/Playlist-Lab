@@ -21,14 +21,33 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/drevilish/playlist-lab/internal/adapters"
 	"github.com/drevilish/playlist-lab/internal/db"
+	"github.com/drevilish/playlist-lab/internal/services/imdb"
 	"github.com/drevilish/playlist-lab/internal/services/importsvc"
+	"github.com/drevilish/playlist-lab/internal/services/letterboxd"
 	"github.com/drevilish/playlist-lab/internal/services/matching"
+	"github.com/drevilish/playlist-lab/internal/services/medialist"
 	"github.com/drevilish/playlist-lab/internal/services/mixes"
 	"github.com/drevilish/playlist-lab/internal/services/plex"
+	"github.com/drevilish/playlist-lab/internal/services/tmdb"
+	"github.com/drevilish/playlist-lab/internal/services/trakt"
+	"github.com/drevilish/playlist-lab/internal/services/tvdb"
+)
+
+// tmdbAdminConfigKey/tvdbAdminConfigKey/traktAdminConfigKey mirror
+// handlers/admin.go's configKeyTMDbAPIKey/configKeyTVDbAPIKey/
+// configKeyTraktAPIKey - duplicated rather than imported to avoid a
+// handlers<->scheduler import cycle (handlers already imports scheduler
+// for RefreshCollection). IMDb/Letterboxd need no key (scraping only, same
+// as this app's other unauthenticated playlist scrapers).
+const (
+	tmdbAdminConfigKey  = "tmdb_api_key"
+	tvdbAdminConfigKey  = "tvdb_api_key"
+	traktAdminConfigKey = "trakt_api_key"
 )
 
 // frequencySeconds ports getDueSchedules()'s switch on schedule.frequency.
@@ -144,6 +163,8 @@ func Run(d Deps, s db.Schedule) error {
 		return executePlaylistRefresh(d, s)
 	case "mix_generation":
 		return executeMixGeneration(d, s)
+	case "collection_refresh":
+		return executeCollectionRefresh(d, s)
 	default:
 		return fmt.Errorf("unknown schedule type: %s", s.ScheduleType)
 	}
@@ -167,7 +188,7 @@ func executePlaylistRefresh(d Deps, s db.Schedule) error {
 	if err != nil || user == nil {
 		return fmt.Errorf("user not found for schedule %d", s.ID)
 	}
-	server, err := db.GetUserServer(d.DB, s.UserID)
+	server, err := db.GetUserMusicServer(d.DB, s.UserID)
 	if err != nil || server == nil {
 		return fmt.Errorf("no Plex server configured for schedule %d", s.ID)
 	}
@@ -342,7 +363,7 @@ func executeMixGeneration(d Deps, s db.Schedule) error {
 	if err != nil || user == nil {
 		return fmt.Errorf("user not found for schedule %d", s.ID)
 	}
-	server, err := db.GetUserServer(d.DB, s.UserID)
+	server, err := db.GetUserMusicServer(d.DB, s.UserID)
 	if err != nil || server == nil || !server.LibraryID.Valid {
 		return fmt.Errorf("no Plex library selected for schedule %d", s.ID)
 	}
@@ -425,6 +446,348 @@ func executeMixGeneration(d Deps, s db.Schedule) error {
 		_ = db.CompleteScheduleExecution(d.DB, executionID, "success", result.TrackCount, 0, "")
 	}
 	return nil
+}
+
+// executeCollectionRefresh is the schedule-driven wrapper around
+// RefreshCollection: resolves the schedule's linked collection/user/server,
+// then adds schedule_executions bookkeeping around the shared refresh core.
+func executeCollectionRefresh(d Deps, s db.Schedule) error {
+	if !s.CollectionID.Valid {
+		return fmt.Errorf("schedule %d has no linked collection", s.ID)
+	}
+	coll, err := db.GetCollectionByID(d.DB, s.CollectionID.Int64)
+	if err != nil || coll == nil {
+		return fmt.Errorf("collection not found for schedule %d", s.ID)
+	}
+	user, err := db.GetUserByID(d.DB, s.UserID)
+	if err != nil || user == nil {
+		return fmt.Errorf("user not found for schedule %d", s.ID)
+	}
+	// A collection carries its own server (coll.ServerID), independent of
+	// the user's single default (db.GetUserServer) - it may target any of a
+	// user's connected libraries, not just their default music one.
+	server, err := db.GetUserServerByID(d.DB, coll.ServerID)
+	if err != nil || server == nil {
+		return fmt.Errorf("server not found for collection %d", coll.ID)
+	}
+
+	executionID, _ := db.CreateScheduleExecution(d.DB, s.ID, s.UserID, coll.Name)
+	added, removed, err := RefreshCollection(d.DB, buildClient(d, user, server), coll, server)
+	if err != nil {
+		if executionID != 0 {
+			_ = db.CompleteScheduleExecution(d.DB, executionID, "failed", 0, 0, err.Error())
+		}
+		return err
+	}
+	_ = db.UpdateScheduleLastRun(d.DB, s.ID)
+	if executionID != 0 {
+		_ = db.CompleteScheduleExecution(d.DB, executionID, "success", added, removed, "")
+	}
+	return nil
+}
+
+// RefreshCollection evaluates a collection's definition (DESIGN.md §11.11),
+// resolves or creates its Plex collection, and reconciles membership to
+// match. This is the shared core between the schedule-driven path above and
+// the Collections page's manual "Refresh Now" button, which has no
+// schedule row to attach schedule_executions bookkeeping to (same
+// precedent as mix_templates.go's runTemplate, a one-off action that skips
+// that bookkeeping entirely). Persists the collection's plex_collection_id/
+// updated_at itself either way. Returns (added, removed) item counts.
+func RefreshCollection(sqlDB *sql.DB, client *plex.Client, coll *db.Collection, server *db.UserServer) (added, removed int, err error) {
+	targetKeys, err := resolveCollectionTargets(sqlDB, client, coll)
+	if err != nil {
+		return 0, 0, err
+	}
+	if len(targetKeys) == 0 {
+		return 0, 0, fmt.Errorf("collection %d matched no items", coll.ID)
+	}
+
+	plexCollectionID, err := resolveOrCreateCollection(client, coll, targetKeys, server)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	if coll.SortTitle.Valid && coll.SortTitle.String != "" {
+		if err := client.SetCollectionSortTitle(plexCollectionID, coll.SortTitle.String); err != nil {
+			slog.Warn("collection refresh: failed to set sort title", "collectionId", coll.ID, "error", err)
+		}
+	}
+
+	added, removed, err = reconcileCollectionMembership(client, plexCollectionID, targetKeys, coll.SyncMode, server.ServerClientID)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	// An external-list/chart source is very often itself a ranking (IMDb's
+	// Top 250, a TMDb "popular"/"trending" chart, ...), not an arbitrary
+	// set - default every such collection to Plex's "Custom" item order,
+	// actually arranged to match targetKeys (see ReorderCollection: a bulk
+	// uri= add, which is all reconcileCollectionMembership above just did,
+	// does NOT preserve request order on its own - confirmed live). Run
+	// after reconcile, once every targetKeys entry is actually a member;
+	// applied every refresh but each is a cheap no-op unless the order
+	// genuinely needs fixing (a first build, or the source ranking having
+	// reshuffled), so this doesn't cost len(targetKeys) API calls on every
+	// single refresh regardless of whether anything changed.
+	if coll.BuilderType == "external_list" {
+		if err := client.SetCollectionCustomOrder(plexCollectionID); err != nil {
+			slog.Warn("collection refresh: failed to set custom order", "collectionId", coll.ID, "error", err)
+		}
+		if err := client.ReorderCollection(plexCollectionID, targetKeys); err != nil {
+			slog.Warn("collection refresh: failed to reorder items", "collectionId", coll.ID, "error", err)
+		}
+	}
+
+	if plexCollectionID != coll.PlexCollectionID.String {
+		_ = db.UpdateCollectionPlexID(sqlDB, coll.ID, plexCollectionID)
+	} else {
+		_ = db.TouchCollection(sqlDB, coll.ID)
+	}
+	return added, removed, nil
+}
+
+// itemTypeForLibraryType maps a Plex library section type to the numeric
+// metadata type its content uses - see plex.CreateCollection's doc.
+func itemTypeForLibraryType(libraryType string) int {
+	switch libraryType {
+	case "movie":
+		return 1
+	case "show":
+		return 2
+	default:
+		// "artist" (music) - collections operate at track level in v1,
+		// matching this app's existing track-centric model (DESIGN.md §11.11).
+		return 10
+	}
+}
+
+// resolveCollectionTargets evaluates a collection's definition (DESIGN.md
+// §11.11: a flat, AND-combined rule list for "smart", or a plain item list
+// for "manual") into the set of Plex ratingKeys it should currently
+// contain.
+func resolveCollectionTargets(sqlDB *sql.DB, client *plex.Client, coll *db.Collection) ([]string, error) {
+	if coll.BuilderType == "manual" {
+		return coll.ParsedManualItems(), nil
+	}
+	if coll.BuilderType == "external_list" {
+		return resolveExternalListTargets(sqlDB, client, coll)
+	}
+	var opts plex.LibraryFilterOptions
+	for _, r := range coll.ParsedRules() {
+		switch r.Field {
+		case "genre":
+			opts.Genres = append(opts.Genres, r.Value)
+		case "mood":
+			opts.Moods = append(opts.Moods, r.Value)
+		case "style":
+			opts.Styles = append(opts.Styles, r.Value)
+		case "content_rating":
+			opts.ContentRatings = append(opts.ContentRatings, r.Value)
+		case "studio":
+			opts.Studios = append(opts.Studios, r.Value)
+		case "actor":
+			opts.Actors = append(opts.Actors, r.Value)
+		case "director":
+			opts.Directors = append(opts.Directors, r.Value)
+		case "writer":
+			opts.Writers = append(opts.Writers, r.Value)
+		case "unwatched":
+			opts.Unwatched = true
+		case "year":
+			if y, err := strconv.Atoi(r.Value); err == nil {
+				opts.YearFrom, opts.YearTo = y, y
+			}
+		case "decade":
+			if y, err := strconv.Atoi(r.Value); err == nil {
+				opts.YearFrom, opts.YearTo = y, y+9
+			}
+		}
+	}
+	items, err := client.SearchLibraryItems(coll.LibrarySectionID, itemTypeForLibraryType(coll.LibraryType), opts)
+	if err != nil {
+		return nil, err
+	}
+	keys := make([]string, len(items))
+	for i, item := range items {
+		keys[i] = item.RatingKey
+	}
+	return keys, nil
+}
+
+// resolveExternalListTargets pulls one provider's list/chart entries
+// (DESIGN.md §11.11 - tmdb/imdb/tvdb/letterboxd, see their packages under
+// internal/services) and matches each to a Plex ratingKey via its external
+// Guid (Plex's own guid= filter only matches its internal plex://... guid,
+// confirmed live against a real server - not external agent ids - so the
+// whole library is fetched once with includeGuids=1 and matched
+// client-side instead, see plex.Client.GetLibraryItemsWithGuids). Every
+// provider normalizes into medialist.Item, whose GuidKey is already the
+// exact string Plex's own Guid array would carry (e.g. "tmdb://11974"), so
+// matching is a single map lookup regardless of provider. Entries with no
+// match are persisted as "missing" (DESIGN.md §11.11's Missing Films/TV
+// Shows list) rather than silently dropped, mirroring missing_tracks.go's
+// unmatched-import-track convention but scoped to this collection instead
+// of a playlist. Movie/show level only - a partially-owned TV series is
+// not detected (would need per-episode season data, out of scope, see
+// DESIGN.md §11.11).
+func resolveExternalListTargets(sqlDB *sql.DB, client *plex.Client, coll *db.Collection) ([]string, error) {
+	src := coll.ParsedExternalListSource()
+
+	wantType := "movie"
+	if coll.LibraryType == "show" {
+		wantType = "tv"
+	}
+
+	var items []medialist.Item
+	var err error
+	switch src.Provider {
+	case "imdb":
+		if src.Mode == "top250" {
+			items, err = imdb.GetTop250(context.Background())
+		} else {
+			items, err = imdb.GetListItems(context.Background(), src.ListID)
+		}
+	case "tvdb":
+		apiKey, _, _ := db.GetAdminConfig(sqlDB, tvdbAdminConfigKey)
+		if apiKey == "" {
+			return nil, fmt.Errorf("no TVDb API key configured (Settings > Administration > TVDb)")
+		}
+		items, err = tvdb.NewClient(apiKey).GetListItems(src.ListID, wantType)
+	case "letterboxd":
+		items, err = letterboxd.GetListItems(context.Background(), src.ListID, src.Limit)
+	case "trakt":
+		apiKey, _, _ := db.GetAdminConfig(sqlDB, traktAdminConfigKey)
+		if apiKey == "" {
+			return nil, fmt.Errorf("no Trakt Client ID configured (Settings > Administration > Trakt)")
+		}
+		items, err = trakt.NewClient(apiKey).GetListItems(src.ListID, wantType)
+	default: // "tmdb"
+		apiKey, _, _ := db.GetAdminConfig(sqlDB, tmdbAdminConfigKey)
+		if apiKey == "" {
+			return nil, fmt.Errorf("no TMDb API key configured (Settings > Administration > TMDb)")
+		}
+		tc := tmdb.NewClient(apiKey)
+		switch src.Mode {
+		case "popular":
+			items, err = tc.GetChart(wantType, "popular", src.Limit)
+		case "top_rated":
+			items, err = tc.GetChart(wantType, "top_rated", src.Limit)
+		case "trending_daily":
+			items, err = tc.GetTrending(wantType, "day", src.Limit)
+		case "trending_weekly":
+			items, err = tc.GetTrending(wantType, "week", src.Limit)
+		case "collection":
+			items, err = tc.GetCollectionMovies(src.ListID)
+		default:
+			items, err = tc.GetListItems(src.ListID)
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	libItems, err := client.GetLibraryItemsWithGuids(coll.LibrarySectionID, itemTypeForLibraryType(coll.LibraryType))
+	if err != nil {
+		return nil, err
+	}
+	byGuid := make(map[string]string, len(libItems))
+	for _, it := range libItems {
+		for _, g := range it.Guid {
+			byGuid[g.ID] = it.RatingKey
+		}
+	}
+
+	var keys []string
+	var missing []db.NewMissingCollectionItem
+	for _, item := range items {
+		if item.MediaType != "" && item.MediaType != wantType {
+			continue
+		}
+		if rk, ok := byGuid[item.GuidKey]; ok {
+			keys = append(keys, rk)
+			continue
+		}
+		missing = append(missing, db.NewMissingCollectionItem{
+			GuidKey: item.GuidKey, MediaType: item.MediaType, Title: item.Title, Year: item.Year,
+		})
+	}
+	if err := db.ReplaceMissingCollectionItems(sqlDB, coll.UserID, coll.ID, missing); err != nil {
+		slog.Error("failed to persist missing collection items", "error", err, "collectionId", coll.ID)
+	}
+	return keys, nil
+}
+
+// resolveOrCreateCollection returns the Plex collection ratingKey to write
+// into, creating it (seeded with targetKeys) the first time this
+// definition ever runs.
+func resolveOrCreateCollection(client *plex.Client, coll *db.Collection, targetKeys []string, server *db.UserServer) (string, error) {
+	if coll.PlexCollectionID.Valid && coll.PlexCollectionID.String != "" {
+		return coll.PlexCollectionID.String, nil
+	}
+	itemURIs := make([]string, len(targetKeys))
+	for i, key := range targetKeys {
+		itemURIs[i] = plex.BuildTrackURI(server.ServerClientID, key)
+	}
+	created, err := client.CreateCollection(coll.LibrarySectionID, itemTypeForLibraryType(coll.LibraryType), coll.Name, itemURIs)
+	if err != nil {
+		return "", err
+	}
+	return created.RatingKey, nil
+}
+
+// diffCollectionMembership is reconcileCollectionMembership's pure diff
+// logic, split out so it's unit-testable without a live Plex server
+// (scheduler_test.go): toAdd is targetKeys not already present in current;
+// toRemove is current members not in targetKeys, left empty when syncMode
+// is "add_only".
+func diffCollectionMembership(current []plex.Track, targetKeys []string, syncMode string) (toAdd, toRemove []string) {
+	currentSet := make(map[string]bool, len(current))
+	for _, t := range current {
+		currentSet[t.RatingKey] = true
+	}
+	targetSet := make(map[string]bool, len(targetKeys))
+	for _, key := range targetKeys {
+		targetSet[key] = true
+		if !currentSet[key] {
+			toAdd = append(toAdd, key)
+		}
+	}
+	if syncMode != "add_only" {
+		for _, t := range current {
+			if !targetSet[t.RatingKey] {
+				toRemove = append(toRemove, t.RatingKey)
+			}
+		}
+	}
+	return toAdd, toRemove
+}
+
+// reconcileCollectionMembership diffs targetKeys against the collection's
+// current members and applies the delta. Returns (added, removed) counts
+// for the schedule_executions record.
+func reconcileCollectionMembership(client *plex.Client, plexCollectionID string, targetKeys []string, syncMode, serverClientID string) (added, removed int, err error) {
+	current, err := client.GetCollectionItems(plexCollectionID)
+	if err != nil {
+		return 0, 0, err
+	}
+	toAdd, toRemove := diffCollectionMembership(current, targetKeys, syncMode)
+
+	if len(toAdd) > 0 {
+		addURIs := make([]string, len(toAdd))
+		for i, key := range toAdd {
+			addURIs[i] = plex.BuildTrackURI(serverClientID, key)
+		}
+		if err := client.AddToCollection(plexCollectionID, addURIs); err != nil {
+			return 0, 0, err
+		}
+	}
+	for _, key := range toRemove {
+		if err := client.RemoveFromCollection(plexCollectionID, key); err != nil {
+			return len(toAdd), 0, err
+		}
+	}
+	return len(toAdd), len(toRemove), nil
 }
 
 // generateMixByType dispatches to the mixes.Service method for mixType,

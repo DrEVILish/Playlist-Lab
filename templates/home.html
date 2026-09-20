@@ -1,6 +1,8 @@
 {{define "content"}}
+<link rel="stylesheet" href="/static/css/components/DataTable.css">
 <link rel="stylesheet" href="/static/css/pages/PlaylistsPage.css">
 <link rel="stylesheet" href="/static/css/components/MissingTracksPanel.css">
+<script src="/static/js/data-table.js"></script>
 <div class="page-container">
   <div class="playlists-stats">
     <div class="playlists-stat">
@@ -34,19 +36,9 @@
        needed to track a selection. The bar's visibility is a pure CSS
        :has() rule (chrome-interactions.css), the same technique as the
        mobile-nav checkbox hack elsewhere in this codebase. -->
-  <form method="post" action="/playlists/bulk-delete">
-    <div class="bulk-actions-bar">
-      <span class="bulk-actions-count">Selected</span>
-      <button type="submit" formaction="/backup/export" formmethod="get" class="btn btn-secondary btn-small">Backup Selected</button>
-      <!-- Merge needs a name for the resulting playlist - prompt() rather
-           than a permanently-visible text field, since it's only relevant
-           right when this button is clicked (matches the React version's
-           promptDialog()). -->
-      <button type="submit" formaction="/playlists/merge" class="btn btn-secondary btn-small" title="Combine these playlists' tracks into a new playlist" onclick="var n=prompt('Combining the selected playlists into one new playlist.\n\nName for the new playlist:'); if(!n)return false; this.form.querySelector('[name=targetName]')?.remove(); var i=document.createElement('input'); i.type='hidden'; i.name='targetName'; i.value=n; this.form.appendChild(i);">Merge Selected</button>
-      <button type="submit" class="btn btn-secondary btn-small" style="color:var(--error)" onclick="return confirm('Delete the selected playlist(s) from Plex? This cannot be undone.')">Delete Selected</button>
-    </div>
-    <div class="playlists-table-container">
-    <table class="playlists-table">
+  <form method="post" action="/playlists/bulk-delete" class="bulk-select-scope">
+    <div class="playlists-table-container data-table-container">
+    <table class="playlists-table data-table">
       <thead>
         <tr>
           <th class="col-select"><input type="checkbox" id="select-all" aria-label="Select all playlists"></th>
@@ -97,7 +89,7 @@
               </details>
             </div>
           </th>
-          <th class="sortable">
+          <th class="sortable col-hide-1">
             <div class="th-with-filter">
               <a href="{{.Query.SortHref "duration"}}"><span class="th-label">Duration</span> <span class="sort-arrow">{{sortArrow "duration" $.Sort $.Dir}}</span></a>
               <details class="th-filter">
@@ -124,7 +116,7 @@
               </details>
             </div>
           </th>
-          <th class="sortable">
+          <th class="sortable col-hide-2">
             <div class="th-with-filter">
               <a href="{{.Query.SortHref "schedule"}}"><span class="th-label">Schedule</span> <span class="sort-arrow">{{sortArrow "schedule" $.Sort $.Dir}}</span></a>
               <details class="th-filter">
@@ -137,7 +129,7 @@
               </details>
             </div>
           </th>
-          <th class="sortable">
+          <th class="sortable col-hide-2">
             <div class="th-with-filter">
               <a href="{{.Query.SortHref "nextRun"}}"><span class="th-label">Next Run</span> <span class="sort-arrow">{{sortArrow "nextRun" $.Sort $.Dir}}</span></a>
               <details class="th-filter">
@@ -151,7 +143,7 @@
               </details>
             </div>
           </th>
-          <th class="sortable">
+          <th class="sortable col-hide-1">
             <div class="th-with-filter">
               <a href="{{.Query.SortHref "lastRun"}}"><span class="th-label">Last Run</span> <span class="sort-arrow">{{sortArrow "lastRun" $.Sort $.Dir}}</span></a>
               <details class="th-filter">
@@ -165,7 +157,7 @@
               </details>
             </div>
           </th>
-          <th class="sortable">
+          <th class="sortable col-hide-1">
             <div class="th-with-filter">
               <a href="{{.Query.SortHref "dateAdded"}}"><span class="th-label">Date Added</span> <span class="sort-arrow">{{sortArrow "dateAdded" $.Sort $.Dir}}</span></a>
               <details class="th-filter">
@@ -184,27 +176,34 @@
       </thead>
       <tbody>
         {{range .Playlists}}
-        <tr{{if .NeedsAttention}} class="row-attention"{{end}}>
+        <!-- Row click expands the inline read-only track preview below
+             (data-table.js's isRowActionTarget() lets a click on any actual
+             control - checkbox, badge, action icon - pass through instead
+             of toggling the preview); a right-click, or the always-visible
+             "..." button, opens the same row's action icons as a context
+             menu (row-menu-open, see DataTable.css/data-table.js) rather
+             than navigating anywhere. Tracks/Duration/Missing use
+             .mono-data (DESIGN.md §7) since they're raw numeric/technical
+             values, not prose. -->
+        <tr{{if .NeedsAttention}} class="row-attention"{{end}} data-row-menu tabindex="0"
+            hx-on:click="if(!isRowActionTarget(event)) togglePlaylistPreview('{{.PlexID}}')"
+            hx-on:keydown="if(event.key==='Enter'&&!isRowActionTarget(event)) togglePlaylistPreview('{{.PlexID}}')">
           <td class="col-select"><input type="checkbox" name="id" value="{{.PlexID}}" class="row-select" aria-label="Select {{.Name}}"></td>
           <td class="playlist-name-cell">
             <div class="playlist-cover">{{if .CoverURL}}<img src="{{.CoverURL}}" alt="" loading="lazy">{{end}}</div>
-            <a class="playlist-name" href="/playlists/{{.PlexID}}" title="Edit tracks in {{.Name}}">{{.Name}}</a>
+            <span class="playlist-name">{{.Name}}</span>
           </td>
-          <td>
-            {{if eq .Source "plex"}}<span class="playlist-source-label">—</span>
-            {{else if .SourceURL}}<a href="{{.SourceURL}}" target="_blank" rel="noopener noreferrer" class="playlist-source-link">{{.Source}} ↗</a>
-            {{else}}<span class="playlist-source-label">{{.Source}}</span>{{end}}
-          </td>
-          <td>{{.TrackCount}}</td>
-          <td>{{formatDuration .Duration}}</td>
+          <td>{{template "playlistSource" .}}</td>
+          <td class="mono-data">{{.TrackCount}}</td>
+          <td class="mono-data col-hide-1">{{formatDuration .Duration}}</td>
           <td>
             <!-- Expands an inline row (below) scoped to just this playlist's
                  missing tracks via GET /missing/list?playlistId=, instead of
                  navigating away to the full /missing page. -->
-            {{if .MissingCount}}<button type="button" class="badge-button warn" hx-get="/missing/list?playlistId={{.DBID}}" hx-target="#missing-row-{{.DBID}}-content" hx-swap="innerHTML" hx-on:click="document.getElementById('missing-row-{{.DBID}}').classList.toggle('is-open')">{{.MissingCount}}</button>
-            {{else if .DBID}}0{{else}}—{{end}}
+            {{if .MissingCount}}<button type="button" class="badge-button warn mono-data expando-toggle" hx-get="/missing/list?playlistId={{.DBID}}" hx-target="#missing-row-{{.DBID}}-content" hx-swap="innerHTML" hx-on:click="document.getElementById('missing-row-{{.DBID}}').classList.toggle('is-open'); this.classList.toggle('is-open')">{{.MissingCount}}<svg class="expando-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+            {{else if .DBID}}<span class="mono-data">0</span>{{else}}—{{end}}
           </td>
-          <td>
+          <td class="col-hide-2">
             <!-- Shows the schedule's run interval (daily/weekly/fortnightly/
                  monthly), not a duplicate of the Next Run column next to it -
                  text-transform:capitalize on the raw lowercase Frequency
@@ -217,27 +216,60 @@
             {{else if .ScheduleID}}<button type="button" class="badge-button{{if .ScheduleFailed}} warn{{end}}" style="text-transform:capitalize" title="Edit schedule" hx-get="/playlists/{{.PlexID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">{{.Frequency}}</button>
             {{else}}<button type="button" class="badge-button" style="color:var(--text-secondary)" title="Create schedule" hx-get="/playlists/{{.PlexID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">off</button>{{end}}
           </td>
-          <td>{{if .NextRun}}{{.NextRun}}{{else}}—{{end}}</td>
-          <td>
-            {{if .LastRun}}<span{{if eq .LastRunStatus "failed"}} class="badge-button warn"{{end}} title="{{.LastRunStatus}}">{{dateFromUnix .LastRun}}</span>
+          <td class="mono-data col-hide-2"{{if .NextRunAt}} title="{{dateFromUnix .NextRunAt}}"{{end}}>{{if .NextRun}}{{.NextRun}}{{else}}—{{end}}</td>
+          <td class="mono-data col-hide-1">
+            {{if .LastRun}}<span{{if eq .LastRunStatus "failed"}} class="badge-button warn"{{end}} title="{{.LastRunStatus}} · {{dateFromUnix .LastRun}}">{{relativeUnix .LastRun}}</span>
             {{else}}—{{end}}
           </td>
-          <td>{{if .DBID}}{{dateFromUnix .CreatedAt}}{{else}}—{{end}}</td>
-          <!-- .icon-btn is a 26x26 icon box (PlaylistsPage.css): it holds an
+          <td class="mono-data col-hide-1">{{if .DBID}}{{dateFromUnix .CreatedAt}}{{else}}—{{end}}</td>
+          <!-- .icon-btn is a 26x26 icon box (DataTable.css): it holds an
                SVG, not a text label - text overflows and collides. Icon paths
                are copied from apps/web/src/components/icons.tsx verbatim.
                Shared with the mobile card list below (playlistRowActions),
-               since both views offer the exact same per-playlist actions. -->
-          <td class="row-actions">{{template "playlistRowActions" .}}</td>
+               since both views offer the exact same per-playlist actions.
+               .row-actions itself reveals on hover/focus (DataTable.css);
+               .row-menu-toggle ("...") stays visible always as the
+               keyboard/right-click-accessible way to reach the same icons
+               without hovering - see data-table.js. -->
+          <td class="col-actions">
+            <div class="row-actions">{{template "playlistRowActions" .}}</div>
+            <button type="button" class="icon-btn row-menu-toggle" title="More actions" aria-label="More actions for {{.Name}}" onclick="this.closest('tr').classList.toggle('row-menu-open')">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+            </button>
+          </td>
         </tr>
         {{if .MissingCount}}
         <tr id="missing-row-{{.DBID}}" class="missing-row">
           <td colspan="11"><div id="missing-row-{{.DBID}}-content" class="missing-tracks-scope"></div></td>
         </tr>
         {{end}}
+        <!-- Read-only track-list preview (DESIGN.md §11.1): lazy-loaded on
+             first expand via the <tr>'s own hx-get above, toggled open/
+             closed by class rather than re-fetched every click. -->
+        <tr id="preview-row-{{.PlexID}}" class="missing-row preview-row">
+          <td colspan="11"><div id="preview-row-{{.PlexID}}-content" class="playlist-preview-scope"></div></td>
+        </tr>
         {{end}}
       </tbody>
     </table>
+    </div>
+    <div class="bulk-actions-bar">
+      <span class="bulk-actions-count">Selected</span>
+      <button type="submit" formaction="/backup/export" formmethod="get" class="btn btn-secondary btn-small">Backup Selected</button>
+      <!-- Moved out of the always-visible top toolbar (user feedback: sitting
+           next to a "Select" toggle, it wasn't clear what "Export CSV" would
+           actually export) - living here instead makes the scope unambiguous
+           by context, the same way every other button in this bar is already
+           scoped to "whatever's checked." exportCSV (playlists.go) exports
+           just these checked ids when any are given, matching every sibling
+           button's semantics exactly. -->
+      <button type="submit" formaction="/playlists/export" formmethod="get" class="btn btn-secondary btn-small">Export Selected (CSV)</button>
+      <!-- Merge needs a name for the resulting playlist - prompt() rather
+           than a permanently-visible text field, since it's only relevant
+           right when this button is clicked (matches the React version's
+           promptDialog()). -->
+      <button type="submit" formaction="/playlists/merge" class="btn btn-secondary btn-small" title="Combine these playlists' tracks into a new playlist" onclick="var n=prompt('Combining the selected playlists into one new playlist.\n\nName for the new playlist:'); if(!n)return false; this.form.querySelector('[name=targetName]')?.remove(); var i=document.createElement('input'); i.type='hidden'; i.name='targetName'; i.value=n; this.form.appendChild(i);">Merge Selected</button>
+      <button type="submit" class="btn btn-secondary btn-small" style="color:var(--error)" onclick="return confirm('Delete the selected playlist(s) from Plex? This cannot be undone.')">Delete Selected</button>
     </div>
     <script>
       // Drag-to-reorder columns: native HTML5 drag-and-drop, no library.
@@ -378,9 +410,7 @@
         <div class="playlist-card-details">
           <div class="playlist-card-detail-row">
             <span class="playlist-card-detail-label">Source</span>
-            {{if eq .Source "plex"}}<span class="playlist-source-label">&mdash;</span>
-            {{else if .SourceURL}}<a href="{{.SourceURL}}" target="_blank" rel="noopener noreferrer" class="playlist-source-link">{{.Source}} &#8599;</a>
-            {{else}}<span class="playlist-source-label">{{.Source}}</span>{{end}}
+            {{template "playlistSource" .}}
           </div>
           <div class="playlist-card-detail-row">
             <span class="playlist-card-detail-label">Schedule</span>
@@ -413,10 +443,43 @@
     document.getElementById('select-all')?.addEventListener('change', function () {
       document.querySelectorAll('input.row-select').forEach(function (cb) { cb.checked = this.checked; }.bind(this));
     });
+    // Row click -> inline read-only track preview (DESIGN.md §11.1). Lazy-
+    // loaded via htmx.ajax (rather than an hx-get/hx-trigger pair on the
+    // <tr> itself) so the guard against clicks on the row's own controls
+    // (isRowActionTarget, data-table.js) is a plain JS condition instead of
+    // depending on hx-trigger's bracket-filter syntax.
+    function togglePlaylistPreview(plexId) {
+      var row = document.getElementById('preview-row-' + plexId);
+      if (!row) return;
+      var opening = !row.classList.contains('is-open');
+      row.classList.toggle('is-open');
+      var content = document.getElementById('preview-row-' + plexId + '-content');
+      if (opening && content && !content.dataset.loaded) {
+        content.dataset.loaded = '1';
+        htmx.ajax('GET', '/playlists/' + encodeURIComponent(plexId) + '/preview', { target: content, swap: 'innerHTML' });
+      }
+    }
   </script>
   {{end}}{{/* not .Playlists */}}
   {{end}}{{/* .PlexError */}}
 </div>
+{{end}}
+
+{{/* playlistSource renders the Source column/detail: a small monochrome
+     logo (the same PNGs the Import source-picker uses, forced to a white
+     silhouette via CSS - see .playlist-source-logo, PlaylistsPage.css)
+     rather than the service name as plain link text, per user feedback -
+     still a real link out to the source. Falls back to the name as text
+     for a source with no logo asset (serviceLogo returns ""). */}}
+{{define "playlistSource"}}
+{{if eq .Source "plex"}}<span class="playlist-source-label">—</span>
+{{else if .SourceURL}}
+  {{if serviceLogo .Source}}
+  <a href="{{.SourceURL}}" target="_blank" rel="noopener noreferrer" class="playlist-source-link" title="Open on {{.Source}}" aria-label="Open on {{.Source}}">
+    <img src="{{serviceLogo .Source}}" alt="{{.Source}}" class="playlist-source-logo">
+  </a>
+  {{else}}<a href="{{.SourceURL}}" target="_blank" rel="noopener noreferrer" class="playlist-source-link">{{.Source}} ↗</a>{{end}}
+{{else}}<span class="playlist-source-label">{{.Source}}</span>{{end}}
 {{end}}
 
 {{/* playlistRowActions is the per-playlist action button row, shared by the
@@ -450,7 +513,7 @@
 <a class="icon-btn" href="/backup/export?id={{.PlexID}}" title="Download a JSON backup of this playlist" aria-label="Download a backup of {{.Name}}">
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
 </a>
-<button type="button" class="icon-btn" hx-post="/playlists/{{.PlexID}}/clone" hx-confirm="Duplicate &quot;{{.Name}}&quot;?" title="Duplicate this playlist" aria-label="Duplicate {{.Name}}">
+<button type="button" class="icon-btn" hx-post="/playlists/{{.PlexID}}/clone" hx-target="#notifications" hx-swap="innerHTML" hx-confirm="Duplicate &quot;{{.Name}}&quot;?" title="Duplicate this playlist" aria-label="Duplicate {{.Name}}">
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
 </button>
 {{end}}

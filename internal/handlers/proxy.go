@@ -87,7 +87,7 @@ func (h *ProxyHandler) image(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "user not found", http.StatusNotFound)
 		return
 	}
-	userServer, err := db.GetUserServer(h.DB, user.ID)
+	userServer, err := db.GetUserMusicServer(h.DB, user.ID)
 	if err != nil || userServer == nil {
 		h.servePixel(w)
 		return

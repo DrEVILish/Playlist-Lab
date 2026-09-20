@@ -117,6 +117,16 @@
             <p class="quick-mix-description">Build a mix from your own filters - genres, moods, artists, ratings and more</p>
           </div>
         </button>
+        <!-- Moved from the Import page per user feedback: describing a
+             playlist and matching library tracks against it is a
+             generation flow, not an import-from-an-external-source one.
+             Posts to the same /import/ai route unchanged. -->
+        <button type="button" class="quick-mix-card custom-mix-card" hx-get="/mixes/ai-form" hx-target="#modal-root" hx-swap="innerHTML">
+          <div class="quick-mix-content">
+            <h3 class="quick-mix-name">Generate with AI</h3>
+            <p class="quick-mix-description">Describe a playlist in plain language and let AI pick the tracks from your library</p>
+          </div>
+        </button>
       </div>
     </section>
 

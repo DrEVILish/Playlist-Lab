@@ -1,0 +1,49 @@
+{{/* Settings > Sessions panel (DESIGN.md §11.4), rendered by GET
+     /settings/sessions and re-rendered in place by POST
+     /settings/sessions/{id}/revoke - id="settings-panel-sessions" must
+     survive every swap (both routes use hx-swap="outerHTML") so the tab's
+     own "revealed, change from:#settings-tab-sessions" trigger (settings.html)
+     keeps finding this element on repeat visits, same pattern
+     admin_logs.html already uses. */}}
+{{define "partials/settings_sessions.html"}}
+<div id="settings-panel-sessions">
+  {{if .Error}}
+    <p class="settings-hint" style="color:var(--error)">{{.Error}}</p>
+  {{else if not .Sessions}}
+    <p class="settings-hint">No active sessions.</p>
+  {{else}}
+  <div class="data-table-container">
+  <table class="data-table settings-sessions-table">
+    <thead>
+      <tr>
+        <th>Device</th>
+        <th>IP address</th>
+        <th>First signed in</th>
+        <th>Last active</th>
+        <th class="col-actions">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Sessions}}
+      <tr>
+        <td>{{.Device}}{{if .IsCurrent}} <span class="badge badge-primary">This device</span>{{end}}</td>
+        <td class="mono-data">{{if .IP}}{{.IP}}{{else}}&mdash;{{end}}</td>
+        <td class="mono-data">{{if .CreatedAt}}{{relativeUnix .CreatedAt}}{{else}}&mdash;{{end}}</td>
+        <td class="mono-data">{{if .LastSeenAt}}{{relativeUnix .LastSeenAt}}{{else}}&mdash;{{end}}</td>
+        <td class="col-actions">
+          <div class="row-actions">
+          <button type="button" class="icon-btn" title="Revoke this session" aria-label="Revoke this session"
+            hx-post="/settings/sessions/{{.DisplayID}}/revoke" hx-target="#settings-panel-sessions" hx-swap="outerHTML"
+            hx-confirm="{{if .IsCurrent}}This is your current device - revoking it will sign you out immediately. Continue?{{else}}Revoke this session? That device will be signed out immediately.{{end}}">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>
+          </button>
+          </div>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{end}}
+</div>
+{{end}}

@@ -41,8 +41,10 @@
 .delete-dialog-modal {
   background: var(--gradient-card);
   border-radius: var(--radius-xl);
-  max-width: 450px;
+  max-width: 90vw;
   width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
@@ -72,10 +74,14 @@
 .delete-dialog-icon {
   font-size: 3rem;
   line-height: 1;
-  animation: pulse 2s ease-in-out infinite;
+  animation: icon-pulse 2s ease-in-out infinite;
 }
 
-@keyframes pulse {
+/* Named distinctly from base.css's @keyframes pulse (an opacity fade) -
+   this one scales instead, and keyframe names are global across every
+   loaded stylesheet regardless of file, so reusing "pulse" here would
+   silently pick whichever definition's file happened to load last. */
+@keyframes icon-pulse {
   0%, 100% {
     transform: scale(1);
   }

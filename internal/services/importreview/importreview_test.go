@@ -24,7 +24,7 @@ func TestFromMatchedTracks_FlattensMatchedThenUnmatched(t *testing.T) {
 
 func TestSession_UpdateEditsOneTrackWithoutAffectingOthers(t *testing.T) {
 	store := NewStore()
-	sess := store.New("deezer", "123", "My Mix", "")
+	sess := store.New("deezer", "123", "My Mix", "", 1)
 	sess.SetTracks([]Track{{Title: "A"}, {Title: "B"}})
 
 	ok := sess.Update(1, func(tr *Track) {
@@ -71,18 +71,30 @@ func TestSession_Counts(t *testing.T) {
 
 func TestStore_NewGetDelete(t *testing.T) {
 	store := NewStore()
-	sess := store.New("deezer", "123", "My Mix", "https://example.com/cover.jpg")
+	sess := store.New("deezer", "123", "My Mix", "https://example.com/cover.jpg", 1)
 
-	got, ok := store.Get(sess.ID)
+	got, ok := store.Get(sess.ID, 1)
 	if !ok || got != sess {
 		t.Fatal("Get did not return the session New created")
 	}
-	if got.CoverURL != "https://example.com/cover.jpg" {
-		t.Errorf("CoverURL = %q, want it preserved from New", got.CoverURL)
+	if got.CoverURL() != "https://example.com/cover.jpg" {
+		t.Errorf("CoverURL = %q, want it preserved from New", got.CoverURL())
 	}
 
 	store.Delete(sess.ID)
-	if _, ok := store.Get(sess.ID); ok {
+	if _, ok := store.Get(sess.ID, 1); ok {
 		t.Error("session still retrievable after Delete")
+	}
+}
+
+func TestStore_GetRejectsWrongUser(t *testing.T) {
+	store := NewStore()
+	sess := store.New("deezer", "123", "My Mix", "", 1)
+
+	if _, ok := store.Get(sess.ID, 2); ok {
+		t.Error("Get returned a session belonging to a different user")
+	}
+	if got, ok := store.Get(sess.ID, 1); !ok || got != sess {
+		t.Error("Get should still succeed for the owning user")
 	}
 }

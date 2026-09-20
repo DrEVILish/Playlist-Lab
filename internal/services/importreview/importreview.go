@@ -40,18 +40,71 @@ type Track struct {
 	Skipped              bool
 }
 
+// Progress is the review session's fetch/match status while
+// importsvc.ImportPlaylist is still running in the background - a small
+// duplicate of crossimport.Progress's shape (Phase/Current/Total), not a
+// shared type, for the same reason Track above duplicates
+// matching.MatchedTrack instead of reusing crossimport's own type.
+type Progress struct {
+	Phase   string // "scraping", "matching", "review", or "error"
+	Current int
+	Total   int
+	Message string // set when Phase is "error"
+}
+
 // Session holds one in-progress import's editable review state between
 // POST /import/preview and POST /import/confirm/:sessionId.
 type Session struct {
 	ID               string
+	UserID           int64
 	Source           string
 	SourceIdentifier string
-	PlaylistName     string
-	CoverURL         string
 	CreatedAt        time.Time
 
-	mu     sync.Mutex
-	tracks []Track
+	mu           sync.Mutex
+	playlistName string
+	coverURL     string
+	tracks       []Track
+	progress     Progress
+}
+
+// PlaylistName and CoverURL are read a lot (templates, confirmImport) - kept
+// as plain accessor methods rather than exported fields now that they're
+// mutable after a session is created bare (see Store.New/SetPlaylistName).
+func (s *Session) PlaylistName() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.playlistName
+}
+
+func (s *Session) CoverURL() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.coverURL
+}
+
+func (s *Session) SetPlaylistName(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.playlistName = name
+}
+
+func (s *Session) SetCoverURL(url string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.coverURL = url
+}
+
+func (s *Session) SetProgress(p Progress) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.progress = p
+}
+
+func (s *Session) GetProgress() Progress {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.progress
 }
 
 func (s *Session) SetTracks(tracks []Track) {
@@ -79,6 +132,37 @@ func (s *Session) Update(index int, fn func(*Track)) bool {
 		return false
 	}
 	fn(&s.tracks[index])
+	return true
+}
+
+// Move reorders the track currently at fromIndex to sit right after the
+// track currently at afterIndex (afterIndex -1 means "move to the front"),
+// same "move relative to a stable-at-render-time position" idea as
+// playlists.go's moveTrack (which uses a Plex item id instead of an index
+// since its rows already exist in Plex - these don't yet, so a plain slice
+// index is the local equivalent). Returns false if either index is out of
+// range.
+func (s *Session) Move(fromIndex, afterIndex int) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := len(s.tracks)
+	if fromIndex < 0 || fromIndex >= n || afterIndex < -1 || afterIndex >= n || fromIndex == afterIndex {
+		return false
+	}
+	moved := s.tracks[fromIndex]
+	rest := append(s.tracks[:fromIndex:fromIndex], s.tracks[fromIndex+1:]...)
+
+	insertAfter := afterIndex
+	if afterIndex > fromIndex {
+		insertAfter--
+	}
+	insertPos := insertAfter + 1
+
+	out := make([]Track, 0, n)
+	out = append(out, rest[:insertPos]...)
+	out = append(out, moved)
+	out = append(out, rest[insertPos:]...)
+	s.tracks = out
 	return true
 }
 
@@ -129,10 +213,21 @@ func NewStore() *Store {
 	return &Store{sessions: map[string]*Session{}}
 }
 
-func (s *Store) New(source, sourceIdentifier, playlistName, coverURL string) *Session {
+func (s *Store) New(source, sourceIdentifier, playlistName, coverURL string, userID int64) *Session {
+	sess := s.NewBare(source, sourceIdentifier, userID)
+	sess.playlistName, sess.coverURL = playlistName, coverURL
+	return sess
+}
+
+// NewBare creates a session before the fetch/match results (playlist name,
+// cover, tracks) are known - used by the live-progress preview path, which
+// needs a session id to poll against while importsvc.ImportPlaylist is
+// still running in a background goroutine. SetPlaylistName/SetCoverURL/
+// SetTracks fill it in once that finishes.
+func (s *Store) NewBare(source, sourceIdentifier string, userID int64) *Session {
 	sess := &Session{
-		ID: uuid.NewString(), Source: source, SourceIdentifier: sourceIdentifier,
-		PlaylistName: playlistName, CoverURL: coverURL, CreatedAt: time.Now(),
+		ID: uuid.NewString(), UserID: userID, Source: source, SourceIdentifier: sourceIdentifier,
+		CreatedAt: time.Now(),
 	}
 	s.mu.Lock()
 	s.sessions[sess.ID] = sess
@@ -140,10 +235,16 @@ func (s *Store) New(source, sourceIdentifier, playlistName, coverURL string) *Se
 	return sess
 }
 
-func (s *Store) Get(id string) (*Session, bool) {
+// Get returns id's session only if it belongs to userID - a mismatched or
+// unknown id both report "not found" so a guessed/leaked session id can't
+// be used to distinguish "exists but isn't yours" from "doesn't exist".
+func (s *Store) Get(id string, userID int64) (*Session, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	sess, ok := s.sessions[id]
+	if !ok || sess.UserID != userID {
+		return nil, false
+	}
 	return sess, ok
 }
 

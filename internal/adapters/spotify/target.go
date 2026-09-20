@@ -77,8 +77,8 @@ func toMatchResult(source adapters.TrackInfo, item spotifyTrack, score float64, 
 	}
 }
 
-func (t *Target) searchTracks(token, query string, limit int) ([]spotifyTrack, error) {
-	req, err := http.NewRequest(http.MethodGet,
+func (t *Target) searchTracks(ctx context.Context, token, query string, limit int) ([]spotifyTrack, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		"https://api.spotify.com/v1/search?type=track&limit="+fmt.Sprint(limit)+"&q="+url.QueryEscape(query), nil)
 	if err != nil {
 		return nil, err
@@ -109,14 +109,14 @@ func (t *Target) searchTracks(token, query string, limit int) ([]spotifyTrack, e
 }
 
 func (t *Target) SearchCatalog(ctx context.Context, query string, userID int64, allowLive, allowStatic bool) ([]adapters.MatchResult, error) {
-	token, err := GetToken(t.DB, t.Secret, userID)
+	token, err := GetToken(ctx, t.DB, t.Secret, userID)
 	if err != nil {
 		return nil, err
 	}
 	if token == "" {
 		return nil, ErrNotConnected
 	}
-	items, err := t.searchTracks(token, query, 10)
+	items, err := t.searchTracks(ctx, token, query, 10)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +129,7 @@ func (t *Target) SearchCatalog(ctx context.Context, query string, userID int64, 
 }
 
 func (t *Target) MatchTracks(ctx context.Context, tracks []adapters.TrackInfo, cfg adapters.TargetConfig, userID int64, progress func(current, total int), isCancelled func() bool) ([]adapters.MatchResult, error) {
-	token, err := GetToken(t.DB, t.Secret, userID)
+	token, err := GetToken(ctx, t.DB, t.Secret, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func (t *Target) MatchTracks(ctx context.Context, tracks []adapters.TrackInfo, c
 		query := strings.TrimSpace(track.Title + " " + track.Artist)
 		result := adapters.MatchResult{SourceTrack: track}
 
-		items, err := t.searchTracks(token, query, 5)
+		items, err := t.searchTracks(ctx, token, query, 5)
 		if err != nil {
 			slog.Warn("spotify search failed for track", "track", track, "error", err)
 		} else if len(items) > 0 {
@@ -166,7 +166,7 @@ func (t *Target) MatchTracks(ctx context.Context, tracks []adapters.TrackInfo, c
 }
 
 func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adapters.MatchResult, cfg adapters.TargetConfig, userID int64) (string, string, int, error) {
-	token, err := GetToken(t.DB, t.Secret, userID)
+	token, err := GetToken(ctx, t.DB, t.Secret, userID)
 	if err != nil {
 		return "", "", 0, err
 	}
@@ -174,12 +174,12 @@ func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adap
 		return "", "", 0, ErrNotConnected
 	}
 
-	me, err := t.getMe(token)
+	me, err := t.getMe(ctx, token)
 	if err != nil {
 		return "", "", 0, err
 	}
 
-	playlistID, createdName, err := t.createEmptyPlaylist(token, me, name)
+	playlistID, createdName, err := t.createEmptyPlaylist(ctx, token, me, name)
 	if err != nil {
 		return "", "", 0, err
 	}
@@ -197,8 +197,8 @@ func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adap
 	const batchSize = 100
 	for i := 0; i < len(uris); i += batchSize {
 		end := min(i+batchSize, len(uris))
-		if err := t.addTracks(token, playlistID, uris[i:end]); err != nil {
-			t.deletePlaylist(token, playlistID) // best-effort cleanup of the now-broken empty playlist
+		if err := t.addTracks(ctx, token, playlistID, uris[i:end]); err != nil {
+			t.deletePlaylist(ctx, token, playlistID) // best-effort cleanup of the now-broken empty playlist
 			return "", "", 0, err
 		}
 	}
@@ -206,8 +206,8 @@ func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adap
 	return playlistID, createdName, len(uris), nil
 }
 
-func (t *Target) getMe(token string) (string, error) {
-	req, _ := http.NewRequest(http.MethodGet, "https://api.spotify.com/v1/me", nil)
+func (t *Target) getMe(ctx context.Context, token string) (string, error) {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.spotify.com/v1/me", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := t.httpClient.Do(req)
 	if err != nil {
@@ -226,9 +226,9 @@ func (t *Target) getMe(token string) (string, error) {
 	return me.ID, nil
 }
 
-func (t *Target) createEmptyPlaylist(token, spotifyUserID, name string) (id, createdName string, err error) {
+func (t *Target) createEmptyPlaylist(ctx context.Context, token, spotifyUserID, name string) (id, createdName string, err error) {
 	body, _ := json.Marshal(map[string]any{"name": name, "public": false})
-	req, _ := http.NewRequest(http.MethodPost, "https://api.spotify.com/v1/users/"+url.PathEscape(spotifyUserID)+"/playlists", strings.NewReader(string(body)))
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.spotify.com/v1/users/"+url.PathEscape(spotifyUserID)+"/playlists", strings.NewReader(string(body)))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := t.httpClient.Do(req)
@@ -249,9 +249,9 @@ func (t *Target) createEmptyPlaylist(token, spotifyUserID, name string) (id, cre
 	return created.ID, created.Name, nil
 }
 
-func (t *Target) addTracks(token, playlistID string, uris []string) error {
+func (t *Target) addTracks(ctx context.Context, token, playlistID string, uris []string) error {
 	body, _ := json.Marshal(map[string]any{"uris": uris})
-	req, _ := http.NewRequest(http.MethodPost, "https://api.spotify.com/v1/playlists/"+url.PathEscape(playlistID)+"/tracks", strings.NewReader(string(body)))
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.spotify.com/v1/playlists/"+url.PathEscape(playlistID)+"/tracks", strings.NewReader(string(body)))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := t.httpClient.Do(req)
@@ -265,8 +265,8 @@ func (t *Target) addTracks(token, playlistID string, uris []string) error {
 	return nil
 }
 
-func (t *Target) deletePlaylist(token, playlistID string) {
-	req, _ := http.NewRequest(http.MethodDelete, "https://api.spotify.com/v1/playlists/"+url.PathEscape(playlistID)+"/followers", nil)
+func (t *Target) deletePlaylist(ctx context.Context, token, playlistID string) {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodDelete, "https://api.spotify.com/v1/playlists/"+url.PathEscape(playlistID)+"/followers", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := t.httpClient.Do(req)
 	if err == nil {
@@ -301,7 +301,7 @@ func (t *Target) HandleOAuthCallback(ctx context.Context, code string, userID in
 		return err
 	}
 	form := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {t.RedirectURI}}
-	tokens, err := requestToken(clientID, clientSecret, form)
+	tokens, err := requestToken(ctx, clientID, clientSecret, form)
 	if err != nil {
 		return err
 	}
@@ -322,7 +322,7 @@ func (t *Target) HandleOAuthCallback(ctx context.Context, code string, userID in
 }
 
 func (t *Target) HasValidConnection(ctx context.Context, userID int64) (bool, error) {
-	token, err := GetToken(t.DB, t.Secret, userID)
+	token, err := GetToken(ctx, t.DB, t.Secret, userID)
 	if err != nil {
 		return false, err
 	}

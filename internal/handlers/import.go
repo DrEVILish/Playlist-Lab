@@ -33,11 +33,14 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -50,6 +53,7 @@ import (
 	"github.com/drevilish/playlist-lab/internal/services/importsvc"
 	"github.com/drevilish/playlist-lab/internal/services/notifications"
 	"github.com/drevilish/playlist-lab/internal/services/plex"
+	"github.com/drevilish/playlist-lab/internal/services/scrapers"
 )
 
 type ImportHandler struct {
@@ -61,6 +65,10 @@ type ImportHandler struct {
 	Registry      *adapters.Registry
 	// Reviews backs the preview/review/confirm flow in import_review.go.
 	Reviews *importreview.Store
+	// PendingFiles backs the file-import modal's flow in import_file.go -
+	// set by RegisterImportFile, not a caller-supplied field (nothing
+	// outside this package constructs one).
+	PendingFiles *pendingFileStore
 }
 
 func RegisterImport(r chi.Router, mw *auth.Middleware, h *ImportHandler) {
@@ -70,6 +78,7 @@ func RegisterImport(r chi.Router, mw *auth.Middleware, h *ImportHandler) {
 		r.Post("/import", h.startImport)
 		r.Post("/import/file", h.startFileImport)
 		r.Post("/import/ai", h.startAIImport)
+		r.Get("/import/billboard/weeks", h.billboardWeeks)
 	})
 }
 
@@ -77,14 +86,18 @@ func RegisterImport(r chi.Router, mw *auth.Middleware, h *ImportHandler) {
 const maxImportFileSize = 10 << 20
 
 // importSources lists, in display order, the source IDs registered in
-// main.go that are actually reachable from this page.
+// main.go that are actually reachable from this page. youtube-music is
+// registered (see main.go) but deliberately left out here - it's the same
+// service as youtube to a user picking a source, so only one tab is shown,
+// same "registered but not surfaced" treatment apple/tidal/amazon/qobuz get
+// above.
 var importSources = []string{
-	"deezer", "listenbrainz", "youtube", "youtube-music", "spotify", "aria", "billboard", "lastfm",
+	"spotify", "deezer", "youtube", "billboard", "aria", "listenbrainz", "lastfm",
 }
 
 func (h *ImportHandler) page(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
-	userServer, _ := db.GetUserServer(h.DB, user.ID)
+	userServer, _ := db.GetUserMusicServer(h.DB, user.ID)
 
 	var sources []adapters.ServiceMeta
 	for _, id := range importSources {
@@ -93,9 +106,18 @@ func (h *ImportHandler) page(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	type countryOption struct{ Code, Name string }
+	countries := make([]countryOption, len(scrapers.PopularCountries))
+	for i, code := range scrapers.PopularCountries {
+		countries[i] = countryOption{Code: code, Name: scrapers.PopularCountryName(code)}
+	}
+	country, _ := db.GetCountry(h.DB, user.ID)
+
 	data := map[string]any{
 		"User": user, "HasServer": userServer != nil && userServer.LibraryID.Valid,
-		"Sources": sources,
+		"Sources":        sources,
+		"BillboardYears": billboardYearOptions(),
+		"Countries":      countries, "Country": country,
 	}
 	if IsModalRequest(r) {
 		h.Tmpl.RenderModal(w, r, "import", "Import", data)
@@ -126,7 +148,7 @@ func (h *ImportHandler) startImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userServer, err := db.GetUserServer(h.DB, user.ID)
+	userServer, err := db.GetUserMusicServer(h.DB, user.ID)
 	if err != nil || userServer == nil || !userServer.LibraryID.Valid {
 		http.Error(w, "No music library selected. Please select a library first.", http.StatusBadRequest)
 		return
@@ -180,7 +202,7 @@ func (h *ImportHandler) startFileImport(w http.ResponseWriter, r *http.Request) 
 	customName := r.FormValue("playlistName")
 	filename := header.Filename
 
-	userServer, err := db.GetUserServer(h.DB, user.ID)
+	userServer, err := db.GetUserMusicServer(h.DB, user.ID)
 	if err != nil || userServer == nil || !userServer.LibraryID.Valid {
 		http.Error(w, "No music library selected. Please select a library first.", http.StatusBadRequest)
 		return
@@ -296,4 +318,94 @@ func (h *ImportHandler) run(ctx context.Context, userID int64, userServer *db.Us
 	pct := 100
 	h.Notifications.Update(userID, notificationID, notifications.Patch{Status: &status, Detail: &detail, Progress: &pct})
 	return nil
+}
+
+// billboardHot100Since is the first date the Hot 100 chart was published;
+// billboardYearOptions' lower bound.
+const billboardHot100Since = 1958
+
+// billboardYearOptions backs the Import page's Billboard year picker
+// (DESIGN.md; user feedback: bring back example/top-chart browsing instead
+// of only a raw URL paste box) - descending so the most recent year (the
+// one anyone browsing charts most likely wants) sorts first.
+func billboardYearOptions() []int {
+	current := time.Now().Year()
+	years := make([]int, 0, current-billboardHot100Since+1)
+	for y := current; y >= billboardHot100Since; y-- {
+		years = append(years, y)
+	}
+	return years
+}
+
+// billboardValidDates fetches and caches the Hot 100's own published list of
+// every real chart date (not every Saturday - the chart's day-of-week
+// convention has changed over its history, so computing dates rather than
+// reading the source's own index would silently produce dead links for
+// older years). Same GitHub mirror the billboard adapter's FetchTracks
+// already reads (internal/adapters/billboard/source.go) - this just adds
+// its lightweight index file, not a new data source. Cached for the
+// process lifetime plus a day: it only grows by one entry a week.
+var (
+	billboardDatesMu    sync.Mutex
+	billboardDatesCache []string
+	billboardDatesAt    time.Time
+)
+
+const billboardValidDatesURL = "https://raw.githubusercontent.com/mhollingshead/billboard-hot-100/main/valid_dates.json"
+
+func billboardValidDates() ([]string, error) {
+	billboardDatesMu.Lock()
+	defer billboardDatesMu.Unlock()
+	if len(billboardDatesCache) > 0 && time.Since(billboardDatesAt) < 24*time.Hour {
+		return billboardDatesCache, nil
+	}
+	req, err := http.NewRequest(http.MethodGet, billboardValidDatesURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("valid_dates.json: status %d", resp.StatusCode)
+	}
+	var dates []string
+	if err := json.NewDecoder(resp.Body).Decode(&dates); err != nil {
+		return nil, err
+	}
+	billboardDatesCache = dates
+	billboardDatesAt = time.Now()
+	return dates, nil
+}
+
+type billboardWeekOption struct{ URL, Label string }
+
+// billboardWeeks backs the year picker's cascading week <select> (GET
+// /import/billboard/weeks?year=YYYY), rendered into the identifier field's
+// picker widget in import.html.
+func (h *ImportHandler) billboardWeeks(w http.ResponseWriter, r *http.Request) {
+	year := r.URL.Query().Get("year")
+	dates, err := billboardValidDates()
+	if err != nil {
+		slog.Error("failed to load Billboard valid dates", "error", err)
+		http.Error(w, "Failed to load Billboard chart dates", http.StatusBadGateway)
+		return
+	}
+	var weeks []billboardWeekOption
+	for _, d := range dates {
+		if !strings.HasPrefix(d, year+"-") {
+			continue
+		}
+		t, err := time.Parse("2006-01-02", d)
+		if err != nil {
+			continue
+		}
+		weeks = append(weeks, billboardWeekOption{
+			URL:   "https://www.billboard.com/charts/hot-100/" + d + "/",
+			Label: t.Format("January 2, 2006"),
+		})
+	}
+	h.Tmpl.RenderPartial(w, "partials/billboard_weeks.html", map[string]any{"Weeks": weeks})
 }

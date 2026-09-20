@@ -376,7 +376,7 @@ tr.selected-for-removal td {
   background: var(--surface);
   border-radius: 8px;
   padding: 2rem;
-  max-width: 500px;
+  max-width: 90vw;
   width: 90%;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
@@ -457,7 +457,7 @@ tr.selected-for-removal td {
 
 /* Add Tracks Modal */
 .add-tracks-modal {
-  max-width: 600px;
+  max-width: 90vw;
   max-height: 80vh;
   display: flex;
   flex-direction: column;

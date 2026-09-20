@@ -1,0 +1,31 @@
+{{/* collection_items_preview.html: the Collections table's row-click
+     expando (mirrors home.html's playlist_preview.html) - a live, read-only
+     list of everything currently in the collection on Plex right now, not
+     the Missing column's separate "what didn't match" list next to it.
+     Reuses the shared .data-table mechanics (DataTable.css) rather than a
+     bespoke mini-table, the same way missing_list.html's own nested table
+     does, so this doesn't read as a visually different sub-widget bolted
+     onto the row. Takes {Items: []collectionItemRow, Error: bool}. */}}
+{{define "partials/collection_items_preview.html"}}
+{{if .Error}}
+<p class="collection-preview-empty">Couldn't load this collection's items.</p>
+{{else if not .Items}}
+<p class="collection-preview-empty">This collection has no items yet - refresh it to populate membership.</p>
+{{else}}
+<p class="collection-preview-count">{{len .Items}} item(s), in the order they appear in the Plex collection.</p>
+<table class="collection-preview-table data-table">
+  <thead>
+    <tr><th class="collection-preview-rank">#</th><th>Title</th><th>Year</th></tr>
+  </thead>
+  <tbody>
+    {{range $i, $it := .Items}}
+    <tr>
+      <td class="collection-preview-rank mono-data">{{add $i 1}}</td>
+      <td>{{$it.Title}}</td>
+      <td class="mono-data">{{if $it.Year}}{{$it.Year}}{{else}}—{{end}}</td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{end}}
+{{end}}

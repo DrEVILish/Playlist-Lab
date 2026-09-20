@@ -1,0 +1,18 @@
+{{/* Manual builder's staged item list (DESIGN.md §11.11) - rendered both
+     inline in collection_form.html's initial edit view and as the
+     hx-swap="outerHTML" response from the add/remove-manual-item routes;
+     kept as a short duplicate of that same markup rather than a shared
+     sub-template, since there's no "dict" template helper in this app to
+     pass both CollectionID and ManualItems into a shared define. */}}
+{{define "partials/collection_manual_items.html"}}
+<ul id="collection-manual-items" class="collection-manual-items-list">
+  {{$collectionID := .CollectionID}}
+  {{range .ManualItems}}
+  <li>
+    <span>{{.Title}}{{if .Artist}} — {{.Artist}}{{end}}</span>
+    <button type="button" class="icon-btn" title="Remove" aria-label="Remove {{.Title}}"
+      hx-delete="/collections/{{$collectionID}}/manual-items/{{.RatingKey}}" hx-target="#collection-manual-items" hx-swap="outerHTML">&times;</button>
+  </li>
+  {{end}}
+</ul>
+{{end}}

@@ -109,7 +109,7 @@ func TestUserCascadeDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreatePlaylistRow: %v", err)
 	}
-	if _, err := CreateSchedule(sqlDB, u.ID, pl.ID, "playlist_refresh", "daily", "2024-01-01", ""); err != nil {
+	if _, err := CreateSchedule(sqlDB, u.ID, pl.ID, 0, "playlist_refresh", "daily", "2024-01-01", ""); err != nil {
 		t.Fatalf("CreateSchedule: %v", err)
 	}
 	if err := AddMissingTracks(sqlDB, u.ID, pl.ID, []NewMissingTrack{{Title: "t", Artist: "a", Position: 0, Source: "spotify"}}); err != nil {

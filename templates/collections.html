@@ -1,0 +1,53 @@
+{{define "content"}}
+<link rel="stylesheet" href="/static/css/components/DataTable.css">
+<link rel="stylesheet" href="/static/css/components/MissingTracksPanel.css">
+<link rel="stylesheet" href="/static/css/pages/CollectionsPage.css">
+<script src="/static/js/data-table.js"></script>
+<div class="collections page-container">
+  <div class="page-header">
+    <h1 class="page-title">Collections</h1>
+    <button type="button" class="btn btn-secondary btn-small"
+      hx-get="/collections/presets" hx-target="#modal-root" hx-swap="innerHTML">
+      Browse Presets
+    </button>
+    <button type="button" class="btn btn-primary btn-small"
+      hx-get="/collections/new" hx-target="#modal-root" hx-swap="innerHTML">
+      New Collection
+    </button>
+  </div>
+
+  <!-- collections-changed fires from the schedule modal's create/update/
+       delete responses (handlers/schedules.go's closeModalAndNotifyCollections)
+       - a schedule attached to a collection has no other reason to touch
+       this page's own list markup, so it just re-fetches rather than the
+       modal trying to render collection_list.html itself. -->
+  <!-- Missing Films/TV Shows (DESIGN.md §11.11) is integrated into this
+       same table now, per-row (collection_list.html's "Missing" column +
+       expando row) - same pattern as the Playlists table's Missing Tracks
+       column, not a separate section. -->
+  <div id="collections-list" hx-get="/collections/list" hx-trigger="load, collections-changed from:body" hx-swap="innerHTML"></div>
+</div>
+<!-- Row-click item preview (mirrors home.html's togglePlaylistPreview) -
+     defined here rather than inside collection_list.html since that
+     fragment reloads on every filter/sort/refresh; this page shell loads
+     once, so the function is declared once too. -->
+<script>
+  function toggleCollectionPreview(rowKey) {
+    var row = document.getElementById('preview-row-' + rowKey);
+    if (!row) return;
+    var opening = !row.classList.contains('is-open');
+    row.classList.toggle('is-open');
+    // Drives the Name cell's chevron (.collection-preview-toggle,
+    // CollectionsPage.css's "tr.is-open .collection-preview-toggle" rule) -
+    // a separate element from preview-row-* above, so it needs its own
+    // toggle rather than inheriting one from a shared ancestor.
+    var mainRow = document.getElementById('collection-row-' + rowKey);
+    if (mainRow) mainRow.classList.toggle('is-open', opening);
+    var content = document.getElementById('preview-row-' + rowKey + '-content');
+    if (opening && content && !content.dataset.loaded) {
+      content.dataset.loaded = '1';
+      htmx.ajax('GET', '/collections/' + encodeURIComponent(rowKey) + '/items', { target: content, swap: 'innerHTML' });
+    }
+  }
+</script>
+{{end}}

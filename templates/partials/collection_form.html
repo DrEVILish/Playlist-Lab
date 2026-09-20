@@ -1,0 +1,280 @@
+{{/* Create/edit modal for a Collection (DESIGN.md §11.11). Reuses the
+     .advanced-mix-overlay/.advanced-mix-modal chrome already used by
+     schedule_form.html/mix_advanced_form.html rather than new modal CSS.
+     builder_type (Smart vs Manual) and the library are only choosable at
+     creation - see collections.go's package doc for why they're immutable
+     afterward.
+
+     Grouped into labeled sections (.collection-form-section,
+     CollectionsPage.css) by decision weight - what it is, what it
+     contains, how it behaves, danger zone - rather than one flat list of
+     fields, and an edit's fixed-at-creation facts (Library, Builder type)
+     render as a chip readout (.collection-spec-plate) instead of a form
+     field with a caption underneath, so it's immediately legible as "this
+     can't change here" rather than looking like a broken input. */}}
+{{define "collectionRuleFieldSelect"}}
+<select name="ruleField" class="form-select collection-rule-field">
+  <option value="genre" {{if eq . "genre"}}selected{{end}}>Genre</option>
+  <option value="mood" {{if eq . "mood"}}selected{{end}}>Mood (music)</option>
+  <option value="style" {{if eq . "style"}}selected{{end}}>Style (music)</option>
+  <option value="year" {{if eq . "year"}}selected{{end}}>Year</option>
+  <option value="decade" {{if eq . "decade"}}selected{{end}}>Decade (e.g. 1990)</option>
+  <option value="content_rating" {{if eq . "content_rating"}}selected{{end}}>Content Rating (movie)</option>
+  <option value="studio" {{if eq . "studio"}}selected{{end}}>Studio / Network</option>
+  <option value="actor" {{if eq . "actor"}}selected{{end}}>Actor</option>
+  <option value="director" {{if eq . "director"}}selected{{end}}>Director</option>
+  <option value="writer" {{if eq . "writer"}}selected{{end}}>Writer</option>
+</select>
+{{end}}
+
+{{define "partials/collection_form.html"}}
+<div class="advanced-mix-overlay">
+  <div class="advanced-mix-modal">
+    <div class="advanced-mix-header">
+      <h2 class="advanced-mix-title">{{if .Collection}}Edit Collection{{else}}New Collection{{end}}</h2>
+      <button type="button" class="advanced-mix-close" onclick="closeTopModal()" aria-label="Close">&times;</button>
+    </div>
+
+    <form {{if .Collection}}hx-put="/collections/{{.Collection.ID}}"{{else}}hx-post="/collections"{{end}}
+      hx-target="#collections-list" hx-swap="innerHTML"
+      hx-on::after-request="if(event.detail.successful) closeTopModal()">
+      <div class="advanced-mix-content">
+
+        {{if .Collection}}
+        <div class="collection-spec-plate">
+          <span class="collection-builder-badge">{{.Collection.ServerName}}</span>
+          <span class="collection-builder-badge">{{.Collection.LibraryDisplay}}</span>
+          <span class="collection-builder-badge collection-builder-badge--{{.Collection.BuilderType}}">{{if eq .Collection.BuilderType "manual"}}Manual{{else if eq .Collection.BuilderType "external_list"}}{{.Collection.ProviderLabel}}{{else}}Smart{{end}}</span>
+        </div>
+        {{end}}
+
+        <div class="form-group">
+          <label class="form-label" for="collection-name">Name</label>
+          <input id="collection-name" class="form-input" type="text" name="name" maxlength="255" required
+            value="{{if .Collection}}{{.Collection.Name}}{{else if .Prefill}}{{.Prefill.Name}}{{end}}" autofocus>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="collection-description">Description (optional)</label>
+          <textarea id="collection-description" class="form-textarea" name="description" rows="2">{{if .Collection}}{{.Collection.Description.String}}{{end}}</textarea>
+        </div>
+
+        {{if not .Collection}}
+        <div class="form-group">
+          <label class="form-label" for="collection-library">Library</label>
+          <!-- Grouped by server (DESIGN.md §11.11 multi-server support) -
+               a user with more than one linked Plex server (e.g. one for
+               movies/TV, one for music) picks a library from any of them. -->
+          <!-- Auto-selects a matching library when the prefill (a preset or
+               search result, collection_preset_search.go) knows its media
+               type - e.g. Browse Presets' movie-only Awards/Holiday/
+               Franchise entries pick this account's movie library by Plex's
+               own library type (not name-matching "Movies"/"Films"/...,
+               which a user could have named anything), so there's one less
+               thing to pick by hand on the common path. Still a plain
+               select the user can freely change either way. -->
+          <select id="collection-library" class="form-select" name="library" required>
+            <option value="">Select a library...</option>
+            {{range .ServerGroups}}
+            <optgroup label="{{.ServerName}}">
+              {{range .Libraries}}
+              <option value="{{.Value}}"{{if and $.RecommendedLibrary (eq .Value $.RecommendedLibrary)}} selected{{end}}>{{.Name}}</option>
+              {{end}}
+            </optgroup>
+            {{end}}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Membership</label>
+          {{$presetIsList := .Prefill}}
+          <div class="update-mode-group">
+            <label class="update-mode-card">
+              <input type="radio" name="builderType" value="smart" {{if not $presetIsList}}checked{{end}}>
+              <span class="update-mode-card-title">Smart</span>
+              <span class="update-mode-card-desc">Membership is a set of rules (genre, year, actor, ...), re-evaluated against your library on every refresh.</span>
+            </label>
+            <label class="update-mode-card">
+              <input type="radio" name="builderType" value="manual">
+              <span class="update-mode-card-title">Manual</span>
+              <span class="update-mode-card-desc">You pick the items directly. Managed after creation from the collection's own row.</span>
+            </label>
+            <label class="update-mode-card">
+              <input type="radio" name="builderType" value="external_list" {{if $presetIsList}}checked{{end}}>
+              <span class="update-mode-card-title">External List/Chart</span>
+              <span class="update-mode-card-desc">Membership comes from a TMDb/IMDb/TVDb/Letterboxd/Trakt list, or a TMDb chart/franchise. Entries not found in this library show up under Missing Films/TV Shows.</span>
+            </label>
+          </div>
+        </div>
+        {{end}}
+
+        {{$builderType := "smart"}}{{if .Collection}}{{$builderType = .Collection.BuilderType}}{{else if .Prefill}}{{$builderType = "external_list"}}{{end}}
+        <div class="collection-form-section collection-smart-fields{{if ne $builderType "smart"}} is-hidden{{end}}">
+          <h3 class="collection-form-section-title">Rules</h3>
+          <p class="field-hint field-hint--tight">All of these must match (AND) - one card per condition.</p>
+          <div id="collection-rules" class="collection-rules-list">
+            {{if .Collection}}
+              {{range .Collection.ParsedRules}}
+                {{if ne .Field "unwatched"}}
+                <div class="collection-rule-row card">
+                  {{template "collectionRuleFieldSelect" .Field}}
+                  <input type="text" name="ruleValue" class="form-input" value="{{.Value}}" placeholder="value">
+                  <button type="button" class="icon-btn" data-remove-rule aria-label="Remove rule">&times;</button>
+                </div>
+                {{end}}
+              {{end}}
+            {{else}}
+            <div class="collection-rule-row card">
+              {{template "collectionRuleFieldSelect" ""}}
+              <input type="text" name="ruleValue" class="form-input" placeholder="value">
+              <button type="button" class="icon-btn" data-remove-rule aria-label="Remove rule">&times;</button>
+            </div>
+            {{end}}
+          </div>
+          <button type="button" class="btn btn-secondary btn-small" data-add-rule>Add Rule</button>
+          <template id="collection-rule-row-template">
+            <div class="collection-rule-row card">
+              {{template "collectionRuleFieldSelect" ""}}
+              <input type="text" name="ruleValue" class="form-input" placeholder="value">
+              <button type="button" class="icon-btn" data-remove-rule aria-label="Remove rule">&times;</button>
+            </div>
+          </template>
+          <label class="form-check">
+            <input type="checkbox" name="unwatchedOnly" {{if .Collection}}{{range .Collection.ParsedRules}}{{if and (eq .Field "unwatched") (eq .Value "true")}}checked{{end}}{{end}}{{end}}>
+            Only include unwatched items (movie/show libraries)
+          </label>
+        </div>
+
+        {{$extProvider := "tmdb"}}{{$tmdbMode := "list"}}{{$tmdbListID := ""}}{{$tmdbLimit := 20}}
+        {{if and .Collection (eq .Collection.BuilderType "external_list")}}
+          {{$src := .Collection.ParsedExternalListSource}}
+          {{$extProvider = $src.Provider}}{{$tmdbMode = $src.Mode}}{{$tmdbListID = $src.ListID}}{{if gt $src.Limit 0}}{{$tmdbLimit = $src.Limit}}{{end}}
+        {{else if .Prefill}}
+          {{$extProvider = .Prefill.ExternalProvider}}{{$tmdbMode = .Prefill.ExternalMode}}{{$tmdbListID = .Prefill.ExternalListID}}
+        {{end}}
+        <div class="collection-form-section collection-tmdb-fields{{if ne $builderType "external_list"}} is-hidden{{end}}">
+          <h3 class="collection-form-section-title">Source</h3>
+          {{if .Collection}}
+          <!-- Provider is immutable after creation, same as builderType itself
+               - a hidden field carries it forward rather than a select. -->
+          <input type="hidden" name="externalProvider" value="{{$extProvider}}">
+          <p class="field-hint">{{.Collection.ProviderLabel}}</p>
+          {{else}}
+          <div class="form-group">
+            <label class="form-label" for="collection-external-provider">Source</label>
+            <select id="collection-external-provider" class="form-select" name="externalProvider">
+              <option value="tmdb" {{if eq $extProvider "tmdb"}}selected{{end}}>TMDb</option>
+              <option value="imdb" {{if eq $extProvider "imdb"}}selected{{end}}>IMDb</option>
+              <option value="tvdb" {{if eq $extProvider "tvdb"}}selected{{end}}>TVDb</option>
+              <option value="letterboxd" {{if eq $extProvider "letterboxd"}}selected{{end}}>Letterboxd</option>
+              <option value="trakt" {{if eq $extProvider "trakt"}}selected{{end}}>Trakt</option>
+            </select>
+          </div>
+          {{end}}
+          <div class="form-group collection-tmdb-mode-group{{if not (or (eq $extProvider "tmdb") (eq $extProvider "imdb"))}} is-hidden{{end}}">
+            <label class="form-label" for="collection-tmdb-mode">List Type</label>
+            <select id="collection-tmdb-mode" class="form-select" name="tmdbMode">
+              <option value="list" {{if eq $tmdbMode "list"}}selected{{end}}>Public list</option>
+              <option value="popular" data-provider="tmdb" {{if eq $tmdbMode "popular"}}selected{{end}}>Popular</option>
+              <option value="top_rated" data-provider="tmdb" {{if eq $tmdbMode "top_rated"}}selected{{end}}>Top Rated</option>
+              <option value="trending_daily" data-provider="tmdb" {{if eq $tmdbMode "trending_daily"}}selected{{end}}>Trending (Daily)</option>
+              <option value="trending_weekly" data-provider="tmdb" {{if eq $tmdbMode "trending_weekly"}}selected{{end}}>Trending (Weekly)</option>
+              <option value="collection" data-provider="tmdb" {{if eq $tmdbMode "collection"}}selected{{end}}>Franchise / Collection</option>
+              <option value="top250" data-provider="imdb" {{if eq $tmdbMode "top250"}}selected{{end}}>Top 250</option>
+            </select>
+          </div>
+          <div class="form-group collection-tmdb-list-id{{if not (or (eq $tmdbMode "list") (eq $tmdbMode "collection"))}} is-hidden{{end}}">
+            <label class="form-label" for="collection-tmdb-list-id">{{if eq $tmdbMode "collection"}}Collection ID or URL{{else}}List ID or URL{{end}}</label>
+            <input id="collection-tmdb-list-id" type="text" class="form-input" name="tmdbListId" value="{{$tmdbListID}}" placeholder="e.g. themoviedb.org/list/12345-my-list, or a Trakt/franchise URL">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="collection-tmdb-limit">Max items</label>
+            <input id="collection-tmdb-limit" type="number" class="form-input" name="tmdbLimit" min="1" max="200" value="{{$tmdbLimit}}">
+          </div>
+        </div>
+
+        {{if and .Collection (eq .Collection.BuilderType "manual")}}
+        <div class="collection-form-section">
+          <h3 class="collection-form-section-title">Items</h3>
+          <div class="form-group">
+            <input type="text" class="form-input" placeholder="Search this library..."
+              hx-get="/collections/{{.Collection.ID}}/search" hx-trigger="input changed delay:400ms, search"
+              hx-target="#collection-search-results" hx-swap="innerHTML">
+            <div id="collection-search-results"></div>
+            <ul id="collection-manual-items" class="collection-manual-items-list">
+              {{range .ManualItems}}
+              <li>
+                <span>{{.Title}}{{if .Artist}} — {{.Artist}}{{end}}</span>
+                <button type="button" class="icon-btn" title="Remove" aria-label="Remove {{.Title}}"
+                  hx-delete="/collections/{{$.Collection.ID}}/manual-items/{{.RatingKey}}" hx-target="#collection-manual-items" hx-swap="outerHTML">&times;</button>
+              </li>
+              {{end}}
+            </ul>
+          </div>
+        </div>
+        {{end}}
+
+        <div class="collection-form-section">
+          <h3 class="collection-form-section-title">Behavior</h3>
+          <div class="form-group">
+            <label class="form-label" for="collection-sort-title">Sort Title (optional)</label>
+            <input id="collection-sort-title" class="form-input" type="text" name="sortTitle" maxlength="255"
+              value="{{if .Collection}}{{.Collection.SortTitle.String}}{{end}}" placeholder="e.g. +1_Trending">
+            <p class="field-hint">Plex sorts collections by this instead of the name when set - Kometa's own convention is a numeric prefix like "+1_" to force order.</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Sync Mode</label>
+            {{$syncMode := "sync"}}{{if .Collection}}{{$syncMode = .Collection.SyncMode}}{{end}}
+            <div class="update-mode-group">
+              <label class="update-mode-card">
+                <input type="radio" name="syncMode" value="sync" {{if eq $syncMode "sync"}}checked{{end}}>
+                <span class="update-mode-card-title">Sync</span>
+                <span class="update-mode-card-desc">Items that no longer match are removed from the Plex collection.</span>
+              </label>
+              <label class="update-mode-card">
+                <input type="radio" name="syncMode" value="add_only" {{if eq $syncMode "add_only"}}checked{{end}}>
+                <span class="update-mode-card-title">Add only</span>
+                <span class="update-mode-card-desc">New matches are added; nothing already there is ever removed.</span>
+              </label>
+            </div>
+          </div>
+
+          {{if and .Collection .Collection.PlexCollectionID.Valid}}
+          <div class="form-group">
+            <label class="form-label" for="collection-poster-url">Poster</label>
+            <div class="update-mode-group collection-poster-row">
+              <input id="collection-poster-url" type="text" class="form-input" name="imageUrl" placeholder="Image URL">
+              <button type="button" class="btn btn-secondary btn-small"
+                hx-post="/collections/{{.Collection.ID}}/poster" hx-include="#collection-poster-url"
+                hx-target="#collection-poster-status" hx-swap="innerHTML">Set Poster</button>
+            </div>
+            <div id="collection-poster-status"></div>
+          </div>
+          {{end}}
+        </div>
+
+        {{if .Collection}}
+        <div class="collection-form-section">
+          <h3 class="collection-form-section-title">Danger Zone</h3>
+          <label class="form-check">
+            <input type="checkbox" form="collection-delete-form" name="deleteInPlex" value="true">
+            Also delete the collection from Plex itself
+          </label>
+          <form id="collection-delete-form" hx-delete="/collections/{{.Collection.ID}}" hx-target="#collections-list" hx-swap="innerHTML"
+            hx-confirm="Delete this collection?" hx-on::after-request="if(event.detail.successful) closeTopModal()">
+            <button type="submit" class="btn btn-secondary btn-small text-error">Delete Collection</button>
+          </form>
+        </div>
+        {{end}}
+      </div>
+
+      <div class="advanced-mix-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeTopModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">{{if .Collection}}Save Changes{{else}}Create Collection{{end}}</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script src="/static/js/collection-form.js"></script>
+{{end}}

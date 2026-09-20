@@ -75,8 +75,8 @@ type spotifyTracksPage struct {
 	} `json:"items"`
 }
 
-func (s *Source) getJSON(url, token string, out any) (status int, err error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+func (s *Source) getJSON(ctx context.Context, url, token string, out any) (status int, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -105,9 +105,9 @@ func (s *Source) getJSON(url, token string, out any) (status int, err error) {
 // one already-resolved access token - shared by the per-user-token and
 // client-credentials paths in FetchTracks below, which differ only in how
 // they got that token.
-func (s *Source) fetchWithToken(playlistID, token string) (adapters.PlaylistInfo, []adapters.TrackInfo, int, error) {
+func (s *Source) fetchWithToken(ctx context.Context, playlistID, token string) (adapters.PlaylistInfo, []adapters.TrackInfo, int, error) {
 	var meta spotifyPlaylistMeta
-	status, err := s.getJSON(
+	status, err := s.getJSON(ctx,
 		"https://api.spotify.com/v1/playlists/"+playlistID+"?fields=id,name,tracks(total),images", token, &meta)
 	if err != nil {
 		return adapters.PlaylistInfo{}, nil, status, err
@@ -119,7 +119,7 @@ func (s *Source) fetchWithToken(playlistID, token string) (adapters.PlaylistInfo
 		pageURL := fmt.Sprintf(
 			"https://api.spotify.com/v1/playlists/%s/tracks?limit=100&offset=%d&fields=items(track(name,artists,album))",
 			playlistID, offset)
-		if status, err := s.getJSON(pageURL, token, &page); err != nil {
+		if status, err := s.getJSON(ctx, pageURL, token, &page); err != nil {
 			return adapters.PlaylistInfo{}, nil, status, err
 		}
 		for _, item := range page.Items {
@@ -145,8 +145,8 @@ func (s *Source) fetchWithToken(playlistID, token string) (adapters.PlaylistInfo
 func (s *Source) FetchTracks(ctx context.Context, playlistURLOrID string, userID int64) (adapters.PlaylistInfo, []adapters.TrackInfo, error) {
 	playlistID := extractPlaylistID(playlistURLOrID)
 
-	if token, err := GetToken(s.DB, s.Secret, userID); err == nil && token != "" {
-		playlist, tracks, status, err := s.fetchWithToken(playlistID, token)
+	if token, err := GetToken(ctx, s.DB, s.Secret, userID); err == nil && token != "" {
+		playlist, tracks, status, err := s.fetchWithToken(ctx, playlistID, token)
 		if err == nil {
 			return playlist, tracks, nil
 		}
@@ -157,9 +157,9 @@ func (s *Source) FetchTracks(ctx context.Context, playlistURLOrID string, userID
 		// fetchTracks()'s 401/403 handling in spotify-source.ts.
 	}
 
-	token, err := GetClientCredentialsToken(s.DB, s.Secret, userID, s.AppClientID, s.AppClientSecret)
+	token, err := GetClientCredentialsToken(ctx, s.DB, s.Secret, userID, s.AppClientID, s.AppClientSecret)
 	if err == nil && token != "" {
-		if playlist, tracks, _, err := s.fetchWithToken(playlistID, token); err == nil {
+		if playlist, tracks, _, err := s.fetchWithToken(ctx, playlistID, token); err == nil {
 			return playlist, tracks, nil
 		}
 		// Falls through to scraping below - most commonly a 403 from

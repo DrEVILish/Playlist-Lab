@@ -1,8 +1,73 @@
 {{define "partials/admin_stats.html"}}
+{{/* Admin dashboard: stat tiles with inline sparklines, plus one larger
+     trend chart (DESIGN.md §11.5, §8.10).
+
+     DESIGN.md §8.10 specifies TanStack Charts for these. That library ships
+     only framework adapters (React/Solid/Vue); this app is server-rendered
+     Go templates + htmx with no JS framework or bundler in place, so
+     adopting it here would mean introducing a full JS framework + build
+     step just for this one page - out of scope for a design-token rollout.
+     Built with plain inline SVG instead: a sparkline is a handful of points
+     on a <polyline>, no library needed. All the point/axis math lives in
+     internal/handlers/admin.go (sparklinePoints/buildScheduleTrendChart) so
+     this template stays markup-only. Styled to the same tokens TanStack
+     Charts would have used (--accent-teal/--error series, --border
+     gridlines, --font-mono labels). Revisit adopting it as its own scoped
+     effort - see docs/DESIGN.md §17. */}}
 <div class="admin-stats-grid">
-  <div class="card admin-stat-card"><h3>Total Users</h3><p class="admin-stat-value">{{.Stats.TotalUsers}}</p></div>
-  <div class="card admin-stat-card"><h3>Active Users (30d)</h3><p class="admin-stat-value">{{.Stats.ActiveUsers}}</p></div>
-  <div class="card admin-stat-card"><h3 title="Every playlist ever imported/tracked through Playlist Lab, across all users - not just those currently live on Plex">Playlists Tracked (All-Time)</h3><p class="admin-stat-value">{{.Stats.TotalPlaylists}}</p></div>
-  <div class="card admin-stat-card"><h3>Missing Tracks</h3><p class="admin-stat-value">{{.Stats.TotalMissing}}</p></div>
+  <div class="card admin-stat-card">
+    <h3>Total Users</h3>
+    <p class="admin-stat-value mono-data">{{.Stats.TotalUsers}}</p>
+    <svg class="admin-sparkline" viewBox="0 0 {{.SparklineWidth}} {{.SparklineHeight}}" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points="{{.UserSparkline}}" fill="none" stroke="var(--accent-teal)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>
+    <span class="admin-stat-caption">new signups &middot; last 14 days</span>
+  </div>
+
+  <div class="card admin-stat-card">
+    <h3>Active Users (30d)</h3>
+    <p class="admin-stat-value mono-data">{{.Stats.ActiveUsers}}</p>
+    <svg class="admin-sparkline" viewBox="0 0 {{.SparklineWidth}} {{.SparklineHeight}}" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points="{{.ActiveSparkline}}" fill="none" stroke="var(--accent-teal)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>
+    <span class="admin-stat-caption">logins by day &middot; last 14 days</span>
+  </div>
+
+  <div class="card admin-stat-card">
+    <h3 title="Every playlist ever imported/tracked through Playlist Lab, across all users - not just those currently live on Plex">Playlists Tracked (All-Time)</h3>
+    <p class="admin-stat-value mono-data">{{.Stats.TotalPlaylists}}</p>
+    <svg class="admin-sparkline" viewBox="0 0 {{.SparklineWidth}} {{.SparklineHeight}}" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points="{{.PlaylistSparkline}}" fill="none" stroke="var(--accent-teal)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>
+    <span class="admin-stat-caption">new playlists &middot; last 14 days</span>
+  </div>
+
+  <div class="card admin-stat-card">
+    <h3>Missing Tracks</h3>
+    <p class="admin-stat-value mono-data">{{.Stats.TotalMissing}}</p>
+    <svg class="admin-sparkline" viewBox="0 0 {{.SparklineWidth}} {{.SparklineHeight}}" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points="{{.MissingSparkline}}" fill="none" stroke="var(--accent-teal)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>
+    <span class="admin-stat-caption">newly missing &middot; last 14 days</span>
+  </div>
+</div>
+
+<div class="card admin-trend-card">
+  <div class="admin-trend-header">
+    <h3>Sync activity <span class="admin-trend-subtitle">&middot; schedule runs, last 14 days</span></h3>
+    <div class="admin-trend-legend">
+      <span class="admin-trend-legend-item"><span class="admin-trend-swatch admin-trend-swatch--ok"></span>Succeeded</span>
+      <span class="admin-trend-legend-item"><span class="admin-trend-swatch admin-trend-swatch--err"></span>Failed</span>
+    </div>
+  </div>
+  <svg class="admin-trend-chart" viewBox="0 0 {{.TrendChartWidth}} {{.TrendChartHeight}}" preserveAspectRatio="none">
+    <line x1="0" y1="0" x2="{{.TrendChartWidth}}" y2="0" class="admin-trend-gridline"/>
+    <line x1="0" y1="{{.TrendChart.HalfY}}" x2="{{.TrendChartWidth}}" y2="{{.TrendChart.HalfY}}" class="admin-trend-gridline"/>
+    <polyline points="{{.TrendChart.SucceededPoints}}" fill="none" stroke="var(--accent-teal)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <polyline points="{{.TrendChart.FailedPoints}}" fill="none" stroke="var(--error)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    {{range .TrendChart.DayLabels}}
+    <text x="{{.X}}" y="{{$.TrendChart.LabelY}}" text-anchor="{{.Anchor}}" class="admin-trend-axis-label mono-data">{{.Label}}</text>
+    {{end}}
+  </svg>
 </div>
 {{end}}

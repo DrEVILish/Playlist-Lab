@@ -16,13 +16,22 @@
    carries its own tables/forms sized for a full-width page, not a 700px
    dialog - wider than the default so that content isn't cramped. */
 .advanced-mix-modal.page-modal {
-  max-width: 960px;
+  max-width: 90vw;
+}
+
+/* page_modal.html reuses the target page's own "content" block verbatim,
+   which starts with that page's own <h1 class="page-title"> (some wrapped
+   in a .page-header div, some bare - e.g. "Generate a Mix", "Status &
+   Reports") - redundant once the modal chrome above already shows that
+   same name as .advanced-mix-title. */
+.page-modal .page-title {
+  display: none;
 }
 
 .advanced-mix-modal {
   background: var(--gradient-card);
   border-radius: var(--radius-xl);
-  max-width: 700px;
+  max-width: 90vw;
   width: 100%;
   max-height: 90vh;
   display: flex;
@@ -216,8 +225,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 0.5rem 0.75rem;
-  background-color: rgba(91, 155, 213, 0.12);
-  border: 1px solid rgba(91, 155, 213, 0.3);
+  background-color: rgba(47, 143, 255, 0.12);
+  border: 1px solid rgba(47, 143, 255, 0.3);
   border-radius: var(--radius-sm);
   margin-top: 0.5rem;
   font-size: 0.875rem;
@@ -241,7 +250,7 @@
 }
 
 .remove-badge-btn:hover {
-  background-color: rgba(91, 155, 213, 0.2);
+  background-color: rgba(47, 143, 255, 0.2);
 }
 
 /* Tag Grid for Moods/Genres */
@@ -277,7 +286,7 @@
 
 .tag-button.selected,
 .tag-button:has(input:checked) {
-  background-color: rgba(91, 155, 213, 0.15);
+  background-color: rgba(47, 143, 255, 0.15);
   border-color: var(--primary-color);
   color: var(--primary-color);
   font-weight: 500;
@@ -323,44 +332,26 @@
 .btn-generate {
   flex: 1;
   padding: 1rem 1.5rem;
-  background: var(--gradient-primary);
-  color: #ffffff;
-  border: none;
+  background: transparent;
+  color: var(--accent-cyan);
+  border: 1px solid var(--accent-cyan);
   border-radius: var(--radius-md);
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 12px rgba(91, 155, 213, 0.3);
-  position: relative;
-  overflow: hidden;
-}
-
-.btn-generate::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-  transition: left 0.5s;
-}
-
-.btn-generate:hover:not(:disabled)::before {
-  left: 100%;
 }
 
 .btn-generate:hover:not(:disabled) {
-  box-shadow: 0 4px 20px rgba(91, 155, 213, 0.5);
-  transform: translateY(-1px);
+  background: rgba(0, 229, 255, 0.12);
+  box-shadow: 0 0 14px rgba(0, 229, 255, 0.4);
 }
 
 .btn-generate:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-schedule {
   padding: 1rem 1.5rem;
-  background: var(--gradient-accent);
+  background: var(--primary-color);
   color: #ffffff;
   border: none;
   border-radius: var(--radius-md);

@@ -1,43 +1,57 @@
 {{/* Admin Schedules tab body, ported from routes/admin.ts's GET /jobs and
-     GET /schedules (database.ts's getAllSchedules). */}}
+     GET /schedules (database.ts's getAllSchedules).
+
+     Per DESIGN.md §11.5, "All schedules" is a calendar/timeline view rather
+     than a plain next-run list: schedules are grouped into Overdue/Today/
+     This week/Later/Not yet run buckets (internal/handlers/admin_schedules.go's
+     buildScheduleTimeline), each schedule's next run projected from its
+     last run + its own frequency - not a full month-grid calendar widget,
+     which would need real client-side interaction this app has no JS
+     framework for; a grouped timeline gets the same "when is this due"
+     glanceability with plain server-rendered markup. */}}
 {{define "partials/admin_schedules.html"}}
 <div id="admin-schedules">
   <h3 class="admin-schedules-subheading">Background jobs</h3>
-  <div class="table-responsive">
-    <table style="width:100%; border-collapse: collapse;">
-      <thead><tr><th>Job</th><th>Schedule</th><th>Status</th><th>Next run</th></tr></thead>
-      <tbody>
-        {{range .Jobs}}
-        <tr>
-          <td>{{.Name}}</td>
-          <td><code>{{.Spec}}</code></td>
-          <td>{{if .Enabled}}enabled{{else}}disabled{{end}}</td>
-          <td>{{if .NextRun}}{{.NextRun}}{{else}}&mdash;{{end}}</td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
+  <div class="admin-jobs-list">
+    {{range .Jobs}}
+    <div class="admin-jobs-row">
+      <span class="status-dot {{if .Enabled}}status-dot-success{{else}}status-dot-never{{end}}" title="{{if .Enabled}}Enabled{{else}}Disabled{{end}}"></span>
+      <span class="admin-jobs-name">{{.Name}}</span>
+      <code class="admin-jobs-spec mono-data">{{.Spec}}</code>
+      <span class="admin-jobs-next mono-data">{{if .NextRun}}next {{.NextRun}}{{else}}&mdash;{{end}}</span>
+    </div>
+    {{end}}
   </div>
 
   <h3 class="admin-schedules-subheading">All schedules</h3>
-  {{if not .Schedules}}
+  {{if not .Timeline}}
     <p class="settings-hint">No schedules exist yet.</p>
   {{else}}
-  <div class="table-responsive">
-    <table style="width:100%; border-collapse: collapse;">
-      <thead><tr><th>User</th><th>Type</th><th>Playlist</th><th>Frequency</th><th>Last run</th></tr></thead>
-      <tbody>
-        {{range .Schedules}}
-        <tr>
-          <td>{{.Username}}</td>
-          <td>{{.ScheduleType}}</td>
-          <td>{{if .PlaylistName.Valid}}{{.PlaylistName.String}}{{else}}&mdash;{{end}}</td>
-          <td>{{.Frequency}}</td>
-          <td>{{if not .LastRunTime.IsZero}}{{relativeTime .LastRunTime}}{{else}}never{{end}}</td>
-        </tr>
+  <div class="admin-timeline">
+    {{range .Timeline}}
+    <section class="admin-timeline-group admin-timeline-group--{{.Key}}">
+      <h4 class="admin-timeline-group-header">
+        <span class="admin-timeline-dot"></span>{{.Label}}
+        <span class="admin-timeline-count">{{len .Rows}}</span>
+      </h4>
+      <div class="admin-timeline-rows">
+        {{range .Rows}}
+        <div class="admin-timeline-row">
+          <div class="admin-timeline-row-main">
+            <span class="admin-timeline-row-title">{{.Username}}</span>
+            <span class="admin-timeline-row-meta">
+              {{.ScheduleType}} &middot; {{.Frequency}}{{if .PlaylistName.Valid}} &middot; {{.PlaylistName.String}}{{end}}
+            </span>
+          </div>
+          <div class="admin-timeline-row-times mono-data">
+            <span title="Last run">{{if not .LastRunTime.IsZero}}{{relativeTime .LastRunTime}}{{else}}never run{{end}}</span>
+            {{if .NextRunLabel}}<span title="Next run">next {{.NextRunLabel}}</span>{{end}}
+          </div>
+        </div>
         {{end}}
-      </tbody>
-    </table>
+      </div>
+    </section>
+    {{end}}
   </div>
   {{end}}
 </div>

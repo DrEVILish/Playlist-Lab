@@ -24,7 +24,7 @@ func proxyTestFixture(t *testing.T, plex http.HandlerFunc) (*sql.DB, *db.User, c
 
 	srv := httptest.NewServer(plex)
 	t.Cleanup(srv.Close)
-	if _, err := db.SaveUserServer(sqlDB, user.ID, "Test Server", "client-1", srv.URL, "1", "Music", ""); err != nil {
+	if _, err := db.AddUserServer(sqlDB, user.ID, "Test Server", "client-1", srv.URL, "1", "Music", "", false); err != nil {
 		t.Fatalf("SaveUserServer: %v", err)
 	}
 

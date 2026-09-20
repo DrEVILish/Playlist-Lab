@@ -58,19 +58,23 @@ func (h *NotificationsHandler) render(w http.ResponseWriter, userID int64) {
 // (NotificationCenter.tsx: shown only when there's something they'd
 // actually affect), which html/template can't compute mid-range itself.
 func notificationsViewData(list []notifications.Notification) map[string]any {
-	hasSuccess, hasNonInProgress := false, false
+	hasSuccess, hasNonInProgress, hasInProgress := false, false, false
 	for _, n := range list {
 		if n.Status == notifications.StatusSuccess {
 			hasSuccess = true
 		}
 		if n.Status != notifications.StatusInProgress {
 			hasNonInProgress = true
+		} else {
+			hasInProgress = true
 		}
 	}
 	return map[string]any{
 		"Notifications":    sortedNotifications(list),
 		"HasSuccess":       hasSuccess,
 		"HasNonInProgress": hasNonInProgress,
+		"Count":            len(list),
+		"HasInProgress":    hasInProgress,
 	}
 }
 

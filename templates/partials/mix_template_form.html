@@ -12,11 +12,11 @@
 <div class="edit-template-overlay">
   <div class="edit-template-modal" role="dialog" aria-modal="true" aria-label="Edit Template: {{.Template.Name}}">
     <form hx-put="/mix-templates/{{.Template.ID}}" hx-target="#mix-templates-list" hx-swap="innerHTML"
-      hx-on::after:request="if(event.detail.ctx.response.status<400)document.getElementById('modal-root').innerHTML=''">
+      hx-on::after:request="if(event.detail.ctx.response.status<400)closeTopModal()">
       <div class="edit-template-header">
         <h2 class="edit-template-title">Edit Template: {{.Template.Name}}</h2>
         <button type="button" class="edit-template-close" title="Close (Esc)"
-          onclick="document.getElementById('modal-root').innerHTML=''">&times;</button>
+          onclick="closeTopModal()">&times;</button>
       </div>
 
       <div class="edit-template-content">
@@ -96,16 +96,16 @@
 
                 {{if eq .Template.MixType "custom"}}
                 <div class="form-group">
-                  <label class="form-label">Include Genres (comma-separated)</label>
-                  <input class="form-input" type="text" name="includeGenres" placeholder="e.g., Rock, Pop" value="{{join .Template.IncludeGenres}}">
+                  <label class="form-label" for="edit-template-include-genres">Include Genres (comma-separated)</label>
+                  <input id="edit-template-include-genres" class="form-input" type="text" name="includeGenres" placeholder="e.g., Rock, Pop" value="{{join .Template.IncludeGenres}}">
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Exclude Genres (comma-separated)</label>
-                  <input class="form-input" type="text" name="excludeGenres" placeholder="e.g., Country, Classical" value="{{join .Template.ExcludeGenres}}">
+                  <label class="form-label" for="edit-template-exclude-genres">Exclude Genres (comma-separated)</label>
+                  <input id="edit-template-exclude-genres" class="form-input" type="text" name="excludeGenres" placeholder="e.g., Country, Classical" value="{{join .Template.ExcludeGenres}}">
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Minimum Rating (0-10)</label>
-                  <input class="form-input" type="number" name="minRating" placeholder="Any" min="0" max="10" step="0.1" value="{{if .Template.MinRating}}{{.Template.MinRating}}{{end}}">
+                  <label class="form-label" for="edit-template-min-rating">Minimum Rating (0-10)</label>
+                  <input id="edit-template-min-rating" class="form-input" type="number" name="minRating" placeholder="Any" min="0" max="10" step="0.1" value="{{if .Template.MinRating}}{{.Template.MinRating}}{{end}}">
                 </div>
                 {{end}}
               </div>
@@ -116,7 +116,7 @@
 
       <div class="edit-template-actions">
         <button type="submit" class="btn-save">Save Changes</button>
-        <button type="button" class="btn-cancel" onclick="document.getElementById('modal-root').innerHTML=''">Cancel</button>
+        <button type="button" class="btn-cancel" onclick="closeTopModal()">Cancel</button>
       </div>
     </form>
   </div>

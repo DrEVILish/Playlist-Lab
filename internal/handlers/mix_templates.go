@@ -12,6 +12,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -241,9 +242,12 @@ func (h *MixTemplatesHandler) create(w http.ResponseWriter, r *http.Request) {
 		desc = &description
 	}
 	if _, err := db.CreateMixTemplate(h.DB, user.ID, name, desc, mixType, string(cfgJSON)); err != nil {
+		slog.Error("failed to create mix template", "error", err, "userId", user.ID, "name", name)
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Save mix template", err.Error(), notifications.StatusError, nil)
 		http.Error(w, "Failed to create template", http.StatusInternalServerError)
 		return
 	}
+	h.Notifications.Add(user.ID, notifications.TypeAction, "Save mix template", name, notifications.StatusSuccess, nil)
 	h.renderList(w, user.ID)
 }
 
@@ -373,9 +377,12 @@ func (h *MixTemplatesHandler) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := db.UpdateMixTemplate(h.DB, id, update); err != nil {
+		slog.Error("failed to update mix template", "error", err, "templateId", id)
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Update mix template", err.Error(), notifications.StatusError, nil)
 		http.Error(w, "Failed to update template", http.StatusInternalServerError)
 		return
 	}
+	h.Notifications.Add(user.ID, notifications.TypeAction, "Update mix template", tpl.Name, notifications.StatusSuccess, nil)
 	h.renderList(w, user.ID)
 }
 
@@ -388,9 +395,12 @@ func (h *MixTemplatesHandler) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := db.DeleteMixTemplate(h.DB, id); err != nil {
+		slog.Error("failed to delete mix template", "error", err, "templateId", id)
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Delete mix template", err.Error(), notifications.StatusError, nil)
 		http.Error(w, "Failed to delete template", http.StatusInternalServerError)
 		return
 	}
+	h.Notifications.Add(user.ID, notifications.TypeAction, "Delete mix template", tpl.Name, notifications.StatusSuccess, nil)
 	h.renderList(w, user.ID)
 }
 
@@ -410,7 +420,7 @@ func (h *MixTemplatesHandler) generate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userServer, err := db.GetUserServer(h.DB, user.ID)
+	userServer, err := db.GetUserMusicServer(h.DB, user.ID)
 	if err != nil || userServer == nil || !userServer.LibraryID.Valid {
 		http.Error(w, "No music library selected. Please select a library first.", http.StatusBadRequest)
 		return

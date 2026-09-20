@@ -307,6 +307,7 @@ func (s *Service) reconcileDownload(userID int64, notificationID string, reconci
 	for attempt := 1; attempt <= reconcileMaxAttempts; attempt++ {
 		tracks, err := db.GetUserMissingTracks(s.db, userID)
 		if err != nil {
+			time.Sleep(reconcilePollInterval)
 			continue
 		}
 		var track *db.MissingTrack

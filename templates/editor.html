@@ -2,8 +2,14 @@
 <!-- SettingsPage.css owns .settings-input/.settings-select, reused here
      (rename field, sort/export dropdowns, search box, split-name field)
      rather than duplicated - without it every one of those rendered as an
-     unstyled browser-default white control on this page's dark theme. -->
+     unstyled browser-default white control on this page's dark theme.
+     PlaylistsPage.css owns .badge-button (schedule/missing pills, same
+     hx-get="/playlists/{id}/schedule" modal trigger the Playlists table
+     already uses) - reused here for the same reason rather than redefined,
+     so the header's schedule/missing pills look and behave identically to
+     the ones on the Playlists table. -->
 <link rel="stylesheet" href="/static/css/pages/SettingsPage.css">
+<link rel="stylesheet" href="/static/css/pages/PlaylistsPage.css">
 <link rel="stylesheet" href="/static/css/pages/EditorPage.css">
 <link rel="stylesheet" href="/static/css/components/MissingTracksPanel.css">
 <div class="editor page-container">
@@ -12,9 +18,43 @@
   <h1>Couldn't load this playlist</h1>
   <p class="error-message">Couldn't reach your Plex server to load this playlist's tracks. Check your connection and try again.</p>
   {{else}}
-  <h1>{{.Name}}</h1>
 
   {{$plexId := .PlexID}}
+  {{$header := .Header}}
+
+  <!-- Detail-page header (DESIGN.md §11.2): the Editor doubles as the
+       playlist detail page, so cover/stats/schedule live here instead of
+       on a separate view. Built only from fields the handler already
+       fetches (GetPlaylists()/schedules tables) - there's no "description"
+       field anywhere in this app's Plex client or DB, so that part of
+       §11.2 is simply not shown rather than invented. -->
+  <div class="editor-header">
+    <div class="editor-cover">{{if $header.CoverURL}}<img src="{{$header.CoverURL}}" alt="" loading="lazy">{{end}}</div>
+    <div class="editor-header-body">
+      <h1>{{.Name}}</h1>
+      <div class="editor-stats">
+        <span class="editor-stat">{{$header.TrackCount}} tracks</span>
+        <span class="editor-stat">{{formatDuration $header.Duration}}</span>
+        {{if $header.Source}}<span class="badge badge-primary">{{$header.Source}}</span>{{end}}
+        {{if $header.AddedAt}}<span class="editor-stat" title="{{dateFromUnix $header.AddedAt}}">Added {{relativeUnix $header.AddedAt}}</span>{{end}}
+        {{if .DBID}}
+        {{if $header.MissingCount}}
+        <button type="button" class="badge-button warn" title="Jump to missing tracks"
+          onclick="var d=document.getElementById('editor-missing-details'); d.open=true; d.scrollIntoView({behavior:'smooth', block:'start'});">{{$header.MissingCount}} missing</button>
+        {{end}}
+        {{if $header.ScheduleID}}
+        <button type="button" class="badge-button{{if $header.ScheduleFailed}} warn{{end}}" title="Edit schedule"
+          hx-get="/playlists/{{$plexId}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">
+          <span class="status-dot status-dot-{{if $header.LastRunStatus}}{{$header.LastRunStatus}}{{else}}never{{end}}"></span>
+          <span style="text-transform:capitalize">{{$header.Frequency}}</span>{{if $header.NextRun}} &middot; next {{$header.NextRun}}{{end}}
+        </button>
+        {{else}}
+        <button type="button" class="badge-button" title="Create schedule" hx-get="/playlists/{{$plexId}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">+ Schedule</button>
+        {{end}}
+        {{end}}
+      </div>
+    </div>
+  </div>
 
   <!-- Operations toolbar: rename/shuffle/sort/dedupe/cover all ported from
        PlaylistEditor.tsx. Functional parity, not a pixel-for-pixel port of
@@ -22,64 +62,77 @@
        static/css yet - a separate, larger follow-up) - plain form controls
        using the app's existing btn classes. -->
   <div class="editor-toolbar">
-    <form class="editor-rename-form" hx-put="/playlists/{{$plexId}}/rename" hx-swap="none">
-      <input type="text" name="name" value="{{.Name}}" class="settings-input" aria-label="Playlist name">
-      <button type="submit" class="btn btn-secondary btn-small">Rename</button>
-    </form>
+    <div class="editor-toolbar-group">
+      <span class="editor-toolbar-label">Edit</span>
+      <form class="editor-rename-form" hx-put="/playlists/{{$plexId}}/rename" hx-swap="none">
+        <input type="text" name="name" value="{{.Name}}" class="settings-input" aria-label="Playlist name">
+        <button type="submit" class="btn btn-secondary btn-small">Rename</button>
+      </form>
 
-    <button type="button" class="btn btn-secondary btn-small" hx-post="/playlists/{{$plexId}}/shuffle"
-      hx-target="#notifications" hx-swap="innerHTML">Shuffle</button>
+      <button type="button" class="btn btn-secondary btn-small" hx-post="/playlists/{{$plexId}}/shuffle"
+        hx-target="#notifications" hx-swap="innerHTML">Shuffle</button>
+    </div>
 
-    <form class="editor-sort-form" hx-post="/playlists/{{$plexId}}/sort" hx-target="#notifications" hx-swap="innerHTML">
-      <select name="by" class="settings-input" aria-label="Sort by">
-        <option value="title">Title</option>
-        <option value="artist">Artist</option>
-        <option value="album">Album</option>
-        <option value="year">Year</option>
-        <option value="duration">Duration</option>
-      </select>
-      <select name="direction" class="settings-input" aria-label="Sort direction">
-        <option value="asc">Ascending</option>
-        <option value="desc">Descending</option>
-      </select>
-      <button type="submit" class="btn btn-secondary btn-small">Sort</button>
-    </form>
+    <div class="editor-toolbar-group">
+      <span class="editor-toolbar-label">Sort</span>
+      <form class="editor-sort-form" hx-post="/playlists/{{$plexId}}/sort" hx-target="#notifications" hx-swap="innerHTML">
+        <select name="by" class="settings-input" aria-label="Sort by">
+          <option value="title">Title</option>
+          <option value="artist">Artist</option>
+          <option value="album">Album</option>
+          <option value="year">Year</option>
+          <option value="duration">Duration</option>
+        </select>
+        <select name="direction" class="settings-input" aria-label="Sort direction">
+          <option value="asc">Ascending</option>
+          <option value="desc">Descending</option>
+        </select>
+        <button type="submit" class="btn btn-secondary btn-small">Sort</button>
+      </form>
+    </div>
 
-    <button type="button" class="btn btn-secondary btn-small" hx-post="/playlists/{{$plexId}}/dedupe"
-      hx-target="#notifications" hx-swap="innerHTML"
-      hx-confirm="Remove duplicate tracks (same Plex track added more than once)?">Remove Duplicates</button>
+    <div class="editor-toolbar-group">
+      <span class="editor-toolbar-label">Export</span>
+      <form class="editor-cover-form" hx-post="/playlists/{{$plexId}}/cover" hx-encoding="multipart/form-data" hx-swap="none">
+        <label class="btn btn-secondary btn-small">
+          Upload Cover
+          <input type="file" name="cover" accept="image/*" style="display:none"
+            onchange="this.closest('form').requestSubmit()">
+        </label>
+      </form>
 
-    <form class="editor-cover-form" hx-post="/playlists/{{$plexId}}/cover" hx-encoding="multipart/form-data" hx-swap="none">
-      <label class="btn btn-secondary btn-small">
-        Upload Cover
-        <input type="file" name="cover" accept="image/*" style="display:none"
-          onchange="this.closest('form').requestSubmit()">
-      </label>
-    </form>
+      <!-- Plain (non-htmx) form: the response is the actual file with
+           Content-Disposition: attachment, which a real form submit downloads
+           natively - an htmx-intercepted request would instead try to swap
+           the file's raw bytes into some element as if it were an HTML
+           fragment. -->
+      <form class="editor-export-form" method="post" action="/playlists/{{$plexId}}/export">
+        <select name="format" class="settings-input" aria-label="Export format">
+          <option value="m3u8">M3U8 (UTF-8)</option>
+          <option value="m3u">M3U</option>
+          <option value="pls">PLS</option>
+          <option value="xspf">XSPF</option>
+          <option value="csv">CSV</option>
+          <option value="txt">TXT (Artist - Title)</option>
+        </select>
+        <button type="submit" class="btn btn-secondary btn-small">Export</button>
+      </form>
+    </div>
 
-    <!-- Plain (non-htmx) form: the response is the actual file with
-         Content-Disposition: attachment, which a real form submit downloads
-         natively - an htmx-intercepted request would instead try to swap
-         the file's raw bytes into some element as if it were an HTML
-         fragment. -->
-    <form class="editor-export-form" method="post" action="/playlists/{{$plexId}}/export">
-      <select name="format" class="settings-input" aria-label="Export format">
-        <option value="m3u8">M3U8 (UTF-8)</option>
-        <option value="m3u">M3U</option>
-        <option value="pls">PLS</option>
-        <option value="xspf">XSPF</option>
-        <option value="csv">CSV</option>
-        <option value="txt">TXT (Artist - Title)</option>
-      </select>
-      <button type="submit" class="btn btn-secondary btn-small">Export</button>
-    </form>
+    <div class="editor-toolbar-group editor-toolbar-danger">
+      <span class="editor-toolbar-label">Danger zone</span>
+      <button type="button" class="btn btn-secondary btn-small" hx-post="/playlists/{{$plexId}}/dedupe"
+        hx-target="#notifications" hx-swap="innerHTML"
+        hx-confirm="Remove duplicate tracks (same Plex track added more than once)?">Remove Duplicates</button>
+    </div>
   </div>
 
   {{if .DBID}}
   <!-- Reuses the same partial/endpoint as the dashboard's per-row missing
        expando (GET /missing/list?playlistId=) so a user editing a playlist
-       doesn't have to leave the page to see what's missing from it. -->
-  <details class="editor-missing">
+       doesn't have to leave the page to see what's missing from it. id
+       lets the header's "N missing" pill (above) jump straight here. -->
+  <details class="editor-missing" id="editor-missing-details">
     <summary>Missing Tracks</summary>
     <div class="missing-tracks-scope" hx-get="/missing/list?playlistId={{.DBID}}" hx-trigger="toggle from:closest details once" hx-swap="innerHTML"></div>
   </details>
@@ -101,36 +154,91 @@
        untouched. The table lives inside this same form (like home.html's
        bulk-delete bar) so htmx's native FormData collection picks up every
        checked "trackId" box on submit - no JS needed to track a selection,
-       same technique as the playlists page. -->
+       same technique as the playlists page. The column-visibility
+       checkboxes added below are deliberately left without a "name"
+       attribute so FormData(form) skips them on this same submit. -->
   <form hx-post="/playlists/{{$plexId}}/split" hx-target="#notifications" hx-swap="innerHTML">
     <div class="editor-split-bar">
       <input type="text" name="name" placeholder="New playlist name" class="settings-input" required>
       <button type="submit" class="btn btn-secondary btn-small">Split Checked Tracks Into New Playlist</button>
+
+      <!-- Column show/hide + drag-reorder (DESIGN.md §8.6/§11.2). No
+           per-user settings table exists in internal/db for this today, so
+           state lives in localStorage (see the "ponytail:" note in the
+           script below) - the pragmatic default, not a permanent choice. -->
+      <div class="editor-columns">
+        <button type="button" class="btn btn-secondary btn-small" id="columns-toggle" aria-haspopup="true" aria-expanded="false">Columns</button>
+        <div class="editor-columns-menu" id="columns-menu" hidden></div>
+      </div>
     </div>
     <div class="editor-tracks-container">
-    <table id="tracks">
-      <thead><tr><th></th><th></th><th>Title</th><th>Artist</th><th>Album</th><th>Codec</th><th></th></tr></thead>
+    <table id="tracks" class="data-table">
+      <thead>
+        <tr>
+          <th aria-label="Reorder"></th>
+          <th aria-label="Move"></th>
+          <th aria-label="Select"></th>
+          <th aria-label="Preview"></th>
+          <th data-col="title">Title</th>
+          <th data-col="artist">Artist</th>
+          <th data-col="album">Album</th>
+          <th data-col="duration">Duration</th>
+          <th data-col="codec">Codec</th>
+          <th class="col-actions" aria-label="Actions"></th>
+        </tr>
+      </thead>
       <tbody>
         {{range .Tracks}}
         {{if .PlaylistItemID}}
-        <tr draggable="true" data-item-id="{{.PlaylistItemID}}">
-          <td class="drag-handle">&#8942;&#8942;</td>
+        <tr draggable="false" data-item-id="{{.PlaylistItemID}}" data-rating-key="{{.RatingKey}}">
+          <td class="drag-handle" title="Drag to reorder" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-grip"></use></svg>
+          </td>
+          <td class="row-move-cell">
+            <button type="button" class="row-move-btn" data-dir="up" title="Move up" aria-label="Move &quot;{{.Title}}&quot; up">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-chevron-up"></use></svg>
+            </button>
+            <button type="button" class="row-move-btn" data-dir="down" title="Move down" aria-label="Move &quot;{{.Title}}&quot; down">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-chevron-down"></use></svg>
+            </button>
+          </td>
           <td><input type="checkbox" name="trackId" value="{{.RatingKey}}" aria-label="Select {{.Title}} for split"></td>
-          <td>{{.Title}}</td>
-          <td>{{.Artist}}</td>
-          <td>{{.Album}}</td>
-          <td>{{.Codec}}</td>
-          <td><button hx-delete="/playlists/{{$plexId}}/tracks/{{.PlaylistItemID}}" hx-target="closest tr" hx-swap="outerHTML swap:0s">Remove</button></td>
+          <td>
+            <!-- Stub: DESIGN.md §17 calls out real preview-audio playback
+                 as backend-scoped (per-service streaming integration). This
+                 wires the affordance to a handler that's clearly a stub
+                 (notYetAvailable in playlists.go) rather than doing nothing
+                 or faking playback. -->
+            <button type="button" class="row-play-btn" title="Preview playback (not yet available)" aria-label="Preview {{.Title}}"
+              hx-post="/playlists/{{$plexId}}/tracks/{{.PlaylistItemID}}/preview" hx-swap="none">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none"><use href="#icon-play"></use></svg>
+            </button>
+          </td>
+          <td data-col="title" class="editor-cell-editable" tabindex="0" role="button" data-field="title" data-value="{{.Title}}" title="Click to edit">{{.Title}}</td>
+          <td data-col="artist" class="editor-cell-editable" tabindex="0" role="button" data-field="artist" data-value="{{.Artist}}" title="Click to edit">{{.Artist}}</td>
+          <td data-col="album">{{.Album}}</td>
+          <td data-col="duration" class="mono-data">{{formatTrackDuration .Duration}}</td>
+          <td data-col="codec" class="mono-data">{{.Codec}}</td>
+          <td class="col-actions row-actions">
+            <button type="button" class="row-remove-btn" title="Remove from playlist" aria-label="Remove {{.Title}}"
+              hx-delete="/playlists/{{$plexId}}/tracks/{{.PlaylistItemID}}" hx-target="closest tr" hx-swap="outerHTML swap:0s"
+              hx-confirm="Remove &quot;{{.Title}}&quot; from this playlist?">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-trash"></use></svg>
+            </button>
+          </td>
         </tr>
         {{else}}
         <tr>
           <td></td>
           <td></td>
-          <td>{{.Title}}</td>
-          <td>{{.Artist}}</td>
-          <td>{{.Album}}</td>
-          <td>{{.Codec}}</td>
-          <td><em>smart playlist - not editable</em></td>
+          <td></td>
+          <td></td>
+          <td data-col="title">{{.Title}}</td>
+          <td data-col="artist">{{.Artist}}</td>
+          <td data-col="album">{{.Album}}</td>
+          <td data-col="duration" class="mono-data">{{formatTrackDuration .Duration}}</td>
+          <td data-col="codec" class="mono-data">{{.Codec}}</td>
+          <td class="col-actions"><em>smart playlist - not editable</em></td>
         </tr>
         {{end}}
         {{end}}
@@ -140,37 +248,237 @@
   </form>
   {{end}}
 </div>
+
+<!-- Icon sprite: DESIGN.md §5 (24x24 viewBox, currentColor, Feather-style
+     monoline), defined once and referenced per-row via <use> instead of
+     inlining full SVG markup in every row - this table can have hundreds
+     of rows. -->
+<svg style="display:none" aria-hidden="true">
+  <symbol id="icon-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5"></circle><circle cx="9" cy="12" r="1.5"></circle><circle cx="9" cy="18" r="1.5"></circle><circle cx="15" cy="6" r="1.5"></circle><circle cx="15" cy="12" r="1.5"></circle><circle cx="15" cy="18" r="1.5"></circle></symbol>
+  <symbol id="icon-chevron-up" viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"></polyline></symbol>
+  <symbol id="icon-chevron-down" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></symbol>
+  <symbol id="icon-play" viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4"></polygon></symbol>
+  <symbol id="icon-trash" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></symbol>
+</svg>
+
 {{if not .PlexError}}
 <script>
 (function () {
   const plexId = {{.PlexID}};
-  const tbody = document.querySelector('#tracks tbody');
-  let dragged = null;
+  const table = document.getElementById('tracks');
+  const tbody = table.querySelector('tbody');
 
-  tbody.addEventListener('dragstart', (e) => {
-    dragged = e.target.closest('tr');
-  });
+  // --- Toast: shared by the preview-play and inline-metadata-edit stubs
+  // (both respond with HX-Trigger: {"editor-toast": "..."}), and by
+  // anything else on this page that wants a lightweight, non-blocking
+  // status message instead of the full notification-bell job queue. ---
+  function showToast(msg) {
+    let el = document.getElementById('editor-toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'editor-toast';
+      el.className = 'editor-toast';
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.classList.add('is-visible');
+    clearTimeout(el._hideTimer);
+    el._hideTimer = setTimeout(() => el.classList.remove('is-visible'), 4000);
+  }
+  document.body.addEventListener('editor-toast', (e) => showToast(e.detail.value));
 
-  tbody.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    const target = e.target.closest('tr');
-    if (!target || target === dragged) return;
-    const rect = target.getBoundingClientRect();
-    const before = (e.clientY - rect.top) / rect.height < 0.5;
-    tbody.insertBefore(dragged, before ? target : target.nextSibling);
-  });
-
-  tbody.addEventListener('drop', (e) => {
-    e.preventDefault();
-    if (!dragged) return;
-    const prev = dragged.previousElementSibling;
-    const afterId = prev ? prev.dataset.itemId : '0';
-    htmx.ajax('PUT', `/playlists/${plexId}/tracks/${dragged.dataset.itemId}/move`, {
-      values: { afterId },
-      swap: 'none',
+  // --- Generic drag-to-reorder: dragstart/dragover/drop on a container of
+  // sibling elements, used below for both track rows and the column menu.
+  function wireDragReorder(container, itemSelector, onDrop) {
+    let dragged = null;
+    container.addEventListener('dragstart', (e) => {
+      const item = e.target.closest(itemSelector);
+      if (item) dragged = item;
     });
-    dragged = null;
+    container.addEventListener('dragover', (e) => {
+      if (!dragged) return;
+      e.preventDefault();
+      const target = e.target.closest(itemSelector);
+      if (!target || target === dragged) return;
+      const rect = target.getBoundingClientRect();
+      const before = (e.clientY - rect.top) / rect.height < 0.5;
+      container.insertBefore(dragged, before ? target : target.nextSibling);
+    });
+    container.addEventListener('drop', (e) => {
+      if (!dragged) return;
+      e.preventDefault();
+      onDrop(dragged);
+      dragged = null;
+    });
+    container.addEventListener('dragend', () => { dragged = null; });
+  }
+
+  // --- Row reordering: drag via the dedicated handle column, plus
+  // keyboard-accessible move-up/move-down buttons for non-pointer users
+  // (DESIGN.md §11.2). Both paths persist through the same existing
+  // PUT /playlists/{id}/tracks/{itemId}/move endpoint the old whole-row-
+  // draggable implementation used. ---
+  function persistMove(row) {
+    const prev = row.previousElementSibling;
+    const afterId = prev ? prev.dataset.itemId : '0';
+    htmx.ajax('PUT', `/playlists/${plexId}/tracks/${row.dataset.itemId}/move`, {
+      values: { afterId }, swap: 'none',
+    });
+  }
+
+  // A row is only draggable while its handle is being pressed - dragging
+  // the whole row (old behavior) would fight with the inline-edit click
+  // target and the move buttons.
+  tbody.addEventListener('mousedown', (e) => {
+    const handle = e.target.closest('.drag-handle');
+    if (handle) handle.closest('tr').draggable = true;
   });
+  document.addEventListener('mouseup', () => {
+    tbody.querySelectorAll('tr[draggable="true"]').forEach((r) => { r.draggable = false; });
+  });
+  wireDragReorder(tbody, 'tr', persistMove);
+
+  tbody.addEventListener('click', (e) => {
+    const btn = e.target.closest('.row-move-btn');
+    if (!btn) return;
+    const row = btn.closest('tr');
+    const sibling = btn.dataset.dir === 'up' ? row.previousElementSibling : row.nextElementSibling;
+    if (!sibling) return;
+    if (btn.dataset.dir === 'up') tbody.insertBefore(row, sibling);
+    else tbody.insertBefore(row, sibling.nextElementSibling);
+    persistMove(row);
+    btn.focus(); // stays on the same logical button so repeated Enter/Space keeps moving the row
+  });
+
+  // --- Inline metadata editing: click a Title/Artist cell (or focus +
+  // Enter/Space, for keyboard users) to turn it into a text input, save on
+  // blur/Enter via htmx. There's no backend write-back to the media
+  // library yet (see playlists.go's notYetAvailable), so every save
+  // reverts the cell to its original value and surfaces the "not yet
+  // available" toast instead of pretending the edit stuck. ---
+  function startEdit(cell) {
+    if (cell.querySelector('input')) return;
+    const row = cell.closest('tr');
+    const field = cell.dataset.field;
+    const original = cell.dataset.value;
+    cell.textContent = '';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'editor-cell-input';
+    input.value = original;
+    cell.appendChild(input);
+    input.focus();
+    input.select();
+
+    let cancelled = false;
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+      else if (e.key === 'Escape') { e.preventDefault(); cancelled = true; input.blur(); }
+    });
+    input.addEventListener('blur', () => {
+      cell.textContent = original;
+      if (!cancelled) {
+        htmx.ajax('PUT', `/playlists/${plexId}/tracks/${row.dataset.itemId}/metadata`, {
+          values: { field, value: input.value }, swap: 'none',
+        });
+      }
+    });
+  }
+  tbody.addEventListener('click', (e) => {
+    const cell = e.target.closest('.editor-cell-editable');
+    if (cell) startEdit(cell);
+  });
+  tbody.addEventListener('keydown', (e) => {
+    const cell = e.target.closest('.editor-cell-editable');
+    if (cell && cell === e.target && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      startEdit(cell);
+    }
+  });
+
+  // --- Column show/hide + drag-reorder, persisted server-side (DESIGN.md
+  // §11.2) so it follows the user across devices - user_settings.
+  // editor_columns, via internal/handlers/playlists.go's saveEditorColumns.
+  // The DOM update itself still happens instantly/synchronously on change;
+  // only the persistence call is async (fire-and-forget, like persistMove
+  // above - a failed save just means the next page load falls back to
+  // defaults, not a broken editing session). ---
+  const COLUMNS = [
+    { key: 'title', label: 'Title' },
+    { key: 'artist', label: 'Artist' },
+    { key: 'album', label: 'Album' },
+    { key: 'duration', label: 'Duration' },
+    { key: 'codec', label: 'Codec' },
+  ];
+
+  function loadColumnState() {
+    const keys = COLUMNS.map((c) => c.key);
+    let state = null;
+    try { state = JSON.parse({{.EditorColumnsJSON}} || 'null'); } catch (e) { /* corrupt/old value, ignore */ }
+    if (!state || !Array.isArray(state.order)) state = { order: keys, hidden: [] };
+    // Reconcile against COLUMNS so a stale/foreign key never breaks
+    // rendering and a newly-added column still shows up appended at the end.
+    state.order = state.order.filter((k) => keys.includes(k)).concat(keys.filter((k) => !state.order.includes(k)));
+    state.hidden = (state.hidden || []).filter((k) => keys.includes(k));
+    return state;
+  }
+  function saveColumnState(state) {
+    htmx.ajax('PUT', '/editor/columns', { values: { columns: JSON.stringify(state) }, swap: 'none' });
+  }
+  function applyColumns(state) {
+    table.querySelectorAll('tr').forEach((row) => {
+      const actionsCell = row.querySelector('.col-actions');
+      state.order.forEach((key) => {
+        const cell = row.querySelector(`[data-col="${key}"]`);
+        if (cell) row.insertBefore(cell, actionsCell || null);
+      });
+    });
+    COLUMNS.forEach((c) => {
+      document.querySelectorAll(`[data-col="${c.key}"]`).forEach((el) => {
+        el.style.display = state.hidden.includes(c.key) ? 'none' : '';
+      });
+    });
+  }
+
+  const columnsToggle = document.getElementById('columns-toggle');
+  const columnsMenu = document.getElementById('columns-menu');
+  const colState = loadColumnState();
+
+  function buildColumnsMenu() {
+    columnsMenu.innerHTML = '';
+    colState.order.forEach((key) => {
+      const col = COLUMNS.find((c) => c.key === key);
+      const item = document.createElement('div');
+      item.className = 'editor-columns-item';
+      item.draggable = true;
+      item.dataset.key = key;
+      item.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#icon-grip"></use></svg>'
+        + '<label><input type="checkbox"' + (colState.hidden.includes(key) ? '' : ' checked') + '> ' + col.label + '</label>';
+      item.querySelector('input').addEventListener('change', (e) => {
+        colState.hidden = e.target.checked ? colState.hidden.filter((k) => k !== key) : colState.hidden.concat([key]);
+        saveColumnState(colState);
+        applyColumns(colState);
+      });
+      columnsMenu.appendChild(item);
+    });
+  }
+  wireDragReorder(columnsMenu, '.editor-columns-item', () => {
+    colState.order = [...columnsMenu.querySelectorAll('.editor-columns-item')].map((el) => el.dataset.key);
+    saveColumnState(colState);
+    applyColumns(colState);
+  });
+
+  columnsToggle.addEventListener('click', () => {
+    const opening = columnsMenu.hidden;
+    columnsMenu.hidden = !opening;
+    columnsToggle.setAttribute('aria-expanded', String(opening));
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.editor-columns')) { columnsMenu.hidden = true; columnsToggle.setAttribute('aria-expanded', 'false'); }
+  });
+
+  buildColumnsMenu();
+  applyColumns(colState);
 })();
 </script>
 {{end}}

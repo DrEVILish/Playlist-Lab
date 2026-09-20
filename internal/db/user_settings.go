@@ -78,3 +78,25 @@ func SaveAIProvider(sqlDB *sql.DB, userID int64, provider string) error {
 	_, err := sqlDB.Exec("UPDATE user_settings SET ai_provider = ? WHERE user_id = ?", provider, userID)
 	return err
 }
+
+// GetCountry returns the user's preferred chart/search country, defaulting
+// to "global" if unset - drives the Import page's country dropdown.
+func GetCountry(sqlDB *sql.DB, userID int64) (string, error) {
+	var country sql.NullString
+	err := sqlDB.QueryRow("SELECT country FROM user_settings WHERE user_id = ?", userID).Scan(&country)
+	if err == sql.ErrNoRows || country.String == "" {
+		return "global", nil
+	}
+	if err != nil {
+		return "global", err
+	}
+	return country.String, nil
+}
+
+func SaveCountry(sqlDB *sql.DB, userID int64, country string) error {
+	if err := ensureUserSettingsRow(sqlDB, userID); err != nil {
+		return err
+	}
+	_, err := sqlDB.Exec("UPDATE user_settings SET country = ? WHERE user_id = ?", country, userID)
+	return err
+}

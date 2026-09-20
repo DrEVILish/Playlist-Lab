@@ -129,7 +129,7 @@ func TestPlaylistCascadeDelete(t *testing.T) {
 	u, _ := CreateUser(sqlDB, "plex1", "u1", "tok1", "")
 	pl, _ := CreatePlaylistRow(sqlDB, u.ID, "pl1", "Playlist 1", "spotify", "")
 
-	if _, err := CreateSchedule(sqlDB, u.ID, pl.ID, "playlist_refresh", "daily", "2024-01-01", ""); err != nil {
+	if _, err := CreateSchedule(sqlDB, u.ID, pl.ID, 0, "playlist_refresh", "daily", "2024-01-01", ""); err != nil {
 		t.Fatalf("CreateSchedule: %v", err)
 	}
 	if err := AddMissingTracks(sqlDB, u.ID, pl.ID, []NewMissingTrack{

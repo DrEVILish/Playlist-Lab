@@ -1,55 +1,85 @@
 {{/* Users tab body, split into its own lazy-loaded (hx-trigger="revealed")
      fragment for the same reason as admin_missing.html: rendering the full
-     table at initial paint made .admin-tabbar itself render blank in
+     list at initial paint made .admin-tabbar itself render blank in
      headless Chromium on a :has()-plus-large-sibling-subtree match. Every
      user-management action below re-renders just this fragment
      (hx-target="#settings-panel-admin-users") rather than the whole
-     settings page. */}}
+     settings page.
+
+     Per DESIGN.md §11.5, this is the one place the doc chooses cards over
+     the canonical table (§8.6) - a user record carries more per-item
+     context (status, role, server, actions) than a dense row wants. The
+     toolbar's search/status/role filters hx-get back to /admin/users-list
+     and swap just this fragment; see AdminHandler.renderUsersPanel for the
+     filtering itself. */}}
 {{define "partials/admin_users_panel.html"}}
 {{if .Error}}<div class="settings-alert settings-alert--error">{{.Error}}</div>{{end}}
-<div class="table-responsive">
-  <table class="admin-users-table">
-    <thead>
-      <tr>
-        <th>Username</th>
-        <th>Last Login</th>
-        <th>Status</th>
-        <th>Admin</th>
-        <th>Server</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {{range .Users}}
-      <tr>
-        <td>{{.PlexUsername}}</td>
-        <!-- ge .LastLogin 946684800000: some users cut over from the old
-             Node server with last_login stored in *seconds*, not
-             milliseconds - dateFromUnixMilli on one of those renders a
-             nonsense "Jan 1970" date instead of throwing, so a plain
-             truthiness check doesn't catch it. Treat anything before
-             year 2000 in ms as bad data and fall back to "never" rather
-             than guess at re-deriving the real value. -->
-        <td>{{if ge .LastLogin 946684800000}}{{dateFromUnixMilli .LastLogin}}{{else}}never{{end}}</td>
-        <td>{{if .IsEnabled}}Enabled{{else}}Disabled{{end}}</td>
-        <td>{{if .IsAdmin}}Admin{{else}}-{{end}}</td>
-        <td>{{if .HasServer}}Configured{{else}}-{{end}}</td>
-        <td class="admin-users-actions">
-          {{if .IsEnabled}}
-          <button class="btn btn-secondary btn-sm" hx-post="/admin/users/{{.ID}}/disable" hx-target="#settings-panel-admin-users" hx-swap="innerHTML">Disable</button>
-          {{else}}
-          <button class="btn btn-secondary btn-sm" hx-post="/admin/users/{{.ID}}/enable" hx-target="#settings-panel-admin-users" hx-swap="innerHTML">Enable</button>
-          {{end}}
-          {{if .IsAdmin}}
-          <button class="btn btn-secondary btn-sm" hx-post="/admin/users/{{.ID}}/demote" hx-target="#settings-panel-admin-users" hx-swap="innerHTML">Revoke Admin</button>
-          {{else}}
-          <button class="btn btn-secondary btn-sm" hx-post="/admin/users/{{.ID}}/promote" hx-target="#settings-panel-admin-users" hx-swap="innerHTML">Make Admin</button>
-          {{end}}
-          <button class="btn btn-secondary btn-sm admin-users-delete" hx-post="/admin/users/{{.ID}}/delete" hx-target="#settings-panel-admin-users" hx-swap="innerHTML" hx-confirm="Delete this user and all their data? This can't be undone.">Delete</button>
-        </td>
-      </tr>
-      {{end}}
-    </tbody>
-  </table>
+
+<div class="admin-users-toolbar">
+  <input type="search" name="q" placeholder="Search username&hellip;" value="{{.FilterQ}}"
+    class="admin-users-search"
+    hx-get="/admin/users-list" hx-target="#settings-panel-admin-users" hx-swap="innerHTML"
+    hx-trigger="keyup changed delay:300ms, search" hx-include="closest .admin-users-toolbar">
+
+  <select name="status" class="admin-users-filter"
+    hx-get="/admin/users-list" hx-target="#settings-panel-admin-users" hx-swap="innerHTML"
+    hx-trigger="change" hx-include="closest .admin-users-toolbar">
+    <option value="" {{if eq .FilterStatus ""}}selected{{end}}>All statuses</option>
+    <option value="enabled" {{if eq .FilterStatus "enabled"}}selected{{end}}>Enabled</option>
+    <option value="disabled" {{if eq .FilterStatus "disabled"}}selected{{end}}>Disabled</option>
+  </select>
+
+  <select name="role" class="admin-users-filter"
+    hx-get="/admin/users-list" hx-target="#settings-panel-admin-users" hx-swap="innerHTML"
+    hx-trigger="change" hx-include="closest .admin-users-toolbar">
+    <option value="" {{if eq .FilterRole ""}}selected{{end}}>All roles</option>
+    <option value="admin" {{if eq .FilterRole "admin"}}selected{{end}}>Admin</option>
+    <option value="member" {{if eq .FilterRole "member"}}selected{{end}}>Member</option>
+  </select>
+
+  <span class="admin-users-count">{{len .Users}} of {{.TotalUsers}}</span>
 </div>
+
+{{if not .Users}}
+<p class="settings-hint">No users match this filter.</p>
+{{else}}
+<div class="admin-cards admin-users-cards">
+  {{range .Users}}
+  <div class="admin-card admin-user-card">
+    <div class="admin-card-row">
+      {{if .PlexThumb.Valid}}
+      <img class="admin-user-avatar" src="{{.PlexThumb.String}}" alt="" width="36" height="36">
+      {{else}}
+      <span class="admin-user-avatar admin-user-avatar--fallback">{{initials .PlexUsername}}</span>
+      {{end}}
+      <div class="admin-card-title">
+        <span class="admin-card-name">{{.PlexUsername}}</span>
+        <span class="admin-card-summary">
+          <span class="status-dot {{if .IsEnabled}}status-dot-success{{else}}status-dot-never{{end}}"></span>
+          {{if .IsEnabled}}Enabled{{else}}Disabled{{end}}
+          {{if .IsAdmin}}<span class="badge badge-primary">Admin</span>{{end}}
+          {{if .HasServer}}<span class="badge badge-success">Server configured</span>{{end}}
+        </span>
+      </div>
+    </div>
+    <p class="admin-card-meta">
+      {{if ge .LastLogin 946684800000}}last login <span class="mono-data">{{dateFromUnixMilli .LastLogin}}</span>{{else}}never logged in{{end}}
+    </p>
+    <div class="admin-card-actions">
+      {{if .IsEnabled}}
+      <button class="btn btn-secondary btn-sm" hx-post="/admin/users/{{.ID}}/disable" hx-target="#settings-panel-admin-users" hx-swap="innerHTML">Disable</button>
+      {{else}}
+      <button class="btn btn-secondary btn-sm" hx-post="/admin/users/{{.ID}}/enable" hx-target="#settings-panel-admin-users" hx-swap="innerHTML">Enable</button>
+      {{end}}
+      {{if .IsAdmin}}
+      <button class="btn btn-secondary btn-sm" hx-post="/admin/users/{{.ID}}/demote" hx-target="#settings-panel-admin-users" hx-swap="innerHTML">Revoke Admin</button>
+      {{else}}
+      <button class="btn btn-secondary btn-sm" hx-post="/admin/users/{{.ID}}/promote" hx-target="#settings-panel-admin-users" hx-swap="innerHTML">Make Admin</button>
+      {{end}}
+      <button class="btn btn-secondary btn-sm admin-users-delete" hx-post="/admin/users/{{.ID}}/delete" hx-target="#settings-panel-admin-users" hx-swap="innerHTML" hx-confirm="Delete this user and all their data? This can't be undone.">Delete</button>
+    </div>
+  </div>
+  {{end}}
+</div>
+{{end}}
 {{end}}

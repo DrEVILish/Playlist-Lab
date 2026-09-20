@@ -52,7 +52,7 @@ func (s *Source) FetchTracks(ctx context.Context, playlistURLOrID string, userID
 	}
 	playlistID := m[1]
 
-	req, err := http.NewRequest(http.MethodGet, "https://www.youtube.com/playlist?list="+playlistID, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://www.youtube.com/playlist?list="+playlistID, nil)
 	if err != nil {
 		return adapters.PlaylistInfo{}, nil, err
 	}
@@ -202,7 +202,7 @@ func (s *Source) SearchPlaylists(ctx context.Context, query string, userID int64
 		return nil, err
 	}
 
-	data, err := s.ytAPI("search", map[string]any{"query": query, "params": "EgIQAw%3D%3D"}, cookie)
+	data, err := s.ytAPI(ctx, "search", map[string]any{"query": query, "params": "EgIQAw%3D%3D"}, cookie)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +238,7 @@ func parseDigits(s string) int {
 	return n
 }
 
-func (s *Source) ytAPI(endpoint string, body map[string]any, cookie string) (map[string]any, error) {
+func (s *Source) ytAPI(ctx context.Context, endpoint string, body map[string]any, cookie string) (map[string]any, error) {
 	fullBody := map[string]any{"context": map[string]any{"client": map[string]string{
 		"clientName": "WEB", "clientVersion": "2.20250101.00.00",
 	}}}
@@ -250,7 +250,7 @@ func (s *Source) ytAPI(endpoint string, body map[string]any, cookie string) (map
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, "https://www.youtube.com/youtubei/v1/"+endpoint+"?prettyPrint=false", bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://www.youtube.com/youtubei/v1/"+endpoint+"?prettyPrint=false", bytes.NewReader(payload))
 	if err != nil {
 		return nil, err
 	}

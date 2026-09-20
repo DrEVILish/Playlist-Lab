@@ -1,6 +1,7 @@
 {{define "partials/cross_import_review.html"}}
 {{$sid := .SessionID}}
 <div id="cross-import-match-status">
+  {{template "partials/ci_step_indicator" 4}}
   <h2 class="step-section-title">Review matches</h2>
 
   <div class="review-summary">

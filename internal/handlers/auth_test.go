@@ -82,7 +82,7 @@ func TestHandleLogin_SecondUserApprovedViaPlexHome(t *testing.T) {
 	if err != nil {
 		t.Fatalf("handleLogin(admin): %v", err)
 	}
-	if _, err := db.SaveUserServer(sqlDB, admin.ID, "Admin Server", "client-1", "http://plex.example", "1", "Music", "srv-token"); err != nil {
+	if _, err := db.AddUserServer(sqlDB, admin.ID, "Admin Server", "client-1", "http://plex.example", "1", "Music", "srv-token", false); err != nil {
 		t.Fatalf("SaveUserServer: %v", err)
 	}
 
@@ -95,12 +95,12 @@ func TestHandleLogin_SecondUserApprovedViaPlexHome(t *testing.T) {
 	if !enabled {
 		t.Error("a user present in the admin's Plex Home must be enabled")
 	}
-	server, err := db.GetUserServer(sqlDB, user.ID)
-	if err != nil || server == nil {
+	servers, err := db.GetUserServers(sqlDB, user.ID)
+	if err != nil || len(servers) != 1 {
 		t.Fatal("expected the admin's server config to be copied to the newly approved user")
 	}
-	if server.ServerURL != "http://plex.example" {
-		t.Errorf("copied server URL = %q, want the admin's http://plex.example", server.ServerURL)
+	if servers[0].ServerURL != "http://plex.example" {
+		t.Errorf("copied server URL = %q, want the admin's http://plex.example", servers[0].ServerURL)
 	}
 }
 

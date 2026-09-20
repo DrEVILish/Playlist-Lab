@@ -1,0 +1,59 @@
+{{/* Settings > Plex Servers panel (DESIGN.md §11.11) - a user's full list
+     of linked Plex servers, with default/remove/refresh actions. Rendered
+     by GET /settings/servers and re-rendered in place by every mutating
+     action below (all use hx-swap="outerHTML" targeting this same
+     id="settings-panel-servers", same pattern settings_sessions.html
+     already uses) so the tab's own "revealed, change from:#settings-tab-servers"
+     trigger keeps finding this element on repeat visits. */}}
+{{define "partials/settings_servers.html"}}
+<div id="settings-panel-servers">
+  {{if not .Servers}}
+    <p class="settings-hint">No Plex server linked yet.</p>
+  {{else}}
+  <div class="data-table-container">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Server</th>
+        <th>Connection</th>
+        <th>Access</th>
+        <th>Library</th>
+        <th>Default</th>
+        <th class="col-actions">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Servers}}
+      <tr>
+        <td>{{.ServerName}}</td>
+        <td class="mono-data">{{.ServerURL}}</td>
+        <td>{{if .IsOwner}}<span class="badge badge-primary">Owned</span>{{else}}<span class="badge">Shared</span>{{end}}</td>
+        <td>{{if .LibraryName.Valid}}{{.LibraryName.String}}{{else}}—{{end}}</td>
+        <td>
+          {{if .IsDefault}}<span class="badge badge-primary">Default</span>
+          {{else}}<button type="button" class="btn btn-secondary btn-small" hx-post="/settings/servers/{{.ID}}/default" hx-target="#settings-panel-servers" hx-swap="outerHTML">Make default</button>{{end}}
+        </td>
+        <td class="col-actions">
+          <div class="row-actions">
+            <button type="button" class="icon-btn" title="Refresh connection" aria-label="Refresh connection for {{.ServerName}}"
+              hx-post="/settings/servers/{{.ID}}/refresh" hx-target="#settings-panel-servers" hx-swap="outerHTML">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            </button>
+            <button type="button" class="icon-btn icon-btn-danger" title="Remove this server" aria-label="Remove {{.ServerName}}"
+              hx-delete="/settings/servers/{{.ID}}" hx-target="#settings-panel-servers" hx-swap="outerHTML"
+              hx-confirm="{{if or .CollectionCount .ScheduleCount}}Remove {{.ServerName}}? {{.CollectionCount}} collection(s) and {{.ScheduleCount}} schedule(s) that use it will stop being tracked here (the collections themselves are not deleted from Plex).{{else}}Remove {{.ServerName}}?{{end}}">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{end}}
+  <div class="settings-actions" style="margin-top:0.75rem;">
+    <button type="button" class="btn btn-secondary btn-small" hx-get="/settings/servers/new" hx-target="#modal-root" hx-swap="innerHTML">Add another server</button>
+  </div>
+</div>
+{{end}}

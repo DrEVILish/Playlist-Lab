@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/drevilish/playlist-lab/internal/services/actionqueue"
 	"github.com/drevilish/playlist-lab/internal/services/crossimport"
 	"github.com/drevilish/playlist-lab/internal/services/notifications"
+	"github.com/drevilish/playlist-lab/internal/session"
 )
 
 type CrossImportHandler struct {
@@ -36,6 +38,7 @@ type CrossImportHandler struct {
 	Queue         *actionqueue.Queue
 	Registry      *adapters.Registry
 	Sessions      *crossimport.Store
+	Store         *session.Store
 }
 
 func RegisterCrossImport(r chi.Router, mw *auth.Middleware, h *CrossImportHandler) {
@@ -74,7 +77,7 @@ func (h *CrossImportHandler) page(w http.ResponseWriter, r *http.Request) {
 		connected, _ = oauth.HasValidConnection(r.Context(), user.ID)
 	}
 
-	userServer, _ := db.GetUserServer(h.DB, user.ID)
+	userServer, _ := db.GetUserMusicServer(h.DB, user.ID)
 	jobs, _ := db.GetCrossImportJobs(h.DB, user.ID)
 
 	h.Tmpl.RenderPage(w, r, "cross_import", map[string]any{
@@ -431,7 +434,39 @@ func (h *CrossImportHandler) oauthStart(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	http.Redirect(w, r, authURL, http.StatusFound)
+
+	// Overwrite whatever `state` the adapter embedded with a random,
+	// session-bound nonce checked back in oauthCallback - without this, an
+	// attacker can start their own OAuth grant, capture the resulting
+	// `code`, and get a logged-in victim to hit this callback URL so the
+	// server links the attacker's OAuth account to the victim's session.
+	nonce, err := session.NewSessionID()
+	if err != nil {
+		http.Error(w, "failed to start OAuth flow", http.StatusInternalServerError)
+		return
+	}
+	sid := auth.SessionID(r)
+	data, err := h.Store.Get(sid)
+	if err != nil {
+		http.Error(w, "session not found", http.StatusUnauthorized)
+		return
+	}
+	data.OAuthState = nonce
+	if err := h.Store.Save(sid, data); err != nil {
+		http.Error(w, "failed to start OAuth flow", http.StatusInternalServerError)
+		return
+	}
+
+	parsed, err := url.Parse(authURL)
+	if err != nil {
+		http.Error(w, "invalid authorization URL", http.StatusInternalServerError)
+		return
+	}
+	q := parsed.Query()
+	q.Set("state", nonce)
+	parsed.RawQuery = q.Encode()
+
+	http.Redirect(w, r, parsed.String(), http.StatusFound)
 }
 
 func (h *CrossImportHandler) oauthCallback(w http.ResponseWriter, r *http.Request) {
@@ -452,6 +487,21 @@ func (h *CrossImportHandler) oauthCallback(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "missing code", http.StatusBadRequest)
 		return
 	}
+
+	// Single-use nonce check - see oauthStart. A mismatch (or a session
+	// with no nonce pending at all) means this callback wasn't the one this
+	// browser's own oauthStart initiated, so it's rejected outright rather
+	// than trusting the code.
+	state := r.URL.Query().Get("state")
+	sid := auth.SessionID(r)
+	data, err := h.Store.Get(sid)
+	if err != nil || data.OAuthState == "" || state == "" || data.OAuthState != state {
+		http.Error(w, "invalid or expired OAuth state", http.StatusBadRequest)
+		return
+	}
+	data.OAuthState = ""
+	_ = h.Store.Save(sid, data)
+
 	redirectURI := fmt.Sprintf("%s://%s/cross-import/oauth/%s/callback", schemeOf(r), r.Host, service)
 	if err := oauth.HandleOAuthCallback(r.Context(), code, user.ID, redirectURI); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -503,9 +553,11 @@ func (h *CrossImportHandler) oauthRevoke(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if err := oauth.RevokeConnection(r.Context(), user.ID); err != nil {
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Disconnect "+service, err.Error(), notifications.StatusError, nil)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	h.Notifications.Add(user.ID, notifications.TypeAction, "Disconnect "+service, "Disconnected", notifications.StatusSuccess, nil)
 	h.oauthServices(w, r)
 }
 

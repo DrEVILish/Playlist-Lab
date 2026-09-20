@@ -1,0 +1,17 @@
+{{/* Second step of the Import from File modal (import_file_modal.html):
+     the upload parsed successfully, this shows the auto-detected playlist
+     name - editable - with the actual Import button below it. Posting
+     creates the playlist from the already-parsed tracks stashed server-side
+     under .SessionID (import_file.go's pendingFileStore), so the file
+     itself isn't re-uploaded. */}}
+{{define "partials/import_file_confirm.html"}}
+<form hx-post="/import/file/confirm/{{.SessionID}}" hx-target="#notifications" hx-swap="innerHTML"
+  hx-on::after-request="if(event.detail.successful) closeTopModal()">
+  <div class="form-section">
+    <label class="form-label" for="import-file-confirm-name">Playlist name</label>
+    <input class="form-input" type="text" id="import-file-confirm-name" name="playlistName" value="{{.Name}}" required autofocus>
+    <p class="form-hint">{{.TrackCount}} track{{if ne .TrackCount 1}}s{{end}} found.</p>
+  </div>
+  <button type="submit" class="btn btn-primary">Import</button>
+</form>
+{{end}}

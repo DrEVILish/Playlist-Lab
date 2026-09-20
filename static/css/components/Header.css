@@ -36,7 +36,7 @@
   width: 36px;
   height: 36px;
   object-fit: contain;
-  filter: drop-shadow(0 0 8px rgba(91, 155, 213, 0.3));
+  filter: drop-shadow(0 0 8px rgba(47, 143, 255, 0.3));
 }
 
 .header-logo h1 {
@@ -50,12 +50,9 @@
   color: var(--text-primary);
 }
 
-.header-logo h1 .logo-lab {
-  background: var(--gradient-primary);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
+/* Was a --gradient-primary text-clip - gradients are banned app-wide now
+   (see base.css's token comment), flat accent-cyan instead. */
+.header-logo h1 .logo-lab { color: var(--accent-cyan); }
 
 .header-actions {
   display: flex;
@@ -64,6 +61,17 @@
   margin-left: 0.5rem;
   padding-left: 1rem;
   border-left: 1px solid var(--border);
+}
+
+/* htmx adds .htmx-request to whichever button made the in-flight
+   hx-get - these buttons load a full page into #modal-root, and Generate
+   in particular can take a couple of real seconds server-side even with
+   its genre/mood lookups cached fast on repeat opens (a genuinely slow
+   first Plex round-trip, not something client-side can hide). Without
+   any feedback here the click just looked like it did nothing. */
+.header-actions button.htmx-request {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 .header-user {

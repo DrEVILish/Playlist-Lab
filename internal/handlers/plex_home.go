@@ -36,12 +36,19 @@ func (h *ImportHandler) plexHomeUsers(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
 	dbUser, err := db.GetUserByID(h.DB, user.ID)
 	if err != nil || dbUser.PlexToken == "" {
-		http.Error(w, "No Plex token found", http.StatusBadRequest)
+		// http.Error's plain-text 4xx body is dropped on the floor by
+		// layout.html's htmx.config.noSwap ('4xx' is in the skip list, app-
+		// wide, so raw error text never dumps into a swap target) - which
+		// left this section's "Loading Plex Home users..." placeholder
+		// stuck forever with no visible failure. Render the same partial's
+		// error state (200, still swaps) instead so the loading text always
+		// resolves to something.
+		h.Tmpl.RenderPartial(w, "partials/plex_home_users.html", map[string]any{"Error": "No Plex token found."})
 		return
 	}
 	users, err := h.PlexAuth.GetHomeUsersDetailed(dbUser.PlexToken)
 	if err != nil {
-		http.Error(w, "Failed to fetch Plex Home users", http.StatusBadGateway)
+		h.Tmpl.RenderPartial(w, "partials/plex_home_users.html", map[string]any{"Error": "Failed to fetch Plex Home users."})
 		return
 	}
 	h.Tmpl.RenderPartial(w, "partials/plex_home_users.html", map[string]any{"Users": users})
@@ -56,7 +63,7 @@ func (h *ImportHandler) plexHomeUserPlaylists(w http.ResponseWriter, r *http.Req
 		http.Error(w, "No Plex token found", http.StatusBadRequest)
 		return
 	}
-	userServer, err := db.GetUserServer(h.DB, user.ID)
+	userServer, err := db.GetUserMusicServer(h.DB, user.ID)
 	if err != nil || userServer == nil {
 		http.Error(w, "No Plex server configured", http.StatusBadRequest)
 		return
@@ -123,7 +130,7 @@ func (h *ImportHandler) plexHomeCopyPlaylist(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "No Plex token found", http.StatusBadRequest)
 		return
 	}
-	userServer, err := db.GetUserServer(h.DB, user.ID)
+	userServer, err := db.GetUserMusicServer(h.DB, user.ID)
 	if err != nil || userServer == nil || !userServer.LibraryID.Valid {
 		http.Error(w, "No Plex server/library configured", http.StatusBadRequest)
 		return

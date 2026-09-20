@@ -14,6 +14,7 @@ package handlers
 
 import (
 	"database/sql"
+	"encoding/csv"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -62,22 +63,26 @@ func RegisterMissing(r chi.Router, mw *auth.Middleware, h *MissingHandler) {
 		r.Use(mw.RequireAuth)
 		r.Get("/missing", h.page)
 		r.Get("/missing/list", h.list)
+		r.Get("/missing/export", h.exportCSV)
 		r.Get("/missing/retry-status", h.retryStatus)
 		r.Post("/missing/retry", h.retry)
 		r.Post("/missing/deemix-all", h.deemixAll)
 		r.Post("/missing/{id}/deemix-download", h.deemixDownload)
 		r.Post("/missing/{id}/lidarr-download", h.lidarrDownload)
 		r.Post("/missing/{id}/rematch", h.rematch)
+		r.Get("/missing/{id}/match", h.openMatchModal)
+		r.Get("/missing/{id}/match-search", h.matchSearch)
 		r.Post("/missing/{id}/replace-similar", h.replaceSimilar)
 		r.Delete("/missing/{id}", h.deleteTrack)
 		r.Delete("/missing/playlist/{playlistId}", h.clearPlaylist)
+		r.Post("/missing/bulk-remove", h.bulkRemove)
 	})
 }
 
 // client builds a plex.Client for the current user's selected server,
 // matching PlaylistsHandler.client.
 func (h *MissingHandler) client(user *db.User) (*plex.Client, *db.UserServer, error) {
-	userServer, err := db.GetUserServer(h.DB, user.ID)
+	userServer, err := db.GetUserMusicServer(h.DB, user.ID)
 	if err != nil || userServer == nil {
 		return nil, userServer, err
 	}
@@ -139,6 +144,32 @@ func (h *MissingHandler) list(w http.ResponseWriter, r *http.Request) {
 	h.renderGroups(w, user.ID, playlistID)
 }
 
+// exportCSV is GET /missing/export - same stdlib encoding/csv approach and
+// column-per-visible-field shape as PlaylistsHandler.exportCSV
+// (playlists.go, DESIGN.md §8.6), one row per missing track grouped by
+// playlist the same way the page itself groups them.
+func (h *MissingHandler) exportCSV(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
+	tracks, err := db.GetUserMissingTracks(h.DB, user.ID)
+	if err != nil {
+		http.Error(w, "Failed to load missing tracks", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", `attachment; filename="missing-tracks.csv"`)
+	cw := csv.NewWriter(w)
+	cw.Write([]string{"Playlist", "Title", "Artist", "Album", "Source", "Added"})
+	for _, group := range groupMissingTracks(h.DB, tracks) {
+		for _, t := range group.Tracks {
+			cw.Write([]string{
+				group.PlaylistName, t.Title, t.Artist, t.Album.String, t.Source, dateFromUnixCSV(t.AddedAt),
+			})
+		}
+	}
+	cw.Flush()
+}
+
 func (h *MissingHandler) renderRetryStatus(w http.ResponseWriter, userID int64) {
 	h.mu.Lock()
 	progress := h.activeRetries[userID]
@@ -163,7 +194,23 @@ func (h *MissingHandler) retry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var toRetry []db.MissingTrack
-	if tid := r.FormValue("trackId"); tid != "" {
+	// "id" (repeated) backs the Missing Tracks page's bulk-select "Retry
+	// Selected" (DESIGN.md §8.6/§11.6) - hx-include gathers every checked
+	// row-select checkbox onto this same request rather than needing a
+	// separate bulk-specific route.
+	if ids := r.Form["id"]; len(ids) > 0 {
+		wanted := make(map[int64]bool, len(ids))
+		for _, raw := range ids {
+			if id, err := strconv.ParseInt(raw, 10, 64); err == nil {
+				wanted[id] = true
+			}
+		}
+		for _, t := range all {
+			if wanted[t.ID] {
+				toRetry = append(toRetry, t)
+			}
+		}
+	} else if tid := r.FormValue("trackId"); tid != "" {
 		id, _ := strconv.ParseInt(tid, 10, 64)
 		for _, t := range all {
 			if t.ID == id {
@@ -191,7 +238,7 @@ func (h *MissingHandler) retry(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "user not found", http.StatusNotFound)
 		return
 	}
-	userServer, err := db.GetUserServer(h.DB, user.ID)
+	userServer, err := db.GetUserMusicServer(h.DB, user.ID)
 	if err != nil || userServer == nil {
 		http.Error(w, "No server selected. Please select a server first.", http.StatusBadRequest)
 		return
@@ -376,7 +423,7 @@ func (h *MissingHandler) deemixDownload(w http.ResponseWriter, r *http.Request) 
 	}
 
 	dbUser, _ := db.GetUserByID(h.DB, user.ID)
-	userServer, _ := db.GetUserServer(h.DB, user.ID)
+	userServer, _ := db.GetUserMusicServer(h.DB, user.ID)
 	settings := h.matchingSettings(user.ID)
 
 	result, err := h.queueDeemixForTrack(user.ID, dbUser, userServer, track, settings)
@@ -466,7 +513,7 @@ func (h *MissingHandler) deemixAll(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "user not found", http.StatusNotFound)
 		return
 	}
-	userServer, err := db.GetUserServer(h.DB, user.ID)
+	userServer, err := db.GetUserMusicServer(h.DB, user.ID)
 	if err != nil || userServer == nil {
 		http.Error(w, "No server selected. Please select a server first.", http.StatusBadRequest)
 		return
@@ -573,7 +620,7 @@ func (h *MissingHandler) lidarrDownload(w http.ResponseWriter, r *http.Request) 
 	}
 
 	dbUser, _ := db.GetUserByID(h.DB, user.ID)
-	userServer, _ := db.GetUserServer(h.DB, user.ID)
+	userServer, _ := db.GetUserMusicServer(h.DB, user.ID)
 
 	firstArtist := firstArtistName(track.Artist)
 	artistLookup, err := h.Lidarr.FindArtist(firstArtist)
@@ -664,11 +711,13 @@ func (h *MissingHandler) rematch(w http.ResponseWriter, r *http.Request) {
 
 	target := matching.PlaylistTarget{ServerClientID: userServer.ServerClientID, LibraryID: userServer.LibraryID.String}
 	if !matching.InsertMatchedTrackIntoPlaylist(h.DB, client, target, track, ratingKey) {
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Rematch track", track.Artist+" - "+track.Title, notifications.StatusError, nil)
 		http.Error(w, "Failed to add track to playlist", http.StatusInternalServerError)
 		return
 	}
 	_ = db.RecordManualMatch(h.DB, user.ID, track.Title, track.Artist, track.Album.String, ratingKey)
 	slog.Info("Missing track manually rematched", "userId", user.ID, "trackId", trackID, "ratingKey", ratingKey)
+	h.Notifications.Add(user.ID, notifications.TypeAction, "Rematch track", track.Artist+" - "+track.Title, notifications.StatusSuccess, nil)
 
 	h.renderGroups(w, user.ID, scopeParam(r))
 }
@@ -696,16 +745,21 @@ func (h *MissingHandler) replaceSimilar(w http.ResponseWriter, r *http.Request) 
 
 	artist, err := client.SearchArtist(userServer.LibraryID.String, track.Artist)
 	if err != nil || artist == nil || artist.RatingKey == "" {
-		http.Error(w, fmt.Sprintf("No artist matching %q found in your Plex library", track.Artist), http.StatusNotFound)
+		msg := fmt.Sprintf("No artist matching %q found in your Plex library", track.Artist)
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Find similar track", msg, notifications.StatusError, nil)
+		http.Error(w, msg, http.StatusNotFound)
 		return
 	}
 	seedTracks, err := client.GetArtistPopularTracks(userServer.LibraryID.String, artist.RatingKey, 1)
 	if err != nil || len(seedTracks) == 0 {
-		http.Error(w, fmt.Sprintf("%q has no tracks in your Plex library to seed a similarity search from", track.Artist), http.StatusNotFound)
+		msg := fmt.Sprintf("%q has no tracks in your Plex library to seed a similarity search from", track.Artist)
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Find similar track", msg, notifications.StatusError, nil)
+		http.Error(w, msg, http.StatusNotFound)
 		return
 	}
 	candidates, err := client.GetSonicallySimilarTracks(seedTracks[0].RatingKey, userServer.LibraryID.String, plex.SonicSimilarOptions{MaxDistance: 0.25, Limit: 10})
 	if err != nil {
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Find similar track", err.Error(), notifications.StatusError, nil)
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -726,17 +780,21 @@ func (h *MissingHandler) replaceSimilar(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	if replacement == nil {
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Find similar track", "No sonically similar replacement found for "+track.Artist+" - "+track.Title, notifications.StatusError, nil)
 		http.Error(w, "No sonically similar replacement found for this track", http.StatusNotFound)
 		return
 	}
 
 	target := matching.PlaylistTarget{ServerClientID: userServer.ServerClientID, LibraryID: userServer.LibraryID.String}
 	if !matching.InsertMatchedTrackIntoPlaylist(h.DB, client, target, track, replacement.RatingKey) {
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Find similar track", "Found a similar track but failed to add it to the playlist", notifications.StatusError, nil)
 		http.Error(w, "Found a similar track but failed to add it to the playlist", http.StatusInternalServerError)
 		return
 	}
 	slog.Info("Replaced missing track with sonically similar match", "userId", user.ID, "trackId", trackID,
 		"original", track.Artist+" - "+track.Title, "replacement", replacement.GrandparentTitle+" - "+replacement.Title)
+	h.Notifications.Add(user.ID, notifications.TypeAction, "Find similar track",
+		fmt.Sprintf("Replaced with %s - %s", replacement.GrandparentTitle, replacement.Title), notifications.StatusSuccess, nil)
 
 	h.renderGroups(w, user.ID, scopeParam(r))
 }
@@ -780,8 +838,39 @@ func (h *MissingHandler) deleteTrack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := db.RemoveMissingTrack(h.DB, trackID); err != nil {
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Dismiss missing track", err.Error(), notifications.StatusError, nil)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
+	}
+	h.renderGroups(w, user.ID, scopeParam(r))
+}
+
+// bulkRemove is the Missing Tracks page's bulk-select "Remove Selected"
+// (DESIGN.md §8.6/§11.6) - the same per-track removal deleteTrack already
+// does, just looped over every checked row-select checkbox instead of one
+// id from the URL path.
+func (h *MissingHandler) bulkRemove(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
+	_ = r.ParseForm()
+	ids := r.Form["id"]
+	failed := 0
+	for _, raw := range ids {
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			continue
+		}
+		if _, ok := h.findMissingTrack(user.ID, id); !ok {
+			continue
+		}
+		if err := db.RemoveMissingTrack(h.DB, id); err != nil {
+			slog.Warn("bulk-remove: failed to remove missing track", "error", err, "trackId", id)
+			failed++
+		}
+	}
+	if failed > 0 {
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Dismiss missing tracks", fmt.Sprintf("%d of %d failed", failed, len(ids)), notifications.StatusError, nil)
+	} else {
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Dismiss missing tracks", fmt.Sprintf("Dismissed %d", len(ids)), notifications.StatusSuccess, nil)
 	}
 	h.renderGroups(w, user.ID, scopeParam(r))
 }
@@ -804,8 +893,10 @@ func (h *MissingHandler) clearPlaylist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := db.ClearPlaylistMissingTracks(h.DB, playlistID); err != nil {
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Clear missing tracks", err.Error(), notifications.StatusError, nil)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+	h.Notifications.Add(user.ID, notifications.TypeAction, "Clear missing tracks", playlist.Name, notifications.StatusSuccess, nil)
 	h.renderGroups(w, user.ID, scopeParam(r))
 }

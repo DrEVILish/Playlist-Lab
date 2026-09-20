@@ -1,0 +1,111 @@
+/* Schedule Modal - reuses advanced-mix-* chrome from AdvancedMixModal.css
+   for the overlay/header/content/actions shell; everything below is the
+   redesigned inner content that used to be inline styles. */
+
+.schedule-meta {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  display: flex;
+  gap: 1rem;
+}
+
+.schedule-fields-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+/* Replace/Accumulate choice, previously two raw radio rows with no visual
+   separation between the option and its description - now a pair of
+   selectable cards so the active choice reads at a glance. */
+.update-mode-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+/* Three-way variant - Dynamic Collections' All/Include/Exclude scope
+   picker (CollectionsPage.css) is the same selectable-card mechanism as
+   the two-way choices above, just one more option. */
+.update-mode-group.cols-3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.update-mode-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.875rem;
+  background-color: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.update-mode-card:hover {
+  border-color: var(--border-light);
+}
+
+.update-mode-card:has(input:checked) {
+  border-color: var(--primary-color);
+  background-color: rgba(47, 143, 255, 0.08);
+}
+
+.update-mode-card input[type="radio"] {
+  accent-color: var(--primary-color);
+  margin: 0 0 0.125rem 0;
+}
+
+.update-mode-card-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.update-mode-card-desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.schedule-runs-list {
+  display: grid;
+  gap: 0.375rem;
+  max-height: 150px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.schedule-run-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  padding: 0.5rem 0.625rem;
+  background-color: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.schedule-run-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  text-transform: capitalize;
+}
+
+.schedule-run-status--success { color: #4caf50; background-color: rgba(76, 175, 80, 0.12); }
+.schedule-run-status--error { color: var(--error); background-color: rgba(239, 83, 80, 0.12); }
+.schedule-run-status--in-progress,
+.schedule-run-status--pending { color: var(--primary-color); background-color: rgba(47, 143, 255, 0.12); }
+
+@media (max-width: 768px) {
+  .schedule-fields-row,
+  .update-mode-group,
+  .update-mode-group.cols-3 {
+    grid-template-columns: 1fr;
+  }
+}

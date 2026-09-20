@@ -1,20 +1,319 @@
 {{define "partials/admin_deemix_panel.html"}}
 <form hx-post="/admin/deemix/arl" hx-target="#settings-panel-admin-deemix" hx-swap="innerHTML">
-  <div class="settings-field-group">
+  <div class="settings-field-group" style="margin-bottom:0.75rem">
     <div class="settings-field">
-      <label class="settings-label">Deezer ARL</label>
-      <input type="password" name="arl" class="settings-input" value="{{.DeemixArl}}" placeholder="paste ARL token here" autocomplete="off">
+      <label class="settings-label" for="deemix-arl">Deezer ARL</label>
+      <input id="deemix-arl" type="password" name="arl" class="settings-input" value="{{.DeemixArl}}" placeholder="paste ARL token here" autocomplete="off">
     </div>
   </div>
-  {{if .Error}}<div class="settings-alert settings-alert--error">{{.Error}}</div>{{end}}
+  {{if .Notice}}<div class="settings-alert settings-alert--success" style="margin-bottom:0.75rem">{{.Notice}}</div>{{end}}
   {{if .ArlStatus}}
-  <div class="settings-alert settings-alert--{{if .ArlStatus.OK}}success{{else}}error{{end}}">
+  <div class="settings-alert settings-alert--{{if .ArlStatus.OK}}success{{else}}error{{end}}" style="margin-bottom:0.75rem">
     {{if .ArlStatus.OK}}ARL working - last checked {{relativeTime .ArlStatus.At}}.{{else}}ARL not working: {{.ArlStatus.Error}} (checked {{relativeTime .ArlStatus.At}}){{end}}
   </div>
   {{end}}
-  <div class="settings-actions">
+  <div class="settings-actions" style="border-top:none;padding-top:0;margin-top:0.25rem">
     <button type="submit" class="btn btn-primary">Save ARL</button>
     <button type="submit" formaction="/admin/deemix/arl/check" class="btn btn-secondary">Test ARL</button>
+  </div>
+</form>
+
+{{$s := .Settings}}
+<form hx-post="/admin/deemix/settings" hx-target="#settings-panel-admin-deemix" hx-swap="innerHTML" style="margin-top:1rem">
+
+  <div class="settings-subtabbar">
+    <input type="radio" name="deemixsubtab" id="deemix-sub-general" class="admin-tab-input" checked>
+    <label for="deemix-sub-general" class="admin-tab">General</label>
+    <input type="radio" name="deemixsubtab" id="deemix-sub-naming" class="admin-tab-input">
+    <label for="deemix-sub-naming" class="admin-tab">Naming &amp; Files</label>
+    <input type="radio" name="deemixsubtab" id="deemix-sub-artwork" class="admin-tab-input">
+    <label for="deemix-sub-artwork" class="admin-tab">Artwork</label>
+    <input type="radio" name="deemixsubtab" id="deemix-sub-tags" class="admin-tab-input">
+    <label for="deemix-sub-tags" class="admin-tab">Tags</label>
+    <input type="radio" name="deemixsubtab" id="deemix-sub-advanced" class="admin-tab-input">
+    <label for="deemix-sub-advanced" class="admin-tab">Advanced</label>
+  </div>
+
+  <div class="settings-subtab-content">
+
+    <div id="deemix-panel-general" class="settings-subtab-panel">
+      <div class="settings-mix-grid">
+        <div class="settings-mix-card">
+          <h3>Quality &amp; Behavior</h3>
+          <div class="settings-slider-row">
+            <label class="settings-label" for="deemix-download-location">Download location</label>
+            <input id="deemix-download-location" type="text" name="downloadLocation" class="settings-input settings-input--mono" value="{{$s.DownloadLocation}}">
+          </div>
+          <div class="settings-slider-row">
+            <label class="settings-label" for="deemix-max-bitrate">Preferred quality</label>
+            <select id="deemix-max-bitrate" name="maxBitrate" class="settings-select">
+              <option value="9" {{if eq $s.MaxBitrate "9"}}selected{{end}}>FLAC (lossless, requires Deezer HiFi)</option>
+              <option value="3" {{if eq $s.MaxBitrate "3"}}selected{{end}}>MP3 320kbps</option>
+              <option value="1" {{if eq $s.MaxBitrate "1"}}selected{{end}}>MP3 128kbps</option>
+            </select>
+          </div>
+          <div class="settings-slider-row">
+            <label class="settings-label" for="deemix-overwrite">If a file already exists</label>
+            <select id="deemix-overwrite" name="overwriteFile" class="settings-select">
+              <option value="n" {{if eq $s.OverwriteFile "n"}}selected{{end}}>Skip it</option>
+              <option value="y" {{if eq $s.OverwriteFile "y"}}selected{{end}}>Overwrite it</option>
+              <option value="b" {{if eq $s.OverwriteFile "b"}}selected{{end}}>Keep both</option>
+              <option value="t" {{if eq $s.OverwriteFile "t"}}selected{{end}}>Overwrite tags only</option>
+              <option value="e" {{if eq $s.OverwriteFile "e"}}selected{{end}}>Overwrite, don't check extension</option>
+            </select>
+          </div>
+          <div class="settings-slider-row">
+            <label class="settings-label" for="deemix-queue-concurrency">Concurrent downloads per album</label>
+            <input id="deemix-queue-concurrency" type="number" min="1" max="10" name="queueConcurrency" class="settings-input" value="{{$s.QueueConcurrency}}">
+          </div>
+          <div class="settings-toggles">
+            <label class="settings-toggle"><input type="checkbox" name="fallbackBitrate" value="true" {{if $s.FallbackBitrate}}checked{{end}}><span>Fall back to a lower quality if unavailable</span></label>
+          </div>
+        </div>
+
+        <div class="settings-mix-card">
+          <h3>Text Processing</h3>
+          <div class="settings-slider-row">
+            <label class="settings-label" for="deemix-title-casing">Title casing</label>
+            <select id="deemix-title-casing" name="titleCasing" class="settings-select">
+              <option value="nothing" {{if eq $s.TitleCasing "nothing"}}selected{{end}}>Leave as-is</option>
+              <option value="lower" {{if eq $s.TitleCasing "lower"}}selected{{end}}>lower case</option>
+              <option value="upper" {{if eq $s.TitleCasing "upper"}}selected{{end}}>UPPER CASE</option>
+              <option value="start" {{if eq $s.TitleCasing "start"}}selected{{end}}>Start Case</option>
+            </select>
+          </div>
+          <div class="settings-slider-row">
+            <label class="settings-label" for="deemix-artist-casing">Artist casing</label>
+            <select id="deemix-artist-casing" name="artistCasing" class="settings-select">
+              <option value="nothing" {{if eq $s.ArtistCasing "nothing"}}selected{{end}}>Leave as-is</option>
+              <option value="lower" {{if eq $s.ArtistCasing "lower"}}selected{{end}}>lower case</option>
+              <option value="upper" {{if eq $s.ArtistCasing "upper"}}selected{{end}}>UPPER CASE</option>
+              <option value="start" {{if eq $s.ArtistCasing "start"}}selected{{end}}>Start Case</option>
+            </select>
+          </div>
+          <div class="settings-slider-row">
+            <label class="settings-label" for="deemix-featured-to-title">Featured artists</label>
+            <select id="deemix-featured-to-title" name="featuredToTitle" class="settings-select">
+              <option value="0" {{if eq $s.FeaturedToTitle "0"}}selected{{end}}>Leave as-is</option>
+              <option value="1" {{if eq $s.FeaturedToTitle "1"}}selected{{end}}>Remove from title</option>
+              <option value="2" {{if eq $s.FeaturedToTitle "2"}}selected{{end}}>Move into title</option>
+              <option value="3" {{if eq $s.FeaturedToTitle "3"}}selected{{end}}>Remove from title and album</option>
+            </select>
+          </div>
+          <div class="settings-slider-row">
+            <label class="settings-label" for="deemix-date-format">Date tag format</label>
+            <input id="deemix-date-format" type="text" name="dateFormat" class="settings-input" value="{{$s.DateFormat}}" placeholder="Y-M-D">
+          </div>
+          <div class="settings-toggles">
+            <label class="settings-toggle"><input type="checkbox" name="removeAlbumVersion" value="true" {{if $s.RemoveAlbumVersion}}checked{{end}}><span>Strip "(Album Version)" from titles</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="removeDuplicateArtists" value="true" {{if $s.RemoveDuplicateArtists}}checked{{end}}><span>Remove duplicate artist credits</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="albumVariousArtists" value="true" {{if $s.AlbumVariousArtists}}checked{{end}}><span>Tag various-artist albums as "Various Artists"</span></label>
+          </div>
+          <p class="settings-hint">Deezer's own data already labels various-artist albums this way, so the toggle above has nothing extra to do today - kept for parity with the original app.</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="deemix-panel-naming" class="settings-subtab-panel">
+      <div class="settings-mix-grid">
+        <div class="settings-mix-card">
+          <h3>Filename Templates</h3>
+          <div class="settings-slider-row">
+            <label class="settings-label" for="deemix-track-template">Single track filename</label>
+            <input id="deemix-track-template" type="text" name="tracknameTemplate" class="settings-input settings-input--mono" value="{{$s.TracknameTemplate}}">
+          </div>
+          <div class="settings-slider-row">
+            <label class="settings-label" for="deemix-album-track-template">Album track filename</label>
+            <input id="deemix-album-track-template" type="text" name="albumTracknameTemplate" class="settings-input settings-input--mono" value="{{$s.AlbumTracknameTemplate}}">
+          </div>
+          <p class="settings-hint">Placeholders: %artist%, %title%, %album%, %tracknumber%</p>
+          <div class="settings-slider-row">
+            <label class="settings-label" for="deemix-artist-template">Artist folder name</label>
+            <input id="deemix-artist-template" type="text" name="artistNameTemplate" class="settings-input settings-input--mono" value="{{$s.ArtistNameTemplate}}">
+          </div>
+          <div class="settings-slider-row">
+            <label class="settings-label" for="deemix-album-template">Album folder name</label>
+            <input id="deemix-album-template" type="text" name="albumNameTemplate" class="settings-input settings-input--mono" value="{{$s.AlbumNameTemplate}}">
+          </div>
+        </div>
+
+        <div class="settings-mix-card">
+          <h3>Folder &amp; Padding Options</h3>
+          <div class="settings-slider-row">
+            <label class="settings-label" for="deemix-padding-size">Track number padding width</label>
+            <input id="deemix-padding-size" type="text" name="paddingSize" class="settings-input" value="{{$s.PaddingSize}}" placeholder="0 = auto">
+          </div>
+          <div class="settings-slider-row">
+            <label class="settings-label" for="deemix-illegal-char">Replace illegal filename characters with</label>
+            <input id="deemix-illegal-char" type="text" name="illegalCharacterReplacer" class="settings-input" value="{{$s.IllegalCharacterReplacer}}" maxlength="3">
+          </div>
+          <div class="settings-toggles">
+            <label class="settings-toggle"><input type="checkbox" name="createArtistFolder" value="true" {{if $s.CreateArtistFolder}}checked{{end}}><span>Create an artist folder</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="createAlbumFolder" value="true" {{if $s.CreateAlbumFolder}}checked{{end}}><span>Create an album folder</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="createCDFolder" value="true" {{if $s.CreateCDFolder}}checked{{end}}><span>Create a CD folder for multi-disc albums</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="createSingleFolder" value="true" {{if $s.CreateSingleFolder}}checked{{end}}><span>Give a standalone single its own folder</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="padTracks" value="true" {{if $s.PadTracks}}checked{{end}}><span>Pad track numbers with leading zeros</span></label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="deemix-panel-artwork" class="settings-subtab-panel">
+      <div class="settings-mix-grid">
+        <div class="settings-mix-card">
+          <h3>Embedded Artwork</h3>
+          <div class="settings-toggles">
+            <label class="settings-toggle"><input type="checkbox" name="tags.cover" value="true" {{if $s.Tags.Cover}}checked{{end}}><span>Embed cover art in the track</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="embeddedArtworkPNG" value="true" {{if $s.EmbeddedArtworkPNG}}checked{{end}}><span>Embed as PNG instead of JPEG</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.coverDescriptionUTF8" value="true" {{if $s.Tags.CoverDescriptionUTF8}}checked{{end}}><span>Encode cover description as UTF-8</span></label>
+          </div>
+          <div class="settings-slider-row">
+            <label class="settings-label" for="deemix-artwork-size">Embedded artwork size (px)</label>
+            <input id="deemix-artwork-size" type="number" min="100" max="1800" name="embeddedArtworkSize" class="settings-input" value="{{$s.EmbeddedArtworkSize}}">
+          </div>
+          <div class="settings-slider-row">
+            <label class="settings-label" for="deemix-jpeg-quality">JPEG quality</label>
+            <input id="deemix-jpeg-quality" type="number" min="1" max="100" name="jpegImageQuality" class="settings-input" value="{{$s.JpegImageQuality}}">
+          </div>
+        </div>
+
+        <div class="settings-mix-card">
+          <h3>Separate Image Files</h3>
+          <div class="settings-toggles">
+            <label class="settings-toggle"><input type="checkbox" name="saveArtwork" value="true" {{if $s.SaveArtwork}}checked{{end}}><span>Also save a separate cover image file</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="saveArtworkArtist" value="true" {{if $s.SaveArtworkArtist}}checked{{end}}><span>Also save a separate artist image file</span></label>
+          </div>
+          <div class="settings-slider-row">
+            <label class="settings-label" for="deemix-local-artwork-size">Separate image size (px)</label>
+            <input id="deemix-local-artwork-size" type="number" min="100" max="3000" name="localArtworkSize" class="settings-input" value="{{$s.LocalArtworkSize}}">
+          </div>
+          <div class="settings-slider-row">
+            <label class="settings-label" for="deemix-local-artwork-format">Separate image format</label>
+            <select id="deemix-local-artwork-format" name="localArtworkFormat" class="settings-select">
+              <option value="jpg" {{if ne $s.LocalArtworkFormat "png"}}selected{{end}}>JPEG</option>
+              <option value="png" {{if eq $s.LocalArtworkFormat "png"}}selected{{end}}>PNG</option>
+            </select>
+          </div>
+          <div class="settings-slider-row">
+            <label class="settings-label" for="deemix-cover-image-template">Cover image filename</label>
+            <input id="deemix-cover-image-template" type="text" name="coverImageTemplate" class="settings-input settings-input--mono" value="{{$s.CoverImageTemplate}}">
+          </div>
+          <div class="settings-slider-row">
+            <label class="settings-label" for="deemix-artist-image-template">Artist image filename</label>
+            <input id="deemix-artist-image-template" type="text" name="artistImageTemplate" class="settings-input settings-input--mono" value="{{$s.ArtistImageTemplate}}">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="deemix-panel-tags" class="settings-subtab-panel">
+      <div class="settings-mix-grid">
+        <div class="settings-mix-card">
+          <h3>Tags - Core</h3>
+          <div class="settings-toggles">
+            <label class="settings-toggle"><input type="checkbox" name="tags.title" value="true" {{if $s.Tags.Title}}checked{{end}}><span>Title</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.artist" value="true" {{if $s.Tags.Artist}}checked{{end}}><span>Artist</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.artists" value="true" {{if $s.Tags.Artists}}checked{{end}}><span>Artists (extra tag listing every credited artist)</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.album" value="true" {{if $s.Tags.Album}}checked{{end}}><span>Album</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.albumArtist" value="true" {{if $s.Tags.AlbumArtist}}checked{{end}}><span>Album artist</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.trackNumber" value="true" {{if $s.Tags.TrackNumber}}checked{{end}}><span>Track number</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.trackTotal" value="true" {{if $s.Tags.TrackTotal}}checked{{end}}><span>Track total</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.discNumber" value="true" {{if $s.Tags.DiscNumber}}checked{{end}}><span>Disc number</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.discTotal" value="true" {{if $s.Tags.DiscTotal}}checked{{end}}><span>Disc total</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.year" value="true" {{if $s.Tags.Year}}checked{{end}}><span>Year</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.date" value="true" {{if $s.Tags.Date}}checked{{end}}><span>Full release date</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.genre" value="true" {{if $s.Tags.Genre}}checked{{end}}><span>Genre</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.explicit" value="true" {{if $s.Tags.Explicit}}checked{{end}}><span>Explicit flag</span></label>
+          </div>
+        </div>
+
+        <div class="settings-mix-card">
+          <h3>Tags - Extended</h3>
+          <div class="settings-toggles">
+            <label class="settings-toggle"><input type="checkbox" name="tags.isrc" value="true" {{if $s.Tags.ISRC}}checked{{end}}><span>ISRC</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.barcode" value="true" {{if $s.Tags.Barcode}}checked{{end}}><span>Barcode (UPC)</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.length" value="true" {{if $s.Tags.Length}}checked{{end}}><span>Length</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.bpm" value="true" {{if $s.Tags.BPM}}checked{{end}}><span>BPM</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.replayGain" value="true" {{if $s.Tags.ReplayGain}}checked{{end}}><span>ReplayGain</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.rating" value="true" {{if $s.Tags.Rating}}checked{{end}}><span>Rating (from Deezer's popularity rank)</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.label" value="true" {{if $s.Tags.Label}}checked{{end}}><span>Record label</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.copyright" value="true" {{if $s.Tags.Copyright}}checked{{end}}><span>Copyright</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.source" value="true" {{if $s.Tags.Source}}checked{{end}}><span>Source (Deezer + track ID)</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.singleAlbumArtist" value="true" {{if $s.Tags.SingleAlbumArtist}}checked{{end}}><span>Force a single album artist rather than every contributor</span></label>
+          </div>
+          <div class="settings-slider-row" style="margin-top:0.75rem">
+            <label class="settings-label" for="deemix-multi-artist-sep">Multiple artists separator</label>
+            <input id="deemix-multi-artist-sep" type="text" name="tags.multiArtistSeparator" class="settings-input" value="{{$s.Tags.MultiArtistSeparator}}" placeholder="default, nothing, or a literal separator">
+          </div>
+        </div>
+
+        <div class="settings-mix-card">
+          <h3>Tags - Credits &amp; Lyrics</h3>
+          <div class="settings-toggles">
+            <label class="settings-toggle"><input type="checkbox" name="tags.composer" value="true" {{if $s.Tags.Composer}}checked{{end}}><span>Composer</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.involvedPeople" value="true" {{if $s.Tags.InvolvedPeople}}checked{{end}}><span>Involved people (writers, producers, engineers)</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.lyrics" value="true" {{if $s.Tags.Lyrics}}checked{{end}}><span>Lyrics</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.saveID3v1" value="true" {{if $s.Tags.SaveID3v1}}checked{{end}}><span>Also write a legacy ID3v1 tag (MP3 only)</span></label>
+          </div>
+          <p class="settings-hint">Cover art is a tag too - see Artwork for its settings.</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="deemix-panel-advanced" class="settings-subtab-panel">
+      <div class="settings-mix-grid">
+        <div class="settings-mix-card">
+          <h3>Advanced</h3>
+          <div class="settings-toggles">
+            <label class="settings-toggle"><input type="checkbox" name="feelingLucky" value="true" {{if $s.FeelingLucky}}checked{{end}}><span>Try Deezer's legacy CDN URL scheme if the normal one fails</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="logErrors" value="true" {{if $s.LogErrors}}checked{{end}}><span>Log per-track errors during an album download</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="logSearched" value="true" {{if $s.LogSearched}}checked{{end}}><span>Log every Deezer search</span></label>
+          </div>
+          <div class="settings-field" style="margin-top:0.75rem">
+            <label class="settings-label" for="deemix-execute-command">Run a command after each download</label>
+            <input id="deemix-execute-command" type="text" name="executeCommand" class="settings-input settings-input--mono" value="{{$s.ExecuteCommand}}" placeholder="e.g. /path/to/a/post-processing/script">
+            <p class="settings-hint">Runs as the server process, with the downloaded file's path as its one argument. Admin-only, same trust level as the rest of this panel.</p>
+          </div>
+        </div>
+
+        <div class="settings-mix-card">
+          <h3>Not Used By Playlist Lab</h3>
+          <p class="settings-hint">
+            Playlist Lab only ever downloads a single track or a whole album - never a playlist - so playlist-shaped
+            settings below have nothing to apply to. fallbackSearch/fallbackISRC have no ISRC data to retry from on a
+            missing track. Synced lyrics aren't supported by this port's ID3 tagging library (plain lyrics under Tags
+            are). These are still saved if you set them, in case a future update adds the feature they'd apply to.
+          </p>
+          <div class="settings-toggles settings-toggles--2col">
+            <label class="settings-toggle"><input type="checkbox" name="createPlaylistFolder" value="true" {{if $s.CreatePlaylistFolder}}checked{{end}}><span>Create a playlist folder</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="createStructurePlaylist" value="true" {{if $s.CreateStructurePlaylist}}checked{{end}}><span>Mirror artist/album structure inside playlist folders</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="createM3U8File" value="true" {{if $s.CreateM3U8File}}checked{{end}}><span>Write an M3U8 playlist file</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="fallbackSearch" value="true" {{if $s.FallbackSearch}}checked{{end}}><span>Fall back to a metadata search when a direct lookup fails</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="fallbackISRC" value="true" {{if $s.FallbackISRC}}checked{{end}}><span>Fall back to ISRC lookup</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.syncedLyrics" value="true" {{if $s.Tags.SyncedLyrics}}checked{{end}}><span>Synced lyrics tag</span></label>
+            <label class="settings-toggle"><input type="checkbox" name="tags.savePlaylistAsCompilation" value="true" {{if $s.Tags.SavePlaylistAsCompilation}}checked{{end}}><span>Save playlist downloads as a compilation</span></label>
+          </div>
+          <div class="settings-slider-row" style="margin-top:0.75rem">
+            <label class="settings-label" for="deemix-playlist-name-template">Playlist folder name</label>
+            <input id="deemix-playlist-name-template" type="text" name="playlistNameTemplate" class="settings-input settings-input--mono" value="{{$s.PlaylistNameTemplate}}">
+          </div>
+          <div class="settings-slider-row">
+            <label class="settings-label" for="deemix-playlist-track-template">Playlist track filename</label>
+            <input id="deemix-playlist-track-template" type="text" name="playlistTracknameTemplate" class="settings-input settings-input--mono" value="{{$s.PlaylistTracknameTemplate}}">
+          </div>
+          <div class="settings-slider-row">
+            <label class="settings-label" for="deemix-playlist-filename-template">Playlist file name</label>
+            <input id="deemix-playlist-filename-template" type="text" name="playlistFilenameTemplate" class="settings-input settings-input--mono" value="{{$s.PlaylistFilenameTemplate}}">
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  {{if .Error}}<div class="settings-alert settings-alert--error" style="margin-top:1.5rem">{{.Error}}</div>{{end}}
+  <div class="settings-actions">
+    <button type="submit" class="btn btn-primary">Save Settings</button>
   </div>
 </form>
 {{end}}

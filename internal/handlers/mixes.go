@@ -15,6 +15,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -42,25 +44,83 @@ func RegisterMixes(r chi.Router, mw *auth.Middleware, h *MixesHandler) {
 		r.Get("/mixes/quick-settings/{mixType}", h.quickSettingsForm)
 		r.Get("/mixes/advanced-form/{mixType}", h.advancedForm)
 		r.Get("/mixes/custom-form", h.customForm)
+		r.Get("/mixes/ai-form", h.aiForm)
 		r.Post("/mixes/generate", h.generate)
 	})
 }
 
 func (h *MixesHandler) page(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
-	userServer, _ := db.GetUserServer(h.DB, user.ID)
+	userServer, _ := db.GetUserMusicServer(h.DB, user.ID)
 
+	// templates/mixes.html (this handler's own template) never reads
+	// Genres/Moods - only mix_advanced_form.html does, fetched by
+	// advancedForm() instead. This handler used to fetch them anyway,
+	// blocking every "Generate" modal open on a Plex round-trip (up to the
+	// 5s fetchGenresAndMoods deadline, worse before that existed) for data
+	// this page throws away.
 	data := map[string]any{"User": user, "HasServer": userServer != nil && userServer.LibraryID.Valid}
-	if userServer != nil && userServer.LibraryID.Valid {
-		client := plex.NewClient(userServer.ServerURL, plex.ResolveToken(user.PlexToken, userServer.AccessToken.String), h.PlexAuth.ClientID, "Playlist Lab")
-		data["Genres"] = client.GetLibraryGenres(userServer.LibraryID.String)
-		data["Moods"] = client.GetLibraryMoods(userServer.LibraryID.String)
-	}
 	if IsModalRequest(r) {
 		h.Tmpl.RenderModal(w, r, "mixes", "Generate Mixes", data)
 		return
 	}
 	h.Tmpl.RenderPage(w, r, "mixes", data)
+}
+
+// genreMoodCache holds the last-fetched genre/mood lists per server+library,
+// since they're expensive (see fetchGenresAndMoods) but change rarely -
+// benchmarked live at a consistent 1.7s-4.7s per /mixes load even after
+// bounding the fetch itself, because that's genuine Plex-side latency on
+// these two directory-listing endpoints for a large library, not something
+// a request timeout can shrink further. A 15-minute cache turns every load
+// after the first into a map lookup instead of two Plex round-trips.
+var genreMoodCache = struct {
+	sync.Mutex
+	entries map[string]genreMoodCacheEntry
+}{entries: make(map[string]genreMoodCacheEntry)}
+
+type genreMoodCacheEntry struct {
+	genres, moods []string
+	expires       time.Time
+}
+
+const genreMoodCacheTTL = 15 * time.Minute
+
+// fetchGenresAndMoods loads the Custom Mix modal's genre/mood filter
+// options. Seen live taking 20s-80s+ per call against a slow-to-respond
+// Plex server, blocking the whole /mixes page (and the header's "Generate"
+// modal on every other page) for over a minute even though these are only
+// used for two optional dropdowns - so both run concurrently against a
+// short deadline and come back empty rather than blocking page render.
+func fetchGenresAndMoods(client *plex.Client, libraryID string) ([]string, []string) {
+	cacheKey := client.ServerURL + "|" + libraryID
+	genreMoodCache.Lock()
+	if e, ok := genreMoodCache.entries[cacheKey]; ok && time.Now().Before(e.expires) {
+		genreMoodCache.Unlock()
+		return e.genres, e.moods
+	}
+	genreMoodCache.Unlock()
+
+	type result struct{ genres, moods []string }
+	ch := make(chan result, 1)
+	go func() {
+		var res result
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() { defer wg.Done(); res.genres = client.GetLibraryGenres(libraryID) }()
+		go func() { defer wg.Done(); res.moods = client.GetLibraryMoods(libraryID) }()
+		wg.Wait()
+		ch <- res
+	}()
+	select {
+	case res := <-ch:
+		genreMoodCache.Lock()
+		genreMoodCache.entries[cacheKey] = genreMoodCacheEntry{genres: res.genres, moods: res.moods, expires: time.Now().Add(genreMoodCacheTTL)}
+		genreMoodCache.Unlock()
+		return res.genres, res.moods
+	case <-time.After(5 * time.Second):
+		return nil, nil
+	}
 }
 
 // quickMixMeta holds the copy shown in the Quick Mix Settings modal (title,
@@ -121,12 +181,11 @@ func (h *MixesHandler) advancedForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := auth.CurrentUser(r)
-	userServer, _ := db.GetUserServer(h.DB, user.ID)
+	userServer, _ := db.GetUserMusicServer(h.DB, user.ID)
 	data := map[string]any{"MixType": mixType, "Title": title, "DefaultName": advancedMixDefaultNames[mixType]}
 	if userServer != nil && userServer.LibraryID.Valid {
 		client := plex.NewClient(userServer.ServerURL, plex.ResolveToken(user.PlexToken, userServer.AccessToken.String), h.PlexAuth.ClientID, "Playlist Lab")
-		data["Genres"] = client.GetLibraryGenres(userServer.LibraryID.String)
-		data["Moods"] = client.GetLibraryMoods(userServer.LibraryID.String)
+		data["Genres"], data["Moods"] = fetchGenresAndMoods(client, userServer.LibraryID.String)
 	}
 	h.Tmpl.RenderPartial(w, "partials/mix_advanced_form.html", data)
 }
@@ -137,6 +196,13 @@ func (h *MixesHandler) advancedForm(w http.ResponseWriter, r *http.Request) {
 // what was left out and why.
 func (h *MixesHandler) customForm(w http.ResponseWriter, r *http.Request) {
 	h.Tmpl.RenderPartial(w, "partials/mix_custom_form.html", nil)
+}
+
+// aiForm renders the "Generate with AI" modal - moved here from the Import
+// page (DESIGN.md; user feedback), posts to the existing /import/ai route
+// unchanged.
+func (h *MixesHandler) aiForm(w http.ResponseWriter, r *http.Request) {
+	h.Tmpl.RenderPartial(w, "partials/mix_ai_form.html", nil)
 }
 
 // generate dispatches on the mixType form field, mirroring each POST
@@ -157,7 +223,7 @@ func (h *MixesHandler) generate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userServer, err := db.GetUserServer(h.DB, user.ID)
+	userServer, err := db.GetUserMusicServer(h.DB, user.ID)
 	if err != nil || userServer == nil || !userServer.LibraryID.Valid {
 		http.Error(w, "No music library selected. Please select a library first.", http.StatusBadRequest)
 		return

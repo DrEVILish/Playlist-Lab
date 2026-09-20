@@ -153,3 +153,34 @@ func TestResolveTargetPlaylistID(t *testing.T) {
 		}
 	})
 }
+
+func TestDiffCollectionMembership(t *testing.T) {
+	current := []plex.Track{{RatingKey: "1"}, {RatingKey: "2"}, {RatingKey: "3"}}
+
+	t.Run("sync mode adds new and removes stale", func(t *testing.T) {
+		toAdd, toRemove := diffCollectionMembership(current, []string{"2", "3", "4"}, "sync")
+		if len(toAdd) != 1 || toAdd[0] != "4" {
+			t.Fatalf("toAdd = %v, want [4]", toAdd)
+		}
+		if len(toRemove) != 1 || toRemove[0] != "1" {
+			t.Fatalf("toRemove = %v, want [1]", toRemove)
+		}
+	})
+
+	t.Run("add_only never removes", func(t *testing.T) {
+		toAdd, toRemove := diffCollectionMembership(current, []string{"4"}, "add_only")
+		if len(toAdd) != 1 || toAdd[0] != "4" {
+			t.Fatalf("toAdd = %v, want [4]", toAdd)
+		}
+		if len(toRemove) != 0 {
+			t.Fatalf("toRemove = %v, want none (add_only)", toRemove)
+		}
+	})
+
+	t.Run("already in sync makes no changes", func(t *testing.T) {
+		toAdd, toRemove := diffCollectionMembership(current, []string{"1", "2", "3"}, "sync")
+		if len(toAdd) != 0 || len(toRemove) != 0 {
+			t.Fatalf("toAdd = %v, toRemove = %v, want both empty", toAdd, toRemove)
+		}
+	})
+}

@@ -115,70 +115,93 @@ func TestAdminConfigCRUD(t *testing.T) {
 	}
 }
 
-func TestUserServerCRUDAndReplace(t *testing.T) {
+func TestUserServerCRUDMultiple(t *testing.T) {
 	sqlDB := newTestDB(t)
 	u, _ := CreateUser(sqlDB, "plex1", "u1", "tok1", "")
 
-	if got, err := GetUserServer(sqlDB, u.ID); err != nil || got != nil {
-		t.Fatalf("expected nil server before any save, got %v err=%v", got, err)
+	if got, err := GetUserServers(sqlDB, u.ID); err != nil || len(got) != 0 {
+		t.Fatalf("expected no servers before any add, got %v err=%v", got, err)
+	}
+	if got, err := GetUserMusicServer(sqlDB, u.ID); err != nil || got != nil {
+		t.Fatalf("expected nil music server before any add, got %v err=%v", got, err)
 	}
 
-	srv, err := SaveUserServer(sqlDB, u.ID, "My Server", "client123", "http://localhost:32400", "lib1", "Music", "")
+	srv1, err := AddUserServer(sqlDB, u.ID, "My Server", "client123", "http://localhost:32400", "lib1", "Music", "", false)
 	if err != nil {
-		t.Fatalf("SaveUserServer: %v", err)
+		t.Fatalf("AddUserServer: %v", err)
 	}
-	if srv.ServerName != "My Server" || srv.LibraryID.String != "lib1" {
-		t.Fatalf("unexpected server: %+v", srv)
+	if srv1.ServerName != "My Server" || srv1.LibraryID.String != "lib1" || !srv1.IsDefault {
+		t.Fatalf("unexpected first server (should auto-default): %+v", srv1)
 	}
 
-	// Saving again should replace, not accumulate rows (mirrors "saveUserServer
-	// should replace existing server").
-	if _, err := SaveUserServer(sqlDB, u.ID, "Server 2", "client2", "http://server2", "", "", ""); err != nil {
-		t.Fatalf("SaveUserServer (replace): %v", err)
+	// Adding a second server (DESIGN.md §11.11 multi-server support) must
+	// accumulate, not replace - a user can link a movies/TV server and a
+	// music server at the same time.
+	srv2, err := AddUserServer(sqlDB, u.ID, "Server 2", "client2", "http://server2", "", "", "", false)
+	if err != nil {
+		t.Fatalf("AddUserServer (second): %v", err)
 	}
-	got, err := GetUserServer(sqlDB, u.ID)
-	if err != nil || got == nil {
-		t.Fatalf("GetUserServer: %v got=%v", err, got)
+	if srv2.IsDefault {
+		t.Fatalf("expected the second server to NOT be default, got %+v", srv2)
 	}
-	if got.ServerName != "Server 2" {
-		t.Fatalf("expected replaced server, got %s", got.ServerName)
+
+	all, err := GetUserServers(sqlDB, u.ID)
+	if err != nil || len(all) != 2 {
+		t.Fatalf("expected 2 servers, got %v err=%v", all, err)
 	}
-	var count int
-	sqlDB.QueryRow("SELECT COUNT(*) FROM user_servers WHERE user_id = ?", u.ID).Scan(&count)
-	if count != 1 {
-		t.Fatalf("expected exactly 1 server row after replace, got %d", count)
+	if all[0].ID != srv1.ID {
+		t.Fatalf("expected the default server to sort first, got %+v", all[0])
+	}
+
+	// GetUserMusicServer resolves to the only server with a library
+	// configured (srv1 - srv2 has none, e.g. a movies/TV-only server).
+	music, err := GetUserMusicServer(sqlDB, u.ID)
+	if err != nil || music == nil || music.ID != srv1.ID {
+		t.Fatalf("expected GetUserMusicServer to resolve srv1: %v got=%v", err, music)
+	}
+
+	// SetDefaultServer promotes srv2.
+	if err := SetDefaultServer(sqlDB, u.ID, srv2.ID); err != nil {
+		t.Fatalf("SetDefaultServer: %v", err)
+	}
+	all, _ = GetUserServers(sqlDB, u.ID)
+	if all[0].ID != srv2.ID || !all[0].IsDefault {
+		t.Fatalf("expected srv2 to be the new default, got %+v", all[0])
+	}
+	if all[1].IsDefault {
+		t.Fatalf("expected srv1 to no longer be default, got %+v", all[1])
+	}
+
+	// RemoveUserServer of the current default promotes the remaining one.
+	if err := RemoveUserServer(sqlDB, u.ID, srv2.ID); err != nil {
+		t.Fatalf("RemoveUserServer: %v", err)
+	}
+	all, _ = GetUserServers(sqlDB, u.ID)
+	if len(all) != 1 || all[0].ID != srv1.ID || !all[0].IsDefault {
+		t.Fatalf("expected only srv1 left and promoted to default, got %+v", all)
 	}
 }
 
-// TestSaveUserServerRollbackOnFailedInsert matches database.test.ts's
+// TestAddUserServerRollbackOnFailedInsert matches database.test.ts's
 // "saveUserServer should leave the previous server intact if the insert
-// fails" - the DELETE+INSERT must be atomic.
-func TestSaveUserServerRollbackOnFailedInsert(t *testing.T) {
+// fails" - a failed insert (FK violation on a nonexistent user) must not
+// leave partial state or touch an unrelated user's existing row.
+func TestAddUserServerRollbackOnFailedInsert(t *testing.T) {
 	sqlDB := newTestDB(t)
 	u, _ := CreateUser(sqlDB, "plex1", "u1", "tok1", "")
 
-	if _, err := SaveUserServer(sqlDB, u.ID, "Server 1", "client1", "http://server1", "", "", ""); err != nil {
-		t.Fatalf("SaveUserServer: %v", err)
+	if _, err := AddUserServer(sqlDB, u.ID, "Server 1", "client1", "http://server1", "", "", "", false); err != nil {
+		t.Fatalf("AddUserServer: %v", err)
 	}
 
-	// server_name is NOT NULL; passing a userID that doesn't exist won't fail
-	// (no FK on user_servers.user_id? there is one) - instead force failure via
-	// FK violation: use a userID that has no matching users row.
 	nonexistentUser := u.ID + 999
-	if _, err := SaveUserServer(sqlDB, nonexistentUser, "Server 2", "client2", "http://server2", "", "", ""); err == nil {
-		t.Fatal("expected SaveUserServer to fail for nonexistent user_id (FK violation)")
+	if _, err := AddUserServer(sqlDB, nonexistentUser, "Server 2", "client2", "http://server2", "", "", "", false); err == nil {
+		t.Fatal("expected AddUserServer to fail for nonexistent user_id (FK violation)")
 	}
 
-	// Original user's server must still be present - the failed insert's
-	// DELETE (which only affected nonexistentUser's rows, i.e. none) must not
-	// have touched user 1's row either way, and the transaction must not have
-	// left partial state.
-	got, err := GetUserServer(sqlDB, u.ID)
-	if err != nil || got == nil {
-		t.Fatalf("expected original server intact: %v got=%v", err, got)
-	}
-	if got.ServerName != "Server 1" {
-		t.Fatalf("expected original server unchanged, got %s", got.ServerName)
+	got, err := GetUserServers(sqlDB, u.ID)
+	if err != nil || len(got) != 1 || got[0].ServerName != "Server 1" {
+		t.Fatalf("expected original server unchanged: %v got=%v", err, got)
 	}
 }
 
@@ -187,23 +210,28 @@ func TestCopyServerConfig(t *testing.T) {
 	u1, _ := CreateUser(sqlDB, "plex1", "u1", "tok1", "")
 	u2, _ := CreateUser(sqlDB, "plex2", "u2", "tok2", "")
 
-	if _, err := SaveUserServer(sqlDB, u1.ID, "Shared Server", "client1", "http://server1", "lib1", "Music", "secret-token"); err != nil {
-		t.Fatalf("SaveUserServer: %v", err)
+	if _, err := AddUserServer(sqlDB, u1.ID, "Shared Server", "client1", "http://server1", "lib1", "Music", "secret-token", false); err != nil {
+		t.Fatalf("AddUserServer: %v", err)
+	}
+	// A second linked server - CopyServerConfig should copy both, not just
+	// the default (DESIGN.md §11.11).
+	if _, err := AddUserServer(sqlDB, u1.ID, "Movies Server", "client2", "http://server2", "", "", "", false); err != nil {
+		t.Fatalf("AddUserServer (second): %v", err)
 	}
 
 	if err := CopyServerConfig(sqlDB, u1.ID, u2.ID); err != nil {
 		t.Fatalf("CopyServerConfig: %v", err)
 	}
 
-	got, err := GetUserServer(sqlDB, u2.ID)
-	if err != nil || got == nil {
-		t.Fatalf("GetUserServer for u2: %v got=%v", err, got)
+	got, err := GetUserServers(sqlDB, u2.ID)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("expected both servers copied to u2: %v got=%v", err, got)
 	}
-	if got.ServerName != "Shared Server" || got.LibraryID.String != "lib1" {
-		t.Fatalf("unexpected copied server: %+v", got)
+	if got[0].ServerName != "Shared Server" || got[0].LibraryID.String != "lib1" || !got[0].IsDefault {
+		t.Fatalf("unexpected copied default server: %+v", got[0])
 	}
 	// access_token deliberately not copied.
-	if got.AccessToken.Valid {
-		t.Fatalf("expected access_token NOT to be copied, got %v", got.AccessToken)
+	if got[0].AccessToken.Valid {
+		t.Fatalf("expected access_token NOT to be copied, got %v", got[0].AccessToken)
 	}
 }

@@ -3,7 +3,9 @@
      #plex-home-playlists. */}}
 {{define "partials/plex_home_users.html"}}
 <div id="plex-home-users">
-  {{if not .Users}}
+  {{if .Error}}
+    <p class="error-message">{{.Error}}</p>
+  {{else if not .Users}}
     <p class="settings-hint">No other Plex Home users found on this server.</p>
   {{else}}
     <div class="plex-home-user-list">

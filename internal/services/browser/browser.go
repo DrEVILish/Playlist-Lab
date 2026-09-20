@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 )
 
@@ -90,6 +91,21 @@ func Scrape(ctx context.Context, label string, timeout time.Duration, actions ..
 		return fmt.Errorf("%s failed: %w", label, err)
 	}
 	return nil
+}
+
+// AcceptLanguage returns a Scrape action that pins the tab's Accept-Language
+// header, so a scraped page's title/metadata doesn't vary with wherever this
+// server happens to run - opt-in per call site (prepend it to Scrape's own
+// actions) rather than a default for every scraper, since only some callers
+// (Collections' IMDb/Letterboxd list import, DESIGN.md §11.11 - "imported
+// and processed in English only") need this; other scrapers are unaffected.
+func AcceptLanguage(lang string) chromedp.Action {
+	return chromedp.ActionFunc(func(ctx context.Context) error {
+		if err := network.Enable().Do(ctx); err != nil {
+			return err
+		}
+		return network.SetExtraHTTPHeaders(network.Headers{"Accept-Language": lang}).Do(ctx)
+	})
 }
 
 // AssertTracksScraped ports assertTracksScraped: a page whose selectors

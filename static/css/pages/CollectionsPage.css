@@ -1,0 +1,581 @@
+/* Collections page (DESIGN.md §11.11) - reuses the app-wide DataTable
+   (sticky header, row-actions, icon-btn - components/DataTable.css, linked
+   from collections.html same as home.html/missing.html) and .advanced-mix-*
+   modal chrome already loaded globally; this file only adds what's
+   specific to this page's own cells and form fields. No new color tokens -
+   the existing --primary-color/--accent-cyan Sci-Fi Futuristic palette
+   applies as-is. */
+
+/* Mirrors PlaylistsPage.css's .playlists-table-container - the shared
+   .data-table-container class (collection_list.html) has no rule of its
+   own, each page owns its container's scroll behavior. */
+.collections-table-container {
+  overflow-x: auto;
+}
+
+.collection-name-cell,
+.col-name {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-name-cell {
+  font-weight: 500;
+}
+
+/* "Wasted space" fix, ported from PlaylistsPage.css's identical rule:
+   auto table-layout otherwise distributes the viewport's full leftover
+   width evenly-ish across every column instead of just the name column
+   absorbing it. */
+.collections-table th:not(.col-name),
+.collections-table td:not(.collection-name-cell) {
+  width: 1%;
+  white-space: nowrap;
+}
+
+/* Sortable column headers (Name, Missing, Last Run, Next Run, Last Updated,
+   Date Added) - mirrors PlaylistsPage.css's own .playlists-table .sort-arrow
+   (same small duplication precedent as .badge-button above: page-specific
+   files here don't share table-row rules with each other). */
+.collections-table .sort-arrow {
+  margin-left: 0.25rem;
+  opacity: 0.6;
+}
+
+.collections-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.collections-table th.sortable:hover {
+  color: var(--primary-color);
+}
+
+.collections-table th a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.collections-table th.sortable:hover a {
+  color: var(--primary-color);
+}
+
+/* Builder filter's provider options sit below a divider from the coarser
+   Smart/Manual/External List/Chart choices above them (collection_list.html) -
+   a plain hairline, not a new component. */
+.th-filter-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0.375rem 0;
+}
+
+.th-filter-search {
+  margin-bottom: 0.375rem;
+}
+
+/* Missing column's expando row (collection_list.html) - identical
+   mechanics to PlaylistsPage.css's .missing-row/.is-open, duplicated here
+   rather than shared since neither page's CSS is loaded on the other. */
+.missing-row {
+  display: none;
+}
+.missing-row.is-open {
+  display: table-row;
+}
+.missing-row > td {
+  padding: 0;
+  background: var(--surface-alt, var(--surface));
+}
+
+/* Row-click item preview (collection_list.html/toggleCollectionPreview,
+   collections.html) - a managed row's whole background is a click target
+   the same way PlaylistsPage.css's .playlists-table tbody tr is; unmanaged
+   rows have no preview wired up, so they keep the default cursor instead
+   of implying they're clickable. */
+.collections-table tbody tr:not(.collection-row--unmanaged) {
+  cursor: pointer;
+}
+
+/* Open/closed indicator (user feedback: no way to tell a row is expandable,
+   or which one is currently open) - a small caret in the Name cell, same
+   "chevron flips 180deg when open" language as the Missing column's own
+   .expando-caret next to it and the mobile card's .playlist-card-chevron,
+   just driven by toggleCollectionPreview adding/removing .is-open on the
+   row itself (collections.html) rather than a checkbox-hack, since a table
+   row has no native checked state to hook a :has() rule off of the way the
+   card list does. */
+.collection-preview-toggle {
+  color: var(--text-secondary);
+  opacity: 0.7;
+  margin-left: 0.375rem;
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+  display: inline-block;
+  vertical-align: -0.1em;
+}
+
+tr.is-open .collection-preview-toggle {
+  transform: rotate(180deg);
+}
+
+/* The expando row itself: padded further than a plain .missing-row (left
+   indent matches DataTable.css's own row padding rhythm) and visually
+   distinct from the page background without competing with it - .surface
+   is the same "raised panel" token every card/input in this app already
+   uses, not a one-off color invented for this. Bounded + scrollable so a
+   193-item collection doesn't balloon the page to match; the nested
+   .data-table's own sticky thead (unmodified, unlike missing_list.html's
+   .missing-table which turns it off) then sticks to *this* box's scroll,
+   not the page's, which is exactly what a bounded sub-list wants. */
+.collection-preview-scope {
+  margin: 0.5rem 0.75rem 0.75rem 3rem;
+  padding: 0.25rem 0.75rem;
+  cursor: default;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.collection-preview-empty,
+.collection-preview-count {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  padding: 0.5rem 0;
+}
+
+.collection-preview-table {
+  width: 100%;
+  font-size: 0.8125rem;
+}
+
+.collection-preview-rank {
+  width: 2.5rem;
+  text-align: center;
+}
+
+/* A real Plex collection with no Playlist Lab row (collections.go's
+   unmanagedCollectionViews) - dimmed so managed rows still read as the
+   primary content, not because it's less real. */
+.collection-row--unmanaged {
+  opacity: 0.7;
+}
+
+.collection-builder-badge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  text-decoration: none; /* badge can be an <a> (external_list's source link) */
+}
+
+a.collection-builder-badge:hover {
+  border-color: var(--accent-cyan);
+}
+
+.collection-builder-badge--smart {
+  color: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+}
+
+.collection-builder-badge--external_list {
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+/* Same shape as PlaylistsPage.css/EditorPage.css's .badge-button (no shared
+   component file for it yet - this is the third copy of an established
+   small duplication, not a new pattern) for the Schedule column's
+   frequency/"off" pill. */
+.badge-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.badge-button:hover {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
+}
+
+.collection-rules-summary {
+  color: var(--text-secondary);
+  font-size: 0.85em;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Each rule reads as its own condition module (the app's existing .card
+   HUD-bracket treatment, base.css - reused as-is, not a new component)
+   rather than a bare table-like row, so a list of several rules stays
+   scannable as distinct units instead of blurring into one strip. */
+.collection-rule-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.625rem;
+}
+
+.collection-rule-row.card:hover {
+  box-shadow: none; /* .card's default hover shadow reads as "clickable panel" - this row's only interactive parts are its own select/input/button, not the row itself */
+}
+
+.collection-rule-row .form-select {
+  flex: 1;
+}
+
+.collection-rule-row .form-input {
+  flex: 1;
+}
+
+.collection-manual-items-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.collection-manual-items-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+}
+
+/* Not loaded elsewhere on this page (it only exists today in two other
+   modals' own CSS files, neither linked here) - every hint line in the
+   Collection/Dynamic Collection forms was rendering as unstyled default
+   paragraph text without this. Same rule as SaveTemplateModal.css/
+   EditTemplateModal.css's copy. */
+.field-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+/* Pulls a hint immediately under a section heading closer, rather than
+   leaving the heading's own bottom margin plus this hint's top margin
+   both applying. */
+.field-hint--tight {
+  margin-top: -0.5rem;
+}
+
+/* Poster URL field + "Set Poster" button on one row - same
+   .update-mode-group grid this form's Sync Mode/Builder Type cards use,
+   just two unequal columns instead of equal-width cards. */
+.collection-poster-row {
+  grid-template-columns: 1fr auto;
+}
+
+/* Browse Presets gallery (collection_presets.go/collection_presets.html) -
+   each preset reuses the app's existing .card HUD-bracket component (base.css),
+   same reasoning as the Collection rule-row modules above: a real, already-
+   vetted component, not a new "preset card" pattern invented for this one
+   screen. */
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.preset-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.875rem;
+}
+
+.preset-card-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+}
+
+.preset-card-desc {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.preset-card-source {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.preset-card > .btn {
+  margin-top: 0.25rem;
+  align-self: flex-start;
+}
+
+.preset-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.preset-year-input {
+  width: 5.5rem;
+}
+
+/* Groups a modal's fields by decision weight (what it is / what it
+   contains / how it behaves / danger zone) instead of one undifferentiated
+   list of .form-groups - a divider plus a small heading, same treatment
+   .collection-danger-zone used alone before this generalized it. */
+.collection-form-section {
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.collection-form-section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* Read-only facts fixed at creation (Library, Builder/Facet Type) - a
+   compact chip readout instead of a form field with a caption underneath,
+   so it's immediately legible as "this can't be changed here" rather than
+   looking like an inert, oddly-styled input. Reuses the existing
+   collection-builder-badge chip rather than a new pill component. */
+.collection-spec-plate {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+/* No dedicated checkbox+label component is loaded globally (settings-toggle
+   lives only in SettingsPage.css) - this is the same shape, kept local
+   rather than pulling that whole stylesheet in for one class. */
+.form-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.form-check input[type="checkbox"] {
+  accent-color: var(--primary-color);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+/* CSS-only builder-type toggle, same :has() technique already used
+   elsewhere in this app (e.g. cross_import_review.html, setup.html) rather
+   than JS for a purely presentational show/hide. */
+form:has(input[name="builderType"][value="manual"]:checked) .collection-smart-fields {
+  display: none;
+}
+
+/* Dynamic Collections' All/Include/Exclude scope picker (dynamic_collection_
+   form.html): same CSS-only reveal idiom as builderType above - exactly one
+   of the two value lists is ever relevant, so exactly one is ever shown,
+   instead of two always-visible textareas that silently ignore each other
+   depending on which has content. */
+form:has(input[name="matchScope"][value="all"]:checked) .dynamic-scope-include,
+form:has(input[name="matchScope"][value="all"]:checked) .dynamic-scope-exclude {
+  display: none;
+}
+form:has(input[name="matchScope"][value="include"]:checked) .dynamic-scope-exclude {
+  display: none;
+}
+form:has(input[name="matchScope"][value="exclude"]:checked) .dynamic-scope-include {
+  display: none;
+}
+
+/* Mobile card list + search + sortbar (collection_list.html), mirroring
+   PlaylistsPage.css's .playlists-cards/.playlists-mobile-search/
+   .playlists-sortbar rule-for-rule - the desktop table (with its per-column
+   .th-filter popovers) is hidden below 768px, so this is the only way to
+   search/sort/filter Collections on a phone. */
+.collections-mobile-search {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.collections-mobile-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.collections-sortbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.collections-sortbar select,
+.collections-sortbar a {
+  padding: 0.375rem 0.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.collections-sortbar select { flex: 1 1 auto; min-width: 0; }
+.collections-sortbar a {
+  cursor: pointer;
+  width: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.collections-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8125rem;
+}
+
+.collection-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.collection-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.1875rem 0.625rem;
+  min-height: 36px;
+}
+
+.collection-card-header input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.collection-card-header-label {
+  display: contents;
+  cursor: pointer;
+}
+
+.collection-card-title {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.collection-card-title .collection-name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-card-summary {
+  font-size: 0.6875rem;
+  line-height: 1.25;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-card-chevron {
+  color: var(--text-secondary);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.collection-card-toggle:checked ~ .collection-card-header .collection-card-chevron {
+  transform: rotate(180deg);
+}
+
+.collection-card-details {
+  padding: 0 0.75rem 0.75rem;
+  border-top: 1px solid var(--border);
+  display: none;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.625rem;
+}
+
+.collection-card-toggle:checked ~ .collection-card-details {
+  display: flex;
+}
+
+.collection-card-detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.collection-card-detail-label {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.collection-card-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--border);
+}
+
+/* Table vs. card list: exactly one of these renders at a time, same 768px
+   breakpoint every other mobile/desktop split in this app uses. */
+@media (max-width: 768px) {
+  .collections-table-container { display: none; }
+}
+@media (min-width: 769px) {
+  .collections-mobile-search, .collections-sortbar, .collections-cards { display: none; }
+}

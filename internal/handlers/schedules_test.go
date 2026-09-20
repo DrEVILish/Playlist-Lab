@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/drevilish/playlist-lab/internal/db"
+	"github.com/drevilish/playlist-lab/internal/services/notifications"
 )
 
 // TestConfigJSON_DefaultsUpdateModeToReplace ports schedule-update-modes.
@@ -47,7 +48,7 @@ func TestScheduleCreate_RequiresPlaylistFrequencyAndStartDate(t *testing.T) {
 	user := newTestUser(t, sqlDB)
 	playlist, _ := db.CreatePlaylistRow(sqlDB, user.ID, "rk-1", "My Playlist", "spotify", "")
 
-	h := &SchedulesHandler{DB: sqlDB, Tmpl: nopTemplates()}
+	h := &SchedulesHandler{DB: sqlDB, Tmpl: nopTemplates(), Notifications: notifications.NewStore()}
 	router := testRouter(sqlDB, "POST", "/schedules", h.create)
 
 	cases := []struct {
@@ -73,7 +74,7 @@ func TestScheduleCreate_Succeeds(t *testing.T) {
 	user := newTestUser(t, sqlDB)
 	playlist, _ := db.CreatePlaylistRow(sqlDB, user.ID, "rk-1", "My Playlist", "spotify", "")
 
-	h := &SchedulesHandler{DB: sqlDB, Tmpl: nopTemplates()}
+	h := &SchedulesHandler{DB: sqlDB, Tmpl: nopTemplates(), Notifications: notifications.NewStore()}
 	router := testRouter(sqlDB, "POST", "/schedules", h.create)
 
 	form := url.Values{"playlistId": {itoa(playlist.ID)}, "frequency": {"daily"}, "startDate": {"2020-01-01"}, "updateMode": {"accumulate"}}
@@ -100,12 +101,12 @@ func TestScheduleUpdateDeleteRunOne_ForbiddenForNonOwner(t *testing.T) {
 	owner := newTestUser(t, sqlDB)
 	other, _ := db.CreateUser(sqlDB, "plex-other-sched", "other", "tok", "")
 	playlist, _ := db.CreatePlaylistRow(sqlDB, owner.ID, "rk-1", "My Playlist", "spotify", "")
-	sched, err := db.CreateSchedule(sqlDB, owner.ID, playlist.ID, "playlist_refresh", "daily", "2020-01-01", `{"updateMode":"replace"}`)
+	sched, err := db.CreateSchedule(sqlDB, owner.ID, playlist.ID, 0, "playlist_refresh", "daily", "2020-01-01", `{"updateMode":"replace"}`)
 	if err != nil {
 		t.Fatalf("CreateSchedule: %v", err)
 	}
 
-	h := &SchedulesHandler{DB: sqlDB, Tmpl: nopTemplates()}
+	h := &SchedulesHandler{DB: sqlDB, Tmpl: nopTemplates(), Notifications: notifications.NewStore()}
 
 	t.Run("update", func(t *testing.T) {
 		router := testRouter(sqlDB, "PUT", "/schedules/{id}", h.update)

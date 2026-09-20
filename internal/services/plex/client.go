@@ -133,6 +133,39 @@ type Track struct {
 	Style         []Tag          `json:"Style"`
 	Collection    []Tag          `json:"Collection"`
 	MusicAnalysis *MusicAnalysis `json:"musicAnalysis,omitempty"`
+
+	// Movie/show fields, added for library-wide Collection filtering
+	// (librarysearch.go, DESIGN.md §11.11) - unused by the track-only paths
+	// above, same as the discovery.go block below it.
+	Studio        string `json:"studio"` // movie studio, or show network (Plex has no separate network field)
+	ContentRating string `json:"contentRating"`
+	Role          []Tag  `json:"Role"`     // cast/actor tags, same shape as Genre/Mood/Style
+	Director      []Tag  `json:"Director"` // director credit tags, same shape as Role
+	Writer        []Tag  `json:"Writer"`   // writer credit tags, same shape as Role
+
+	// PrimaryGuid is Plex's own internal identity guid (e.g.
+	// "plex://movie/..."), always present as a plain string - declared
+	// explicitly so Go's json decoder doesn't case-fold the "guid" key onto
+	// the Guid field below when an item's response has no "Guid" array at
+	// all (confirmed live: some library items - e.g. extras/clips with no
+	// external agent match - omit "Guid" entirely even with
+	// includeGuids=1, and without this field encoding/json's case-
+	// insensitive fallback matching tried to unmarshal that item's plain
+	// "guid" string into the []ExternalGuid slice below and errored).
+	PrimaryGuid string `json:"guid"`
+
+	// Guid carries an item's external agent ids (tmdb://, imdb://, tvdb://) -
+	// Plex omits this by default and only includes it when fetched with
+	// includeGuids=1 (see GetLibraryItemsWithGuids). Confirmed live that
+	// Plex's own guid= search filter only matches its internal
+	// plex://... guid, not these external ids, so Collections' external-
+	// list builder (DESIGN.md §11.11) matches against this field
+	// client-side instead.
+	Guid []ExternalGuid `json:"Guid,omitempty"`
+}
+
+type ExternalGuid struct {
+	ID string `json:"id"`
 }
 
 // Tag is Plex's shape for a Genre/Mood/Style/Collection tag entry.
@@ -454,32 +487,48 @@ func (c *Client) RenamePlaylist(playlistID, title string) error {
 	return err
 }
 
-// AddToPlaylist adds tracks in batches of 50, matching python-plexapi's
-// approach of a single comma-joined ratingKeys URI per batch rather than
-// one request per track.
-func (c *Client) AddToPlaylist(playlistID string, trackURIs []string) error {
+// batchRatingKeyURIs groups itemURIs into batches of up to 50, each
+// collapsed into a single comma-joined-ratingKeys URI sharing one server://
+// prefix - matching python-plexapi's approach of one request per batch
+// rather than one per item. Shared by AddToPlaylist and the Collection
+// mutations in collections.go.
+func batchRatingKeyURIs(itemURIs []string) ([]string, error) {
 	const batchSize = 50
-	if len(trackURIs) == 0 {
-		return nil
+	if len(itemURIs) == 0 {
+		return nil, nil
 	}
-	prefixIdx := strings.Index(trackURIs[0], "/library/metadata/")
+	prefixIdx := strings.Index(itemURIs[0], "/library/metadata/")
 	if prefixIdx == -1 {
-		return fmt.Errorf("invalid track URI: %s", trackURIs[0])
+		return nil, fmt.Errorf("invalid item URI: %s", itemURIs[0])
 	}
-	uriPrefix := trackURIs[0][:prefixIdx]
+	uriPrefix := itemURIs[0][:prefixIdx]
 
-	for i := 0; i < len(trackURIs); i += batchSize {
-		end := min(i+batchSize, len(trackURIs))
-		batch := trackURIs[i:end]
+	var batches []string
+	for i := 0; i < len(itemURIs); i += batchSize {
+		end := min(i+batchSize, len(itemURIs))
+		batch := itemURIs[i:end]
 		ratingKeys := make([]string, len(batch))
 		for j, uri := range batch {
 			parts := strings.SplitN(uri, "/library/metadata/", 2)
 			if len(parts) != 2 {
-				return fmt.Errorf("invalid track URI: %s", uri)
+				return nil, fmt.Errorf("invalid item URI: %s", uri)
 			}
 			ratingKeys[j] = parts[1]
 		}
-		batchURI := uriPrefix + "/library/metadata/" + strings.Join(ratingKeys, ",")
+		batches = append(batches, uriPrefix+"/library/metadata/"+strings.Join(ratingKeys, ","))
+	}
+	return batches, nil
+}
+
+// AddToPlaylist adds tracks in batches of 50, matching python-plexapi's
+// approach of a single comma-joined ratingKeys URI per batch rather than
+// one request per track.
+func (c *Client) AddToPlaylist(playlistID string, trackURIs []string) error {
+	batches, err := batchRatingKeyURIs(trackURIs)
+	if err != nil {
+		return err
+	}
+	for _, batchURI := range batches {
 		p := "/playlists/" + url.PathEscape(playlistID) + "/items?uri=" + url.QueryEscape(batchURI)
 		if _, _, err := c.mutate(http.MethodPut, p); err != nil {
 			return err

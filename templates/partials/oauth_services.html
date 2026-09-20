@@ -13,7 +13,26 @@
     </div>
     <div class="settings-service-actions">
       {{if .Connected}}
-      <button class="btn btn-secondary btn-small" hx-delete="/cross-import/oauth/{{.ID}}" hx-target="closest .settings-services-list" hx-swap="outerHTML" hx-confirm="Disconnect {{.Name}}?" hx-on::after:request="if(event.detail.ctx.response.status<400) window.location.reload()">Disconnect</button>
+      <!-- Destructive action confirms through the shared .modal-overlay/
+           .modal-content pattern (DESIGN.md §8.11/§11.4) instead of the
+           native hx-confirm() dialog this used to use. Checkbox-hack modal
+           (no #modal-root round trip needed) - the "delete-dialog-checkbox"
+           class piggybacks on layout.html's existing Escape handler for
+           free. This partial is also used by the Cross-Import page
+           (cross_import.html), which gets the same upgrade since it's the
+           same shared partial. -->
+      <button type="button" class="btn btn-secondary btn-small" onclick="document.getElementById('confirm-disconnect-{{.ID}}').checked=true">Disconnect</button>
+      <input type="checkbox" id="confirm-disconnect-{{.ID}}" class="delete-dialog-checkbox settings-confirm-toggle">
+      <div class="modal-overlay settings-confirm-overlay" onclick="if(event.target===this) document.getElementById('confirm-disconnect-{{.ID}}').checked=false">
+        <div class="modal-content">
+          <h3>Disconnect {{.Name}}?</h3>
+          <p>You'll need to re-authenticate to use {{.Name}} in Cross Import again.</p>
+          <div class="settings-actions">
+            <button type="button" class="btn btn-secondary" onclick="document.getElementById('confirm-disconnect-{{.ID}}').checked=false">Cancel</button>
+            <button type="button" class="btn btn-primary" hx-delete="/cross-import/oauth/{{.ID}}" hx-target="closest .settings-services-list" hx-swap="outerHTML" hx-on::after:request="if(event.detail.xhr.status<400) window.location.reload()">Disconnect</button>
+          </div>
+        </div>
+      </div>
       {{else}}
       <a class="btn btn-primary btn-small" href="/cross-import/oauth/{{.ID}}">Connect</a>
       {{end}}

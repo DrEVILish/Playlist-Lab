@@ -68,7 +68,7 @@ type tidalAuth struct {
 // getAuth mirrors getToken() in tidal-target.ts: returns a live access
 // token, refreshing via the stored refresh token if the current one
 // expires within 60s.
-func (t *Target) getAuth(userID int64) (*tidalAuth, error) {
+func (t *Target) getAuth(ctx context.Context, userID int64) (*tidalAuth, error) {
 	conn, err := db.GetOAuthConnection(t.DB, userID, serviceName)
 	if err != nil || conn == nil {
 		return nil, err
@@ -95,7 +95,7 @@ func (t *Target) getAuth(userID int64) (*tidalAuth, error) {
 	}
 
 	form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refreshToken}}
-	tokens, err := t.requestToken(form)
+	tokens, err := t.requestToken(ctx, form)
 	if err != nil {
 		return nil, nil
 	}
@@ -127,8 +127,8 @@ type tokenResponse struct {
 	} `json:"user"`
 }
 
-func (t *Target) requestToken(form url.Values) (*tokenResponse, error) {
-	req, err := http.NewRequest(http.MethodPost, "https://auth.tidal.com/v1/oauth2/token", strings.NewReader(form.Encode()))
+func (t *Target) requestToken(ctx context.Context, form url.Values) (*tokenResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://auth.tidal.com/v1/oauth2/token", strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, err
 	}
@@ -182,9 +182,9 @@ func (tt tidalTrack) artistName() string {
 	return ""
 }
 
-func (t *Target) search(token, query string, limit int) ([]tidalTrack, error) {
+func (t *Target) search(ctx context.Context, token, query string, limit int) ([]tidalTrack, error) {
 	u := "https://api.tidal.com/v1/search/tracks?query=" + url.QueryEscape(query) + "&limit=" + strconv.Itoa(limit) + "&countryCode=US"
-	req, err := http.NewRequest(http.MethodGet, u, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -215,14 +215,14 @@ func toMatchResult(source adapters.TrackInfo, item tidalTrack, score float64, ma
 }
 
 func (t *Target) SearchCatalog(ctx context.Context, query string, userID int64, allowLive, allowStatic bool) ([]adapters.MatchResult, error) {
-	auth, err := t.getAuth(userID)
+	auth, err := t.getAuth(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 	if auth == nil {
 		return nil, ErrNotConnected
 	}
-	items, err := t.search(auth.Token, query, 10)
+	items, err := t.search(ctx, auth.Token, query, 10)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +235,7 @@ func (t *Target) SearchCatalog(ctx context.Context, query string, userID int64, 
 }
 
 func (t *Target) MatchTracks(ctx context.Context, tracks []adapters.TrackInfo, cfg adapters.TargetConfig, userID int64, progress func(current, total int), isCancelled func() bool) ([]adapters.MatchResult, error) {
-	auth, err := t.getAuth(userID)
+	auth, err := t.getAuth(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +251,7 @@ func (t *Target) MatchTracks(ctx context.Context, tracks []adapters.TrackInfo, c
 		query := strings.TrimSpace(track.Title + " " + track.Artist)
 		result := adapters.MatchResult{SourceTrack: track}
 
-		items, err := t.search(auth.Token, query, 5)
+		items, err := t.search(ctx, auth.Token, query, 5)
 		if err != nil {
 			slog.Warn("tidal search failed for track", "track", track, "error", err)
 		} else if len(items) > 0 {
@@ -273,7 +273,7 @@ func (t *Target) MatchTracks(ctx context.Context, tracks []adapters.TrackInfo, c
 }
 
 func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adapters.MatchResult, cfg adapters.TargetConfig, userID int64) (string, string, int, error) {
-	auth, err := t.getAuth(userID)
+	auth, err := t.getAuth(ctx, userID)
 	if err != nil {
 		return "", "", 0, err
 	}
@@ -282,7 +282,7 @@ func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adap
 	}
 
 	body, _ := json.Marshal(map[string]string{"title": name, "description": ""})
-	req, _ := http.NewRequest(http.MethodPost, "https://api.tidal.com/v1/users/"+url.PathEscape(auth.UserID)+"/playlists", strings.NewReader(string(body)))
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.tidal.com/v1/users/"+url.PathEscape(auth.UserID)+"/playlists", strings.NewReader(string(body)))
 	req.Header.Set("Authorization", "Bearer "+auth.Token)
 	req.Header.Set("X-Tidal-Token", t.ClientID)
 	req.Header.Set("Content-Type", "application/json")
@@ -311,7 +311,7 @@ func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adap
 	}
 	if len(trackIDs) > 0 {
 		addBody, _ := json.Marshal(map[string]any{"trackIds": trackIDs, "toIndex": 0})
-		addReq, _ := http.NewRequest(http.MethodPost, "https://api.tidal.com/v1/playlists/"+created.UUID+"/items", strings.NewReader(string(addBody)))
+		addReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.tidal.com/v1/playlists/"+created.UUID+"/items", strings.NewReader(string(addBody)))
 		addReq.Header.Set("Authorization", "Bearer "+auth.Token)
 		addReq.Header.Set("X-Tidal-Token", t.ClientID)
 		addReq.Header.Set("Content-Type", "application/json")
@@ -344,7 +344,7 @@ func (t *Target) HandleOAuthCallback(ctx context.Context, code string, userID in
 	}
 
 	form := url.Values{"grant_type": {"password"}, "username": {username}, "password": {password}, "scope": {"r_usr w_usr w_sub"}}
-	tokens, err := t.requestToken(form)
+	tokens, err := t.requestToken(ctx, form)
 	if err != nil {
 		return err
 	}
@@ -366,7 +366,7 @@ func (t *Target) HandleOAuthCallback(ctx context.Context, code string, userID in
 }
 
 func (t *Target) HasValidConnection(ctx context.Context, userID int64) (bool, error) {
-	auth, err := t.getAuth(userID)
+	auth, err := t.getAuth(ctx, userID)
 	return auth != nil, err
 }
 

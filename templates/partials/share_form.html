@@ -1,13 +1,22 @@
 {{/* "Share with another Playlist Lab user" modal, ported from ShareModal.tsx.
      Same self-contained overlay/close pattern as schedule_form.html, reusing
      AdvancedMixModal.css's generic dark-modal chrome. Rendered via
-     GET /playlists/{plexId}/share into #modal-root. */}}
+     GET /playlists/{plexId}/share into #modal-root.
+
+     TODO (DESIGN.md §11.9): this only supports inviting a specific in-
+     instance user (the .share() handler in playlists.go copies the
+     playlist straight into the target user's Plex account) - it has no
+     link-sharing mode. Link sharing needs a real shareable-link/token
+     model (generate + store a token, an unauthenticated accept route,
+     revocation) that doesn't exist yet; that's backend work beyond a
+     template/CSS restyle, so it's left as a gap rather than bolted on
+     here. No QR code needed either way, per §11.9. */}}
 {{define "partials/share_form.html"}}
 <div class="advanced-mix-overlay">
-  <div class="advanced-mix-modal" style="max-width:420px">
+  <div class="advanced-mix-modal">
     <div class="advanced-mix-header">
       <h2 class="advanced-mix-title">Share Playlist</h2>
-      <button type="button" class="advanced-mix-close" onclick="document.getElementById('modal-root').innerHTML=''" aria-label="Close">&times;</button>
+      <button type="button" class="advanced-mix-close" onclick="closeTopModal()" aria-label="Close">&times;</button>
     </div>
     <div class="advanced-mix-content">
       {{if not .Targets}}

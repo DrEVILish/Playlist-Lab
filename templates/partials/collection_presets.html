@@ -1,0 +1,68 @@
+{{/* Browse Presets gallery (collection_presets.go) - a categorized,
+     one-click starting point for New Collection / New Dynamic Collection
+     Set, built from a real survey of Kometa's own Community-Configs repo
+     rather than invented examples (see that file's package doc for exactly
+     which config each entry traces back to). Reuses the same modal chrome
+     (advanced-mix-* and collection-form-section) as the two create modals -
+     clicking a preset swaps this modal for whichever of the two create
+     forms it targets, pre-filled. */}}
+{{define "partials/collection_presets.html"}}
+<div class="advanced-mix-overlay">
+  <div class="advanced-mix-modal">
+    <div class="advanced-mix-header">
+      <h2 class="advanced-mix-title">Browse Presets</h2>
+      <button type="button" class="advanced-mix-close" onclick="closeTopModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="advanced-mix-content">
+      <div class="collection-form-section" style="border-top:none;padding-top:0">
+        <h3 class="collection-form-section-title">Search</h3>
+        <p class="field-hint field-hint--tight">Not in the list below? Search Trakt's public lists or TMDb's franchise collections directly.</p>
+        <div class="update-mode-group" style="grid-template-columns:auto 1fr">
+          <select id="preset-search-source" class="form-select" name="source"
+            hx-get="/collections/presets/search" hx-include="#preset-search-query" hx-trigger="change" hx-target="#preset-search-results" hx-swap="innerHTML">
+            <option value="trakt-list">Trakt Lists</option>
+            <option value="tmdb-collection">TMDb Franchises</option>
+          </select>
+          <input id="preset-search-query" type="search" name="q" class="form-input" placeholder="e.g. Best Picture, Harry Potter..."
+            hx-get="/collections/presets/search" hx-include="#preset-search-source" hx-trigger="input changed delay:400ms, search" hx-target="#preset-search-results" hx-swap="innerHTML">
+        </div>
+        <div id="preset-search-results">
+          <p class="field-hint">Search Trakt's public lists or TMDb's franchise collections by name.</p>
+        </div>
+      </div>
+
+      <p class="field-hint">Or pick a ready-made preset below, sourced from real Kometa community configs (each cites exactly which one). Pick a library/server on the next step.</p>
+      {{range .Categories}}
+      {{if .Presets}}
+      <div class="collection-form-section">
+        <h3 class="collection-form-section-title">{{.Category}}</h3>
+        <div class="preset-grid">
+          {{range .Presets}}
+          <div class="preset-card card">
+            <div class="preset-card-title">{{.Name}}</div>
+            {{if .Description}}<div class="preset-card-desc">{{.Description}}</div>{{end}}
+            <div class="preset-card-source">{{.Source}}</div>
+            {{if .NeedsYear}}
+            <div class="preset-card-actions">
+              <input type="number" name="year" class="form-input preset-year-input" placeholder="Year" min="1927" max="2030" required>
+              <button type="button" class="btn btn-secondary btn-small" hx-get="/collections/new?preset={{.Slug}}" hx-include="closest .preset-card" hx-target="#modal-root" hx-swap="innerHTML">Use This</button>
+            </div>
+            <button type="button" class="btn btn-secondary btn-small preset-all-years-btn" hx-get="/collections/presets/{{.Slug}}/years" hx-target="#modal-root" hx-swap="innerHTML">All Years...</button>
+            {{else if eq .Kind "dynamic"}}
+            <button type="button" class="btn btn-secondary btn-small" hx-get="/dynamic-collections/new?preset={{.Slug}}" hx-target="#modal-root" hx-swap="innerHTML">Use This</button>
+            {{else}}
+            <button type="button" class="btn btn-secondary btn-small" hx-get="/collections/new?preset={{.Slug}}" hx-target="#modal-root" hx-swap="innerHTML">Use This</button>
+            {{end}}
+          </div>
+          {{end}}
+        </div>
+      </div>
+      {{end}}
+      {{end}}
+    </div>
+    <div class="advanced-mix-actions">
+      <button type="button" class="btn btn-secondary" onclick="closeTopModal()">Close</button>
+    </div>
+  </div>
+</div>
+{{end}}

@@ -28,7 +28,7 @@
   min-width: 24px;
   height: 24px;
   padding: 0 0.5rem;
-  background: var(--gradient-primary);
+  background: var(--primary-color);
   color: white;
   font-size: 0.75rem;
   font-weight: 600;
@@ -126,12 +126,11 @@
 .template-list-loading p {
   color: var(--text-secondary);
   font-size: 0.875rem;
+  /* Uses base.css's shared @keyframes pulse - a same-named local copy here
+     silently wins or loses against any other page's local "pulse" purely
+     based on stylesheet load order, since keyframe names aren't scoped
+     per-file. */
   animation: pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
 }
 
 /* Error State */

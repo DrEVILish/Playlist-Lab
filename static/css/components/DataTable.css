@@ -1,0 +1,158 @@
+/* Shared canonical data-table chrome (DESIGN.md §8.6), used by both the
+   Playlists table (PlaylistsPage.css) and the Missing Tracks table
+   (MissingTracksPanel.css) so the compact/sticky/hover/bulk-select/row-menu
+   conventions live in exactly one place instead of being re-implemented
+   per page. Per-page CSS still owns column widths and cell-content styling
+   (e.g. .playlist-name-cell, .missing-track-title) - only the table
+   mechanics below are shared. */
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.data-table thead {
+  background: var(--surface-hover);
+}
+
+.data-table th {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  background: var(--surface-hover);
+  z-index: 10;
+}
+
+.data-table td {
+  padding: 0.375rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  height: 44px;
+}
+
+/* Full-row hover highlight (§8.6) - keyboard focus gets the same treatment
+   (focus-within) so tabbing into a row's actions also reveals them, rather
+   than only a mouse hover doing so. */
+.data-table tbody tr:hover,
+.data-table tbody tr:focus-within {
+  background: var(--surface-hover);
+}
+
+/* Base .row-actions: a plain flex row of icon buttons, also used outside
+   any table (e.g. the Playlists mobile card list's .playlist-card-actions,
+   which wants a full-width wrapping row, not the inline/hover-hidden
+   version below). */
+.row-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+/* Inside a data table specifically: row actions sit inline next to the
+   row-menu "..." button rather than as a full-width block. Always visible
+   (not hover-revealed) per user feedback on the live table - a table with
+   several dense rows read as broken/empty-looking before a mouse ever
+   touched a row, and touch devices have no hover state to reveal them
+   with at all. */
+.data-table .row-actions {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.icon-btn:hover:not(:disabled) {
+  border-color: var(--accent-cyan);
+  color: var(--text-primary);
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.35);
+}
+
+.icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.icon-btn-danger:hover:not(:disabled) {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+@media (max-width: 768px) {
+  .icon-btn {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* "..." row-menu button: doubles as the row's right-click context menu
+   (data-table.js opens the same element on contextmenu) and as an
+   always-visible, keyboard-reachable way to get to the row actions without
+   relying on hover - the row's own .row-actions row above just becomes
+   visible rather than needing a second, separately-templated menu. Rule
+   itself is further down, next to .col-actions. */
+
+/* Bulk-select checkboxes: always visible, not hover/mode-toggle-revealed -
+   removed for the same reason row actions above are always visible (§8.6):
+   a checkbox that's identical whether or not "Select mode" is on added a
+   toggle button with no actual behavior difference to explain. */
+.col-select {
+  width: 2rem;
+  text-align: center;
+}
+
+/* Sticky bottom bulk-action bar (§8.6): appears once any row is selected
+   (chrome-interactions.css's form:has(...) rule toggles display), pinned to
+   the bottom of the viewport while scrolling rather than sitting inline -
+   placed as the last child of the scrolling area in markup so
+   `position: sticky; bottom: 0` has room to engage. */
+.bulk-actions-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--primary-color);
+  background: var(--background-elevated);
+  box-shadow: var(--card-shadow-hover);
+  position: sticky;
+  bottom: 0.75rem;
+  z-index: 15;
+  margin-top: 0.75rem;
+}
+
+.bulk-actions-count {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-right: 0.25rem;
+}
+
+/* Cell layout only (not flex) - .row-actions and .row-menu-toggle are both
+   inline-flex, so they already sit side by side; avoids putting display:flex
+   directly on a table cell, which some browsers stop treating as a normal
+   table cell for column sizing. */
+.col-actions {
+  white-space: nowrap;
+}
+
+.row-menu-toggle {
+  margin-left: 0.25rem;
+  opacity: 1;
+}

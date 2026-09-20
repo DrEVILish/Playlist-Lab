@@ -16,7 +16,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -26,15 +28,19 @@ import (
 	"github.com/drevilish/playlist-lab/internal/db"
 	"github.com/drevilish/playlist-lab/internal/services/ai"
 	"github.com/drevilish/playlist-lab/internal/services/matching"
+	"github.com/drevilish/playlist-lab/internal/services/notifications"
 	"github.com/drevilish/playlist-lab/internal/services/plex"
+	"github.com/drevilish/playlist-lab/internal/session"
 )
 
 var errNoLibrarySelected = errors.New("no Plex server/library selected")
 
 type SettingsHandler struct {
-	DB       *sql.DB
-	PlexAuth *auth.PlexClient
-	Tmpl     *Templates
+	DB            *sql.DB
+	PlexAuth      *auth.PlexClient
+	Tmpl          *Templates
+	Store         *session.Store
+	Notifications *notifications.Store
 }
 
 func RegisterSettings(r chi.Router, mw *auth.Middleware, h *SettingsHandler) {
@@ -45,6 +51,9 @@ func RegisterSettings(r chi.Router, mw *auth.Middleware, h *SettingsHandler) {
 		r.Post("/settings/matching/reset", h.resetMatching)
 		r.Post("/settings/mixes", h.saveMixes)
 		r.Post("/settings/mixes/reset", h.resetMixes)
+		r.Post("/settings/appearance", h.saveAppearance)
+		r.Get("/settings/sessions", h.sessionsSection)
+		r.Post("/settings/sessions/{id}/revoke", h.revokeSession)
 		r.Post("/settings/ai", h.saveAI)
 		r.Post("/settings/ai/test", h.testAI)
 		r.Post("/settings/scan-library", h.scanLibrary)
@@ -83,13 +92,20 @@ func mixDefaultsFromJSON(raw string) mixDefaults {
 	return d
 }
 
+// processStartedAt captures approximately when this binary started (Go
+// initializes package-level vars once, at program startup) - backs Server
+// Info's uptime line. Not a persisted/configured value, so nothing to wire
+// up at build time to make it accurate.
+var processStartedAt = time.Now()
+
 func (h *SettingsHandler) page(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
 	matchingJSON, _ := db.GetMatchingSettingsJSON(h.DB, user.ID)
 	mixJSON, _ := db.GetMixSettingsJSON(h.DB, user.ID)
 	aiSettings, _ := db.GetAISettings(h.DB, user.ID)
 	isAdmin, _ := db.IsAdmin(h.DB, user.ID)
-	userServer, _ := db.GetUserServer(h.DB, user.ID)
+	userServer, _ := db.GetUserMusicServer(h.DB, user.ID)
+	textScale, _ := db.GetTextScale(h.DB, user.ID)
 
 	h.Tmpl.RenderPage(w, r, "settings", map[string]any{
 		"User":      user,
@@ -98,6 +114,19 @@ func (h *SettingsHandler) page(w http.ResponseWriter, r *http.Request) {
 		"Mixes":     mixDefaultsFromJSON(mixJSON),
 		"AI":        aiSettings,
 		"HasServer": userServer != nil && userServer.LibraryID.Valid,
+		// "small"/"medium"/"large", for the radio group below - deliberately
+		// not named "TextScale": pageData (templates.go) already reserves
+		// that key for the numeric --text-scale CSS multiplier <html> uses,
+		// and only fills it in when the caller hasn't set it, so reusing the
+		// name here would silently break every page's --text-scale value.
+		"TextScaleChoice": textScale,
+		// Server Info (§11.4) - user feedback: the old "Version: (not set
+		// by this build)" placeholder read as an unfinished feature since
+		// this deploy has no ldflags/git-describe wiring to fill it in.
+		// These are real values that need no build-time setup at all.
+		"GoVersion": runtime.Version(),
+		"Uptime":    time.Since(processStartedAt).Round(time.Minute).String(),
+		"Server":    userServer,
 	})
 }
 
@@ -106,7 +135,7 @@ func (h *SettingsHandler) page(w http.ResponseWriter, r *http.Request) {
 // asks Plex to refresh the user's selected library for new/changed files.
 func (h *SettingsHandler) scanLibrary(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
-	userServer, err := db.GetUserServer(h.DB, user.ID)
+	userServer, err := db.GetUserMusicServer(h.DB, user.ID)
 	if err != nil || userServer == nil || !userServer.LibraryID.Valid {
 		h.renderAlert(w, "", errNoLibrarySelected)
 		return
@@ -115,14 +144,16 @@ func (h *SettingsHandler) scanLibrary(w http.ResponseWriter, r *http.Request) {
 	path := r.FormValue("path")
 	err = client.ScanLibrary(userServer.LibraryID.String, path)
 	if err != nil {
+		h.notifySettingsSave(user.ID, "Scan library", err)
 		h.renderAlert(w, "", err)
 		return
 	}
+	msg := "Library scan triggered."
 	if path != "" {
-		h.renderAlert(w, "Scan triggered for "+path+".", nil)
-		return
+		msg = "Scan triggered for " + path + "."
 	}
-	h.renderAlert(w, "Library scan triggered.", nil)
+	h.Notifications.Add(user.ID, notifications.TypeAction, "Scan library", msg, notifications.StatusSuccess, nil)
+	h.renderAlert(w, msg, nil)
 }
 
 // libraryFolders ports GET /api/servers/library-folders: lists the
@@ -131,7 +162,7 @@ func (h *SettingsHandler) scanLibrary(w http.ResponseWriter, r *http.Request) {
 // something to pick from instead of requiring a hand-typed path.
 func (h *SettingsHandler) libraryFolders(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
-	userServer, err := db.GetUserServer(h.DB, user.ID)
+	userServer, err := db.GetUserMusicServer(h.DB, user.ID)
 	if err != nil || userServer == nil || !userServer.LibraryID.Valid {
 		h.Tmpl.RenderPartial(w, "partials/library_folders.html", map[string]any{"Error": errNoLibrarySelected.Error()})
 		return
@@ -162,13 +193,15 @@ func (h *SettingsHandler) saveMatching(w http.ResponseWriter, r *http.Request) {
 
 	raw, _ := json.Marshal(settings)
 	err := db.SaveMatchingSettingsJSON(h.DB, user.ID, string(raw))
-	h.renderAlert(w, "Matching settings saved", err)
+	h.notifySettingsSave(user.ID, "Save matching settings", err)
+	h.renderFieldStatus(w, err)
 }
 
 func (h *SettingsHandler) resetMatching(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
 	raw, _ := json.Marshal(matching.DefaultSettings())
 	err := db.SaveMatchingSettingsJSON(h.DB, user.ID, string(raw))
+	h.notifySettingsSave(user.ID, "Reset matching settings", err)
 	h.renderAlert(w, "Matching settings reset to defaults", err)
 }
 
@@ -199,14 +232,34 @@ func (h *SettingsHandler) saveMixes(w http.ResponseWriter, r *http.Request) {
 
 	raw, _ := json.Marshal(d)
 	err := db.SaveMixSettingsJSON(h.DB, user.ID, string(raw))
-	h.renderAlert(w, "Mix defaults saved", err)
+	h.notifySettingsSave(user.ID, "Save mix settings", err)
+	h.renderFieldStatus(w, err)
 }
 
 func (h *SettingsHandler) resetMixes(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
 	raw, _ := json.Marshal(defaultMixDefaults())
 	err := db.SaveMixSettingsJSON(h.DB, user.ID, string(raw))
+	h.notifySettingsSave(user.ID, "Reset mix settings", err)
 	h.renderAlert(w, "Mix defaults reset", err)
+}
+
+// saveAppearance persists Settings > Appearance's text-size choice
+// (DESIGN.md §14) - the only Appearance field today, same autosave shape
+// as saveMatching/saveMixes/saveAI above.
+func (h *SettingsHandler) saveAppearance(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	scale := r.FormValue("textScale")
+	if scale != "small" && scale != "medium" && scale != "large" {
+		scale = "medium"
+	}
+	err := db.SaveTextScale(h.DB, user.ID, scale)
+	h.notifySettingsSave(user.ID, "Save appearance settings", err)
+	h.renderFieldStatus(w, err)
 }
 
 func (h *SettingsHandler) saveAI(w http.ResponseWriter, r *http.Request) {
@@ -224,24 +277,28 @@ func (h *SettingsHandler) saveAI(w http.ResponseWriter, r *http.Request) {
 	// a key when the field actually carries a new value.
 	if key := r.FormValue("geminiApiKey"); key != "" {
 		if err := db.SaveGeminiAPIKey(h.DB, user.ID, key); err != nil {
-			h.renderAlert(w, "", err)
+			h.notifySettingsSave(user.ID, "Save AI settings", err)
+			h.renderFieldStatus(w, err)
 			return
 		}
 	}
 	if key := r.FormValue("grokApiKey"); key != "" {
 		if err := db.SaveGrokAPIKey(h.DB, user.ID, key); err != nil {
-			h.renderAlert(w, "", err)
+			h.notifySettingsSave(user.ID, "Save AI settings", err)
+			h.renderFieldStatus(w, err)
 			return
 		}
 	}
 	err := db.SaveAIProvider(h.DB, user.ID, provider)
-	h.renderAlert(w, "AI settings saved", err)
+	h.notifySettingsSave(user.ID, "Save AI settings", err)
+	h.renderFieldStatus(w, err)
 }
 
 // testAI ports the Gemini/Grok branch of POST /api/import/ai/test - "does
 // this key actually work", checked against whichever key was just typed
 // into the form rather than requiring a save first.
 func (h *SettingsHandler) testAI(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
@@ -258,10 +315,25 @@ func (h *SettingsHandler) testAI(w http.ResponseWriter, r *http.Request) {
 		_, err = ai.TestGemini(ctx, r.FormValue("geminiApiKey"))
 	}
 	if err != nil {
+		h.notifySettingsSave(user.ID, "Test AI connection", err)
 		h.renderAlert(w, "", err)
 		return
 	}
+	h.Notifications.Add(user.ID, notifications.TypeAction, "Test AI connection", "Connection successful", notifications.StatusSuccess, nil)
 	h.renderAlert(w, "Connection successful", nil)
+}
+
+// notifySettingsSave posts a bell entry for one of the autosaving Settings
+// fields above, success or failure - every save here otherwise only shows a
+// small inline "saved"/error indicator next to that one field (see
+// renderFieldStatus), with nothing recorded once the page is left.
+func (h *SettingsHandler) notifySettingsSave(userID int64, title string, err error) {
+	if err != nil {
+		slog.Error("settings save failed", "action", title, "userId", userID, "error", err)
+		h.Notifications.Add(userID, notifications.TypeAction, title, err.Error(), notifications.StatusError, nil)
+		return
+	}
+	h.Notifications.Add(userID, notifications.TypeAction, title, "Saved", notifications.StatusSuccess, nil)
 }
 
 func (h *SettingsHandler) renderAlert(w http.ResponseWriter, successMsg string, err error) {
@@ -272,4 +344,18 @@ func (h *SettingsHandler) renderAlert(w http.ResponseWriter, successMsg string, 
 		data["Success"] = successMsg
 	}
 	h.Tmpl.RenderPartial(w, "partials/settings_alert.html", data)
+}
+
+// renderFieldStatus answers a single autosaving field's change (DESIGN.md
+// §11.4): swapped into that field's own small status span (settings.html),
+// not the shared section-level alert renderAlert uses - every autosaving
+// field needs its own saved/saving/error indicator since there's no longer
+// a Save click to signal completion. The caller has already done the
+// server-side validation/write; this only renders the result.
+func (h *SettingsHandler) renderFieldStatus(w http.ResponseWriter, err error) {
+	data := map[string]any{}
+	if err != nil {
+		data["Error"] = err.Error()
+	}
+	h.Tmpl.RenderPartial(w, "partials/settings_field_status.html", data)
 }

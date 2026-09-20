@@ -19,7 +19,14 @@
     {{range $i, $t := .Tracks}}
     {{$status := "unmatched"}}
     {{if $t.Skipped}}{{$status = "skipped"}}{{else if $t.Matched}}{{$status = "matched"}}{{end}}
-    <div class="review-track-item {{$status}}">
+    <div class="review-track-item {{$status}}" data-index="{{$i}}">
+      <div class="track-drag-handle" title="Drag to reorder" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
+      </div>
+      <div class="track-move-buttons">
+        <button type="button" class="track-move-btn" data-dir="up" title="Move up" aria-label="Move &quot;{{$t.Title}}&quot; up" {{if eq $i 0}}disabled{{end}}>&#9650;</button>
+        <button type="button" class="track-move-btn" data-dir="down" title="Move down" aria-label="Move &quot;{{$t.Title}}&quot; down">&#9660;</button>
+      </div>
       <div class="review-track-source">
         <div class="review-track-title">{{$t.Title}}</div>
         <div class="review-track-artist">{{$t.Artist}}</div>
@@ -51,7 +58,8 @@
     {{end}}
   </div>
 
-  <form hx-post="/import/confirm/{{$sid}}" hx-target="#notifications" hx-swap="innerHTML" class="import-confirm-form">
+  <form hx-post="/import/confirm/{{$sid}}" hx-target="#notifications" hx-swap="innerHTML" class="import-confirm-form"
+    hx-on::after-request="if(event.detail.successful) closeTopModal()">
     <div class="form-section">
       <label class="form-label" for="import-confirm-name">Playlist name</label>
       <input class="form-input" type="text" id="import-confirm-name" name="playlistName" value="{{.PlaylistName}}" required>
@@ -62,7 +70,12 @@
     <div class="form-section">
       <label><input type="checkbox" name="keepExistingCover" value="true"> Keep the existing playlist's cover art</label>
     </div>
-    <button type="submit" class="btn btn-primary">Confirm Import ({{.MatchedCount}} tracks)</button>
+    <div class="form-section" style="display:flex;gap:0.75rem;align-items:center;">
+      <button type="submit" class="btn btn-primary">Confirm Import ({{.MatchedCount}} tracks)</button>
+      {{if gt .UnmatchedCount 0}}
+      <a class="btn btn-secondary" href="/import/review/{{$sid}}/export">Export unmatched tracks (CSV)</a>
+      {{end}}
+    </div>
   </form>
 </div>
 <style>
@@ -73,4 +86,70 @@
   .ci-search summary { list-style: none; cursor: pointer; display: inline-block; }
   .ci-search summary::-webkit-details-marker { display: none; }
 </style>
+<script>
+(function () {
+  // Drag-to-reorder + mobile up/down buttons, same wireDragReorder pattern
+  // as editor.html's track list - duplicated rather than shared, since
+  // this partial is swapped in via htmx (outerHTML) as a self-contained
+  // fragment and re-runs this script on every swap (htmx re-executes
+  // inline <script> tags in swapped content, see partials/auth_pending.html
+  // for the same pattern), so it always binds fresh listeners to the fresh
+  // container that was just inserted.
+  const list = document.querySelector('#import-review .review-track-list');
+  if (!list) return;
+  const sessionId = "{{$sid}}";
+
+  function persistMove(row) {
+    const prev = row.previousElementSibling;
+    const afterIndex = prev ? prev.dataset.index : '-1';
+    htmx.ajax('POST', `/import/review/${sessionId}/track/${row.dataset.index}/move`, {
+      values: { afterIndex }, target: '#import-review', swap: 'outerHTML',
+    });
+  }
+
+  function wireDragReorder(container, itemSelector, onDrop) {
+    let dragged = null;
+    container.addEventListener('dragstart', (e) => {
+      const item = e.target.closest(itemSelector);
+      if (item) dragged = item;
+    });
+    container.addEventListener('dragover', (e) => {
+      if (!dragged) return;
+      e.preventDefault();
+      const target = e.target.closest(itemSelector);
+      if (!target || target === dragged) return;
+      const rect = target.getBoundingClientRect();
+      const before = (e.clientY - rect.top) / rect.height < 0.5;
+      container.insertBefore(dragged, before ? target : target.nextSibling);
+    });
+    container.addEventListener('drop', (e) => {
+      if (!dragged) return;
+      e.preventDefault();
+      onDrop(dragged);
+      dragged = null;
+    });
+    container.addEventListener('dragend', () => { dragged = null; });
+  }
+
+  list.addEventListener('mousedown', (e) => {
+    const handle = e.target.closest('.track-drag-handle');
+    if (handle) handle.closest('.review-track-item').draggable = true;
+  });
+  document.addEventListener('mouseup', () => {
+    list.querySelectorAll('.review-track-item[draggable="true"]').forEach((row) => { row.draggable = false; });
+  });
+  wireDragReorder(list, '.review-track-item', persistMove);
+
+  list.addEventListener('click', (e) => {
+    const btn = e.target.closest('.track-move-btn');
+    if (!btn) return;
+    const row = btn.closest('.review-track-item');
+    const sibling = btn.dataset.dir === 'up' ? row.previousElementSibling : row.nextElementSibling;
+    if (!sibling) return;
+    if (btn.dataset.dir === 'up') list.insertBefore(row, sibling);
+    else list.insertBefore(row, sibling.nextElementSibling);
+    persistMove(row);
+  });
+})();
+</script>
 {{end}}

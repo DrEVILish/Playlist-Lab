@@ -48,11 +48,15 @@ type Track struct {
 
 // PopularPlaylist mirrors the Array<{name,url,description,count}> shape
 // returned by getDeezerPopularPlaylists/searchAppleMusicPlaylists/etc.
+// Image is a cover-art URL, populated where the source's own response
+// already carries one (Deezer's picture_medium, Spotify's images[0].url,
+// Apple's RSS artworkUrl100) - empty string if the source has none.
 type PopularPlaylist struct {
 	Name        string
 	URL         string
 	Description string
 	Count       int
+	Image       string
 }
 
 var deezerCountryNames = map[string]string{
@@ -179,10 +183,27 @@ var popularCountryNames = map[string]string{
 	"PL": "Poland", "AR": "Argentina", "CL": "Chile", "NZ": "New Zealand",
 }
 
+// PopularCountries lists the country codes DeezerPopularPlaylists/
+// SpotifyPopularPlaylists accept, in the same order v1.x's country
+// dropdown used, for the Import page's country <select>.
+var PopularCountries = []string{
+	"US", "GB", "CA", "AU", "DE", "FR", "ES", "IT", "BR", "MX",
+	"JP", "KR", "IN", "NL", "SE", "NO", "PL", "AR", "CL", "NZ",
+}
+
+// PopularCountryName returns the display name for a PopularCountries code.
+func PopularCountryName(code string) string {
+	if name := popularCountryNames[code]; name != "" {
+		return name
+	}
+	return code
+}
+
 type deezerPlaylistEntry struct {
 	ID       json.Number `json:"id"`
 	Title    string      `json:"title"`
 	NbTracks int         `json:"nb_tracks"`
+	Picture  string      `json:"picture_medium"`
 	User     struct {
 		Name string `json:"name"`
 	} `json:"user"`
@@ -214,7 +235,7 @@ func DeezerPopularPlaylists(country string) []PopularPlaylist {
 		}
 		results = append(results, PopularPlaylist{
 			Name: p.Title, URL: "https://www.deezer.com/playlist/" + id,
-			Description: desc, Count: p.NbTracks,
+			Description: desc, Count: p.NbTracks, Image: p.Picture,
 		})
 	}
 
@@ -266,6 +287,9 @@ func SpotifyPopularPlaylists(country, token string) []PopularPlaylist {
 		Tracks struct {
 			Total int `json:"total"`
 		} `json:"tracks"`
+		Images []struct {
+			URL string `json:"url"`
+		} `json:"images"`
 	}
 	get := func(rawURL string) []spotifyPlaylist {
 		req, err := http.NewRequest(http.MethodGet, rawURL, nil)
@@ -307,7 +331,11 @@ func SpotifyPopularPlaylists(country, token string) []PopularPlaylist {
 		if playlistURL == "" {
 			playlistURL = "https://open.spotify.com/playlist/" + p.ID
 		}
-		results = append(results, PopularPlaylist{Name: p.Name, URL: playlistURL, Description: desc, Count: p.Tracks.Total})
+		image := ""
+		if len(p.Images) > 0 {
+			image = p.Images[0].URL
+		}
+		results = append(results, PopularPlaylist{Name: p.Name, URL: playlistURL, Description: desc, Count: p.Tracks.Total, Image: image})
 	}
 
 	q := url.Values{"country": {country}, "limit": {"20"}}
@@ -331,6 +359,7 @@ func SearchAppleMusicPlaylists(country string) []PopularPlaylist {
 				Name       string `json:"name"`
 				URL        string `json:"url"`
 				ArtistName string `json:"artistName"`
+				ArtworkURL string `json:"artworkUrl100"`
 			} `json:"results"`
 		} `json:"feed"`
 	}
@@ -341,7 +370,38 @@ func SearchAppleMusicPlaylists(country string) []PopularPlaylist {
 	}
 	out := make([]PopularPlaylist, 0, len(feed.Feed.Results))
 	for _, p := range feed.Feed.Results {
-		out = append(out, PopularPlaylist{Name: p.Name, URL: p.URL, Description: p.ArtistName})
+		out = append(out, PopularPlaylist{Name: p.Name, URL: p.URL, Description: p.ArtistName, Image: p.ArtworkURL})
+	}
+	return out
+}
+
+// SearchDeezerPlaylists ports a free-text playlist-name search against
+// Deezer's public, unauthenticated search API - the same endpoint
+// DeezerPopularPlaylists already uses for its country/genre lookups, just
+// driven by a user-typed query instead of a canned one.
+func SearchDeezerPlaylists(query string) []PopularPlaylist {
+	var search struct {
+		Data []deezerPlaylistEntry `json:"data"`
+	}
+	q := url.QueryEscape(query)
+	if err := getJSON("https://api.deezer.com/search/playlist?q="+q+"&limit=25", &search); err != nil {
+		slog.Error("[Deezer] search error", "query", query, "error", err)
+		return nil
+	}
+	out := make([]PopularPlaylist, 0, len(search.Data))
+	for _, p := range search.Data {
+		id := p.ID.String()
+		if id == "" {
+			continue
+		}
+		desc := fmt.Sprintf("%d tracks", p.NbTracks)
+		if p.User.Name != "" {
+			desc = fmt.Sprintf("by %s · %d tracks", p.User.Name, p.NbTracks)
+		}
+		out = append(out, PopularPlaylist{
+			Name: p.Title, URL: "https://www.deezer.com/playlist/" + id,
+			Description: desc, Count: p.NbTracks, Image: p.Picture,
+		})
 	}
 	return out
 }

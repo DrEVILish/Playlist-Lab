@@ -13,90 +13,86 @@
   flex-wrap: wrap;
 }
 
+.missing-tracks-summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.missing-tracks-summary::-webkit-details-marker { display: none; }
+
+.missing-tracks-summary h2 {
+  display: inline;
+}
+
+.missing-tracks-summary::before {
+  content: "\25B8";
+  display: inline-block;
+  margin-right: 0.375rem;
+  transition: transform 0.1s ease;
+}
+
+.missing-tracks-panel[open] > .missing-tracks-summary::before {
+  transform: rotate(90deg);
+}
+
+.missing-count-badge {
+  color: var(--text-secondary);
+  font-weight: 400;
+  font-size: 0.85em;
+}
+
+.missing-search-input {
+  width: 100%;
+  max-width: 420px;
+  margin: 0.75rem 0;
+}
+
+/* Toggled by missing.html's plain-JS filterMissingTracks() on both a
+   .missing-track-row (a <tr> now, DESIGN.md §11.6) and a whole
+   .missing-tracks-panel (a <details> group) - display:none works
+   identically on either element type, so no JS changes were needed when
+   this went from flex rows to table rows. */
+.missing-track-hidden {
+  display: none !important;
+}
+
 .missing-tracks-toolbar-actions {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
 }
 
-.missing-track-row {
-  padding: 0.75rem 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.75rem;
+/* Table mechanics (sticky header, compact padding, full-row hover,
+   bulk-select checkbox reveal, row-actions hover/focus reveal, the "..."
+   row-menu) come from the shared DataTable.css (DESIGN.md §8.6) via the
+   "data-table"/"col-select"/"col-actions"/"row-actions"/"row-menu-toggle"
+   classes below - this file only adds what's specific to a missing-track
+   row's own cells. */
+.missing-table-container {
+  overflow-x: auto;
 }
 
-.missing-track-info {
-  flex: 1;
-  min-width: 0;
+/* Each group's table is small (open by default only when <=10 tracks) and
+   sits inside a page that scrolls as a whole rather than a measured,
+   independently-scrolling container (unlike the Playlists table) - a
+   sticky thead here would just compete with the app header/Playlists
+   table's own sticky header at the same top:0 band once this panel is
+   embedded inside a Playlists row's expando, so it's turned back off for
+   this specific table rather than inherited from .data-table. */
+.missing-table th {
+  position: static;
+}
+
+.missing-table th:not(.col-select):not(.col-actions),
+.missing-table td:not(.col-select):not(.col-actions) {
+  max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.missing-track-actions {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-@media (max-width: 480px) {
-  /* Five text buttons alongside a title simply don't fit a phone-width
-     card - stack the title above them and let the row grow instead of
-     forcing the title into a cramped multi-line column. */
-  .missing-track-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .missing-track-actions {
-    justify-content: flex-start;
-  }
-
-  /* 32x30 (the desktop size) is under the ~40px minimum comfortable tap
-     target. */
-  .missing-track-more > summary {
-    width: 40px;
-    height: 40px;
-  }
-}
-
-/* Compact (mobile card list) - a track is one line with a single Retry
-   button; everything else lives behind the ⋯ overflow. */
-.missing-tracks-panel-compact {
-  padding: 0.5rem 0;
-  font-size: 0.8125rem;
-}
-
-.missing-tracks-panel-compact .missing-tracks-toolbar {
-  margin-bottom: 0.5rem;
-  gap: 0.375rem;
-}
-
-.missing-tracks-panel-compact .missing-track-row {
-  padding: 0.375rem 0;
-  gap: 0.5rem;
-  /* Overrides the <=480px stacking rule below: with the overflow menu there
-     are only two controls left, so the row fits on one line again. */
-  flex-direction: row;
-  align-items: center;
-}
-
-.missing-tracks-panel-compact .missing-track-actions {
-  flex-wrap: nowrap;
-  justify-content: flex-end;
-  gap: 0.25rem;
-}
-
 .missing-track-title {
   font-weight: 500;
-}
-
-.missing-track-sep {
-  color: var(--text-secondary);
-  margin: 0 0.25rem;
 }
 
 .missing-track-artist,
@@ -104,60 +100,45 @@
   color: var(--text-secondary);
 }
 
-/* Every action inline (desktop): the "..." menu below is redundant once
-   there's room for the buttons themselves, so the two are complementary,
-   never both visible. */
-.missing-track-more-inline {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: nowrap;
-}
-
-.missing-track-rematch-form {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.missing-track-more { display: none; position: relative; }
-
-@media (max-width: 900px) {
-  .missing-track-more-inline { display: none; }
-  .missing-track-more { display: block; }
-}
-
-.missing-track-more > summary {
+/* Match modal's search results (partials/missing_match_results.html) -
+   plain buttons rather than the checkbox+label <li>s the editor's "add
+   tracks" search box uses (track_search_results.html), since clicking a
+   result here is itself the action (DESIGN.md §11.6), not a multi-select
+   staged for a separate submit. */
+.track-search-list {
   list-style: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 30px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 1rem;
-  line-height: 1;
-}
-
-.missing-track-more > summary::-webkit-details-marker { display: none; }
-.missing-track-more[open] > summary { border-color: var(--primary-color); color: var(--text-primary); }
-
-.missing-track-more-menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  z-index: 20;
+  max-height: 320px;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  padding: 0.375rem;
-  min-width: 120px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
-.missing-track-more-menu .btn { justify-content: flex-start; text-align: left; }
+.track-search-result {
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.625rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.track-search-result:hover {
+  border-color: var(--primary-color);
+  background: var(--surface-hover);
+}
+
+.track-search-result-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.track-search-result-meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}

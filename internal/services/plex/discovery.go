@@ -329,10 +329,15 @@ func (c *Client) GetTracksWithAdvancedFilters(libraryID string, opts AdvancedFil
 		filters = append(filters, "addedAt>="+strconv.FormatInt(now-int64(opts.AddedInLastDays)*86400, 10))
 	}
 	if opts.ReleasedAfterYear > 0 {
-		filters = append(filters, "parentYear>>="+strconv.Itoa(opts.ReleasedAfterYear))
+		// Single >=, not doubled >>= - confirmed live (librarysearch.go's
+		// SearchLibraryItems had the identical bug) that the doubled form
+		// silently returns zero/wrong results unless carefully escaped,
+		// while single >=/<= works correctly raw, matching every other
+		// filter in this function.
+		filters = append(filters, "parentYear>="+strconv.Itoa(opts.ReleasedAfterYear))
 	}
 	if opts.ReleasedBeforeYear > 0 {
-		filters = append(filters, "parentYear<<="+strconv.Itoa(opts.ReleasedBeforeYear))
+		filters = append(filters, "parentYear<="+strconv.Itoa(opts.ReleasedBeforeYear))
 	}
 	if opts.MinRating > 0 {
 		filters = append(filters, "userRating>="+strconv.Itoa(opts.MinRating))
@@ -618,4 +623,44 @@ func (c *Client) GetLibraryStyles(libraryID string) []string {
 // GetLibraryCollections ports plex.ts's getLibraryCollections.
 func (c *Client) GetLibraryCollections(libraryID string) []string {
 	return c.libraryDirectoryTitles(libraryID, "collection")
+}
+
+// GetLibraryStudios, GetLibraryContentRatings, GetLibraryYears, and
+// GetLibraryActors round out libraryDirectoryTitles' facet coverage for
+// Dynamic Collections (DESIGN.md §11.11's dynamic-collection-set builder,
+// scheduler.GenerateDynamicCollections) - same Plex "Directory" browse
+// endpoint as genre/mood/style/collection above, just a different facet
+// kind. "decade" has no such endpoint on its own; callers derive it from
+// GetLibraryYears instead.
+func (c *Client) GetLibraryStudios(libraryID string) []string {
+	return c.libraryDirectoryTitles(libraryID, "studio")
+}
+
+func (c *Client) GetLibraryContentRatings(libraryID string) []string {
+	return c.libraryDirectoryTitles(libraryID, "contentRating")
+}
+
+func (c *Client) GetLibraryYears(libraryID string) []string {
+	return c.libraryDirectoryTitles(libraryID, "year")
+}
+
+func (c *Client) GetLibraryActors(libraryID string) []string {
+	return c.libraryDirectoryTitles(libraryID, "actor")
+}
+
+// GetLibraryDirectors and GetLibraryWriters round out the facet set with
+// the two credit types Kometa's own community configs lean on most for
+// person-based collections (fscorrupt/directors.yml's Director/Writer
+// templates) - not independently live-verified against a real Plex server
+// the way genre/actor/studio were (same caveat as GetLibraryContentRatings/
+// GetLibraryYears): Plex's per-library "Directory" browse endpoint is
+// confirmed to exist for genre/mood/style/collection/actor, and director/
+// writer are documented as the same kind of facet, but a field-name
+// mismatch here is the first place to look if either comes back empty.
+func (c *Client) GetLibraryDirectors(libraryID string) []string {
+	return c.libraryDirectoryTitles(libraryID, "director")
+}
+
+func (c *Client) GetLibraryWriters(libraryID string) []string {
+	return c.libraryDirectoryTitles(libraryID, "writer")
 }

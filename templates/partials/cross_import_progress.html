@@ -1,9 +1,24 @@
+{{/* Shared 4-step indicator (DESIGN.md §11.7), reused by both this partial
+     (step 3) and cross_import_review.html (step 4) - the one pair of steps
+     that render inside #cross-import-match-status rather than the page
+     template, so they can share one Go template define. Invoked as
+     {{template "partials/ci_step_indicator" 3}}. */}}
+{{define "partials/ci_step_indicator"}}
+<ol class="ci-step-indicator">
+  <li class="ci-step ci-step--done">1. Connect</li>
+  <li class="ci-step ci-step--done">2. Choose Playlist</li>
+  <li class="ci-step {{if eq . 3}}ci-step--active{{else}}ci-step--done{{end}}">3. Match</li>
+  <li class="ci-step {{if eq . 4}}ci-step--active{{end}}">4. Review &amp; Confirm</li>
+</ol>
+{{end}}
+
 {{define "partials/cross_import_progress.html"}}
 {{$p := .Progress}}
 <div id="cross-import-match-status"
      {{if or (eq $p.Phase "fetching") (eq $p.Phase "matching")}}
      hx-get="/cross-import/match/{{.SessionID}}/status" hx-trigger="every 1s" hx-swap="outerHTML"
      {{end}}>
+  {{template "partials/ci_step_indicator" 3}}
   {{if eq $p.Phase "error"}}
   <div class="error-message">Matching failed: {{$p.Message}}</div>
   {{else}}

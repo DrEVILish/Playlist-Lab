@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -14,6 +16,19 @@ import (
 	"github.com/drevilish/playlist-lab/internal/db"
 	"github.com/drevilish/playlist-lab/internal/session"
 )
+
+// clientIP strips the port off r.RemoteAddr for Settings > Sessions'
+// device list (DESIGN.md §11.4). Not proxy-header parsing of its own -
+// cmd/server/main.go already installs chi's middleware.RealIP ahead of
+// every handler when TrustProxy is set, which rewrites RemoteAddr itself,
+// so this only ever needs to trust what's already there.
+func clientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
 
 type AuthHandler struct {
 	DB     *sql.DB
@@ -135,7 +150,12 @@ func (h *AuthHandler) poll(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	if err := h.Store.Save(sid, &session.Data{UserID: user.ID, PlexUserID: user.PlexUserID}); err != nil {
+	data := &session.Data{
+		UserID: user.ID, PlexUserID: user.PlexUserID,
+		UserAgent: r.UserAgent(), IP: clientIP(r),
+		CreatedAt: time.Now().Unix(), LastSeenAt: time.Now().Unix(),
+	}
+	if err := h.Store.Save(sid, data); err != nil {
 		slog.Error("failed to save session", "error", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -233,7 +253,7 @@ func (h *AuthHandler) reverifyMembership(admin, user *db.User, plexUserID string
 
 	if approved[plexUserID] {
 		_ = db.EnableUser(h.DB, user.ID)
-		if existing, _ := db.GetUserServer(h.DB, user.ID); existing == nil {
+		if servers, _ := db.GetUserServers(h.DB, user.ID); len(servers) == 0 {
 			_ = db.CopyServerConfig(h.DB, admin.ID, user.ID)
 		}
 	} else if user.IsEnabled {

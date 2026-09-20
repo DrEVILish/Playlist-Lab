@@ -5,11 +5,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/drevilish/playlist-lab/internal/adapters"
@@ -22,14 +25,16 @@ const ServiceName = "youtube"
 type Target struct {
 	DB         *sql.DB
 	Secret     string
-	OAuth      OAuthConfig
 	httpClient *http.Client
+
+	mu    sync.Mutex
+	oauth OAuthConfig
 }
 
 func NewTarget(sqlDB *sql.DB, secret, clientID, clientSecret, redirectURI string) *Target {
 	return &Target{
 		DB: sqlDB, Secret: secret,
-		OAuth:      OAuthConfig{ClientID: clientID, ClientSecret: clientSecret, RedirectURI: redirectURI},
+		oauth:      OAuthConfig{ClientID: clientID, ClientSecret: clientSecret, RedirectURI: redirectURI},
 		httpClient: &http.Client{Timeout: 15 * time.Second},
 	}
 }
@@ -38,18 +43,31 @@ func (t *Target) Meta() adapters.ServiceMeta {
 	return adapters.ServiceMeta{ID: ServiceName, Name: "YouTube", Icon: "youtube", RequiresOAuth: true}
 }
 
-func (t *Target) IsConfigured() bool { return t.OAuth.IsConfigured() }
+// OAuthConfig returns a copy of the currently configured OAuth credentials -
+// the only safe way to read them, since SetOAuth can replace them from a
+// concurrent admin-panel save at any time.
+func (t *Target) OAuthConfig() OAuthConfig {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.oauth
+}
+
+// SetOAuth replaces the configured OAuth credentials (admin panel save).
+func (t *Target) SetOAuth(cfg OAuthConfig) {
+	t.mu.Lock()
+	t.oauth = cfg
+	t.mu.Unlock()
+}
+
+func (t *Target) IsConfigured() bool { return t.OAuthConfig().IsConfigured() }
 
 // getValidAccessToken mirrors youtube-oauth.ts's getValidAccessToken():
 // refreshes if the stored token expires within 5 minutes, deleting the
 // connection entirely if the refresh itself fails (a stale refresh token
 // isn't recoverable without the user reconnecting). Exported as
-// GetValidAccessToken so the InnerTube-based target
-// (internal/adapters/youtubeinnertube) can share the same token storage -
-// only one of the two ever runs at a time, but both authenticate against
-// the same Google OAuth connection.
+// GetValidAccessToken so other callers can share the same token storage.
 func (t *Target) getValidAccessToken(userID int64) (string, error) {
-	return GetValidAccessToken(t.DB, t.Secret, t.OAuth, userID)
+	return GetValidAccessToken(t.DB, t.Secret, t.OAuthConfig(), userID)
 }
 
 func GetValidAccessToken(sqlDB *sql.DB, secret string, oauth OAuthConfig, userID int64) (string, error) {
@@ -210,12 +228,12 @@ type ytVideo struct {
 	Channel string
 }
 
-func (t *Target) search(accessToken, query string, maxResults int) ([]ytVideo, error) {
+func (t *Target) search(ctx context.Context, accessToken, query string, maxResults int) ([]ytVideo, error) {
 	params := url.Values{
 		"part": {"snippet"}, "q": {query}, "type": {"video"},
 		"maxResults": {fmt.Sprint(maxResults)}, "videoCategoryId": {"10"},
 	}
-	req, err := http.NewRequest(http.MethodGet, apiBase+"/search?"+params.Encode(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiBase+"/search?"+params.Encode(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +275,7 @@ func (t *Target) SearchCatalog(ctx context.Context, query string, userID int64, 
 	if err != nil {
 		return nil, err
 	}
-	videos, err := t.search(accessToken, query, 10)
+	videos, err := t.search(ctx, accessToken, query, 10)
 	if err != nil {
 		return nil, fmt.Errorf("YouTube search failed: %w", err)
 	}
@@ -292,7 +310,7 @@ func (t *Target) MatchTracks(ctx context.Context, tracks []adapters.TrackInfo, c
 		query := strings.TrimSpace(cleanedTitle + " " + track.Artist)
 		result := adapters.MatchResult{SourceTrack: track}
 
-		if candidates, err := t.search(accessToken, query, 5); err == nil && len(candidates) > 0 {
+		if candidates, err := t.search(ctx, accessToken, query, 5); err == nil && len(candidates) > 0 {
 			bestIdx, bestScore := 0, -1.0
 			for ci, c := range candidates {
 				score := applyBoostsAndPenalties(similarity(cleanedTitle, c.Title)*0.6+similarity(track.Artist, c.Channel)*0.4, c.Title)
@@ -317,7 +335,7 @@ func (t *Target) MatchTracks(ctx context.Context, tracks []adapters.TrackInfo, c
 	}
 
 	if len(matchedVideoIDs) > 0 && (isCancelled == nil || !isCancelled()) {
-		resolutions := t.fetchResolutions(accessToken, matchedVideoIDs)
+		resolutions := t.fetchResolutions(ctx, accessToken, matchedVideoIDs)
 		for i, r := range results {
 			if res, ok := resolutions[r.TargetTrackID]; ok {
 				results[i].TargetResolution = res
@@ -331,14 +349,14 @@ func (t *Target) MatchTracks(ctx context.Context, tracks []adapters.TrackInfo, c
 // fetchResolutions batch-fetches contentDetails.definition (hd/sd) for
 // every matched video, mapping to a display resolution - best-effort, a
 // failure here doesn't affect matching.
-func (t *Target) fetchResolutions(accessToken string, videoIDs []string) map[string]string {
+func (t *Target) fetchResolutions(ctx context.Context, accessToken string, videoIDs []string) map[string]string {
 	out := map[string]string{}
 	const batchSize = 50
 	for i := 0; i < len(videoIDs); i += batchSize {
 		end := min(i+batchSize, len(videoIDs))
 		batch := videoIDs[i:end]
 		params := url.Values{"part": {"contentDetails"}, "id": {strings.Join(batch, ",")}}
-		req, err := http.NewRequest(http.MethodGet, apiBase+"/videos?"+params.Encode(), nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiBase+"/videos?"+params.Encode(), nil)
 		if err != nil {
 			continue
 		}
@@ -379,7 +397,7 @@ func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adap
 		"snippet": map[string]string{"title": name, "description": "Created by Playlist Lab"},
 		"status":  map[string]string{"privacyStatus": "private"},
 	})
-	req, _ := http.NewRequest(http.MethodPost, apiBase+"/playlists?part=snippet,status", strings.NewReader(string(body)))
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, apiBase+"/playlists?part=snippet,status", strings.NewReader(string(body)))
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := t.httpClient.Do(req)
@@ -400,6 +418,26 @@ func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adap
 		return "", "", 0, fmt.Errorf("failed to create playlist - no playlist ID returned")
 	}
 
+	addPlaylistItem := func(itemBody []byte) (status int, retryAfter time.Duration, err error) {
+		itemReq, err := http.NewRequestWithContext(ctx, http.MethodPost, apiBase+"/playlistItems?part=snippet", strings.NewReader(string(itemBody)))
+		if err != nil {
+			return 0, 0, err
+		}
+		itemReq.Header.Set("Authorization", "Bearer "+accessToken)
+		itemReq.Header.Set("Content-Type", "application/json")
+		itemResp, err := t.httpClient.Do(itemReq)
+		if err != nil {
+			return 0, 0, err
+		}
+		defer itemResp.Body.Close()
+		if itemResp.StatusCode == http.StatusTooManyRequests {
+			if secs, parseErr := strconv.Atoi(itemResp.Header.Get("Retry-After")); parseErr == nil {
+				retryAfter = time.Duration(secs) * time.Second
+			}
+		}
+		return itemResp.StatusCode, retryAfter, nil
+	}
+
 	addedCount := 0
 	for _, m := range matches {
 		if !m.Matched || m.Skipped || m.TargetTrackID == "" {
@@ -411,14 +449,27 @@ func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adap
 				"resourceId": map[string]string{"kind": "youtube#video", "videoId": m.TargetTrackID},
 			},
 		})
-		itemReq, _ := http.NewRequest(http.MethodPost, apiBase+"/playlistItems?part=snippet", strings.NewReader(string(itemBody)))
-		itemReq.Header.Set("Authorization", "Bearer "+accessToken)
-		itemReq.Header.Set("Content-Type", "application/json")
-		if itemResp, err := t.httpClient.Do(itemReq); err == nil {
-			itemResp.Body.Close()
-			if itemResp.StatusCode < 400 {
-				addedCount++
+
+		status, retryAfter, err := addPlaylistItem(itemBody)
+		if err == nil && status == http.StatusTooManyRequests {
+			if retryAfter <= 0 {
+				retryAfter = 5 * time.Second
 			}
+			if retryAfter > 30*time.Second {
+				retryAfter = 30 * time.Second
+			}
+			slog.Warn("youtube playlist add rate-limited, retrying once", "videoId", m.TargetTrackID, "playlistId", created.ID, "retryAfter", retryAfter)
+			time.Sleep(retryAfter)
+			status, _, err = addPlaylistItem(itemBody)
+		}
+
+		switch {
+		case err != nil:
+			slog.Warn("failed to add track to YouTube playlist", "videoId", m.TargetTrackID, "playlistId", created.ID, "error", err)
+		case status >= 400:
+			slog.Warn("failed to add track to YouTube playlist", "videoId", m.TargetTrackID, "playlistId", created.ID, "status", status)
+		default:
+			addedCount++
 		}
 	}
 
@@ -426,17 +477,19 @@ func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adap
 }
 
 func (t *Target) GetOAuthURL(ctx context.Context, userID int64, redirectURI string) (string, error) {
-	if !t.OAuth.IsConfigured() {
+	oauth := t.OAuthConfig()
+	if !oauth.IsConfigured() {
 		return "", fmt.Errorf("YouTube OAuth not configured. Set YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, and YOUTUBE_REDIRECT_URI")
 	}
-	return t.OAuth.AuthorizeURL(fmt.Sprint(userID)), nil
+	return oauth.AuthorizeURL(fmt.Sprint(userID)), nil
 }
 
 func (t *Target) HandleOAuthCallback(ctx context.Context, code string, userID int64, redirectURI string) error {
-	if !t.OAuth.IsConfigured() {
+	oauth := t.OAuthConfig()
+	if !oauth.IsConfigured() {
 		return fmt.Errorf("YouTube OAuth not configured")
 	}
-	tokens, err := t.OAuth.ExchangeCode(code)
+	tokens, err := oauth.ExchangeCode(code)
 	if err != nil {
 		return fmt.Errorf("failed to exchange authorization code: %w", err)
 	}
@@ -453,9 +506,10 @@ func (t *Target) HasValidConnection(ctx context.Context, userID int64) (bool, er
 
 func (t *Target) RevokeConnection(ctx context.Context, userID int64) error {
 	conn, err := db.GetOAuthConnection(t.DB, userID, ServiceName)
-	if err == nil && conn != nil && t.OAuth.IsConfigured() {
+	oauth := t.OAuthConfig()
+	if err == nil && conn != nil && oauth.IsConfigured() {
 		if token, decErr := crypto.Decrypt(conn.AccessToken, t.Secret); decErr == nil {
-			t.OAuth.Revoke(token)
+			oauth.Revoke(token)
 		}
 	}
 	return db.DeleteOAuthConnection(t.DB, userID, ServiceName)

@@ -1,0 +1,9 @@
+{{/* Per-field autosave indicator (DESIGN.md §11.4/§8.12) - swapped via
+     hx-swap="innerHTML" into a field's small static <span id="...-status">
+     wrapper (settings.html), so the wrapper keeps its id across swaps and
+     stays a stable hx-target for the next change. .settings-save-status--ok
+     fades itself out via CSS animation (SettingsPage.css); the error state
+     does not, and stays until the next successful save replaces it. */}}
+{{define "partials/settings_field_status.html"}}
+{{if .Error}}<span class="settings-save-status--error" role="alert">&#9888; {{.Error}}</span>{{else}}<span class="settings-save-status--ok" aria-live="polite">&#10003; Saved</span>{{end}}
+{{end}}

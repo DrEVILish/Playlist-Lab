@@ -12,6 +12,20 @@
   </div>
 
   <div class="cross-import-flow">
+    <!-- Visible step indicator (DESIGN.md §11.7) - this page has no separate
+         steps 3/4 markup of its own (matching happens in
+         partials/cross_import_progress.html, review in
+         partials/cross_import_review.html, both swapped into
+         #cross-import-progress below), so those two render their own copy
+         of this same indicator rather than sharing a Go template define
+         across the page/partial template sets, which are parsed separately
+         (see LoadTemplates in internal/handlers/templates.go). -->
+    <ol class="ci-step-indicator">
+      <li class="ci-step {{if not .TargetConnected}}ci-step--active{{else}}ci-step--done{{end}}">1. Connect</li>
+      <li class="ci-step {{if .TargetConnected}}ci-step--active{{end}}">2. Choose Playlist</li>
+      <li class="ci-step">3. Match</li>
+      <li class="ci-step">4. Review &amp; Confirm</li>
+    </ol>
     <div class="step-content" id="cross-import-step">
       {{if not .HasServer}}
       <div class="error-message">Select a Plex server and music library in setup before importing.</div>
@@ -20,6 +34,11 @@
         <h2 class="step-section-title">Connect to YouTube</h2>
         <p class="cross-import-description" style="margin-bottom:1.5rem;">
           Connect your YouTube account to export Plex playlists to YouTube.
+        </p>
+        <p class="cross-import-description" style="margin-bottom:1.5rem;">
+          Connecting creates a new YouTube playlist from your selected Plex playlist; matching happens
+          automatically and unmatched tracks are skipped. You'll be asked to grant permission to manage
+          your YouTube playlists.
         </p>
         <a class="btn btn-primary" href="/cross-import/oauth/youtube">Connect YouTube</a>
       </div>
@@ -38,7 +57,7 @@
   </div>
 
   <section class="cross-import-history-section">
-    <h2 class="step-section-title">Import History</h2>
+    <h2 class="step-section-title">Export History</h2>
     <div id="cross-import-history" hx-get="/cross-import/history" hx-trigger="load" hx-swap="innerHTML"></div>
   </section>
 </div>

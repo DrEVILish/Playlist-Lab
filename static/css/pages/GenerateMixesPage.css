@@ -82,7 +82,7 @@
 }
 
 .create-custom-mix-btn-compact:hover:not(:disabled) {
-  background: rgba(91, 155, 213, 0.08);
+  background: rgba(47, 143, 255, 0.08);
   border-color: var(--primary-color);
   color: var(--primary-color);
 }
@@ -126,17 +126,17 @@
 
 .quick-mix-card.custom-mix-card {
   border: 2px dashed var(--primary-color);
-  background: rgba(91, 155, 213, 0.05);
+  background: rgba(47, 143, 255, 0.05);
 }
 
 .quick-mix-card.custom-mix-card:hover:not(:disabled) {
-  background: rgba(91, 155, 213, 0.1);
+  background: rgba(47, 143, 255, 0.1);
   border-color: var(--primary-color);
 }
 
 .quick-mix-card.generating {
   border-color: var(--primary-color);
-  background: rgba(91, 155, 213, 0.08);
+  background: rgba(47, 143, 255, 0.08);
 }
 
 .quick-mix-content {
@@ -166,7 +166,7 @@
   gap: 0.5rem;
   margin-top: 1rem;
   padding: 0.75rem;
-  background: rgba(91, 155, 213, 0.1);
+  background: rgba(47, 143, 255, 0.1);
   border-radius: var(--radius-sm);
   font-size: 0.875rem;
   color: var(--primary-color);
@@ -177,7 +177,7 @@
 .spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(91, 155, 213, 0.3);
+  border: 2px solid rgba(47, 143, 255, 0.3);
   border-top-color: var(--primary-color);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -363,7 +363,7 @@
 .mix-settings-modal {
   background: var(--gradient-card);
   border-radius: var(--radius-xl);
-  max-width: 560px;
+  max-width: 90vw;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
@@ -517,12 +517,11 @@
 .mix-settings-actions .btn-primary {
   flex: 1;
   justify-content: center;
-  background: var(--gradient-primary);
-  box-shadow: 0 2px 12px rgba(91, 155, 213, 0.3);
 }
 
 .mix-settings-actions .btn-primary:hover:not(:disabled) {
-  box-shadow: 0 4px 20px rgba(91, 155, 213, 0.4);
+  background: rgba(0, 229, 255, 0.12);
+  box-shadow: 0 0 14px rgba(0, 229, 255, 0.4);
 }
 
 .mix-settings-actions .btn-secondary {
@@ -534,7 +533,12 @@
 .mix-settings-actions .btn-secondary:hover:not(:disabled) {
   background-color: var(--surface-hover);
   color: var(--text-primary);
-  border-color: var(--border-light);
+  /* DESIGN.md §4: hover glow is now the app-wide language for every
+     .btn-secondary - this selector's higher specificity was silently
+     overriding base.css's border-color/box-shadow with the pre-reskin
+     look, so it's restated here to match rather than left stale. */
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
 }
 
 /* Scrollbar */

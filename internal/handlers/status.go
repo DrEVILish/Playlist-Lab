@@ -67,7 +67,7 @@ func (h *StatusHandler) page(w http.ResponseWriter, r *http.Request) {
 		h.Tmpl.RenderPage(w, r, "status", data)
 	}
 
-	userServer, err := db.GetUserServer(h.DB, user.ID)
+	userServer, err := db.GetUserMusicServer(h.DB, user.ID)
 	if err != nil || userServer == nil || !userServer.LibraryID.Valid {
 		render()
 		return

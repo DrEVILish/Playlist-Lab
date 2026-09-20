@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"database/sql"
+	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -35,11 +37,24 @@ func RegisterPlaylists(r chi.Router, mw *auth.Middleware, h *PlaylistsHandler) {
 	r.Group(func(r chi.Router) {
 		r.Use(mw.RequireAuth)
 		r.Get("/", h.index)
+		r.Get("/playlists/export", h.exportCSV)
+		r.Get("/playlists/{plexId}/preview", h.preview)
 		r.Get("/playlists/{plexId}", h.editor)
 		r.Put("/playlists/{plexId}/tracks/{trackId}/move", h.moveTrack)
 		r.Delete("/playlists/{plexId}/tracks/{trackId}", h.removeTrack)
+		// Both stubs: the Editor page (§11.2) wants the UI affordance for
+		// per-row preview playback and inline metadata editing now, but
+		// actually implementing either needs real backend work this page's
+		// scope doesn't cover - streaming-service preview-audio integration
+		// (DESIGN.md §17) and Plex library metadata write-back respectively.
+		// Returning a clear "not yet available" toast beats doing nothing
+		// (silently swallowed click) or faking success (edit reverts, so a
+		// save the user didn't get would be worse than no save button).
+		r.Post("/playlists/{plexId}/tracks/{trackId}/preview", notYetAvailable("Track preview playback isn't available yet - it needs per-service preview-audio integration."))
+		r.Put("/playlists/{plexId}/tracks/{trackId}/metadata", notYetAvailable("Editing track metadata isn't available yet - it needs write-back integration with your media library."))
 		r.Delete("/playlists/{plexId}", h.deletePlaylist)
 		r.Post("/playlists/bulk-delete", h.bulkDelete)
+		r.Put("/editor/columns", h.saveEditorColumns)
 		r.Post("/playlists/{plexId}/clone", h.clone)
 		r.Post("/playlists/{plexId}/shuffle", h.shuffle)
 		r.Post("/playlists/{plexId}/sort", h.sortTracks)
@@ -60,7 +75,7 @@ func RegisterPlaylists(r chi.Router, mw *auth.Middleware, h *PlaylistsHandler) {
 // resolving whether to use their account token or the server-specific one
 // (see plex.ResolveToken). Returns nil, nil if no server is selected yet.
 func (h *PlaylistsHandler) client(user *db.User) (*plex.Client, *db.UserServer, error) {
-	userServer, err := db.GetUserServer(h.DB, user.ID)
+	userServer, err := db.GetUserMusicServer(h.DB, user.ID)
 	if err != nil || userServer == nil {
 		return nil, userServer, err
 	}
@@ -102,11 +117,40 @@ func (h *PlaylistsHandler) index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plexPlaylists, err := client.GetPlaylists()
+	loaded, err := h.loadPlaylistRows(user, client, r.URL.Query())
 	if err != nil {
 		slog.Error("failed to fetch playlists from Plex", "error", err)
 		h.Tmpl.RenderPage(w, r, "home", map[string]any{"User": user, "PlexError": true})
 		return
+	}
+
+	h.Tmpl.RenderPage(w, r, "home", map[string]any{
+		"User": user, "Playlists": loaded.Rows, "TotalPlaylists": loaded.TotalPlaylists,
+		"TotalMissing": loaded.TotalMissing, "TotalScheduled": loaded.TotalScheduled, "TotalAttention": loaded.TotalAttention,
+		"Sort": loaded.SortKey, "Dir": loaded.Dir,
+		"Filter": loaded.Filter, "Sources": loaded.Sources,
+		"Query": queryState(loaded.Query),
+	})
+}
+
+// loadedPlaylistRows bundles everything the Playlists table needs to
+// render, either as the page itself (index) or as a CSV export
+// (exportCSV) of the exact same filtered/sorted rows - one query+filter+
+// sort implementation instead of two that could drift apart.
+type loadedPlaylistRows struct {
+	Rows                                         []playlistRow
+	TotalPlaylists, TotalMissing, TotalScheduled int
+	TotalAttention                               int
+	Filter                                       rowFilter
+	Sources                                      []string
+	SortKey, Dir                                 string
+	Query                                        url.Values
+}
+
+func (h *PlaylistsHandler) loadPlaylistRows(user *db.User, client *plex.Client, q url.Values) (loadedPlaylistRows, error) {
+	plexPlaylists, err := client.GetPlaylists()
+	if err != nil {
+		return loadedPlaylistRows{}, err
 	}
 
 	tracked, err := db.GetUserPlaylists(h.DB, user.ID)
@@ -186,7 +230,6 @@ func (h *PlaylistsHandler) index(w http.ResponseWriter, r *http.Request) {
 
 	// Stat tiles describe the whole library, so they're already tallied
 	// above - filtering only narrows the table below them.
-	q := r.URL.Query()
 	f := rowFilter{
 		Search:      strings.TrimSpace(q.Get("q")),
 		Source:      q.Get("fSource"),
@@ -217,13 +260,121 @@ func (h *PlaylistsHandler) index(w http.ResponseWriter, r *http.Request) {
 	}
 	sortRows(rows, sortKey, dir)
 
-	h.Tmpl.RenderPage(w, r, "home", map[string]any{
-		"User": user, "Playlists": rows, "TotalPlaylists": totalPlaylists,
-		"TotalMissing": totalMissing, "TotalScheduled": totalScheduled, "TotalAttention": totalAttention,
-		"Sort": sortKey, "Dir": dir,
-		"Filter": f, "Sources": sources,
-		"Query": queryState(q),
-	})
+	return loadedPlaylistRows{
+		Rows: rows, TotalPlaylists: totalPlaylists, TotalMissing: totalMissing,
+		TotalScheduled: totalScheduled, TotalAttention: totalAttention,
+		Filter: f, Sources: sources, SortKey: sortKey, Dir: dir, Query: q,
+	}, nil
+}
+
+// exportCSV streams the Playlists table's current filtered/sorted rows as
+// CSV (DESIGN.md §8.6/§11.1) - the same columns the table shows, minus the
+// actions column. ponytail: encoding/csv straight to the response writer,
+// no export-format registry like export.go's playlist-track exporter -
+// this table only ever needs the one format.
+func (h *PlaylistsHandler) exportCSV(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
+	client, userServer, err := h.client(user)
+	if err != nil || userServer == nil {
+		http.Error(w, "no server selected", http.StatusBadRequest)
+		return
+	}
+	loaded, err := h.loadPlaylistRows(user, client, r.URL.Query())
+	if err != nil {
+		http.Error(w, "Failed to load playlists", http.StatusBadGateway)
+		return
+	}
+
+	// Called from the bulk-actions bar's "Export Selected" button (a GET
+	// form submit, so checked ids arrive as repeated ?id= params, same as
+	// Backup/Merge/Delete Selected reading them from a POST body) - scoped
+	// to just those rows so its behavior matches every other button in that
+	// bar rather than silently exporting the whole filtered table.
+	rows := loaded.Rows
+	if ids := r.URL.Query()["id"]; len(ids) > 0 {
+		wanted := make(map[string]bool, len(ids))
+		for _, id := range ids {
+			wanted[id] = true
+		}
+		filtered := make([]playlistRow, 0, len(ids))
+		for _, row := range rows {
+			if wanted[row.PlexID] {
+				filtered = append(filtered, row)
+			}
+		}
+		rows = filtered
+	}
+
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", `attachment; filename="playlists.csv"`)
+	cw := csv.NewWriter(w)
+	cw.Write([]string{"Playlist Name", "Date Added", "Source", "Tracks", "Duration", "Missing Tracks", "Schedule", "Next Run", "Last Run"})
+	for _, row := range rows {
+		dateAdded, schedule, nextRun, lastRun := "", "off", "", ""
+		if row.DBID != 0 {
+			dateAdded = dateFromUnixCSV(row.CreatedAt)
+		}
+		if row.ScheduleID != 0 {
+			schedule = row.Frequency
+		}
+		if row.NextRun != "" {
+			nextRun = row.NextRun
+		}
+		if row.LastRun != 0 {
+			lastRun = dateFromUnixCSV(row.LastRun)
+			if row.LastRunStatus != "" {
+				lastRun += " (" + row.LastRunStatus + ")"
+			}
+		}
+		cw.Write([]string{
+			row.Name, dateAdded, row.Source, strconv.Itoa(row.TrackCount), formatDurationCSV(row.Duration),
+			strconv.Itoa(row.MissingCount), schedule, nextRun, lastRun,
+		})
+	}
+	cw.Flush()
+}
+
+// dateFromUnixCSV matches the "dateFromUnix" template func's format, kept
+// as its own copy here since that one lives in the template.FuncMap
+// closure rather than as a standalone callable Go function.
+func dateFromUnixCSV(sec int64) string {
+	if sec == 0 {
+		return ""
+	}
+	return time.Unix(sec, 0).Format("Jan 2, 2006")
+}
+
+// formatDurationCSV matches the "formatDuration" template func (h:mm,
+// DESIGN.md §7) - same duplication reason as dateFromUnixCSV above.
+func formatDurationCSV(ms int64) string {
+	totalMinutes := ms / 60000
+	hours := totalMinutes / 60
+	minutes := totalMinutes % 60
+	if hours > 0 {
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	}
+	return fmt.Sprintf("%dm", minutes)
+}
+
+// preview renders GET /playlists/{plexId}/preview - the Playlists table's
+// row-click expando (DESIGN.md §11.1): a lightweight, read-only track list,
+// not the full Editor. Reuses the same client.GetPlaylistTracks the Editor
+// page (h.editor) and clone() already call - no new Plex API surface.
+func (h *PlaylistsHandler) preview(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
+	plexID := chi.URLParam(r, "plexId")
+	client, userServer, err := h.client(user)
+	if err != nil || userServer == nil {
+		h.Tmpl.RenderPartial(w, "partials/playlist_preview.html", map[string]any{"Error": true})
+		return
+	}
+	tracks, err := client.GetPlaylistTracks(plexID)
+	if err != nil {
+		slog.Error("failed to fetch playlist tracks for preview", "error", err, "plexId", plexID)
+		h.Tmpl.RenderPartial(w, "partials/playlist_preview.html", map[string]any{"Error": true})
+		return
+	}
+	h.Tmpl.RenderPartial(w, "partials/playlist_preview.html", map[string]any{"Tracks": toTrackRows(tracks)})
 }
 
 // queryState lets templates build a link that changes exactly one query
@@ -502,6 +653,29 @@ type trackRow struct {
 	Artist         string
 	Album          string
 	Codec          string
+	Duration       int64 // ms
+}
+
+// editorHeader is the Editor page's detail-page header (DESIGN.md §11.2:
+// cover, description, stats, schedule live above the track table, since
+// there's no separate playlist detail page). Built entirely from fields
+// GetPlaylists()/the schedules tables already return - no new backend
+// fields. There's no playlist "description" field anywhere in this app's
+// Plex client or DB today, so that part of §11.2 is simply omitted rather
+// than invented.
+type editorHeader struct {
+	CoverURL       string
+	TrackCount     int
+	Duration       int64 // ms, whole playlist
+	Source         string
+	AddedAt        int64 // unix seconds, 0 if unknown; template renders it via relativeUnix/dateFromUnix (DESIGN.md §7)
+	MissingCount   int
+	ScheduleID     int64
+	Frequency      string
+	NextRun        string
+	LastRun        int64
+	LastRunStatus  string
+	ScheduleFailed bool
 }
 
 func (h *PlaylistsHandler) editor(w http.ResponseWriter, r *http.Request) {
@@ -523,28 +697,89 @@ func (h *PlaylistsHandler) editor(w http.ResponseWriter, r *http.Request) {
 	// Same lookup clone() uses: GetPlaylists() has no per-item Get, only a
 	// full list, but the editor page is opened rarely enough (once per
 	// playlist visited) that fetching it isn't worth adding a dedicated
-	// client method for.
+	// client method for. Also doubles as the source of the header's
+	// cover/stats below.
 	name := plexID
+	header := editorHeader{}
 	if playlists, err := client.GetPlaylists(); err == nil {
 		for _, p := range playlists {
 			if p.RatingKey == plexID {
 				name = p.Title
+				header.CoverURL = ImageProxyURL(p.Composite)
+				header.TrackCount = p.LeafCount
+				header.Duration = p.Duration
+				header.AddedAt = p.AddedAt
 				break
 			}
 		}
 	}
 
 	var dbID int64
-	if p, err := db.GetPlaylistByPlexID(h.DB, user.ID, plexID); err == nil && p != nil {
-		dbID = p.ID
+	if tracked, err := db.GetPlaylistByPlexID(h.DB, user.ID, plexID); err == nil && tracked != nil {
+		dbID = tracked.ID
+		header.Source = tracked.Source
+		// The playlist's own row in Playlist Lab's DB (when it has one) is
+		// a more meaningful "date added" than Plex's own addedAt - it's
+		// when the user actually started managing it here.
+		header.AddedAt = tracked.CreatedAt
+
+		if missing, err := db.GetUserMissingTracks(h.DB, user.ID); err == nil {
+			for _, t := range missing {
+				if t.PlaylistID == dbID {
+					header.MissingCount++
+				}
+			}
+		}
+
+		if s, err := db.GetScheduleByPlaylistID(h.DB, dbID); err == nil && s != nil {
+			header.ScheduleID = s.ID
+			header.Frequency = s.Frequency
+			header.NextRun, _ = nextRunRelative(*s)
+			if execs, err := db.GetScheduleExecutions(h.DB, s.ID, 1); err == nil && len(execs) > 0 {
+				header.LastRun = execs[0].StartedAt
+				header.LastRunStatus = execs[0].Status
+				header.ScheduleFailed = execs[0].Status == "failed"
+			}
+		}
 	}
 
+	columnsJSON, _ := db.GetEditorColumnsJSON(h.DB, user.ID)
 	h.Tmpl.RenderPage(w, r, "editor", map[string]any{
-		"PlexID": plexID,
-		"Name":   name,
-		"Tracks": toTrackRows(tracks),
-		"DBID":   dbID,
+		"PlexID":            plexID,
+		"Name":              name,
+		"Tracks":            toTrackRows(tracks),
+		"DBID":              dbID,
+		"Header":            header,
+		"EditorColumnsJSON": columnsJSON,
 	})
+}
+
+// saveEditorColumns persists the Editor page's column show/hide + order
+// (DESIGN.md §11.2/§17) as user_settings.editor_columns JSON - a per-user
+// preference, not per-playlist, so it isn't scoped under /playlists/{id}
+// like the rest of this file's routes.
+func (h *PlaylistsHandler) saveEditorColumns(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	raw := r.FormValue("columns")
+	// Validate it's at least well-formed JSON before it lands in the
+	// column - editor.html only ever sends its own JSON.stringify()'d
+	// state, so this is a sanity check against a malformed request, not
+	// meaningful input validation of the shape itself (loadColumnState's
+	// reconciliation against the real COLUMNS list already tolerates a
+	// stale/foreign key on read).
+	if !json.Valid([]byte(raw)) {
+		http.Error(w, "invalid column state", http.StatusBadRequest)
+		return
+	}
+	if err := db.SaveEditorColumnsJSON(h.DB, user.ID, raw); err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func toTrackRows(tracks []plex.Track) []trackRow {
@@ -557,9 +792,24 @@ func toTrackRows(tracks []plex.Track) []trackRow {
 		rows[i] = trackRow{
 			RatingKey: t.RatingKey, PlaylistItemID: itemID,
 			Title: t.Title, Artist: t.DisplayArtist(), Album: t.ParentTitle, Codec: t.Codec(),
+			Duration: t.Duration,
 		}
 	}
 	return rows
+}
+
+// notYetAvailable stubs an Editor-page control whose real behavior needs
+// backend work out of this page's scope (see the route comments above).
+// It responds success (so htmx doesn't render the request as a failed
+// action) but with an HX-Trigger the page's own small toast listener
+// (editor.html) shows, so the click visibly does *something* truthful
+// instead of nothing.
+func notYetAvailable(msg string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		payload, _ := json.Marshal(map[string]string{"editor-toast": msg})
+		w.Header().Set("HX-Trigger", string(payload))
+		w.WriteHeader(http.StatusOK)
+	}
 }
 
 func (h *PlaylistsHandler) moveTrack(w http.ResponseWriter, r *http.Request) {
@@ -575,6 +825,7 @@ func (h *PlaylistsHandler) moveTrack(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := client.MovePlaylistItem(plexID, trackID, afterID); err != nil {
 		slog.Error("failed to move track", "error", err)
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Reorder track", err.Error(), notifications.StatusError, nil)
 		http.Error(w, "Failed to reorder track", http.StatusBadGateway)
 		return
 	}
@@ -593,6 +844,7 @@ func (h *PlaylistsHandler) removeTrack(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := client.RemoveFromPlaylist(plexID, trackID); err != nil {
 		slog.Error("failed to remove track", "error", err)
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Remove track", err.Error(), notifications.StatusError, nil)
 		http.Error(w, "Failed to remove track", http.StatusBadGateway)
 		return
 	}
@@ -606,6 +858,12 @@ func (h *PlaylistsHandler) removeTrack(w http.ResponseWriter, r *http.Request) {
 // as a new one with the same tracks. Reuses the same
 // BuildLibraryURI/BuildTrackURI/CreatePlaylist pieces adapters/plex/target.go
 // already uses for cross-import - a straight copy, no new Plex API surface.
+// clone runs through the action queue (like merge/shuffle/sort/dedupe/split
+// above): duplicating a playlist means loading every source track, resolving
+// the machine identifier, and re-listing playlists to find the source's own
+// name - several sequential Plex round trips, the same "can take a while"
+// reasoning the other multi-call playlist actions in this file already queue
+// for.
 func (h *PlaylistsHandler) clone(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
 	plexID := chi.URLParam(r, "plexId")
@@ -615,43 +873,43 @@ func (h *PlaylistsHandler) clone(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no server selected", http.StatusBadRequest)
 		return
 	}
-	tracks, err := client.GetPlaylistTracks(plexID)
-	if err != nil {
-		slog.Error("clone: failed to load source playlist tracks", "error", err)
-		http.Error(w, "Failed to load playlist tracks", http.StatusBadGateway)
-		return
-	}
-	machineID, err := client.GetMachineIdentifier()
-	if err != nil {
-		slog.Error("clone: failed to get machine identifier", "error", err)
-		http.Error(w, "Failed to reach Plex server", http.StatusBadGateway)
-		return
-	}
-	trackURIs := make([]string, len(tracks))
-	for i, t := range tracks {
-		trackURIs[i] = client.BuildTrackURI(t.RatingKey, machineID)
-	}
 
-	playlists, err := client.GetPlaylists()
-	if err != nil {
-		http.Error(w, "Failed to load playlists", http.StatusBadGateway)
-		return
-	}
-	var sourceName string
-	for _, p := range playlists {
-		if p.RatingKey == plexID {
-			sourceName = p.Title
-			break
+	h.Queue.Enqueue(user.ID, "Duplicate playlist", notifications.TypeAction, func(notificationID string) error {
+		tracks, err := client.GetPlaylistTracks(plexID)
+		if err != nil {
+			return fmt.Errorf("failed to load playlist tracks: %w", err)
 		}
-	}
-	name := sourceName + " (Copy)"
-	if _, err := client.CreatePlaylist(name, client.BuildLibraryURI(userServer.LibraryID.String, machineID), trackURIs); err != nil {
-		slog.Error("clone: failed to create cloned playlist", "error", err)
-		http.Error(w, "Failed to create cloned playlist", http.StatusBadGateway)
-		return
-	}
-	w.Header().Set("HX-Redirect", "/")
-	w.WriteHeader(http.StatusOK)
+		machineID, err := client.GetMachineIdentifier()
+		if err != nil {
+			return fmt.Errorf("failed to reach Plex server: %w", err)
+		}
+		trackURIs := make([]string, len(tracks))
+		for i, t := range tracks {
+			trackURIs[i] = client.BuildTrackURI(t.RatingKey, machineID)
+		}
+
+		playlists, err := client.GetPlaylists()
+		if err != nil {
+			return fmt.Errorf("failed to load playlists: %w", err)
+		}
+		var sourceName string
+		for _, p := range playlists {
+			if p.RatingKey == plexID {
+				sourceName = p.Title
+				break
+			}
+		}
+		name := sourceName + " (Copy)"
+		if _, err := client.CreatePlaylist(name, client.BuildLibraryURI(userServer.LibraryID.String, machineID), trackURIs); err != nil {
+			return fmt.Errorf("failed to create cloned playlist: %w", err)
+		}
+		status := notifications.StatusSuccess
+		detail := fmt.Sprintf("Created %q", name)
+		h.Notifications.Update(user.ID, notificationID, notifications.Patch{Status: &status, Detail: &detail})
+		return nil
+	})
+	w.WriteHeader(http.StatusAccepted)
+	h.Tmpl.RenderPartial(w, "partials/notifications.html", map[string]any{"Notifications": h.Notifications.List(user.ID)})
 }
 
 func (h *PlaylistsHandler) deletePlaylist(w http.ResponseWriter, r *http.Request) {
@@ -665,9 +923,11 @@ func (h *PlaylistsHandler) deletePlaylist(w http.ResponseWriter, r *http.Request
 	}
 	if err := deleteOnePlaylist(h.DB, client, user.ID, plexID); err != nil {
 		slog.Error("failed to delete playlist in Plex", "error", err)
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Delete playlist", err.Error(), notifications.StatusError, nil)
 		http.Error(w, "Failed to delete playlist", http.StatusBadGateway)
 		return
 	}
+	h.Notifications.Add(user.ID, notifications.TypeAction, "Delete playlist", "Deleted", notifications.StatusSuccess, nil)
 	w.Header().Set("HX-Redirect", "/")
 	w.WriteHeader(http.StatusOK)
 }
@@ -706,6 +966,9 @@ func (h *PlaylistsHandler) bulkDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	if failed > 0 {
 		slog.Warn("bulk delete finished with failures", "failed", failed, "total", len(ids))
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Delete playlists", fmt.Sprintf("%d of %d failed", failed, len(ids)), notifications.StatusError, nil)
+	} else {
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Delete playlists", fmt.Sprintf("Deleted %d", len(ids)), notifications.StatusSuccess, nil)
 	}
 	w.Header().Set("HX-Redirect", "/")
 	w.WriteHeader(http.StatusOK)
@@ -1090,6 +1353,7 @@ func (h *PlaylistsHandler) rename(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := client.RenamePlaylist(plexID, name); err != nil {
 		slog.Error("rename: failed to rename playlist in Plex", "error", err)
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Rename playlist", err.Error(), notifications.StatusError, nil)
 		http.Error(w, "Failed to rename playlist", http.StatusBadGateway)
 		return
 	}
@@ -1098,6 +1362,7 @@ func (h *PlaylistsHandler) rename(w http.ResponseWriter, r *http.Request) {
 			slog.Warn("rename: failed to update tracked playlist row", "error", err)
 		}
 	}
+	h.Notifications.Add(user.ID, notifications.TypeAction, "Rename playlist", name, notifications.StatusSuccess, nil)
 	// Back to this same playlist's editor, not home - the user is mid-edit,
 	// not done with it just because they renamed it.
 	w.Header().Set("HX-Redirect", "/playlists/"+plexID)
@@ -1146,9 +1411,11 @@ func (h *PlaylistsHandler) uploadCover(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := client.UploadPlaylistPosterBytes(plexID, body, contentType); err != nil {
 		slog.Error("failed to upload playlist cover", "error", err, "playlistId", plexID)
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Upload playlist cover", err.Error(), notifications.StatusError, nil)
 		http.Error(w, "Failed to upload cover", http.StatusBadGateway)
 		return
 	}
+	h.Notifications.Add(user.ID, notifications.TypeAction, "Upload playlist cover", "Uploaded", notifications.StatusSuccess, nil)
 	// Back to this same playlist's editor, not home - same reasoning as
 	// rename above.
 	w.Header().Set("HX-Redirect", "/playlists/"+plexID)
@@ -1222,10 +1489,12 @@ func (h *PlaylistsHandler) addTracks(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := client.AddToPlaylist(plexID, trackURIs); err != nil {
 		slog.Error("failed to add tracks to playlist", "error", err, "playlistId", plexID)
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Add tracks", err.Error(), notifications.StatusError, nil)
 		http.Error(w, "Failed to add tracks", http.StatusBadGateway)
 		return
 	}
 	touchTrackedPlaylist(h.DB, user.ID, plexID)
+	h.Notifications.Add(user.ID, notifications.TypeAction, "Add tracks", fmt.Sprintf("Added %d track(s)", len(trackIDs)), notifications.StatusSuccess, nil)
 	w.Header().Set("HX-Redirect", "/playlists/"+plexID)
 	w.WriteHeader(http.StatusOK)
 }
@@ -1270,7 +1539,7 @@ func (h *PlaylistsHandler) share(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "target user not found", http.StatusBadRequest)
 		return
 	}
-	targetServer, err := db.GetUserServer(h.DB, targetUserID)
+	targetServer, err := db.GetUserMusicServer(h.DB, targetUserID)
 	if err != nil || targetServer == nil || !targetServer.LibraryID.Valid {
 		http.Error(w, "target user has no library selected", http.StatusBadRequest)
 		return
@@ -1283,11 +1552,13 @@ func (h *PlaylistsHandler) share(w http.ResponseWriter, r *http.Request) {
 	}
 	tracks, err := client.GetPlaylistTracks(plexID)
 	if err != nil || len(tracks) == 0 {
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Share playlist", "Cannot share an empty or unreachable playlist", notifications.StatusError, nil)
 		http.Error(w, "cannot share an empty or unreachable playlist", http.StatusBadGateway)
 		return
 	}
 	playlists, err := client.GetPlaylists()
 	if err != nil {
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Share playlist", "Failed to load playlists", notifications.StatusError, nil)
 		http.Error(w, "failed to load playlists", http.StatusBadGateway)
 		return
 	}
@@ -1318,6 +1589,7 @@ func (h *PlaylistsHandler) share(w http.ResponseWriter, r *http.Request) {
 	newPlaylist, err := targetClient.CreatePlaylist(name, libraryURI, trackURIs)
 	if err != nil {
 		slog.Error("share: failed to create playlist for target user", "error", err)
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Share playlist", "Failed to create playlist for "+targetUser.PlexUsername, notifications.StatusError, nil)
 		http.Error(w, "failed to create playlist for target user", http.StatusBadGateway)
 		return
 	}
@@ -1330,6 +1602,7 @@ func (h *PlaylistsHandler) share(w http.ResponseWriter, r *http.Request) {
 		sourceRow, err = db.CreatePlaylistRow(h.DB, user.ID, plexID, name, "plex", "")
 		if err != nil {
 			slog.Error("share: failed to record source playlist row", "error", err)
+			h.Notifications.Add(user.ID, notifications.TypeAction, "Share playlist", "Shared, but failed to record the share", notifications.StatusError, nil)
 			http.Error(w, "shared, but failed to record the share", http.StatusInternalServerError)
 			return
 		}
@@ -1337,6 +1610,7 @@ func (h *PlaylistsHandler) share(w http.ResponseWriter, r *http.Request) {
 	if err := db.RecordPlaylistShare(h.DB, sourceRow.ID, user.ID, targetUserID, plexID, name); err != nil {
 		slog.Error("share: failed to record share", "error", err)
 	}
+	h.Notifications.Add(user.ID, notifications.TypeAction, "Share playlist", fmt.Sprintf("Shared %q with %s", name, targetUser.PlexUsername), notifications.StatusSuccess, nil)
 	h.Tmpl.RenderPartial(w, "partials/share_result.html", map[string]any{
 		"PlaylistName": name, "TrackCount": len(tracks),
 	})

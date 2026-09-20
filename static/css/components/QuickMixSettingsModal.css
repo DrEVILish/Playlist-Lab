@@ -15,7 +15,7 @@
 .quick-mix-settings-modal {
   background: var(--gradient-card);
   border-radius: var(--radius-xl);
-  max-width: 600px;
+  max-width: 90vw;
   width: 100%;
   max-height: 90vh;
   display: flex;
@@ -161,44 +161,26 @@
 .btn-generate {
   flex: 1;
   padding: 1rem 1.5rem;
-  background: var(--gradient-primary);
-  color: #ffffff;
-  border: none;
+  background: transparent;
+  color: var(--accent-cyan);
+  border: 1px solid var(--accent-cyan);
   border-radius: var(--radius-md);
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 12px rgba(91, 155, 213, 0.3);
-  position: relative;
-  overflow: hidden;
-}
-
-.btn-generate::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-  transition: left 0.5s;
-}
-
-.btn-generate:hover:not(:disabled)::before {
-  left: 100%;
 }
 
 .btn-generate:hover:not(:disabled) {
-  box-shadow: 0 4px 20px rgba(91, 155, 213, 0.5);
-  transform: translateY(-1px);
+  background: rgba(0, 229, 255, 0.12);
+  box-shadow: 0 0 14px rgba(0, 229, 255, 0.4);
 }
 
 .btn-generate:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-schedule {
   padding: 1rem 1.5rem;
-  background: var(--gradient-accent);
+  background: var(--primary-color);
   color: #ffffff;
   border: none;
   border-radius: var(--radius-md);

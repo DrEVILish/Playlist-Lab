@@ -1,6 +1,7 @@
 package spotify
 
 import (
+	"context"
 	"database/sql"
 	"path/filepath"
 	"testing"
@@ -47,7 +48,7 @@ func TestGetToken_NeverConnected_ReturnsEmptyNoError(t *testing.T) {
 	sqlDB := newTestDB(t)
 	userID := newTestUser(t, sqlDB)
 
-	token, err := GetToken(sqlDB, testSecret, userID)
+	token, err := GetToken(context.Background(), sqlDB, testSecret, userID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -68,7 +69,7 @@ func TestGetToken_ValidUnexpiredToken_DecryptsAndReturns(t *testing.T) {
 		t.Fatalf("SaveSpotifyTokens: %v", err)
 	}
 
-	token, err := GetToken(sqlDB, testSecret, userID)
+	token, err := GetToken(context.Background(), sqlDB, testSecret, userID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -92,7 +93,7 @@ func TestGetToken_ExpiredWithNoRefreshToken_ReturnsEmptyNoError(t *testing.T) {
 		t.Fatalf("SaveSpotifyTokens: %v", err)
 	}
 
-	token, err := GetToken(sqlDB, testSecret, userID)
+	token, err := GetToken(context.Background(), sqlDB, testSecret, userID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

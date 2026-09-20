@@ -7,12 +7,13 @@ import (
 	"testing"
 
 	"github.com/drevilish/playlist-lab/internal/db"
+	"github.com/drevilish/playlist-lab/internal/services/notifications"
 )
 
 func TestMixTemplateCreate_StampsSchemaVersionWhenMissing(t *testing.T) {
 	sqlDB := newTestDB(t)
 	user := newTestUser(t, sqlDB)
-	h := &MixTemplatesHandler{DB: sqlDB, Tmpl: nopTemplates()}
+	h := &MixTemplatesHandler{DB: sqlDB, Tmpl: nopTemplates(), Notifications: notifications.NewStore()}
 	router := testRouter(sqlDB, "POST", "/mix-templates", h.create)
 
 	form := url.Values{
@@ -41,7 +42,7 @@ func TestMixTemplateCreate_StampsSchemaVersionWhenMissing(t *testing.T) {
 func TestMixTemplateCreate_PreservesExistingSchemaVersion(t *testing.T) {
 	sqlDB := newTestDB(t)
 	user := newTestUser(t, sqlDB)
-	h := &MixTemplatesHandler{DB: sqlDB, Tmpl: nopTemplates()}
+	h := &MixTemplatesHandler{DB: sqlDB, Tmpl: nopTemplates(), Notifications: notifications.NewStore()}
 	router := testRouter(sqlDB, "POST", "/mix-templates", h.create)
 
 	form := url.Values{
@@ -62,7 +63,7 @@ func TestMixTemplateCreate_PreservesExistingSchemaVersion(t *testing.T) {
 func TestMixTemplateCreate_RejectsMissingTrackCount(t *testing.T) {
 	sqlDB := newTestDB(t)
 	user := newTestUser(t, sqlDB)
-	h := &MixTemplatesHandler{DB: sqlDB, Tmpl: nopTemplates()}
+	h := &MixTemplatesHandler{DB: sqlDB, Tmpl: nopTemplates(), Notifications: notifications.NewStore()}
 	router := testRouter(sqlDB, "POST", "/mix-templates", h.create)
 
 	form := url.Values{
@@ -79,7 +80,7 @@ func TestMixTemplateCreate_RejectsMissingTrackCount(t *testing.T) {
 func TestMixTemplateCreate_RejectsInvalidMixType(t *testing.T) {
 	sqlDB := newTestDB(t)
 	user := newTestUser(t, sqlDB)
-	h := &MixTemplatesHandler{DB: sqlDB, Tmpl: nopTemplates()}
+	h := &MixTemplatesHandler{DB: sqlDB, Tmpl: nopTemplates(), Notifications: notifications.NewStore()}
 	router := testRouter(sqlDB, "POST", "/mix-templates", h.create)
 
 	form := url.Values{
@@ -96,7 +97,7 @@ func TestMixTemplateCreate_RejectsInvalidMixType(t *testing.T) {
 func TestMixTemplateCreate_RejectsEmptyName(t *testing.T) {
 	sqlDB := newTestDB(t)
 	user := newTestUser(t, sqlDB)
-	h := &MixTemplatesHandler{DB: sqlDB, Tmpl: nopTemplates()}
+	h := &MixTemplatesHandler{DB: sqlDB, Tmpl: nopTemplates(), Notifications: notifications.NewStore()}
 	router := testRouter(sqlDB, "POST", "/mix-templates", h.create)
 
 	form := url.Values{
@@ -120,7 +121,7 @@ func TestMixTemplateCreate_RejectsEmptyName(t *testing.T) {
 func TestMixTemplateUpdate_GranularFieldsMergePreservesOtherFields(t *testing.T) {
 	sqlDB := newTestDB(t)
 	user := newTestUser(t, sqlDB)
-	h := &MixTemplatesHandler{DB: sqlDB, Tmpl: nopTemplates()}
+	h := &MixTemplatesHandler{DB: sqlDB, Tmpl: nopTemplates(), Notifications: notifications.NewStore()}
 
 	tpl, err := db.CreateMixTemplate(sqlDB, user.ID, "Artist Mix", nil, "artist",
 		`{"trackCount": 30, "artistIds": ["a1", "a2"], "schemaVersion": 1}`)
@@ -157,7 +158,7 @@ func TestMixTemplateUpdate_GranularFieldsMergePreservesOtherFields(t *testing.T)
 func TestMixTemplateUpdate_RejectsZeroTrackCountFromGranularEdit(t *testing.T) {
 	sqlDB := newTestDB(t)
 	user := newTestUser(t, sqlDB)
-	h := &MixTemplatesHandler{DB: sqlDB, Tmpl: nopTemplates()}
+	h := &MixTemplatesHandler{DB: sqlDB, Tmpl: nopTemplates(), Notifications: notifications.NewStore()}
 
 	tpl, _ := db.CreateMixTemplate(sqlDB, user.ID, "Mood Mix", nil, "mood", `{"trackCount": 30, "moods": ["chill"]}`)
 
@@ -176,7 +177,7 @@ func TestMixTemplateUpdate_ForbiddenForOtherUsersTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
-	h := &MixTemplatesHandler{DB: sqlDB, Tmpl: nopTemplates()}
+	h := &MixTemplatesHandler{DB: sqlDB, Tmpl: nopTemplates(), Notifications: notifications.NewStore()}
 	tpl, _ := db.CreateMixTemplate(sqlDB, owner.ID, "Owner's Mix", nil, "mood", `{"trackCount": 30, "moods": ["chill"]}`)
 
 	router := testRouter(sqlDB, "PUT", "/mix-templates/{id}", h.update)
@@ -195,7 +196,7 @@ func TestMixTemplateUpdate_ForbiddenForOtherUsersTemplate(t *testing.T) {
 func TestMixTemplateDelete_RoundTrip(t *testing.T) {
 	sqlDB := newTestDB(t)
 	user := newTestUser(t, sqlDB)
-	h := &MixTemplatesHandler{DB: sqlDB, Tmpl: nopTemplates()}
+	h := &MixTemplatesHandler{DB: sqlDB, Tmpl: nopTemplates(), Notifications: notifications.NewStore()}
 	tpl, _ := db.CreateMixTemplate(sqlDB, user.ID, "Delete Me", nil, "mood", `{"trackCount": 30, "moods": ["chill"]}`)
 
 	router := testRouter(sqlDB, "DELETE", "/mix-templates/{id}", h.delete)

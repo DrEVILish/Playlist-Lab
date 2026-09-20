@@ -15,31 +15,31 @@
   <div class="advanced-mix-modal">
     <div class="advanced-mix-header">
       <h2 class="advanced-mix-title">{{.Title}}</h2>
-      <button type="button" class="advanced-mix-close" onclick="document.getElementById('modal-root').innerHTML=''" aria-label="Close">&times;</button>
+      <button type="button" class="advanced-mix-close" onclick="closeTopModal()" aria-label="Close">&times;</button>
     </div>
 
-    <form hx-post="/mixes/generate" hx-target="#notifications" hx-swap="innerHTML" hx-on::after:request="document.getElementById('modal-root').innerHTML=''">
+    <form hx-post="/mixes/generate" hx-target="#notifications" hx-swap="innerHTML" hx-on::after:request="closeTopModal()">
       <input type="hidden" name="mixType" value="{{.MixType}}">
       <div class="advanced-mix-content">
         <div class="form-group">
-          <label class="form-label">Playlist Name</label>
-          <input type="text" class="form-input" name="playlistName" value="{{.DefaultName}}">
+          <label class="form-label" for="playlist-name">Playlist Name</label>
+          <input id="playlist-name" type="text" class="form-input" name="playlistName" value="{{.DefaultName}}">
         </div>
 
         <div class="form-group">
-          <label class="form-label">Number of Tracks</label>
-          <input type="range" class="track-slider" name="trackCount" min="10" max="200" step="10" value="50">
+          <label class="form-label" for="track-count">Number of Tracks</label>
+          <input id="track-count" type="range" class="track-slider" name="trackCount" min="10" max="200" step="10" value="50">
         </div>
 
         {{if eq .MixType "artist-discovery"}}
         <div class="form-group">
-          <label class="form-label">Artist Name</label>
-          <input type="text" class="form-input" name="seedArtistName" placeholder="e.g. Radiohead" required>
+          <label class="form-label" for="seed-artist-name">Artist Name</label>
+          <input id="seed-artist-name" type="text" class="form-input" name="seedArtistName" placeholder="e.g. Radiohead" required>
           <p class="form-hint">Matched against your library by name</p>
         </div>
         <div class="form-group">
-          <label class="form-label">Tracks Per Artist</label>
-          <input type="range" class="track-slider" name="tracksPerArtist" min="1" max="10" value="3">
+          <label class="form-label" for="tracks-per-artist">Tracks Per Artist</label>
+          <input id="tracks-per-artist" type="range" class="track-slider" name="tracksPerArtist" min="1" max="10" value="3">
         </div>
         {{end}}
 
@@ -66,12 +66,12 @@
           <label class="form-label">Year Range</label>
           <div class="year-range-inputs">
             <div>
-              <label class="form-label-small">Start Year</label>
-              <input type="number" class="form-input" name="startYear" min="1900" max="2100" value="1970">
+              <label class="form-label-small" for="start-year">Start Year</label>
+              <input id="start-year" type="number" class="form-input" name="startYear" min="1900" max="2100" value="1970">
             </div>
             <div>
-              <label class="form-label-small">End Year</label>
-              <input type="number" class="form-input" name="endYear" min="1900" max="2100" value="1979">
+              <label class="form-label-small" for="end-year">End Year</label>
+              <input id="end-year" type="number" class="form-input" name="endYear" min="1900" max="2100" value="1979">
             </div>
           </div>
         </div>
@@ -79,27 +79,27 @@
 
         {{if eq .MixType "genre-evolution"}}
         <div class="form-group">
-          <label class="form-label">Select Genre</label>
-          <select class="form-select" name="genre" required>
+          <label class="form-label" for="genre">Select Genre</label>
+          <select id="genre" class="form-select" name="genre" required>
             <option value="">Choose a genre...</option>
             {{range .Genres}}<option value="{{.}}">{{.}}</option>{{end}}
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">Tracks Per Decade</label>
-          <input type="range" class="track-slider" name="tracksPerDecade" min="1" max="15" value="5">
+          <label class="form-label" for="tracks-per-decade">Tracks Per Decade</label>
+          <input id="tracks-per-decade" type="range" class="track-slider" name="tracksPerDecade" min="1" max="15" value="5">
         </div>
         {{end}}
 
         {{if eq .MixType "artist-journey"}}
         <div class="form-group">
-          <label class="form-label">Artist Name</label>
-          <input type="text" class="form-input" name="artistName" placeholder="e.g. Radiohead" required>
+          <label class="form-label" for="artist-name">Artist Name</label>
+          <input id="artist-name" type="text" class="form-input" name="artistName" placeholder="e.g. Radiohead" required>
           <p class="form-hint">Matched against your library by name</p>
         </div>
         <div class="form-group">
-          <label class="form-label">Tracks Per Album</label>
-          <input type="range" class="track-slider" name="tracksPerAlbum" min="1" max="10" value="3">
+          <label class="form-label" for="tracks-per-album">Tracks Per Album</label>
+          <input id="tracks-per-album" type="range" class="track-slider" name="tracksPerAlbum" min="1" max="10" value="3">
         </div>
         {{end}}
 
@@ -113,8 +113,8 @@
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">Minimum Genres Per Track</label>
-          <input type="range" class="track-slider" name="minGenres" min="2" max="5" value="2">
+          <label class="form-label" for="min-genres">Minimum Genres Per Track</label>
+          <input id="min-genres" type="range" class="track-slider" name="minGenres" min="2" max="5" value="2">
           <p class="form-hint">Tracks must have at least this many of the selected genres</p>
         </div>
         {{end}}
@@ -122,7 +122,7 @@
 
       <div class="advanced-mix-actions">
         <button type="submit" class="btn-generate">Generate Mix</button>
-        <button type="button" class="btn-cancel" onclick="document.getElementById('modal-root').innerHTML=''">Cancel</button>
+        <button type="button" class="btn-cancel" onclick="closeTopModal()">Cancel</button>
       </div>
     </form>
   </div>

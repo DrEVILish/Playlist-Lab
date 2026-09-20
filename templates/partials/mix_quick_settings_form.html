@@ -6,135 +6,135 @@
 {{define "partials/mix_quick_settings_form.html"}}
 <div class="modal-overlay quick-mix-settings-overlay">
   <div class="modal-content quick-mix-settings-modal" role="dialog" aria-modal="true" aria-label="{{.Title}}">
-    <form hx-post="/mixes/generate" hx-target="#notifications" hx-swap="innerHTML" hx-on::after:request="document.getElementById('modal-root').innerHTML=''">
+    <form hx-post="/mixes/generate" hx-target="#notifications" hx-swap="innerHTML" hx-on::after:request="closeTopModal()">
       <input type="hidden" name="mixType" value="{{.MixType}}">
       <div class="quick-mix-settings-header">
         <div>
           <h2 class="quick-mix-settings-title">{{.Title}}</h2>
           <p class="quick-mix-settings-description">{{.Description}}</p>
         </div>
-        <button type="button" class="quick-mix-settings-close" onclick="document.getElementById('modal-root').innerHTML=''" aria-label="Close">&times;</button>
+        <button type="button" class="quick-mix-settings-close" onclick="closeTopModal()" aria-label="Close">&times;</button>
       </div>
 
       <div class="quick-mix-settings-content">
         <div class="form-group">
-          <label class="form-label">Playlist Name</label>
-          <input type="text" class="form-input" name="playlistName" value="{{.DefaultName}}">
+          <label class="form-label" for="playlist-name">Playlist Name</label>
+          <input id="playlist-name" type="text" class="form-input" name="playlistName" value="{{.DefaultName}}">
         </div>
 
         {{if eq .MixType "weekly"}}
         <div class="form-group">
-          <label class="form-label">Top Artists</label>
-          <input type="range" class="track-slider" name="topArtists" min="5" max="20" value="10">
+          <label class="form-label" for="top-artists">Top Artists</label>
+          <input id="top-artists" type="range" class="track-slider" name="topArtists" min="5" max="20" value="10">
           <p class="form-hint">Number of your most-played artists to include</p>
         </div>
         <div class="form-group">
-          <label class="form-label">Tracks Per Artist</label>
-          <input type="range" class="track-slider" name="tracksPerArtist" min="1" max="10" value="3">
+          <label class="form-label" for="tracks-per-artist">Tracks Per Artist</label>
+          <input id="tracks-per-artist" type="range" class="track-slider" name="tracksPerArtist" min="1" max="10" value="3">
           <p class="form-hint">Number of tracks to include from each artist</p>
         </div>
         {{end}}
 
         {{if eq .MixType "daily"}}
         <div class="form-group">
-          <label class="form-label">Recent Tracks</label>
-          <input type="range" class="track-slider" name="recentTracks" min="5" max="30" value="20">
+          <label class="form-label" for="recent-tracks">Recent Tracks</label>
+          <input id="recent-tracks" type="range" class="track-slider" name="recentTracks" min="5" max="30" value="20">
           <p class="form-hint">Tracks you've played recently</p>
         </div>
         <div class="form-group">
-          <label class="form-label">Related Tracks</label>
-          <input type="range" class="track-slider" name="relatedTracks" min="5" max="30" value="15">
+          <label class="form-label" for="related-tracks">Related Tracks</label>
+          <input id="related-tracks" type="range" class="track-slider" name="relatedTracks" min="5" max="30" value="15">
           <p class="form-hint">Tracks similar to your recent plays</p>
         </div>
         <div class="form-group">
-          <label class="form-label">Rediscovery Tracks</label>
-          <input type="range" class="track-slider" name="rediscoveryTracks" min="0" max="20" value="15">
+          <label class="form-label" for="rediscovery-tracks">Rediscovery Tracks</label>
+          <input id="rediscovery-tracks" type="range" class="track-slider" name="rediscoveryTracks" min="0" max="20" value="15">
           <p class="form-hint">Tracks you haven't played in a while</p>
         </div>
         <div class="form-group">
-          <label class="form-label">Rediscovery Period (days)</label>
-          <input type="range" class="track-slider" name="rediscoveryDays" min="30" max="365" step="30" value="90">
+          <label class="form-label" for="rediscovery-days">Rediscovery Period (days)</label>
+          <input id="rediscovery-days" type="range" class="track-slider" name="rediscoveryDays" min="30" max="365" step="30" value="90">
           <p class="form-hint">How long since last played for rediscovery tracks</p>
         </div>
         {{end}}
 
         {{if eq .MixType "timecapsule"}}
         <div class="form-group">
-          <label class="form-label">Track Count</label>
-          <input type="range" class="track-slider" name="trackCount" min="25" max="100" step="5" value="50">
+          <label class="form-label" for="track-count">Track Count</label>
+          <input id="track-count" type="range" class="track-slider" name="trackCount" min="25" max="100" step="5" value="50">
         </div>
         <div class="form-group">
-          <label class="form-label">Days Ago</label>
-          <input type="range" class="track-slider" name="daysAgo" min="180" max="730" step="30" value="365">
+          <label class="form-label" for="days-ago">Days Ago</label>
+          <input id="days-ago" type="range" class="track-slider" name="daysAgo" min="180" max="730" step="30" value="365">
           <p class="form-hint">Find tracks not played in the last N days</p>
         </div>
         <div class="form-group">
-          <label class="form-label">Max Per Artist</label>
-          <input type="range" class="track-slider" name="maxPerArtist" min="1" max="10" value="3">
+          <label class="form-label" for="max-per-artist">Max Per Artist</label>
+          <input id="max-per-artist" type="range" class="track-slider" name="maxPerArtist" min="1" max="10" value="3">
           <p class="form-hint">Maximum tracks from the same artist</p>
         </div>
         {{end}}
 
         {{if eq .MixType "newmusic"}}
         <div class="form-group">
-          <label class="form-label">Album Count</label>
-          <input type="range" class="track-slider" name="albumCount" min="5" max="20" value="10">
+          <label class="form-label" for="album-count">Album Count</label>
+          <input id="album-count" type="range" class="track-slider" name="albumCount" min="5" max="20" value="10">
           <p class="form-hint">Number of recently added albums to include</p>
         </div>
         <div class="form-group">
-          <label class="form-label">Tracks Per Album</label>
-          <input type="range" class="track-slider" name="tracksPerAlbum" min="1" max="10" value="3">
+          <label class="form-label" for="tracks-per-album">Tracks Per Album</label>
+          <input id="tracks-per-album" type="range" class="track-slider" name="tracksPerAlbum" min="1" max="10" value="3">
           <p class="form-hint">Number of tracks to include from each album</p>
         </div>
         {{end}}
 
         {{if eq .MixType "deep-cuts"}}
         <div class="form-group">
-          <label class="form-label">Track Count</label>
-          <input type="range" class="track-slider" name="trackCount" min="10" max="200" step="10" value="50">
+          <label class="form-label" for="track-count">Track Count</label>
+          <input id="track-count" type="range" class="track-slider" name="trackCount" min="10" max="200" step="10" value="50">
         </div>
         <div class="form-group">
-          <label class="form-label">Max Play Count</label>
-          <input type="range" class="track-slider" name="maxPlayCount" min="0" max="20" value="5">
+          <label class="form-label" for="max-play-count">Max Play Count</label>
+          <input id="max-play-count" type="range" class="track-slider" name="maxPlayCount" min="0" max="20" value="5">
           <p class="form-hint">Only include tracks played this many times or less</p>
         </div>
         {{end}}
 
         {{if eq .MixType "workout"}}
         <div class="form-group">
-          <label class="form-label">Total Track Count</label>
-          <input type="range" class="track-slider" name="trackCount" min="20" max="100" step="5" value="50">
+          <label class="form-label" for="track-count">Total Track Count</label>
+          <input id="track-count" type="range" class="track-slider" name="trackCount" min="20" max="100" step="5" value="50">
         </div>
         <div class="form-group">
-          <label class="form-label">Warmup Tracks</label>
-          <input type="range" class="track-slider" name="warmupTracks" min="0" max="15" value="5">
+          <label class="form-label" for="warmup-tracks">Warmup Tracks</label>
+          <input id="warmup-tracks" type="range" class="track-slider" name="warmupTracks" min="0" max="15" value="5">
           <p class="form-hint">Lower tempo/energy tracks to start</p>
         </div>
         <div class="form-group">
-          <label class="form-label">Peak Tracks</label>
-          <input type="range" class="track-slider" name="peakTracks" min="10" max="80" value="30">
+          <label class="form-label" for="peak-tracks">Peak Tracks</label>
+          <input id="peak-tracks" type="range" class="track-slider" name="peakTracks" min="10" max="80" value="30">
           <p class="form-hint">High tempo/energy tracks for main workout</p>
         </div>
         <div class="form-group">
-          <label class="form-label">Cooldown Tracks</label>
-          <input type="range" class="track-slider" name="cooldownTracks" min="0" max="15" value="5">
+          <label class="form-label" for="cooldown-tracks">Cooldown Tracks</label>
+          <input id="cooldown-tracks" type="range" class="track-slider" name="cooldownTracks" min="0" max="15" value="5">
           <p class="form-hint">Lower tempo/energy tracks to finish</p>
         </div>
         {{end}}
 
         {{if eq .MixType "forgotten-favorites"}}
         <div class="form-group">
-          <label class="form-label">Track Count</label>
-          <input type="range" class="track-slider" name="trackCount" min="10" max="200" step="10" value="50">
+          <label class="form-label" for="track-count">Track Count</label>
+          <input id="track-count" type="range" class="track-slider" name="trackCount" min="10" max="200" step="10" value="50">
         </div>
         <div class="form-group">
-          <label class="form-label">Minimum Play Count</label>
-          <input type="range" class="track-slider" name="minPlayCount" min="5" max="50" value="10">
+          <label class="form-label" for="min-play-count">Minimum Play Count</label>
+          <input id="min-play-count" type="range" class="track-slider" name="minPlayCount" min="5" max="50" value="10">
           <p class="form-hint">Only include tracks played at least this many times</p>
         </div>
         <div class="form-group">
-          <label class="form-label">Not Played In (days)</label>
-          <input type="range" class="track-slider" name="notPlayedDays" min="30" max="730" step="30" value="180">
+          <label class="form-label" for="not-played-days">Not Played In (days)</label>
+          <input id="not-played-days" type="range" class="track-slider" name="notPlayedDays" min="30" max="730" step="30" value="180">
           <p class="form-hint">Find tracks not played in the last N days</p>
         </div>
         {{end}}
@@ -142,7 +142,7 @@
 
       <div class="quick-mix-settings-actions">
         <button type="submit" class="btn-generate">Generate Mix</button>
-        <button type="button" class="btn-cancel" onclick="document.getElementById('modal-root').innerHTML=''">Cancel</button>
+        <button type="button" class="btn-cancel" onclick="closeTopModal()">Cancel</button>
       </div>
     </form>
   </div>

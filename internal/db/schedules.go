@@ -18,7 +18,8 @@ type Schedule struct {
 	ID           int64
 	UserID       int64
 	PlaylistID   sql.NullInt64
-	ScheduleType string // "playlist_refresh" or "mix_generation"
+	CollectionID sql.NullInt64
+	ScheduleType string // "playlist_refresh", "mix_generation", or "collection_refresh"
 	Frequency    string // "daily", "weekly", "fortnightly", "monthly"
 	StartDate    string // "YYYY-MM-DD"
 	LastRun      sql.NullInt64
@@ -58,11 +59,11 @@ type ScheduleExecution struct {
 	PlaylistName    sql.NullString
 }
 
-const scheduleCols = "id, user_id, playlist_id, schedule_type, frequency, start_date, last_run, config, created_at"
+const scheduleCols = "id, user_id, playlist_id, collection_id, schedule_type, frequency, start_date, last_run, config, created_at"
 
 func scanSchedule(row interface{ Scan(...any) error }) (*Schedule, error) {
 	var s Schedule
-	err := row.Scan(&s.ID, &s.UserID, &s.PlaylistID, &s.ScheduleType, &s.Frequency, &s.StartDate, &s.LastRun, &s.Config, &s.CreatedAt)
+	err := row.Scan(&s.ID, &s.UserID, &s.PlaylistID, &s.CollectionID, &s.ScheduleType, &s.Frequency, &s.StartDate, &s.LastRun, &s.Config, &s.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -72,17 +73,18 @@ func scanSchedule(row interface{ Scan(...any) error }) (*Schedule, error) {
 	return &s, nil
 }
 
-// CreateSchedule inserts a schedule row. playlistID of 0 stores NULL -
-// unlike the TS version, this Go port only supports schedules linked to an
-// already-imported playlist row (see scheduler package doc), so callers
-// always pass a real playlist_id for playlist_refresh; mix_generation
-// schedules pass 0 until their first run links one.
-func CreateSchedule(sqlDB *sql.DB, userID, playlistID int64, scheduleType, frequency, startDate, configJSON string) (*Schedule, error) {
+// CreateSchedule inserts a schedule row. playlistID/collectionID of 0 store
+// NULL - unlike the TS version, this Go port only supports schedules linked
+// to an already-imported playlist or collection row (see scheduler package
+// doc), so callers always pass a real id for playlist_refresh/
+// collection_refresh; mix_generation schedules pass 0 for both until their
+// first run links a playlist.
+func CreateSchedule(sqlDB *sql.DB, userID, playlistID, collectionID int64, scheduleType, frequency, startDate, configJSON string) (*Schedule, error) {
 	now := time.Now().Unix()
 	res, err := sqlDB.Exec(
-		`INSERT INTO schedules (user_id, playlist_id, schedule_type, frequency, start_date, config, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		userID, nullIfZero(playlistID), scheduleType, frequency, startDate, nullIfEmpty(configJSON), now,
+		`INSERT INTO schedules (user_id, playlist_id, collection_id, schedule_type, frequency, start_date, config, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		userID, nullIfZero(playlistID), nullIfZero(collectionID), scheduleType, frequency, startDate, nullIfEmpty(configJSON), now,
 	)
 	if err != nil {
 		return nil, err
@@ -103,6 +105,12 @@ func GetScheduleByID(sqlDB *sql.DB, id int64) (*Schedule, error) {
 // "Create Schedule" and "Manage Schedule" for a given playlist row.
 func GetScheduleByPlaylistID(sqlDB *sql.DB, playlistID int64) (*Schedule, error) {
 	return scanSchedule(sqlDB.QueryRow("SELECT "+scheduleCols+" FROM schedules WHERE playlist_id = ? LIMIT 1", playlistID))
+}
+
+// GetScheduleByCollectionID is GetScheduleByPlaylistID's Collections
+// sibling (DESIGN.md §11.11).
+func GetScheduleByCollectionID(sqlDB *sql.DB, collectionID int64) (*Schedule, error) {
+	return scanSchedule(sqlDB.QueryRow("SELECT "+scheduleCols+" FROM schedules WHERE collection_id = ? LIMIT 1", collectionID))
 }
 
 func GetUserSchedules(sqlDB *sql.DB, userID int64) ([]Schedule, error) {
@@ -137,7 +145,7 @@ type AdminSchedule struct {
 // other caller (the playlists page, the scheduler) only ever needs that.
 func GetAllSchedules(sqlDB *sql.DB) ([]AdminSchedule, error) {
 	rows, err := sqlDB.Query(`
-		SELECT s.id, s.user_id, s.playlist_id, s.schedule_type, s.frequency,
+		SELECT s.id, s.user_id, s.playlist_id, s.collection_id, s.schedule_type, s.frequency,
 		       s.start_date, s.last_run, s.config, s.created_at, u.plex_username, p.name
 		FROM schedules s
 		JOIN users u ON u.id = s.user_id
@@ -150,7 +158,7 @@ func GetAllSchedules(sqlDB *sql.DB) ([]AdminSchedule, error) {
 	var out []AdminSchedule
 	for rows.Next() {
 		var a AdminSchedule
-		if err := rows.Scan(&a.ID, &a.UserID, &a.PlaylistID, &a.ScheduleType, &a.Frequency, &a.StartDate, &a.LastRun, &a.Config, &a.CreatedAt, &a.Username, &a.PlaylistName); err != nil {
+		if err := rows.Scan(&a.ID, &a.UserID, &a.PlaylistID, &a.CollectionID, &a.ScheduleType, &a.Frequency, &a.StartDate, &a.LastRun, &a.Config, &a.CreatedAt, &a.Username, &a.PlaylistName); err != nil {
 			return nil, err
 		}
 		out = append(out, a)
@@ -164,7 +172,7 @@ func GetAllSchedules(sqlDB *sql.DB) ([]AdminSchedule, error) {
 // unit-testable without a DB, see scheduler/scheduler_test.go).
 func GetDueSchedules(sqlDB *sql.DB) ([]Schedule, error) {
 	rows, err := sqlDB.Query(`
-		SELECT schedules.id, schedules.user_id, schedules.playlist_id, schedules.schedule_type,
+		SELECT schedules.id, schedules.user_id, schedules.playlist_id, schedules.collection_id, schedules.schedule_type,
 		       schedules.frequency, schedules.start_date, schedules.last_run, schedules.config, schedules.created_at
 		FROM schedules
 		JOIN users ON users.id = schedules.user_id

@@ -42,6 +42,35 @@ func TestAddAndGetMissingTracks(t *testing.T) {
 	}
 }
 
+// TestAddMissingTracksDedupes covers the "same track appears 2-4 times in a
+// row" bug: a source list containing repeated title+artist entries (a
+// scrape duplicate, or a retry re-appending an already-unmatched track)
+// should collapse to one missing_tracks row per track, case/whitespace
+// insensitively.
+func TestAddMissingTracksDedupes(t *testing.T) {
+	sqlDB := newTestDB(t)
+	u, _ := CreateUser(sqlDB, "plex1", "u1", "tok1", "")
+	pl, _ := CreatePlaylistRow(sqlDB, u.ID, "pl1", "P1", "spotify", "")
+
+	tracks := []NewMissingTrack{
+		{Title: "Track A", Artist: "Artist A", Position: 0, Source: "spotify"},
+		{Title: "track a", Artist: " artist a ", Position: 1, Source: "spotify"},
+		{Title: "Track A", Artist: "Artist A", Position: 2, Source: "spotify"},
+		{Title: "Track B", Artist: "Artist B", Position: 3, Source: "spotify"},
+	}
+	if err := AddMissingTracks(sqlDB, u.ID, pl.ID, tracks); err != nil {
+		t.Fatalf("AddMissingTracks: %v", err)
+	}
+
+	got, err := GetUserMissingTracks(sqlDB, u.ID)
+	if err != nil {
+		t.Fatalf("GetUserMissingTracks: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 deduped tracks, got %d: %+v", len(got), got)
+	}
+}
+
 func TestAddMissingTracksEmptyIsNoop(t *testing.T) {
 	sqlDB := newTestDB(t)
 	u, _ := CreateUser(sqlDB, "plex1", "u1", "tok1", "")

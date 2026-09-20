@@ -7,7 +7,7 @@ func TestScheduleCRUD(t *testing.T) {
 	u, _ := CreateUser(sqlDB, "plex1", "u1", "tok1", "")
 	pl, _ := CreatePlaylistRow(sqlDB, u.ID, "pl1", "Playlist 1", "spotify", "")
 
-	sched, err := CreateSchedule(sqlDB, u.ID, pl.ID, "playlist_refresh", "daily", "2024-01-01", "")
+	sched, err := CreateSchedule(sqlDB, u.ID, pl.ID, 0, "playlist_refresh", "daily", "2024-01-01", "")
 	if err != nil {
 		t.Fatalf("CreateSchedule: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestGetUserSchedulesIsolation(t *testing.T) {
 	u2, _ := CreateUser(sqlDB, "plex2", "u2", "tok2", "")
 	pl1, _ := CreatePlaylistRow(sqlDB, u1.ID, "pl1", "P1", "spotify", "")
 
-	if _, err := CreateSchedule(sqlDB, u1.ID, pl1.ID, "mix_generation", "weekly", "2024-01-01", ""); err != nil {
+	if _, err := CreateSchedule(sqlDB, u1.ID, pl1.ID, 0, "mix_generation", "weekly", "2024-01-01", ""); err != nil {
 		t.Fatalf("CreateSchedule: %v", err)
 	}
 
@@ -64,7 +64,7 @@ func TestGetDueSchedulesDisabledUser(t *testing.T) {
 	sqlDB := newTestDB(t)
 	u, _ := CreateUser(sqlDB, "plex1", "u1", "tok1", "")
 	pl, _ := CreatePlaylistRow(sqlDB, u.ID, "pl1", "P1", "spotify", "")
-	sched, err := CreateSchedule(sqlDB, u.ID, pl.ID, "mix_generation", "daily", "2024-01-01", "")
+	sched, err := CreateSchedule(sqlDB, u.ID, pl.ID, 0, "mix_generation", "daily", "2024-01-01", "")
 	if err != nil {
 		t.Fatalf("CreateSchedule: %v", err)
 	}
@@ -119,13 +119,13 @@ func TestGetAllSchedules(t *testing.T) {
 	u2, _ := CreateUser(sqlDB, "plex2", "bob", "tok2", "")
 	pl, _ := CreatePlaylistRow(sqlDB, u1.ID, "pl1", "Alice's Playlist", "spotify", "")
 
-	s1, err := CreateSchedule(sqlDB, u1.ID, pl.ID, "playlist_refresh", "daily", "2024-01-01", "")
+	s1, err := CreateSchedule(sqlDB, u1.ID, pl.ID, 0, "playlist_refresh", "daily", "2024-01-01", "")
 	if err != nil {
 		t.Fatalf("CreateSchedule (alice): %v", err)
 	}
 	// mix_generation schedules have no playlist yet - GetAllSchedules must
 	// tolerate that rather than erroring on the LEFT JOIN.
-	s2, err := CreateSchedule(sqlDB, u2.ID, 0, "mix_generation", "weekly", "2024-01-01", "")
+	s2, err := CreateSchedule(sqlDB, u2.ID, 0, 0, "mix_generation", "weekly", "2024-01-01", "")
 	if err != nil {
 		t.Fatalf("CreateSchedule (bob): %v", err)
 	}

@@ -5,6 +5,7 @@
 package spotify
 
 import (
+	"context"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
@@ -52,7 +53,7 @@ func getCredentials(sqlDB *sql.DB, secret string, userID int64) (clientID, clien
 // refreshing it first if expired. Returns ("", nil) - not an error - if the
 // user has never connected Spotify, matching getSpotifyToken()'s "null
 // means not connected" contract in spotify-auth.ts.
-func GetToken(sqlDB *sql.DB, secret string, userID int64) (string, error) {
+func GetToken(ctx context.Context, sqlDB *sql.DB, secret string, userID int64) (string, error) {
 	tokens, err := db.GetSpotifyTokens(sqlDB, userID)
 	if err != nil {
 		return "", err
@@ -65,7 +66,7 @@ func GetToken(sqlDB *sql.DB, secret string, userID int64) (string, error) {
 		if !tokens.RefreshToken.Valid || tokens.RefreshToken.String == "" {
 			return "", nil
 		}
-		return refreshToken(sqlDB, secret, userID, tokens.RefreshToken.String)
+		return refreshToken(ctx, sqlDB, secret, userID, tokens.RefreshToken.String)
 	}
 
 	return crypto.Decrypt(tokens.AccessToken, secret)
@@ -75,7 +76,7 @@ func GetToken(sqlDB *sql.DB, secret string, userID int64) (string, error) {
 // its self-healing behavior: a decryption failure means SESSION_SECRET
 // changed since these were encrypted, so the now-unusable credentials are
 // cleared rather than left to fail the same way on every future call.
-func refreshToken(sqlDB *sql.DB, secret string, userID int64, encryptedRefreshToken string) (string, error) {
+func refreshToken(ctx context.Context, sqlDB *sql.DB, secret string, userID int64, encryptedRefreshToken string) (string, error) {
 	clientID, clientSecret, err := getCredentials(sqlDB, secret, userID)
 	if err != nil {
 		_ = db.ClearSpotifyCredentials(sqlDB, userID)
@@ -89,7 +90,7 @@ func refreshToken(sqlDB *sql.DB, secret string, userID int64, encryptedRefreshTo
 	}
 
 	form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refreshTok}}
-	tokens, err := requestToken(clientID, clientSecret, form)
+	tokens, err := requestToken(ctx, clientID, clientSecret, form)
 	if err != nil {
 		return "", err
 	}
@@ -128,7 +129,7 @@ var clientCredentialsCache struct {
 // back to the server-wide appClientID/appClientSecret (config.SpotifyClientID/
 // Secret). Returns ("", nil) - not an error - if neither is configured,
 // matching the original's "no credentials available" no-op.
-func GetClientCredentialsToken(sqlDB *sql.DB, secret string, userID int64, appClientID, appClientSecret string) (string, error) {
+func GetClientCredentialsToken(ctx context.Context, sqlDB *sql.DB, secret string, userID int64, appClientID, appClientSecret string) (string, error) {
 	clientCredentialsCache.mu.Lock()
 	if clientCredentialsCache.token != "" && time.Now().Add(60*time.Second).Before(clientCredentialsCache.expiresAt) {
 		token := clientCredentialsCache.token
@@ -148,7 +149,7 @@ func GetClientCredentialsToken(sqlDB *sql.DB, secret string, userID int64, appCl
 	}
 
 	form := url.Values{"grant_type": {"client_credentials"}}
-	tokens, err := requestToken(clientID, clientSecret, form)
+	tokens, err := requestToken(ctx, clientID, clientSecret, form)
 	if err != nil {
 		return "", err
 	}
@@ -161,8 +162,8 @@ func GetClientCredentialsToken(sqlDB *sql.DB, secret string, userID int64, appCl
 	return tokens.AccessToken, nil
 }
 
-func requestToken(clientID, clientSecret string, form url.Values) (*tokenResponse, error) {
-	req, err := http.NewRequest(http.MethodPost, "https://accounts.spotify.com/api/token", strings.NewReader(form.Encode()))
+func requestToken(ctx context.Context, clientID, clientSecret string, form url.Values) (*tokenResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://accounts.spotify.com/api/token", strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, err
 	}

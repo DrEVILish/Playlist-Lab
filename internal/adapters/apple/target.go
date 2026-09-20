@@ -81,9 +81,9 @@ type searchResponse struct {
 	} `json:"results"`
 }
 
-func (t *Target) search(devToken, userToken, query string, limit int) ([]appleSong, error) {
+func (t *Target) search(ctx context.Context, devToken, userToken, query string, limit int) ([]appleSong, error) {
 	u := "https://api.music.apple.com/v1/catalog/us/search?types=songs&term=" + url.QueryEscape(query) + "&limit=" + fmt.Sprint(limit)
-	req, err := http.NewRequest(http.MethodGet, u, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +123,7 @@ func (t *Target) SearchCatalog(ctx context.Context, query string, userID int64, 
 	if err != nil {
 		return nil, err
 	}
-	items, err := t.search(devToken, userToken, query, 10)
+	items, err := t.search(ctx, devToken, userToken, query, 10)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +156,7 @@ func (t *Target) MatchTracks(ctx context.Context, tracks []adapters.TrackInfo, c
 		query := strings.TrimSpace(track.Title + " " + track.Artist)
 		result := adapters.MatchResult{SourceTrack: track}
 
-		items, err := t.search(devToken, userToken, query, 5)
+		items, err := t.search(ctx, devToken, userToken, query, 5)
 		if err != nil {
 			slog.Warn("apple music search failed for track", "track", track, "error", err)
 		} else if len(items) > 0 {
@@ -205,7 +205,7 @@ func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adap
 		"attributes":    map[string]string{"name": name},
 		"relationships": map[string]any{"tracks": map[string]any{"data": trackRefs}},
 	})
-	req, _ := http.NewRequest(http.MethodPost, "https://api.music.apple.com/v1/me/library/playlists", strings.NewReader(string(body)))
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.music.apple.com/v1/me/library/playlists", strings.NewReader(string(body)))
 	req.Header.Set("Authorization", "Bearer "+devToken)
 	req.Header.Set("Music-User-Token", userToken)
 	req.Header.Set("Content-Type", "application/json")

@@ -49,15 +49,12 @@ type Config struct {
 	EnableScheduleChecker   bool
 	ScheduleCheckerSchedule string
 
-	// Deemix (services/deemix.ts). DeemixURL/DeemixConfigPath/ServiceName
-	// point at our own local deemix-server install and are pure env config.
-	// DeemixArl here is only the startup fallback used when admin_config has
-	// no "deemix_arl" row yet - once the admin saves it via /admin (Deemix
-	// tab), cmd/server/main.go's admin_config lookup takes over and this
-	// value is never read again, matching Node's configService behavior.
-	DeemixURL              string
-	DeemixConfigPath       string
-	DeemixServiceName      string
+	// Deemix (internal/services/deemix) talks to Deezer directly - no
+	// separate deemix-server process/URL to configure anymore. DeemixArl is
+	// only the startup fallback used when admin_config has no "deemix_arl"
+	// row yet - once the admin saves it via /admin (Deemix tab),
+	// cmd/server/main.go's admin_config lookup takes over and this value is
+	// never read again, matching Node's configService behavior.
 	DeemixArl              string
 	EnableDeemixArlCheck   bool
 	DeemixArlCheckSchedule string
@@ -105,9 +102,6 @@ func Load() Config {
 		EnableScheduleChecker:   getBool("ENABLE_SCHEDULE_CHECKER", true),
 		ScheduleCheckerSchedule: getEnv("SCHEDULE_CHECKER_SCHEDULE", "0,10,20,30,40,50 * * * *"), // every 10 minutes
 
-		DeemixURL:              strings.TrimSuffix(getEnv("DEEMIX_URL", "http://127.0.0.1:6595"), "/"),
-		DeemixConfigPath:       getEnv("DEEMIX_CONFIG_PATH", "/opt/deemix-server/config/config.json"),
-		DeemixServiceName:      getEnv("DEEMIX_SERVICE_NAME", "deemix-server.service"),
 		DeemixArl:              getEnv("DEEMIX_ARL", ""),
 		EnableDeemixArlCheck:   getBool("ENABLE_DEEMIX_ARL_CHECK", true),
 		DeemixArlCheckSchedule: getEnv("DEEMIX_ARL_CHECK_SCHEDULE", "0 4 * * *"),

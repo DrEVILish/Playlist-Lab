@@ -1,0 +1,385 @@
+{{/* Collections list (DESIGN.md §11.11) - the DataTable conventions from
+     DataTable.css (sticky header, always-visible row actions, "..." row
+     menu) without the col-select/bulk-actions-bar machinery, since there is
+     no bulk operation across collections in v1.
+
+     Lists every real Plex collection across the user's owned servers, not
+     just ones this app created (collections.go's unmanagedCollectionViews) -
+     a row with no ID (Go template falsy for int64 0) is a real Plex
+     collection with no matching Playlist Lab row, so it gets no edit/
+     refresh/schedule (nothing local to act on), just a delete-from-Plex.
+
+     The Missing column's expando row mirrors home.html's Missing Tracks
+     column exactly (GET .../missing lazy-loaded into a hidden sibling
+     <tr>, toggled via .is-open) - integrated into this same table instead
+     of a separate page section. */}}
+{{define "partials/collection_list.html"}}
+{{if not .Collections}}
+<p>{{if .Filter.Active}}No collections match these filters.{{else}}No collections yet. Create one to start managing a Plex library's collection membership from here.{{end}}</p>
+{{else}}
+<!-- Bulk select (DESIGN.md §11.11): a plain div, not a <form>, since row
+     actions (Edit/Refresh/Delete) are hx-* buttons that would illegally
+     nest inside a real <form> - same reasoning as missing_media_list.html's
+     own bulk-select-scope. Only managed rows (.ID set) get a checkbox;
+     unmanaged (Plex-native) rows already have their own single "Delete
+     from Plex" action and no local row to bulk-refresh. -->
+<div class="bulk-select-scope">
+<div class="collections-table-container data-table-container">
+<table class="collections-table data-table">
+  <thead>
+    <tr>
+      <th class="col-select"><input type="checkbox" class="select-all-in-table" aria-label="Select all collections"></th>
+      <th class="col-name sortable">
+        <div class="th-with-filter">
+          <a href="{{.Query.SortHref "name"}}" hx-get="{{.Query.SortHref "name"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true"><span class="th-label">Name</span> <span class="sort-arrow">{{sortArrow "name" $.Sort $.Dir}}</span></a>
+          <details class="th-filter">
+            <summary class="th-filter-btn{{if .Filter.Search}} active{{end}}" title="Search"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+            <form class="th-filter-menu" hx-get="/collections/list" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">
+              <!-- Preserves every OTHER active filter/sort param when
+                   submitting this one - fLibrary/fServer can now hold more
+                   than one value (multi-select), so every value has to
+                   round-trip, not just the first. -->
+              {{range $k, $v := .Query}}{{if ne $k "q"}}{{range $val := $v}}<input type="hidden" name="{{$k}}" value="{{$val}}">{{end}}{{end}}{{end}}
+              <input type="search" name="q" value="{{.Filter.Search}}" placeholder="Search collections..." class="form-input" autofocus>
+              <button type="submit" class="btn btn-primary btn-small" style="margin-top:0.375rem">Search</button>
+            </form>
+          </details>
+        </div>
+      </th>
+      {{if $.MultiServer}}
+      <th>
+        <div class="th-with-filter">
+          <span class="th-label">Server</span>
+          <details class="th-filter">
+            <summary class="th-filter-btn{{if .Filter.Server}} active{{end}}" title="Filter (multiple choice)"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+            <!-- Multiple choice: each server toggles independently
+                 (collectionsQueryState.Toggle) rather than replacing the
+                 whole filter value - "All servers" is the only exclusive
+                 option, clearing every selection at once. -->
+            <div class="th-filter-menu">
+              <button type="button" class="th-filter-option{{if not .Filter.Server}} active{{end}}" hx-get="{{.Query.With "fServer" ""}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">All servers</button>
+              {{range .Servers}}<button type="button" class="th-filter-option{{if hasString $.Filter.Server .}} active{{end}}" hx-get="{{$.Query.Toggle "fServer" .}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">{{if hasString $.Filter.Server .}}✓ {{end}}{{.}}</button>{{end}}
+            </div>
+          </details>
+        </div>
+      </th>
+      {{end}}
+      <th>
+        <div class="th-with-filter">
+          <span class="th-label">Library</span>
+          <details class="th-filter">
+            <summary class="th-filter-btn{{if .Filter.Library}} active{{end}}" title="Filter by library (multiple choice)"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+            <div class="th-filter-menu">
+              <button type="button" class="th-filter-option{{if not .Filter.Library}} active{{end}}" hx-get="{{.Query.With "fLibrary" ""}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">All libraries</button>
+              {{range .Libraries}}<button type="button" class="th-filter-option{{if hasString $.Filter.Library .}} active{{end}}" hx-get="{{$.Query.Toggle "fLibrary" .}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">{{if hasString $.Filter.Library .}}✓ {{end}}{{.}}</button>{{end}}
+            </div>
+          </details>
+          <details class="th-filter">
+            <summary class="th-filter-btn{{if .Filter.MediaType}} active{{end}}" title="Filter by media type"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+            <div class="th-filter-menu">
+              <button type="button" class="th-filter-option{{if not .Filter.MediaType}} active{{end}}" hx-get="{{.Query.With "fType" ""}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">All types</button>
+              <button type="button" class="th-filter-option{{if eq .Filter.MediaType "movie"}} active{{end}}" hx-get="{{.Query.With "fType" "movie"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Movies</button>
+              <button type="button" class="th-filter-option{{if eq .Filter.MediaType "show"}} active{{end}}" hx-get="{{.Query.With "fType" "show"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">TV Shows</button>
+            </div>
+          </details>
+        </div>
+      </th>
+      <th>
+        <div class="th-with-filter">
+          <span class="th-label">Builder</span>
+          <details class="th-filter">
+            <summary class="th-filter-btn{{if or .Filter.Builder .Filter.Provider}} active{{end}}" title="Filter (searchable)"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+            <!-- Searchable (DESIGN.md §11.11): a plain text input live-
+                 filters the option buttons below it by visible text
+                 (data-table.js's th-filter-search handler) - generic enough
+                 to reuse on any future th-filter-menu that grows a long
+                 option list, not special-cased to this one column. -->
+            <div class="th-filter-menu">
+              <input type="search" class="form-input th-filter-search" placeholder="Search..." aria-label="Search builder types" autofocus>
+              <button type="button" class="th-filter-option{{if not (or .Filter.Builder .Filter.Provider)}} active{{end}}" hx-get="{{.Query.SetBuilder ""}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">All</button>
+              <button type="button" class="th-filter-option{{if eq .Filter.Builder "smart"}} active{{end}}" hx-get="{{.Query.SetBuilder "smart"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Smart</button>
+              <button type="button" class="th-filter-option{{if eq .Filter.Builder "manual"}} active{{end}}" hx-get="{{.Query.SetBuilder "manual"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Manual</button>
+              <button type="button" class="th-filter-option{{if eq .Filter.Builder "external_list"}} active{{end}}" hx-get="{{.Query.SetBuilder "external_list"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">External List/Chart (any source)</button>
+              <button type="button" class="th-filter-option{{if eq .Filter.Builder "unmanaged"}} active{{end}}" hx-get="{{.Query.SetBuilder "unmanaged"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Not tracked by Playlist Lab</button>
+              <hr class="th-filter-divider">
+              <button type="button" class="th-filter-option{{if eq .Filter.Provider "tmdb"}} active{{end}}" hx-get="{{.Query.SetProvider "tmdb"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">TMDb</button>
+              <button type="button" class="th-filter-option{{if eq .Filter.Provider "imdb"}} active{{end}}" hx-get="{{.Query.SetProvider "imdb"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">IMDb</button>
+              <button type="button" class="th-filter-option{{if eq .Filter.Provider "tvdb"}} active{{end}}" hx-get="{{.Query.SetProvider "tvdb"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">TVDb</button>
+              <button type="button" class="th-filter-option{{if eq .Filter.Provider "letterboxd"}} active{{end}}" hx-get="{{.Query.SetProvider "letterboxd"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Letterboxd</button>
+            </div>
+          </details>
+        </div>
+      </th>
+      <th>Rules / Items</th>
+      <th>Sync Mode</th>
+      <th class="sortable">
+        <div class="th-with-filter">
+          <a href="{{.Query.SortHref "missing"}}" hx-get="{{.Query.SortHref "missing"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true"><span class="th-label">Missing</span> <span class="sort-arrow">{{sortArrow "missing" $.Sort $.Dir}}</span></a>
+          <details class="th-filter">
+            <summary class="th-filter-btn{{if .Filter.Missing}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+            <div class="th-filter-menu">
+              <button type="button" class="th-filter-option{{if not .Filter.Missing}} active{{end}}" hx-get="{{.Query.With "fMissing" ""}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Any missing</button>
+              <button type="button" class="th-filter-option{{if eq .Filter.Missing "has"}} active{{end}}" hx-get="{{.Query.With "fMissing" "has"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Has missing</button>
+              <button type="button" class="th-filter-option{{if eq .Filter.Missing "none"}} active{{end}}" hx-get="{{.Query.With "fMissing" "none"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">No missing</button>
+            </div>
+          </details>
+        </div>
+      </th>
+      <th class="sortable">
+        <div class="th-with-filter">
+          <span class="th-label">Schedule</span>
+          <details class="th-filter">
+            <summary class="th-filter-btn{{if .Filter.Schedule}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+            <div class="th-filter-menu">
+              <button type="button" class="th-filter-option{{if not .Filter.Schedule}} active{{end}}" hx-get="{{.Query.With "fSchedule" ""}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Any schedule</button>
+              <button type="button" class="th-filter-option{{if eq .Filter.Schedule "on"}} active{{end}}" hx-get="{{.Query.With "fSchedule" "on"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Scheduled</button>
+              <button type="button" class="th-filter-option{{if eq .Filter.Schedule "off"}} active{{end}}" hx-get="{{.Query.With "fSchedule" "off"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Not scheduled</button>
+            </div>
+          </details>
+        </div>
+      </th>
+      <th class="sortable">
+        <div class="th-with-filter">
+          <a href="{{.Query.SortHref "lastRun"}}" hx-get="{{.Query.SortHref "lastRun"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true"><span class="th-label">Last Run</span> <span class="sort-arrow">{{sortArrow "lastRun" $.Sort $.Dir}}</span></a>
+          <details class="th-filter">
+            <summary class="th-filter-btn{{if .Filter.LastRun}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+            <div class="th-filter-menu">
+              <button type="button" class="th-filter-option{{if not .Filter.LastRun}} active{{end}}" hx-get="{{.Query.With "fLastRun" ""}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Any</button>
+              <button type="button" class="th-filter-option{{if eq .Filter.LastRun "success"}} active{{end}}" hx-get="{{.Query.With "fLastRun" "success"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Succeeded</button>
+              <button type="button" class="th-filter-option{{if eq .Filter.LastRun "failed"}} active{{end}}" hx-get="{{.Query.With "fLastRun" "failed"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Failed</button>
+              <button type="button" class="th-filter-option{{if eq .Filter.LastRun "never"}} active{{end}}" hx-get="{{.Query.With "fLastRun" "never"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Never run</button>
+            </div>
+          </details>
+        </div>
+      </th>
+      <th class="sortable">
+        <div class="th-with-filter">
+          <a href="{{.Query.SortHref "nextRun"}}" hx-get="{{.Query.SortHref "nextRun"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true"><span class="th-label">Next Run</span> <span class="sort-arrow">{{sortArrow "nextRun" $.Sort $.Dir}}</span></a>
+          <details class="th-filter">
+            <summary class="th-filter-btn{{if .Filter.NextRun}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+            <div class="th-filter-menu">
+              <button type="button" class="th-filter-option{{if not .Filter.NextRun}} active{{end}}" hx-get="{{.Query.With "fNextRun" ""}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Any</button>
+              <button type="button" class="th-filter-option{{if eq .Filter.NextRun "due"}} active{{end}}" hx-get="{{.Query.With "fNextRun" "due"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Due now</button>
+              <button type="button" class="th-filter-option{{if eq .Filter.NextRun "upcoming"}} active{{end}}" hx-get="{{.Query.With "fNextRun" "upcoming"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Upcoming</button>
+              <button type="button" class="th-filter-option{{if eq .Filter.NextRun "none"}} active{{end}}" hx-get="{{.Query.With "fNextRun" "none"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Not scheduled</button>
+            </div>
+          </details>
+        </div>
+      </th>
+      <th class="sortable"><a href="{{.Query.SortHref "updatedAt"}}" hx-get="{{.Query.SortHref "updatedAt"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true"><span class="th-label">Last Updated</span> <span class="sort-arrow">{{sortArrow "updatedAt" $.Sort $.Dir}}</span></a></th>
+      <th class="sortable">
+        <div class="th-with-filter">
+          <a href="{{.Query.SortHref "dateAdded"}}" hx-get="{{.Query.SortHref "dateAdded"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true"><span class="th-label">Date Added</span> <span class="sort-arrow">{{sortArrow "dateAdded" $.Sort $.Dir}}</span></a>
+          <details class="th-filter">
+            <summary class="th-filter-btn{{if or .Filter.AddedAfter .Filter.AddedBefore}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+            <form class="th-filter-menu" hx-get="/collections/list" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">
+              {{range $k, $v := .Query}}{{if and (ne $k "fAddedAfter") (ne $k "fAddedBefore")}}{{range $val := $v}}<input type="hidden" name="{{$k}}" value="{{$val}}">{{end}}{{end}}{{end}}
+              <input type="date" name="fAddedAfter" value="{{.Filter.AddedAfter}}" class="form-input">
+              <input type="date" name="fAddedBefore" value="{{.Filter.AddedBefore}}" class="form-input" style="margin-top:0.375rem">
+              <button type="submit" class="btn btn-primary btn-small" style="margin-top:0.375rem">Apply</button>
+            </form>
+          </details>
+        </div>
+      </th>
+      <th class="col-actions">{{if .Filter.Active}}<a class="btn btn-secondary btn-small" href="/collections/list" hx-get="/collections/list" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true" title="Clear all filters">Clear</a>{{end}}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Collections}}
+    {{$rowKey := .PlexCollectionID.String}}{{if .ID}}{{$rowKey = printf "%d" .ID}}{{end}}
+    <tr id="collection-row-{{$rowKey}}" data-row-menu{{if not .ID}} class="collection-row--unmanaged"{{else}} tabindex="0"
+        hx-on:click="if(!isRowActionTarget(event)) toggleCollectionPreview('{{$rowKey}}')"
+        hx-on:keydown="if(event.key==='Enter'&&!isRowActionTarget(event)) toggleCollectionPreview('{{$rowKey}}')"{{end}}>
+      <td class="col-select">
+        {{if .ID}}<input type="checkbox" name="id" value="{{.ID}}" class="row-select" aria-label="Select {{.Name}}">
+        {{else}}<input type="checkbox" name="unmanaged" value="{{.ServerID}}|{{.PlexCollectionID.String}}" class="row-select" aria-label="Select {{.Name}}">{{end}}
+      </td>
+      <td class="collection-name-cell">{{.Name}}{{if .ID}}<svg class="collection-preview-toggle" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>{{end}}</td>
+      {{if $.MultiServer}}<td>{{.ServerName}}</td>{{end}}
+      <td>{{.LibraryDisplay}}</td>
+      <td>
+        {{if and (eq .BuilderType "external_list") .SourceLink}}
+        <a class="collection-builder-badge collection-builder-badge--external_list" href="{{.SourceLink}}" target="_blank" rel="noopener" title="View the source list/chart on {{.ProviderLabel}}">{{.ProviderLabel}}</a>
+        {{else}}
+        <span class="collection-builder-badge collection-builder-badge--{{.BuilderType}}">{{if eq .BuilderType "manual"}}Manual{{else if eq .BuilderType "external_list"}}{{.ProviderLabel}}{{else if .ID}}Smart{{else if .IsSmart}}Smart{{else}}List{{end}}</span>
+        {{end}}
+      </td>
+      <td class="collection-rules-summary">{{if .RulesSummary}}{{.RulesSummary}}{{else}}—{{end}}</td>
+      <td>{{if not .ID}}—{{else if eq .SyncMode "add_only"}}Add only{{else}}Sync{{end}}</td>
+      <td>
+        <!-- Expands an inline row (below) scoped to just this collection's
+             missing items via GET /collections/{id}/missing, same pattern
+             as home.html's Missing Tracks column. -->
+        {{if .MissingCount}}<button type="button" class="badge-button warn mono-data expando-toggle" hx-get="/collections/{{.ID}}/missing" hx-target="#missing-row-{{$rowKey}}-content" hx-swap="innerHTML" hx-on:click="document.getElementById('missing-row-{{$rowKey}}').classList.toggle('is-open'); this.classList.toggle('is-open')">{{.MissingCount}}<svg class="expando-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+        {{else if eq .BuilderType "external_list"}}<span class="mono-data">0</span>
+        {{else}}—{{end}}
+      </td>
+      <td>
+        {{if not .ID}}—
+        {{else if .ScheduleID}}<button type="button" class="badge-button" style="text-transform:capitalize" title="Edit schedule{{if .NextRun}} - next run {{.NextRun}}{{end}}" hx-get="/collections/{{.ID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">{{.Frequency}}</button>
+        {{else}}<button type="button" class="badge-button" style="color:var(--text-secondary)" title="Create schedule" hx-get="/collections/{{.ID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">off</button>{{end}}
+      </td>
+      <td class="mono-data">{{if .LastRun}}<span title="{{dateFromUnix .LastRun}}">{{relativeUnix .LastRun}}</span>{{else}}—{{end}}</td>
+      <td class="mono-data">{{if .NextRunAt}}<span title="{{dateFromUnix .NextRunAt}}">{{.NextRun}}</span>{{else}}—{{end}}</td>
+      <td class="mono-data">{{if .ID}}<span title="{{dateFromUnix .UpdatedAt}}">{{relativeUnix .UpdatedAt}}</span>{{else}}—{{end}}</td>
+      <td class="mono-data">{{if .ID}}{{dateFromUnix .CreatedAt}}{{else}}—{{end}}</td>
+      <td class="col-actions">
+        <div class="row-actions">{{template "collectionRowActions" .}}</div>
+      </td>
+    </tr>
+    {{if .ID}}
+    <tr id="preview-row-{{$rowKey}}" class="missing-row preview-row">
+      <td colspan="20"><div id="preview-row-{{$rowKey}}-content" class="collection-preview-scope"></div></td>
+    </tr>
+    {{end}}
+    {{if .MissingCount}}
+    <tr id="missing-row-{{$rowKey}}" class="missing-row">
+      <td colspan="20"><div id="missing-row-{{$rowKey}}-content" class="missing-tracks-scope"></div></td>
+    </tr>
+    {{end}}
+    {{end}}
+  </tbody>
+</table>
+</div>
+
+<!-- Mobile card list, mirroring home.html's playlists-cards/playlists-mobile-
+     search/playlists-sortbar (PlaylistsPage.css) - below 768px the desktop
+     table (with its per-column .th-filter search/filter popovers) is hidden
+     entirely, so without this phones had no search at all and just a
+     horizontally-scrolling table. Same checkbox-hack expand/collapse per
+     card as the Playlists page uses. -->
+<form class="collections-mobile-search" hx-get="/collections/list" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">
+  {{range $k, $v := .Query}}{{if ne $k "q"}}{{range $val := $v}}<input type="hidden" name="{{$k}}" value="{{$val}}">{{end}}{{end}}{{end}}
+  <input type="search" name="q" value="{{.Filter.Search}}" placeholder="Search collections...">
+  <button type="submit" class="btn btn-secondary btn-small">Search</button>
+</form>
+<div class="collections-sortbar">
+  <label for="collections-mobile-sort">Sort</label>
+  <!-- Each option's value is a full precomputed "/collections/list?..."
+       URL (Query.With, same as the desktop sort links) rather than a bare
+       sort key, so every other active filter/sort param survives the
+       change - a plain name="sort" GET would submit only that one field
+       and silently drop them. htmx.ajax (not hx-get, which has no way to
+       read the just-changed <select>'s own value at request time) fires
+       the fragment swap the same way every other filter/sort link here
+       does. -->
+  <select id="collections-mobile-sort" onchange="htmx.ajax('GET', this.value, {target:'#collections-list', swap:'innerHTML', pushUrl:true})">
+    <option value="{{.Query.With "sort" "name"}}"{{if eq .Sort "name"}} selected{{end}}>Name</option>
+    <option value="{{.Query.With "sort" "missing"}}"{{if eq .Sort "missing"}} selected{{end}}>Missing</option>
+    <option value="{{.Query.With "sort" "lastRun"}}"{{if eq .Sort "lastRun"}} selected{{end}}>Last Run</option>
+    <option value="{{.Query.With "sort" "nextRun"}}"{{if eq .Sort "nextRun"}} selected{{end}}>Next Run</option>
+    <option value="{{.Query.With "sort" "updatedAt"}}"{{if eq .Sort "updatedAt"}} selected{{end}}>Last Updated</option>
+    <option value="{{.Query.With "sort" "dateAdded"}}"{{if eq .Sort "dateAdded"}} selected{{end}}>Date Added</option>
+  </select>
+  <a href="{{.Query.With "dir" (toggleDir .Dir)}}" hx-get="{{.Query.With "dir" (toggleDir .Dir)}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true" title="{{if eq .Dir "desc"}}Descending - tap for ascending{{else}}Ascending - tap for descending{{end}}" aria-label="Sort direction: {{if eq .Dir "desc"}}descending{{else}}ascending{{end}}">{{if eq .Dir "desc"}}▼{{else}}▲{{end}}</a>
+</div>
+<div class="collections-cards">
+  {{range .Collections}}
+  {{$rowKey := .PlexCollectionID.String}}{{if .ID}}{{$rowKey = printf "%d" .ID}}{{end}}
+  <div class="collection-card{{if not .ID}} collection-row--unmanaged{{end}}">
+    <input type="checkbox" id="collection-card-toggle-{{$rowKey}}" class="collection-card-toggle" hidden>
+    <div class="collection-card-header">
+      {{if .ID}}<input type="checkbox" name="id" value="{{.ID}}" class="row-select" aria-label="Select {{.Name}}">
+      {{else}}<input type="checkbox" name="unmanaged" value="{{.ServerID}}|{{.PlexCollectionID.String}}" class="row-select" aria-label="Select {{.Name}}">{{end}}
+      <label for="collection-card-toggle-{{$rowKey}}" class="collection-card-header-label">
+        <div class="collection-card-title">
+          <span class="collection-name">{{.Name}}</span>
+          <span class="collection-card-summary">{{.LibraryDisplay}}{{if .MissingCount}} &middot; {{.MissingCount}} missing{{end}}</span>
+        </div>
+        <span class="collection-card-chevron">&#9662;</span>
+      </label>
+    </div>
+    <div class="collection-card-details">
+      {{if $.MultiServer}}
+      <div class="collection-card-detail-row">
+        <span class="collection-card-detail-label">Server</span>
+        <span>{{.ServerName}}</span>
+      </div>
+      {{end}}
+      <div class="collection-card-detail-row">
+        <span class="collection-card-detail-label">Builder</span>
+        {{if and (eq .BuilderType "external_list") .SourceLink}}
+        <a class="collection-builder-badge collection-builder-badge--external_list" href="{{.SourceLink}}" target="_blank" rel="noopener">{{.ProviderLabel}}</a>
+        {{else}}
+        <span class="collection-builder-badge collection-builder-badge--{{.BuilderType}}">{{if eq .BuilderType "manual"}}Manual{{else if eq .BuilderType "external_list"}}{{.ProviderLabel}}{{else if .ID}}Smart{{else if .IsSmart}}Smart{{else}}List{{end}}</span>
+        {{end}}
+      </div>
+      <div class="collection-card-detail-row">
+        <span class="collection-card-detail-label">Rules / Items</span>
+        <span>{{if .RulesSummary}}{{.RulesSummary}}{{else}}—{{end}}</span>
+      </div>
+      <div class="collection-card-detail-row">
+        <span class="collection-card-detail-label">Sync Mode</span>
+        <span>{{if not .ID}}—{{else if eq .SyncMode "add_only"}}Add only{{else}}Sync{{end}}</span>
+      </div>
+      <div class="collection-card-detail-row">
+        <span class="collection-card-detail-label">Schedule</span>
+        {{if not .ID}}—
+        {{else if .ScheduleID}}<button type="button" class="badge-button" style="text-transform:capitalize" hx-get="/collections/{{.ID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">{{.Frequency}}</button>
+        {{else}}<button type="button" class="badge-button" hx-get="/collections/{{.ID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">+ Schedule</button>{{end}}
+      </div>
+      {{if .ScheduleID}}
+      <div class="collection-card-detail-row">
+        <span class="collection-card-detail-label">Next / Last Run</span>
+        <span>{{if .NextRun}}{{.NextRun}}{{else}}&mdash;{{end}} / {{if .LastRun}}{{dateFromUnix .LastRun}}{{else}}&mdash;{{end}}</span>
+      </div>
+      {{end}}
+      <div class="collection-card-detail-row">
+        <span class="collection-card-detail-label">Date Added</span>
+        <span>{{if .ID}}{{dateFromUnix .CreatedAt}}{{else}}&mdash;{{end}}</span>
+      </div>
+      <div class="row-actions collection-card-actions">{{template "collectionRowActions" .}}</div>
+    </div>
+  </div>
+  {{end}}
+</div>
+
+<div class="bulk-actions-bar">
+  <span class="bulk-actions-count">Selected</span>
+  <!-- "closest .bulk-select-scope [name='id']:checked" (this button's
+       previous value, and the same pattern copy-pasted into missing_list.html/
+       missing_media_list.html) never actually worked - confirmed live with a
+       real headless-Chrome + htmx.min.js harness: Element.closest() walks
+       ANCESTORS of the button, and no ancestor of a "Refresh Selected"/
+       "Delete Selected" button is itself a "[name='id']:checked" element, so
+       it always resolved to nothing and every bulk POST silently submitted
+       an empty form. "closest .bulk-select-scope" alone (no descendant part)
+       is the correct form: htmx finds the ancestor *container* via a real
+       ancestor match, then - per its own hx-include container handling -
+       auto-includes every checked checkbox/radio found anywhere inside it
+       (confirmed with the same harness: only checked boxes are included,
+       unchecked ones correctly excluded), which is exactly the "every
+       selected row in this table" semantics both buttons want. -->
+  <button type="button" class="btn btn-secondary btn-small" hx-post="/collections/bulk-run" hx-include="closest .bulk-select-scope" hx-target="#notifications" hx-swap="innerHTML" hx-confirm="Refresh the selected collection(s) now?">Refresh Selected</button>
+  <button type="button" class="btn btn-secondary btn-small" style="color:var(--error)" hx-post="/collections/bulk-delete" hx-include="closest .bulk-select-scope" hx-target="#collections-list" hx-swap="innerHTML" hx-confirm="Delete the selected collection(s)? Ones tracked by Playlist Lab are removed from Playlist Lab only (Plex is left alone) - ones not tracked by Playlist Lab (no local row to keep) are deleted from Plex directly.">Delete Selected</button>
+</div>
+</div>
+{{end}}
+{{end}}
+
+{{/* collectionRowActions is the per-collection action button row, shared by
+     the desktop table and the mobile card list (mirrors home.html's
+     playlistRowActions) so the two views can't drift out of sync. Takes a
+     CollectionView as context. */}}
+{{define "collectionRowActions"}}
+{{if .ID}}
+<button type="button" class="icon-btn" title="Edit this collection" aria-label="Edit {{.Name}}" hx-get="/collections/{{.ID}}" hx-target="#modal-root" hx-swap="innerHTML">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+</button>
+<button type="button" class="icon-btn" title="Refresh" aria-label="Refresh {{.Name}} now" hx-post="/collections/{{.ID}}/run" hx-target="#notifications" hx-swap="innerHTML">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+</button>
+<!-- Plain confirm+delete here (Plex-side left alone by default, matching
+     Kometa's own convention); the rarer "also delete on Plex" option lives
+     in the edit modal's Danger Zone instead of cluttering this row action. -->
+<button type="button" class="icon-btn icon-btn-danger" title="Delete this collection" aria-label="Delete {{.Name}}" hx-delete="/collections/{{.ID}}" hx-target="#collections-list" hx-swap="innerHTML" hx-confirm="Delete this collection? The Plex collection itself (if one was created) is left alone.">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+</button>
+{{else}}
+<!-- Not tracked by Playlist Lab - nothing local to edit/refresh against,
+     just the option to remove it from Plex directly. -->
+<button type="button" class="icon-btn icon-btn-danger" title="Delete this collection from Plex" aria-label="Delete {{.Name}} from Plex" hx-delete="/collections/unmanaged?serverId={{.ServerID}}&amp;plexId={{.PlexCollectionID.String | urlquery}}" hx-target="#collections-list" hx-swap="innerHTML" hx-confirm="Delete &quot;{{.Name}}&quot; from Plex? This collection isn't tracked by Playlist Lab - this removes it from Plex directly.">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+</button>
+{{end}}
+{{end}}

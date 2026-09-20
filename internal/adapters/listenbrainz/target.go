@@ -83,9 +83,9 @@ func (r recording) albumTitle() string {
 	return ""
 }
 
-func (t *Target) searchMusicBrainz(query string, limit int) ([]recording, error) {
+func (t *Target) searchMusicBrainz(ctx context.Context, query string, limit int) ([]recording, error) {
 	u := "https://musicbrainz.org/ws/2/recording?query=" + url.QueryEscape(query) + "&limit=" + fmt.Sprint(limit) + "&fmt=json"
-	req, err := http.NewRequest(http.MethodGet, u, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func (t *Target) SearchCatalog(ctx context.Context, query string, userID int64, 
 	if token == "" {
 		return nil, ErrNotConnected
 	}
-	items, err := t.searchMusicBrainz(query, 10)
+	items, err := t.searchMusicBrainz(ctx, query, 10)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +151,7 @@ func (t *Target) MatchTracks(ctx context.Context, tracks []adapters.TrackInfo, c
 		query := fmt.Sprintf(`recording:"%s" AND artist:"%s"`, track.Title, track.Artist)
 		result := adapters.MatchResult{SourceTrack: track}
 
-		items, err := t.searchMusicBrainz(query, 5)
+		items, err := t.searchMusicBrainz(ctx, query, 5)
 		if err != nil {
 			slog.Warn("musicbrainz search failed for track", "track", track, "error", err)
 		} else if len(items) > 0 {
@@ -202,7 +202,7 @@ func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adap
 	body, _ := json.Marshal(map[string]any{
 		"playlist": map[string]any{"title": name, "track": tracks},
 	})
-	req, _ := http.NewRequest(http.MethodPost, apiBase+"/1/playlist/create", strings.NewReader(string(body)))
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, apiBase+"/1/playlist/create", strings.NewReader(string(body)))
 	req.Header.Set("Authorization", "Token "+token)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := t.httpClient.Do(req)
@@ -235,7 +235,7 @@ func (t *Target) HandleOAuthCallback(ctx context.Context, code string, userID in
 		return fmt.Errorf("no ListenBrainz token provided")
 	}
 
-	req, _ := http.NewRequest(http.MethodGet, apiBase+"/1/validate-token", nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, apiBase+"/1/validate-token", nil)
 	req.Header.Set("Authorization", "Token "+token)
 	resp, err := t.httpClient.Do(req)
 	if err != nil {

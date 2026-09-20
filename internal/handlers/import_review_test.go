@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/drevilish/playlist-lab/internal/adapters"
 	"github.com/drevilish/playlist-lab/internal/auth"
@@ -86,29 +87,54 @@ func TestPreview_RendersReviewListFromMatchedAndUnmatched(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
 	}
-	body := rec.Body.String()
+	// preview() now hands back a progress panel immediately and runs the
+	// fetch/match in a background goroutine (so the UI can poll live
+	// progress) - a session must exist right away for that poll to find,
+	// but the review list itself only appears once the goroutine finishes.
+	if h.Reviews.Count() != 1 {
+		t.Fatalf("want exactly one review session created, got %d", h.Reviews.Count())
+	}
+	sessionID := strings.SplitN(strings.SplitN(rec.Body.String(), "/import/preview/", 2)[1], "/status", 2)[0]
+
+	statusRouter := testRouter(sqlDB, http.MethodGet, "/import/preview/{sessionId}/status", h.previewStatus)
+	body := waitForReviewBody(t, func() string {
+		rec := authedRequest(t, sqlDB, statusRouter, user, http.MethodGet, "/import/preview/"+sessionID+"/status", "", "")
+		return rec.Body.String()
+	})
 	if !strings.Contains(body, "Song One") {
 		t.Errorf("missing the fetched track, got: %s", body)
 	}
 	if !strings.Contains(body, `value="Fake Playlist"`) {
 		t.Errorf("missing the default playlist name, got: %s", body)
 	}
-	// A session must have been created for the review's follow-up requests
-	// (skip/select/confirm) to find.
-	if h.Reviews.Count() != 1 {
-		t.Fatalf("want exactly one review session created, got %d", h.Reviews.Count())
+}
+
+// waitForReviewBody polls fetch (previewStatus) until the background
+// runPreview job reaches the review phase (fetch stops returning a
+// progress panel), or fails the test if it never does.
+func waitForReviewBody(t *testing.T, fetch func() string) string {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		body := fetch()
+		if !strings.Contains(body, "progress-title") {
+			return body
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
+	t.Fatal("timed out waiting for the review panel to replace the progress panel")
+	return ""
 }
 
 func TestReviewTrackSkip_TogglesAndReRenders(t *testing.T) {
 	sqlDB := newTestDB(t)
+	user := newTestUser(t, sqlDB)
 	store := importreview.NewStore()
-	sess := store.New("fake", "abc", "My Mix", "")
+	sess := store.New("fake", "abc", "My Mix", "", user.ID)
 	sess.SetTracks([]importreview.Track{{Title: "A", Matched: true, PlexRatingKey: "t1"}})
 
 	h := &ImportHandler{DB: sqlDB, Tmpl: nopTemplates(), Reviews: store}
 	router := testRouter(sqlDB, http.MethodPost, "/import/review/{sessionId}/track/{idx}/skip", h.reviewTrackSkip)
-	user := newTestUser(t, sqlDB)
 	rec := authedRequest(t, sqlDB, router, user, http.MethodPost, "/import/review/"+sess.ID+"/track/0/skip", "", "")
 
 	if rec.Code != http.StatusOK {
@@ -124,13 +150,13 @@ func TestReviewTrackSkip_TogglesAndReRenders(t *testing.T) {
 
 func TestReviewTrackSelect_UpdatesMatchAndClearsSkip(t *testing.T) {
 	sqlDB := newTestDB(t)
+	user := newTestUser(t, sqlDB)
 	store := importreview.NewStore()
-	sess := store.New("fake", "abc", "My Mix", "")
+	sess := store.New("fake", "abc", "My Mix", "", user.ID)
 	sess.SetTracks([]importreview.Track{{Title: "A", Matched: false, Skipped: true}})
 
 	h := &ImportHandler{DB: sqlDB, Tmpl: nopTemplates(), Reviews: store}
 	router := testRouter(sqlDB, http.MethodPost, "/import/review/{sessionId}/track/{idx}/select", h.reviewTrackSelect)
-	user := newTestUser(t, sqlDB)
 	rec := authedRequest(t, sqlDB, router, user, http.MethodPost, "/import/review/"+sess.ID+"/track/0/select",
 		"ratingKey=t9&title=Real+Song&artist=Real+Artist&album=Real+Album", "application/x-www-form-urlencoded")
 
@@ -151,7 +177,7 @@ func TestConfirmImport_RequiresPlaylistName(t *testing.T) {
 	user := newTestUser(t, sqlDB)
 	seedUserServer(t, sqlDB, user.ID, "http://127.0.0.1:1")
 	store := importreview.NewStore()
-	sess := store.New("fake", "abc", "", "")
+	sess := store.New("fake", "abc", "", "", user.ID)
 	sess.SetTracks([]importreview.Track{{Matched: true, PlexRatingKey: "t1"}})
 
 	h := &ImportHandler{DB: sqlDB, Tmpl: nopTemplates(), Reviews: store, Notifications: notifications.NewStore(), PlexAuth: auth.NewPlexClient("c", "Playlist Lab")}
@@ -167,7 +193,7 @@ func TestConfirmImport_RejectsAllTracksSkippedOrUnmatched(t *testing.T) {
 	user := newTestUser(t, sqlDB)
 	seedUserServer(t, sqlDB, user.ID, "http://127.0.0.1:1")
 	store := importreview.NewStore()
-	sess := store.New("fake", "abc", "My Mix", "")
+	sess := store.New("fake", "abc", "My Mix", "", user.ID)
 	sess.SetTracks([]importreview.Track{
 		{Matched: true, PlexRatingKey: "t1", Skipped: true},
 		{Matched: false},
@@ -202,10 +228,10 @@ func TestConfirmImport_CreatesPlaylistFromEditedMatchesAndDeletesSession(t *test
 	seedUserServer(t, sqlDB, user.ID, srv.URL)
 
 	store := importreview.NewStore()
-	sess := store.New("fake", "abc", "My Mix", "")
+	sess := store.New("fake", "abc", "My Mix", "", user.ID)
 	sess.SetTracks([]importreview.Track{
 		{Title: "A", Matched: true, PlexRatingKey: "t1"},
-		{Title: "B", Matched: false}, // unmatched, must be excluded from the created playlist
+		{Title: "B", Matched: false},                                    // unmatched, must be excluded from the created playlist
 		{Title: "C", Matched: true, PlexRatingKey: "t3", Skipped: true}, // skipped, must be excluded
 	})
 
@@ -220,7 +246,7 @@ func TestConfirmImport_CreatesPlaylistFromEditedMatchesAndDeletesSession(t *test
 	if createdTitle != "My Mix" {
 		t.Errorf("created playlist title = %q, want %q", createdTitle, "My Mix")
 	}
-	if _, ok := store.Get(sess.ID); ok {
+	if _, ok := store.Get(sess.ID, user.ID); ok {
 		t.Error("review session should be deleted after a successful confirm")
 	}
 	list := notifStore.List(user.ID)
@@ -258,7 +284,7 @@ func TestConfirmImport_OverwriteExistingDeletesOldPlaylist(t *testing.T) {
 	seedUserServer(t, sqlDB, user.ID, srv.URL)
 
 	store := importreview.NewStore()
-	sess := store.New("fake", "abc", "My Mix", "")
+	sess := store.New("fake", "abc", "My Mix", "", user.ID)
 	sess.SetTracks([]importreview.Track{{Title: "A", Matched: true, PlexRatingKey: "t1"}})
 
 	h := &ImportHandler{DB: sqlDB, Tmpl: nopTemplates(), Reviews: store, Notifications: notifications.NewStore(), PlexAuth: auth.NewPlexClient("c", "Playlist Lab")}

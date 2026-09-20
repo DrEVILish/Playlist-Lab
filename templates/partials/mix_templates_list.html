@@ -14,6 +14,7 @@
   <div class="template-list-empty" role="status">
     <p>No saved mixes yet</p>
     <p class="template-list-empty-hint">Create a custom mix and save it to get started</p>
+    <a href="/mixes" class="btn btn-primary btn-small">Create Custom Mix</a>
   </div>
   {{else}}
   <div class="template-list-grid" role="list">
@@ -43,8 +44,9 @@
         <button type="button" class="btn btn-secondary btn-small" title="Edit template"
           aria-label="Edit {{.Name}} template"
           hx-get="/mix-templates/{{.ID}}" hx-target="#modal-root" hx-swap="innerHTML">Edit</button>
-        <label for="delete-confirm-{{.ID}}" class="btn btn-danger btn-small" title="Delete template"
-          aria-label="Delete {{.Name}} template">Delete</label>
+        <button type="button" class="btn btn-danger btn-small" title="Delete template"
+          aria-label="Delete {{.Name}} template"
+          onclick="document.getElementById('delete-confirm-{{.ID}}').checked=true">Delete</button>
       </form>
 
       <input type="checkbox" id="delete-confirm-{{.ID}}" class="delete-dialog-checkbox">
@@ -59,7 +61,7 @@
             <p class="delete-dialog-warning">This action cannot be undone.</p>
           </div>
           <div class="delete-dialog-actions">
-            <label for="delete-confirm-{{.ID}}" class="btn-cancel">Cancel</label>
+            <button type="button" class="btn-cancel" onclick="document.getElementById('delete-confirm-{{.ID}}').checked=false">Cancel</button>
             <button type="button" class="btn-delete"
               hx-delete="/mix-templates/{{.ID}}" hx-target="#mix-templates-list" hx-swap="innerHTML">Delete</button>
           </div>

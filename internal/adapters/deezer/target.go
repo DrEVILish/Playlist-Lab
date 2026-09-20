@@ -55,8 +55,8 @@ func (t *Target) getARL(userID int64) (string, error) {
 	return arl, nil
 }
 
-func (t *Target) deezerRequest(method, path, arl string, body io.Reader) (map[string]any, error) {
-	req, err := http.NewRequest(method, "https://api.deezer.com"+path, body)
+func (t *Target) deezerRequest(ctx context.Context, method, path, arl string, body io.Reader) (map[string]any, error) {
+	req, err := http.NewRequestWithContext(ctx, method, "https://api.deezer.com"+path, body)
 	if err != nil {
 		return nil, err
 	}
@@ -91,8 +91,8 @@ type deezerTrack struct {
 	} `json:"album"`
 }
 
-func (t *Target) searchTracks(arl, query string, limit int) ([]deezerTrack, error) {
-	data, err := t.deezerRequest(http.MethodGet, "/search/track?q="+url.QueryEscape(query)+"&limit="+strconv.Itoa(limit), arl, nil)
+func (t *Target) searchTracks(ctx context.Context, arl, query string, limit int) ([]deezerTrack, error) {
+	data, err := t.deezerRequest(ctx, http.MethodGet, "/search/track?q="+url.QueryEscape(query)+"&limit="+strconv.Itoa(limit), arl, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +124,7 @@ func (t *Target) SearchCatalog(ctx context.Context, query string, userID int64, 
 	if arl == "" {
 		return nil, ErrNotConnected
 	}
-	items, err := t.searchTracks(arl, query, 10)
+	items, err := t.searchTracks(ctx, arl, query, 10)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +153,7 @@ func (t *Target) MatchTracks(ctx context.Context, tracks []adapters.TrackInfo, c
 		query := strings.TrimSpace(track.Title + " " + track.Artist)
 		result := adapters.MatchResult{SourceTrack: track}
 
-		items, err := t.searchTracks(arl, query, 5)
+		items, err := t.searchTracks(ctx, arl, query, 5)
 		if err != nil {
 			slog.Warn("deezer search failed for track", "track", track, "error", err)
 		} else if len(items) > 0 {
@@ -183,13 +183,13 @@ func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adap
 		return "", "", 0, ErrNotConnected
 	}
 
-	me, err := t.deezerRequest(http.MethodGet, "/user/me", arl, nil)
+	me, err := t.deezerRequest(ctx, http.MethodGet, "/user/me", arl, nil)
 	if err != nil {
 		return "", "", 0, err
 	}
 	meID, _ := me["id"].(float64)
 
-	created, err := t.deezerRequest(http.MethodPost, "/user/"+strconv.FormatInt(int64(meID), 10)+"/playlists", arl,
+	created, err := t.deezerRequest(ctx, http.MethodPost, "/user/"+strconv.FormatInt(int64(meID), 10)+"/playlists", arl,
 		strings.NewReader(url.Values{"title": {name}}.Encode()))
 	if err != nil {
 		return "", "", 0, fmt.Errorf("failed to create Deezer playlist: %w", err)
@@ -204,7 +204,7 @@ func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adap
 		}
 	}
 	if len(trackIDs) > 0 {
-		if _, err := t.deezerRequest(http.MethodPost, "/playlist/"+playlistID+"/tracks", arl,
+		if _, err := t.deezerRequest(ctx, http.MethodPost, "/playlist/"+playlistID+"/tracks", arl,
 			strings.NewReader(url.Values{"songs": {strings.Join(trackIDs, ",")}}.Encode())); err != nil {
 			return "", "", 0, fmt.Errorf("failed to add tracks to Deezer playlist: %w", err)
 		}
@@ -229,7 +229,7 @@ func (t *Target) HandleOAuthCallback(ctx context.Context, code string, userID in
 	if arl == "" {
 		return fmt.Errorf("no ARL token provided")
 	}
-	data, err := t.deezerRequest(http.MethodGet, "/user/me", arl, nil)
+	data, err := t.deezerRequest(ctx, http.MethodGet, "/user/me", arl, nil)
 	if err != nil {
 		return fmt.Errorf("invalid Deezer ARL token. Please check and try again")
 	}

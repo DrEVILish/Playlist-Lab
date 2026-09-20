@@ -1,0 +1,37 @@
+{{/* AI playlist generation modal - moved here from the Import page per user
+     feedback ("Generate with AI should be in the Generate tab/modal", not
+     Import): describing a playlist and having Plex-library tracks matched
+     against it is conceptually a mix-generation flow, not an import-from-
+     an-external-source flow. Posts to the same existing /import/ai route
+     (internal/handlers/ai_generate.go's startAIImport) unchanged - only the
+     UI entry point moved, not the backend. Rendered via GET /mixes/ai-form
+     into #modal-root. Reuses .advanced-mix-* chrome, already loaded on
+     mixes.html via AdvancedMixModal.css. */}}
+{{define "partials/mix_ai_form.html"}}
+<div class="advanced-mix-overlay">
+  <div class="advanced-mix-modal">
+    <div class="advanced-mix-header">
+      <h2 class="advanced-mix-title">Generate with AI</h2>
+      <button type="button" class="advanced-mix-close" onclick="closeTopModal()" aria-label="Close">&times;</button>
+    </div>
+
+    <form hx-post="/import/ai" hx-target="#notifications" hx-swap="innerHTML" hx-on::after-request="if(event.detail.successful) closeTopModal()">
+      <div class="advanced-mix-content">
+        <p class="form-hint">Describe the playlist you want. Uses the Gemini or Grok API key configured in Settings &gt; AI.</p>
+        <div class="form-group">
+          <label class="form-label" for="mix-ai-prompt">Describe the playlist</label>
+          <textarea class="form-input" id="mix-ai-prompt" name="prompt" rows="3" placeholder="Upbeat 80s synth-pop for a road trip" required autofocus></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="mix-ai-count">Number of tracks</label>
+          <input class="form-input" type="number" id="mix-ai-count" name="trackCount" min="10" max="100" value="50">
+        </div>
+      </div>
+      <div class="advanced-mix-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeTopModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Generate Playlist</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}

@@ -3,10 +3,10 @@
 {{define "partials/shared_with_me.html"}}
 <link rel="stylesheet" href="/static/css/pages/SharePlaylistsPage.css">
 <div class="advanced-mix-overlay">
-  <div class="advanced-mix-modal" style="max-width:560px">
+  <div class="advanced-mix-modal">
     <div class="advanced-mix-header">
       <h2 class="advanced-mix-title">Shared With Me</h2>
-      <button type="button" class="advanced-mix-close" onclick="document.getElementById('modal-root').innerHTML=''" aria-label="Close">&times;</button>
+      <button type="button" class="advanced-mix-close" onclick="closeTopModal()" aria-label="Close">&times;</button>
     </div>
     <div class="advanced-mix-content">
       <p class="share-description">Playlists other Playlist Lab users have shared with you.</p>
