@@ -1,0 +1,86 @@
+{{define "partials/cross_import_review.html"}}
+{{$sid := .SessionID}}
+<div id="cross-import-match-status">
+  {{template "partials/ci_step_indicator" 4}}
+  <h2 class="step-section-title">Review matches</h2>
+
+  <div class="review-summary">
+    <div class="review-summary-item"><span class="review-summary-count">{{.TotalCount}}</span> total</div>
+    <div class="review-summary-item" style="color:var(--success);"><span class="review-summary-count">{{.MatchedCount}}</span> matched</div>
+    <div class="review-summary-item" style="color:var(--warning);"><span class="review-summary-count">{{.UnmatchedCount}}</span> unmatched</div>
+    <div class="review-summary-item" style="color:var(--text-muted);"><span class="review-summary-count">{{.SkippedCount}}</span> skipped</div>
+  </div>
+
+  <div class="ci-filter-wrap" id="ci-track-wrap" style="margin:0.75rem 0;">
+    <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-size:0.875rem;color:var(--text-secondary);">
+      <input type="checkbox" id="ci-hide-matched">
+      Show only unmatched
+    </label>
+
+  <div class="review-track-list" id="ci-track-list">
+    {{range $i, $r := .Results}}
+    {{$status := "unmatched"}}
+    {{if $r.Skipped}}{{$status = "skipped"}}{{else if $r.Matched}}{{$status = "matched"}}{{end}}
+    <div class="review-track-item {{$status}}" id="ci-row-{{$i}}">
+      <div class="review-track-source">
+        <div class="review-track-title">{{$r.SourceTrack.Title}}</div>
+        <div class="review-track-artist">{{$r.SourceTrack.Artist}}</div>
+      </div>
+
+      <div class="review-track-target">
+        {{if $r.Matched}}
+        <div class="review-track-title">{{$r.TargetTitle}}</div>
+        <div class="review-track-artist">{{$r.TargetArtist}}</div>
+        {{else}}
+        <span class="review-track-unmatched-label">Unmatched</span>
+        {{end}}
+      </div>
+
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.25rem;min-width:60px;">
+        {{if $r.Matched}}
+        {{$conf := printf "%.0f" $r.Confidence}}
+        <span class="confidence-badge {{if ge $r.Confidence 80.0}}confidence-high{{else if ge $r.Confidence 50.0}}confidence-medium{{else}}confidence-low{{end}}">{{$conf}}%</span>
+        {{if $r.TargetResolution}}<span style="font-size:0.7rem;color:var(--text-secondary);">{{$r.TargetResolution}}</span>{{end}}
+        {{if $r.IsStaticImage}}<span style="font-size:0.65rem;color:var(--warning);">Static</span>{{end}}
+        {{end}}
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:0.375rem;align-items:flex-end;">
+        <div style="display:flex;gap:0.375rem;">
+          {{if and $r.Matched $r.TargetTrackID}}
+          <a class="btn btn-secondary btn-small" style="padding:0.25rem 0.5rem;font-size:0.75rem;" href="https://www.youtube.com/watch?v={{$r.TargetTrackID}}" target="_blank" rel="noopener noreferrer" title="Preview on YouTube">Preview</a>
+          {{end}}
+          <form hx-post="/cross-import/review/{{$sid}}/track/{{$i}}/skip" hx-target="#cross-import-match-status" hx-swap="outerHTML" style="display:inline;">
+            <button type="submit" class="btn btn-secondary btn-small" style="padding:0.25rem 0.5rem;font-size:0.75rem;">{{if $r.Skipped}}Unskip{{else}}Skip{{end}}</button>
+          </form>
+        </div>
+        <details class="ci-search">
+          <summary class="btn btn-secondary btn-small" style="padding:0.25rem 0.5rem;font-size:0.75rem;">Search</summary>
+          <form hx-get="/cross-import/review/{{$sid}}/track/{{$i}}/search" hx-target="#ci-candidates-{{$i}}" hx-swap="innerHTML" style="display:flex;gap:0.375rem;margin-top:0.5rem;">
+            <input class="input" type="text" name="q" placeholder="Search…" value="{{$r.SourceTrack.Title}} {{$r.SourceTrack.Artist}}">
+            <button type="submit" class="btn btn-primary btn-small">Go</button>
+          </form>
+          <div id="ci-candidates-{{$i}}"></div>
+        </details>
+      </div>
+    </div>
+    {{end}}
+  </div>
+  </div>
+
+  <form hx-post="/cross-import/execute/{{$sid}}" hx-target="#notifications" hx-swap="innerHTML" style="flex-shrink:0;padding-top:1rem;display:flex;gap:0.75rem;align-items:center;">
+    <label class="form-label" for="ci-playlist-name">Playlist name</label>
+    <input class="form-input" type="text" id="ci-playlist-name" name="playlistName" value="{{.PlaylistName}}" required>
+    <button type="submit" class="btn btn-primary">Confirm Import ({{.MatchedCount}} tracks)</button>
+  </form>
+</div>
+<style>
+  /* ponytail: CSS-only filter toggle instead of a server round-trip - the
+     checkbox and the rows it hides both live under #ci-track-wrap, so
+     :has() on that shared ancestor can see the checkbox's state. */
+  #ci-track-wrap:has(#ci-hide-matched:checked) .review-track-item.matched,
+  #ci-track-wrap:has(#ci-hide-matched:checked) .review-track-item.skipped { display: none; }
+  .ci-search summary { list-style: none; cursor: pointer; display: inline-block; }
+  .ci-search summary::-webkit-details-marker { display: none; }
+</style>
+{{end}}

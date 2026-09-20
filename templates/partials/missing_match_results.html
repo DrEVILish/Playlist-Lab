@@ -1,0 +1,31 @@
+{{/* Match modal's results list (missing_match.html) - its own file (rather
+     than only a sub-define inside missing_match.html) because
+     GET /missing/{id}/match-search re-renders just this on every keystroke,
+     without the surrounding modal chrome. */}}
+{{define "partials/missing_match_results.html"}}{{template "matchResults" .}}{{end}}
+
+{{define "matchResults"}}
+{{if .SearchError}}
+  <p class="settings-hint" style="color:var(--error)">Search failed - try again.</p>
+{{else if not .Query}}
+  <p class="settings-hint">Type to search your Plex library.</p>
+{{else if not .Results}}
+  <p class="settings-hint">No matches for "{{.Query}}".</p>
+{{else}}
+  <ul class="track-search-list">
+    {{$trackID := .TrackID}}
+    {{$listScope := .ListScope}}
+    {{$target := .Target}}
+    {{range .Results}}
+    <li>
+      <button type="button" class="track-search-result" hx-post="/missing/{{$trackID}}/rematch{{if $listScope}}?listScope={{$listScope}}{{end}}"
+        hx-vals='{"ratingKey": "{{.RatingKey}}"}' hx-target="{{$target}}" hx-swap="innerHTML"
+        hx-on::after-request="if(event.detail.successful) closeTopModal()">
+        <span class="track-search-result-title">{{.Title}}</span>
+        <span class="track-search-result-meta">{{.Artist}}{{if .Album}} &middot; {{.Album}}{{end}}</span>
+      </button>
+    </li>
+    {{end}}
+  </ul>
+{{end}}
+{{end}}

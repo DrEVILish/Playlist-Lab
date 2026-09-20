@@ -1,0 +1,51 @@
+.error-page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  padding: 2rem;
+  background: radial-gradient(ellipse at 50% 30%, rgba(239, 83, 80, 0.05) 0%, transparent 60%),
+              var(--background);
+}
+
+.error-page-card {
+  max-width: 420px;
+  width: 100%;
+  background: var(--gradient-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 2.5rem;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+.error-page-icon {
+  display: flex;
+  justify-content: center;
+  color: var(--accent-cyan);
+  margin-bottom: 1rem;
+}
+
+.error-page-code {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.error-page-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0 0 0.75rem;
+  color: var(--text-primary);
+}
+
+.error-page-message {
+  color: var(--text-secondary);
+  margin-bottom: 2rem;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}

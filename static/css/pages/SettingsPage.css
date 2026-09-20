@@ -1,0 +1,620 @@
+﻿.settings-welcome {
+  padding: 1rem 1.25rem;
+  background-color: rgba(47, 143, 255, 0.06);
+  border-left: 3px solid var(--primary-color);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.settings-alert {
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  margin-bottom: 1.25rem;
+}
+
+.settings-alert--error {
+  background-color: rgba(239, 83, 80, 0.08);
+  border: 1px solid rgba(239, 83, 80, 0.3);
+  color: var(--error);
+}
+
+.settings-alert--success {
+  background-color: rgba(102, 187, 106, 0.08);
+  border: 1px solid rgba(102, 187, 106, 0.3);
+  color: var(--success);
+}
+
+/* Tab wiring: only the section matching the checked radio renders, so
+   Settings is one screen-height section at a time instead of a single
+   page with every section stacked (Matching/Mixes/AI/Connected Services/
+   Library Scan/Server Info back to back) that you scroll through
+   regardless of which one you came here for. Uses admin.html's own
+   .admin-tabbar/.admin-tab-input classes (AdminPage.css) - Settings and
+   Admin used to be two separately-navigated pages with two different tab
+   bars; every former /admin tab now lives in this same bar/radio group
+   (settings.html, admin-only sections gated server-side by .IsAdmin) so
+   there's truly only one kind of tab, not two pages pretending to match. */
+.settings-content .settings-section { display: none; }
+.admin-tabbar:has(#settings-tab-servers:checked) ~ .settings-content #servers,
+.admin-tabbar:has(#settings-tab-matching:checked) ~ .settings-content #matching,
+.admin-tabbar:has(#settings-tab-mixes:checked) ~ .settings-content #mixes,
+.admin-tabbar:has(#settings-tab-ai:checked) ~ .settings-content #ai,
+.admin-tabbar:has(#settings-tab-services:checked) ~ .settings-content #connected-services,
+.admin-tabbar:has(#settings-tab-scan:checked) ~ .settings-content #library-scan,
+.admin-tabbar:has(#settings-tab-appearance:checked) ~ .settings-content #appearance,
+.admin-tabbar:has(#settings-tab-sessions:checked) ~ .settings-content #sessions,
+.admin-tabbar:has(#settings-tab-info:checked) ~ .settings-content #server-info,
+.admin-tabbar:has(#settings-tab-admin-stats:checked) ~ .settings-content #admin-stats,
+.admin-tabbar:has(#settings-tab-admin-users:checked) ~ .settings-content #admin-users,
+.admin-tabbar:has(#settings-tab-admin-missing:checked) ~ .settings-content #admin-missing,
+.admin-tabbar:has(#settings-tab-admin-jobs:checked) ~ .settings-content #admin-jobs,
+.admin-tabbar:has(#settings-tab-admin-deemix:checked) ~ .settings-content #admin-deemix,
+.admin-tabbar:has(#settings-tab-admin-lidarr:checked) ~ .settings-content #admin-lidarr,
+.admin-tabbar:has(#settings-tab-admin-youtube:checked) ~ .settings-content #admin-youtube,
+.admin-tabbar:has(#settings-tab-admin-tmdb:checked) ~ .settings-content #admin-tmdb,
+.admin-tabbar:has(#settings-tab-admin-tvdb:checked) ~ .settings-content #admin-tvdb,
+.admin-tabbar:has(#settings-tab-admin-logs:checked) ~ .settings-content #admin-logs,
+.admin-tabbar:has(#settings-tab-admin-proxy:checked) ~ .settings-content #admin-proxy {
+  display: block;
+}
+
+.settings-content { min-width: 0; flex: 1; }
+
+/* Sidebar sub-nav (DESIGN.md §11.4) - the tab-switching mechanism above
+   (radio inputs + :has()) is untouched; this only restyles .admin-tabbar
+   from AdminPage.css's horizontal top strip into a vertical sidebar list,
+   scoped to the Settings page only so every other page that reuses
+   .admin-tabbar/.admin-tab (import.html, the Deemix sub-tabs nested one
+   level deeper inside this same page) is unaffected. Kept as the same
+   .admin-tabbar/.admin-tab-input classes rather than new ones so
+   layout.html's hash-deep-linking script - which selects those classes by
+   name and isn't part of this page's scope - keeps working unmodified. */
+.settings-page .settings-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.75rem;
+}
+
+.settings-page .admin-tabbar {
+  flex-direction: column;
+  align-items: stretch;
+  width: 220px;
+  flex-shrink: 0;
+  gap: 0.125rem;
+  margin-bottom: 0;
+  border-bottom: none;
+  border-right: 1px solid var(--border-color);
+  padding-right: 0.75rem;
+  overflow-x: visible;
+  overflow-y: auto;
+  position: sticky;
+  top: 1rem;
+  align-self: flex-start;
+  max-height: calc(100vh - 2rem);
+}
+
+.settings-page .admin-tabbar::after { display: none; }
+
+.settings-page .admin-tab {
+  padding: 0.6rem 0.85rem;
+  border-bottom: none;
+  border-left: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  white-space: normal;
+}
+
+.settings-page .admin-tab-input:checked + .admin-tab {
+  border-bottom-color: transparent;
+  border-left-color: var(--primary-color);
+  background: rgba(47, 143, 255, 0.08);
+}
+
+.settings-page .admin-tabbar-divider {
+  width: auto;
+  height: 1px;
+  align-self: stretch;
+  margin: 0.5rem 0;
+}
+
+.settings-page .admin-tabbar-group-label {
+  padding: 0.5rem 0.85rem 0.25rem;
+}
+
+@media (max-width: 900px) {
+  .settings-page .settings-layout { flex-direction: column; }
+  .settings-page .admin-tabbar {
+    flex-direction: row;
+    width: 100%;
+    position: static;
+    max-height: none;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+    padding-right: 0;
+    padding-bottom: 0.5rem;
+  }
+}
+
+/* Every tab used to share one full-bleed-width card regardless of what it
+   held, so a simple form (Matching, AI Features, Server Info, a single
+   Deemix/Lidarr/YouTube config form) left most of the card empty on any
+   normal desktop window while only a table/grid tab (Mixes) actually used
+   the width. Cap the card to the fields' own width by default; tabs that
+   hold something that genuinely wants the space (a grid, a table, a log
+   viewer) opt back out via .settings-section--wide. */
+.settings-section {
+  background: var(--gradient-card);
+  border-radius: var(--radius-lg);
+  padding: 1.75rem;
+  border: 1px solid var(--border);
+  max-width: 900px;
+}
+
+.settings-section--wide {
+  max-width: none;
+}
+
+.settings-section-header {
+  margin-bottom: 1.75rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-section-header h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.35rem; }
+.settings-section-header p { font-size: 0.875rem; color: var(--text-secondary); line-height: 1.5; }
+.settings-section-header a { color: var(--primary-color); text-decoration: none; }
+.settings-section-header a:hover { text-decoration: underline; }
+
+/* Matching's slider and the AI Features key inputs otherwise stretch to
+   the full width of a wide desktop window (1300px+) - unreadable line
+   length and, worse, a match-score slider whose 0-to-1 range is spread
+   across that whole width makes fine adjustment nearly impossible. The
+   Mixes tab's card grid (.settings-mix-grid) already wraps at a sane
+   width per-card, so it's intentionally left unconstrained here. */
+.settings-field-group { display: flex; flex-direction: column; gap: 1.25rem; margin-bottom: 1.5rem; max-width: 640px; }
+.settings-field { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.settings-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.settings-select,
+.settings-input {
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background-color: var(--background);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  width: 100%;
+  transition: border-color 0.15s;
+}
+
+.settings-select:focus,
+.settings-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.settings-input--mono { font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 0.8rem; }
+.settings-loading { font-size: 0.875rem; color: var(--text-secondary); padding: 0.25rem 0; }
+.settings-hint { font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.75rem; }
+.settings-hint-list { margin-left: 1.5rem; margin-top: 0.5rem; }
+
+.settings-info-box {
+  background-color: rgba(47, 143, 255, 0.08);
+  border: 1px solid rgba(47, 143, 255, 0.2);
+  border-radius: 6px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.settings-info-box p {
+  margin: 0.5rem 0;
+  font-size: 0.875rem;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+}
+
+.settings-info-box p:first-child {
+  margin-top: 0;
+}
+
+.settings-info-box p:last-child {
+  margin-bottom: 0;
+}
+
+.settings-info-box code {
+  background-color: rgba(0, 0, 0, 0.1);
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.8rem;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 0.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+  margin-top: 1.5rem;
+}
+
+.settings-value-badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  background-color: rgba(47, 143, 255, 0.12);
+  color: var(--primary-color);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Styled glowing track+thumb, matching the reference instrument-panel
+   stylesheet's .styled-range - accent-color alone (the previous rule) gives
+   a fine but plain native slider; this replaces the whole appearance for a
+   track that reads as part of this page's theme instead of the browser's
+   default control. Firefox and WebKit each need their own thumb/track
+   pseudo-elements (no shared standard yet), so both are defined. */
+.settings-range {
+  width: 100%;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  height: 1.5em;
+  background: transparent;
+}
+
+.settings-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--border-light), var(--accent-cyan));
+}
+
+.settings-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 3px;
+  background: var(--background);
+  border: 1px solid var(--accent-cyan);
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.5);
+}
+
+.settings-range::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--border-light), var(--accent-cyan));
+}
+
+.settings-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--accent-cyan);
+  border-radius: 3px;
+  background: var(--background);
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.5);
+}
+
+.settings-range:focus-visible {
+  outline: none;
+}
+.settings-range-labels { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem; }
+
+.settings-toggles { display: flex; flex-direction: column; gap: 0.625rem; }
+
+/* For a card with enough toggles that one column runs tall for no reason
+   (e.g. Deemix's "Not Used By Playlist Lab" card) - wraps into 2 columns
+   instead of adding vertical scroll a single column doesn't need. */
+.settings-toggles--2col { display: block; column-count: 2; column-gap: 1.5rem; }
+.settings-toggles--2col .settings-toggle { break-inside: avoid; margin-bottom: 0.625rem; }
+
+@media (max-width: 480px) {
+  .settings-toggles--2col { column-count: 1; }
+}
+
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+/* Sliding track+thumb switch, CSS-only via appearance:none + a ::before
+   thumb on the native checkbox itself - no wrapper markup needed in
+   settings.html. Matches the reference instrument-panel stylesheet's
+   .sci-switch look/feel with this app's own tokens. */
+.settings-toggle input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 2.75em;
+  height: 1.5em;
+  min-width: 2.75em;
+  border-radius: 999px;
+  background: var(--background);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.settings-toggle input[type="checkbox"]::before {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: calc(1.5em - 4px);
+  height: calc(1.5em - 4px);
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.settings-toggle input[type="checkbox"]:checked {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.4);
+}
+
+.settings-toggle input[type="checkbox"]:checked::before {
+  transform: translateX(1.25em);
+  background: var(--accent-cyan);
+  box-shadow: 0 0 6px var(--accent-cyan);
+}
+
+.settings-toggle input[type="checkbox"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.3);
+}
+
+.settings-subsection { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
+.settings-subsection h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.5rem; }
+
+/* Second-level tabs inside a single settings-section (currently just
+   Deemix) for a section with too many settings to group into one screen's
+   worth of cards. Reuses the exact same .admin-tab/.admin-tab-input look as
+   the page's own tab bar (AdminPage.css) - same component nested one level
+   deeper, not a new pattern - just not position:sticky or full-bleed, since
+   it lives inside a card rather than at the page's own scroll top. */
+/* Scrolls rather than wraps - same overflow strategy as the page's own
+   .admin-tabbar (AdminPage.css), not a second pattern for what's visually
+   the same widget one level deeper. */
+.settings-subtabbar { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); }
+.settings-subtabbar .admin-tab { flex-shrink: 0; }
+.settings-subtab-panel { display: none; }
+.settings-subtabbar:has(#deemix-sub-general:checked) ~ .settings-subtab-content #deemix-panel-general,
+.settings-subtabbar:has(#deemix-sub-naming:checked) ~ .settings-subtab-content #deemix-panel-naming,
+.settings-subtabbar:has(#deemix-sub-artwork:checked) ~ .settings-subtab-content #deemix-panel-artwork,
+.settings-subtabbar:has(#deemix-sub-tags:checked) ~ .settings-subtab-content #deemix-panel-tags,
+.settings-subtabbar:has(#deemix-sub-advanced:checked) ~ .settings-subtab-content #deemix-panel-advanced {
+  display: block;
+}
+
+.settings-scan { display: flex; flex-direction: column; gap: 1rem; }
+.settings-scan-folder { display: flex; flex-direction: column; gap: 0.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+.settings-folder-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 0.75rem; }
+.settings-folder-path { font-size: 0.75rem; font-family: 'JetBrains Mono', 'Courier New', monospace; color: var(--text-secondary); padding: 0.2rem 0; }
+
+.settings-folder-button {
+  font-size: 0.75rem;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  color: var(--text-secondary);
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.settings-folder-button:hover {
+  background: var(--surface-hover);
+  border-color: var(--primary-color);
+  color: var(--text-primary);
+}
+
+.settings-input-group {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.settings-input-group .settings-input {
+  flex: 1;
+}
+
+.settings-input-group .btn {
+  flex-shrink: 0;
+}
+
+/* auto-fit rather than a fixed column count: a --wide section (Mixes,
+   Deemix) reflows from 2 columns up to 4-5 on a wide monitor instead of
+   leaving the extra width empty next to a fixed 2-column grid. */
+.settings-mix-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; margin-bottom: 0.5rem; }
+
+.settings-mix-card {
+  background-color: var(--background);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.settings-mix-card h3 { font-size: 0.875rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem; }
+.settings-slider-row { display: flex; flex-direction: column; gap: 0.35rem; }
+.settings-slider-label { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: var(--text-primary); }
+
+@media (max-width: 768px) {
+  .settings-mix-grid { grid-template-columns: 1fr; }
+  .settings-actions { flex-wrap: wrap; }
+  .settings-section { padding: 1.1rem; }
+  .settings-section-header { margin-bottom: 1.25rem; padding-bottom: 1rem; }
+}
+
+/* Connected Services */
+.settings-services-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.settings-service-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: var(--surface-secondary, rgba(255,255,255,0.04));
+  border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+  border-radius: var(--radius-md);
+}
+
+.settings-service-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.settings-service-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.settings-service-name {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.settings-service-status {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+}
+
+.settings-service-status--connected {
+  background: rgba(102, 187, 106, 0.12);
+  color: var(--success);
+  border: 1px solid rgba(102, 187, 106, 0.25);
+}
+
+.settings-service-status--disconnected {
+  background: rgba(255,255,255,0.04);
+  color: var(--text-muted, var(--text-secondary));
+  border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+}
+
+.btn-sm {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+/* Autosave indicator (DESIGN.md §11.4/§8.12) - a small span sits next to
+   every autosaving field, targeted by that field's own hx-post via
+   hx-swap="innerHTML" (settings.html). While the request is in flight,
+   htmx adds .htmx-request to the element named in hx-indicator (the same
+   span) - styled here as a small spinner glyph. On success the returned
+   ".settings-save-status--ok" checkmark fades itself out via animation;
+   on failure ".settings-save-status--error" stays until the next change. */
+.settings-save-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 1em;
+  font-size: 0.75rem;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.settings-save-status.htmx-request::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border: 2px solid var(--border-light);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: settings-save-spin 0.6s linear infinite;
+}
+
+@keyframes settings-save-spin {
+  to { transform: rotate(360deg); }
+}
+
+.settings-save-status--ok {
+  color: var(--success);
+  animation: settings-save-fade 2.2s ease forwards;
+}
+
+.settings-save-status--error {
+  display: flex;
+  color: var(--error);
+  margin-top: 0.25rem;
+  font-weight: 400;
+}
+
+@keyframes settings-save-fade {
+  0%, 55% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Text size control (Appearance section) */
+.settings-textsize-group {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.settings-textsize-option {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  transition: border-color 0.15s, color 0.15s, background-color 0.15s;
+}
+
+.settings-textsize-option input { accent-color: var(--primary-color); }
+
+.settings-textsize-option:has(input:checked) {
+  border-color: var(--primary-color);
+  color: var(--text-primary);
+  background: rgba(47, 143, 255, 0.08);
+}
+
+/* Inline destructive-action confirm modal (DESIGN.md §8.11/§11.4) - a
+   checkbox-hack dialog reusing the shared .modal-overlay/.modal-content
+   shell (Modal.css) rather than a bespoke variant. Hidden by default;
+   Modal.css's .modal-overlay has no default "hidden" state of its own
+   since every other user of it is only ever mounted into the DOM while
+   open (#modal-root) - the extra .settings-confirm-overlay class scopes
+   this show/hide toggle to just these Settings-page dialogs. The paired
+   checkbox also carries "delete-dialog-checkbox" so it piggybacks on the
+   Escape-to-close handler layout.html already wires up for that class. */
+.modal-overlay.settings-confirm-overlay {
+  display: none;
+}
+
+.settings-confirm-toggle:checked ~ .modal-overlay.settings-confirm-overlay {
+  display: flex;
+}
+
+.settings-confirm-toggle {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}

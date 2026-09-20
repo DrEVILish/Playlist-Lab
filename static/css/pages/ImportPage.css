@@ -1,0 +1,655 @@
+/* Import Page - Modern Dashboard Styling */
+
+/* Source Tabs */
+.source-tabs-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.source-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Matches .tab-button (base.css - the app's one other icon-less tab
+   component) padding/border/font exactly, rather than the min-height this
+   used to force: that min-height (2.5rem) predates the icon-frame's own
+   fixed 1.05rem height and no longer matches any real content size, so it
+   was inflating every pill with dead vertical space instead of the natural
+   content-driven sizing .tab-button already gets right. display:flex+gap
+   is still needed here (unlike .tab-button) to lay out the icon frame
+   next to text-only tabs and center everything within the pill. */
+.source-tab {
+  padding: 0.5rem 1rem;
+  background-color: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+/* Same hover-glow recipe as .tab-button:hover (base.css) - .source-tab is
+   this page's own flavor of the same tab component, so it gets the same
+   cyan border + box-shadow rather than the plain border-lightening this
+   rule used before the SciFi palette pass. */
+.source-tab:hover {
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.25);
+}
+
+/* Brand logo assets are not a consistent shape - some are a near-square
+   glyph, others a wide icon+wordmark lockup, at wildly different native
+   aspect ratios, and (see the per-file height overrides below) several
+   have an icon glyph drawn taller than their own wordmark. A fixed-height
+   frame with overflow:hidden (rather than a plain height+auto-width+
+   max-width on the <img> itself) both gives every tab the same visual
+   footprint AND lets a badly-padded/icon-dominated source file be scaled
+   up and cropped back to size, without editing the SVG itself. No
+   max-width cap here (there was one, 7rem) - several of the per-file
+   overrides below render wider than that once corrected for text height,
+   and the row already wraps via .source-tabs' flex-wrap. */
+.source-tab-icon-frame {
+  /* 75% of the 1.4rem this used to be, per user feedback that every logo
+     read too large. */
+  height: 1.05rem;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.source-tab-icon {
+  height: 100%;
+  width: auto;
+  object-fit: contain;
+  /* SVG brand marks, reduced to pure black/white (no gray shades) rather
+     than rendering each one's own source colors, so a plain unselected tab
+     reads as on-system chrome rather than a strip of mismatched brand
+     colors (same intent as PlaylistsPage.css's .playlist-source-logo).
+     grayscale() first (collapsing hue, keeping relative luminance),
+     brightness(2.2) next (lifting darker source colors - MusicBrainz's
+     darkest purple, say - above the halfway point before the next step
+     clips it), then contrast() at an extreme value last to hard-clip
+     every pixel to true black or true white at that halfway point (a
+     smaller/no contrast() here is what left these as soft mid-grays
+     before). Plain brightness(0)+invert(1) (an earlier approach) isn't
+     enough on its own: it crushes *every* opaque pixel to the same black
+     before inverting, which erases any logo that layers two solid colors
+     to draw an internal detail - YouTube's white play triangle sits on a
+     solid red rect, and brightness(0) turned both into identical
+     black-then-white, deleting the triangle entirely. This filter's
+     grayscale+contrast combination instead keeps the two colors' relative
+     luminance long enough for the hard clip to still split them into two
+     *different* flat tones (still pure black/white, just on opposite
+     sides) - see the invert() group below for the specific files where
+     that split needs a flip to land the *larger* shape on white. */
+  filter: grayscale(1) brightness(2.2) contrast(1000%);
+  /* No resting opacity dim here (there was one, 0.7) - alpha-blending a
+     pure-white icon over the dark tab background is itself a shade of
+     gray, which defeats the pure-black-or-white point of the filter
+     above. Selected/unselected is distinguished by the checked tab's
+     background gradient + the icon's own glow (below) instead. */
+  transition: filter 0.2s ease;
+}
+
+/* Every file below has at least one region (a whole logo, for the
+   plain-text ones; the wordmark or an icon's internal line-work, for the
+   rest) whose source color sits on the *dark* side of the black/white
+   split above by default - invert() first flips light/dark so the split
+   lands the same way as everywhere else (the bulk of the mark ends up
+   white, any interior line-work ends up black on top of it, matching
+   YouTube's play triangle). Determined empirically per file (rendered
+   both ways, kept whichever reads as a clean mark rather than a mostly-
+   invisible one) rather than by inspecting each file's fill colors -
+   aria/billboard/lastfm/deezer's plain near-black text was the obvious
+   case, but youtube (its red rect, not the white triangle) and
+   listenbrainz/MusicBrainz (its darker hexagon half) needed it too, for
+   the same reason. */
+.source-tab-icon[src$="aria.svg"],
+.source-tab-icon[src$="billboard.svg"],
+.source-tab-icon[src$="deezer.svg"],
+.source-tab-icon[src$="lastfm.svg"],
+.source-tab-icon[src$="youtube.svg"],
+.source-tab-icon[src$="listenbrainz.svg"] {
+  filter: grayscale(1) invert(1) brightness(2.2) contrast(1000%);
+}
+
+/* Every logo here pairs an icon glyph with a wordmark, and in most of
+   them the icon is drawn taller than the wordmark's own cap-height (most
+   extreme in Spotify, whose circle sits in a padded square viewBox
+   besides) - matching the frame height to the *icon* (the naive "100%,
+   no override" approach every one of these started with) leaves the
+   *text* shorter than aria/billboard/lastfm's (plain wordmarks, no icon,
+   so their text already fills the frame exactly). Fixed by measuring each
+   wordmark's actual rendered height on the real deployed page (a
+   screenshot, cropped to exclude the icon, thresholded against its own
+   background to find the text's pixel bounding box) against
+   aria/billboard/lastfm's as the reference, then scaling each <img> up by
+   the ratio needed to bring its own wordmark to that same height, in two
+   measure-and-correct passes (the first pass's scaling shifts each
+   wordmark's own rendered height, so it gets re-measured after applying it
+   rather than trusting the pre-scale ratio to still hold exactly):
+     spotify:      64px -> 593% -> re-measured 66px of 69px -> 620%
+     deezer:       51px -> 135% -> re-measured 58px of 69px -> 161%
+     youtube:      62px -> 111% -> re-measured 69px of 69px (exact)
+     musicbrainz:  29px -> 238% -> re-measured 69px of 69px (exact)
+   In every case this makes the icon glyph itself render larger than its
+   peers - an unavoidable trade-off given icon and wordmark are one merged
+   path per file (no way to scale them independently without editing the
+   SVG). Each frame's width isn't set explicitly, so it shrinks-to-fit the
+   now-wider rendered image with no horizontal cropping (there was no
+   horizontal padding to remove in any of these). */
+/* Absolute rem values here, not the percentages (of the frame's height)
+   these started as: a percentage height on a replaced element (<img>)
+   inside an auto-width flex item (the frame) is exactly the circular
+   sizing case browsers resolve inconsistently - the frame's shrink-to-fit
+   width was computed from the <img>'s *unscaled* intrinsic width even
+   though the image itself painted at the scaled-up size, so the frame came
+   out too narrow and its overflow:hidden clipped the image's left edge
+   (MusicBrainz's hexagon) instead of just the intended top/bottom padding.
+   A real length has no such ambiguity. */
+.source-tab-icon[src$="spotify.svg"] { height: 5.46rem; }
+.source-tab-icon[src$="deezer.svg"] { height: 1.691rem; }
+.source-tab-icon[src$="youtube.svg"] { height: 1.166rem; }
+.source-tab-icon[src$="listenbrainz.svg"] { height: 2.499rem; }
+
+/* Checked tab already gets the electric-blue gradient chip (below) - the
+   icon keeps its normal grayscale treatment on top of it, but gains a cyan
+   glow hugging its actual (transparent-background) shape via drop-shadow,
+   not a box-shadow rectangle, for the "instrument panel, powered on" read
+   DESIGN.md calls for on active/selected state. Same rgba(0,229,255,…)
+   accent-cyan alpha convention as every other hover/active glow in the app
+   (base.css's .btn-secondary:hover, .tab-button:hover). */
+.source-tab-input:checked + .source-tab .source-tab-icon {
+  filter: grayscale(1) brightness(2.2) contrast(1000%) drop-shadow(0 0 4px rgba(0, 229, 255, 0.7));
+}
+
+.source-tab-input:checked + .source-tab .source-tab-icon[src$="aria.svg"],
+.source-tab-input:checked + .source-tab .source-tab-icon[src$="billboard.svg"],
+.source-tab-input:checked + .source-tab .source-tab-icon[src$="deezer.svg"],
+.source-tab-input:checked + .source-tab .source-tab-icon[src$="lastfm.svg"],
+.source-tab-input:checked + .source-tab .source-tab-icon[src$="youtube.svg"],
+.source-tab-input:checked + .source-tab .source-tab-icon[src$="listenbrainz.svg"] {
+  filter: grayscale(1) invert(1) brightness(2.2) contrast(1000%) drop-shadow(0 0 4px rgba(0, 229, 255, 0.7));
+}
+
+/* Go port: source picker is a native radio group (label styled as
+   .source-tab) instead of React's useState-driven buttons - the checked
+   radio's value is what the surrounding <form> submits as "source", so no
+   JS is needed to keep tab UI and form value in sync. */
+.source-tab-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.source-tab-input:checked + .source-tab {
+  background: var(--primary-color);
+  color: #ffffff;
+  border-color: transparent;
+  /* Same glow color/alpha as .tab-button.active (base.css) - was a stray
+     rgba(79,195,247,…) left over from before the SciFi palette pass, not
+     one of the app's actual accent tokens. */
+  box-shadow: 0 2px 8px rgba(47, 143, 255, 0.25);
+}
+
+.source-tab-input:focus-visible + .source-tab {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+/* Import Form */
+.import-form {
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  box-shadow: var(--card-shadow);
+  margin-bottom: 2rem;
+}
+
+.form-section { margin-bottom: 1.5rem; }
+.form-section:last-child { margin-bottom: 0; }
+
+/* Preview and Import submit as two separate requests (Preview leads to
+   the match-review screen, Import creates the playlist directly) - side
+   by side rather than stacked since neither is a "danger zone" action
+   needing visual separation. */
+.import-form-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+/* Billboard's "browse a chart week" picker (import.html) - hidden unless
+   Billboard is the selected source (:has() rule the template generates
+   inline). */
+.billboard-week-picker { display: none; }
+.billboard-week-picker-row { display: flex; gap: 0.5rem; }
+.billboard-week-picker-row select { flex: 1; }
+
+/* Chart browsing / search-by-name / saved Spotify users (import.html) -
+   hidden unless Deezer or Spotify is the selected source, same :has()
+   mechanism as .billboard-week-picker above. */
+.import-browse-section { display: none; }
+.spotify-saved-users-section { display: none; }
+
+.import-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.import-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--gradient-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  gap: 0.5rem;
+}
+
+.import-card-image {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background-color: var(--background);
+}
+
+.import-card-image-fallback {
+  background: var(--background);
+}
+
+.import-card-body { flex: 1; min-width: 0; }
+
+.import-card-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-card-desc {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.saved-user-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.saved-user-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.saved-user-add-form {
+  display: flex;
+  gap: 0.5rem;
+}
+.saved-user-add-form .form-input { flex: 1; }
+
+.form-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.form-input {
+  width: 100%;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background-color: var(--background);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  background-color: var(--surface-hover);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+.form-input::placeholder { color: var(--text-muted); }
+
+.form-hint {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* Playlist Grid */
+.playlists-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.playlist-card {
+  background: var(--gradient-card);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  transition: all 0.25s ease;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.playlist-card:hover {
+  border-color: var(--border-light);
+  box-shadow: var(--card-shadow-hover);
+}
+
+.playlist-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.playlist-card-cover {
+  width: 60px;
+  height: 60px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  background-color: var(--background);
+  flex-shrink: 0;
+}
+
+.playlist-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.playlist-card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playlist-card-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.playlist-card-description {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.playlist-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.playlist-card-button {
+  flex: 1;
+  padding: 0.5rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.playlist-card-button-primary {
+  background: transparent;
+  color: var(--accent-cyan);
+  border: 1px solid var(--accent-cyan);
+}
+
+.playlist-card-button-primary:hover {
+  background: rgba(0, 229, 255, 0.12);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.4);
+}
+
+.playlist-card-button-secondary {
+  background-color: var(--surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+
+.playlist-card-button-secondary:hover {
+  background-color: var(--surface-hover);
+  border-color: var(--border-light);
+}
+
+/* Import Progress */
+.import-progress {
+  background: var(--gradient-card);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  border: 1px solid var(--border);
+  box-shadow: var(--card-shadow-hover);
+  margin-bottom: 2rem;
+}
+
+.progress-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.progress-cover {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  background-color: var(--background);
+}
+
+.progress-info { flex: 1; }
+
+.progress-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.375rem;
+}
+
+.progress-subtitle {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.progress-bar-container {
+  width: 100%;
+  height: 6px;
+  background-color: var(--background);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--primary-color);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+  box-shadow: 0 0 8px rgba(79, 195, 247, 0.4);
+}
+
+.progress-text {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+/* Loading State */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  color: var(--text-secondary);
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loading-text {
+  font-size: 0.9375rem;
+  color: var(--text-secondary);
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 3rem 1.5rem;
+  background: var(--gradient-card);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+}
+
+.empty-state-icon { font-size: 3rem; margin-bottom: 1rem; opacity: 0.5; }
+.empty-state-title { font-size: 1.125rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.5rem; }
+.empty-state-description { font-size: 0.9375rem; color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.6; }
+
+/* Error / Success Messages */
+.error-message {
+  background-color: rgba(239, 83, 80, 0.08);
+  border: 1px solid rgba(239, 83, 80, 0.3);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  color: var(--error);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.success-message {
+  background-color: rgba(102, 187, 106, 0.08);
+  border: 1px solid rgba(102, 187, 106, 0.3);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  color: var(--success);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* Review-list drag-to-reorder handle + mobile tap-to-move fallback
+   (import_review.html). Absolutely positioned in the row's left gutter
+   rather than as a grid column, since .review-track-item's grid-template
+   is shared with CrossImportPage.css's identical review rows (which don't
+   have a reorder control) - overriding the column count here would only
+   need to matter for this page, but absolute positioning sidesteps the
+   shared layout entirely instead of forking it. */
+.review-track-list { margin-left: 1.75rem; }
+.review-track-item { position: relative; }
+.track-drag-handle {
+  position: absolute;
+  left: -1.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  cursor: grab;
+}
+.track-drag-handle:active { cursor: grabbing; }
+
+/* Responsive */
+.track-move-buttons {
+  display: none;
+  position: absolute;
+  left: -1.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+@media (max-width: 768px) {
+  .source-tabs-row { flex-wrap: wrap; }
+  .source-tabs { gap: 0.375rem; }
+  .source-tab { padding: 0.375rem 0.75rem; font-size: 0.75rem; }
+  .import-form-actions { flex-direction: column; }
+  .playlists-grid { grid-template-columns: 1fr; }
+  .import-form { padding: 1rem; }
+
+  /* Native HTML5 drag-and-drop doesn't work on touch, so swap the drag
+     handle for tap-to-move buttons instead of just losing reordering. */
+  .track-drag-handle {
+    display: none;
+  }
+
+  .track-move-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .track-move-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 28px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--text-secondary);
+    font-size: 0.625rem;
+    cursor: pointer;
+  }
+
+  .track-move-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+}

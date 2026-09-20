@@ -1,0 +1,30 @@
+{{/* Shared playlist-card grid, reused by the chart browser, search-by-name
+     results, and a saved Spotify user's playlist list - each card is its
+     own tiny form posting straight to /import/preview (the same endpoint
+     the main URL-paste form uses), so importing one is a single click
+     with no client-side JS needed to "fill in and submit" anything. */}}
+{{define "partials/import_playlist_cards.html"}}
+{{if not .Playlists}}
+<p class="settings-hint">{{.EmptyMessage}}</p>
+{{else}}
+<div class="import-card-grid">
+  {{$source := .Source}}
+  {{range .Playlists}}
+  <form class="import-card" hx-post="/import/preview" hx-target="#modal-root" hx-swap="beforeend">
+    <input type="hidden" name="source" value="{{$source}}">
+    <input type="hidden" name="identifier" value="{{.URL}}">
+    {{if .Image}}
+    <img class="import-card-image" src="{{.Image}}" alt="" loading="lazy">
+    {{else}}
+    <div class="import-card-image import-card-image-fallback"></div>
+    {{end}}
+    <div class="import-card-body">
+      <div class="import-card-name">{{.Name}}</div>
+      {{if .Description}}<div class="import-card-desc">{{.Description}}</div>{{end}}
+    </div>
+    <button type="submit" class="btn btn-secondary btn-small">Import</button>
+  </form>
+  {{end}}
+</div>
+{{end}}
+{{end}}

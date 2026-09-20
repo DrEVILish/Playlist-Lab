@@ -1,0 +1,32 @@
+{{/* Saved Spotify usernames panel on the Import page, ported from
+     ImportPage.tsx's savedSpotifyUsers list. Modeled on
+     settings_servers.html's add/remove-list pattern: every mutating
+     action re-renders this whole #import-spotify-users div via
+     hx-swap="outerHTML" so it keeps finding itself on repeat edits.
+     "Browse" loads that user's public playlists into the shared
+     #import-charts card grid (partials/import_playlist_cards.html). */}}
+{{define "partials/import_spotify_users.html"}}
+<div id="import-spotify-users">
+  {{if not .Users}}
+  <p class="settings-hint">No saved Spotify usernames yet.</p>
+  {{else}}
+  <ul class="saved-user-list">
+    {{range .Users}}
+    <li class="saved-user-row">
+      <button type="button" class="btn btn-secondary btn-small" hx-get="/import/spotify-users/{{.SpotifyUserID}}/playlists" hx-target="#import-charts" hx-swap="innerHTML">
+        {{.DisplayName}}
+      </button>
+      <button type="button" class="icon-btn icon-btn-danger" title="Remove this saved user" aria-label="Remove {{.DisplayName}}"
+        hx-delete="/import/spotify-users/{{.ID}}" hx-target="#import-spotify-users" hx-swap="outerHTML">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+    </li>
+    {{end}}
+  </ul>
+  {{end}}
+  <form class="saved-user-add-form" hx-post="/import/spotify-users" hx-target="#import-spotify-users" hx-swap="outerHTML">
+    <input class="form-input" type="text" name="spotifyUserId" placeholder="Spotify username or profile URL" required>
+    <button type="submit" class="btn btn-secondary btn-small">Add</button>
+  </form>
+</div>
+{{end}}

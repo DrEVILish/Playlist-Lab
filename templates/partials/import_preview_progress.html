@@ -1,0 +1,36 @@
+{{/* Live progress panel for the plain /import/preview flow, ported from
+     ImportPage.tsx's SSE-driven progress UI - reusing this app's own
+     1s-polling pattern (cross_import_progress.html) instead of SSE, which
+     this app reserves for the global notification bell. Shares the id
+     "import-review" with partials/import_review.html so every swap
+     (progress -> progress, or progress -> the finished review list) is a
+     plain outerHTML replacement of the same element, same trick
+     cross_import_progress.html/cross_import_review.html share
+     #cross-import-match-status for. */}}
+{{define "partials/import_preview_progress.html"}}
+{{$p := .Progress}}
+<div id="import-review"
+     {{if or (eq $p.Phase "scraping") (eq $p.Phase "matching")}}
+     hx-get="/import/preview/{{.SessionID}}/status" hx-trigger="every 1s" hx-swap="outerHTML"
+     {{end}}>
+  {{if eq $p.Phase "error"}}
+  <div class="error-message">Import failed: {{$p.Message}}</div>
+  {{else}}
+  <div class="import-progress">
+    <div class="progress-title">
+      {{if eq $p.Phase "scraping"}}Fetching playlist…{{else}}Matching tracks against your library…{{end}}
+    </div>
+    <div class="progress-bar-container">
+      {{if gt $p.Total 0}}
+      <div class="progress-bar" style="width: {{percent $p.Current $p.Total}}%"></div>
+      {{else}}
+      <div class="progress-bar" style="width: 30%"></div>
+      {{end}}
+    </div>
+    {{if gt $p.Total 0}}
+    <div class="progress-text">{{$p.Current}} / {{$p.Total}} tracks</div>
+    {{end}}
+  </div>
+  {{end}}
+</div>
+{{end}}

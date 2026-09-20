@@ -1,0 +1,649 @@
+/* Mobile card-list views for the Users and Missing Tracks tabs, which on
+   desktop are dense multi-column tables. Below 768px these replace the
+   table (rather than just letting it scroll horizontally) so admin actions
+   stay reachable without scrolling - the same pattern PlaylistsPage uses
+   for its table/card switch. */
+
+@media (max-width: 768px) {
+  .admin-dashboard-title {
+    display: none;
+  }
+
+  /* A full ISO timestamp plus the level tag otherwise eats most of a phone
+     width, squeezing the actual log message down to a handful of visible
+     characters even though nothing overflows. Give the message its own
+     line instead. */
+  .admin-log-summary {
+    flex-wrap: wrap;
+    gap: 0.375rem 0.75rem;
+  }
+
+  .admin-log-message {
+    flex-basis: 100%;
+  }
+}
+
+/* Grid, not a stacked column: each card is small (name/artist/count + one
+   button), so on the Missing Tracks tab's --wide section a single column
+   left most of the row empty while forcing a long scroll through however
+   many distinct missing tracks the library has - same fix as the Mixes/
+   Deemix card grids. */
+.admin-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0.75rem;
+}
+
+.admin-card {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--surface-hover);
+  padding: 0.75rem;
+}
+
+.admin-card-row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.admin-card-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.admin-card-name {
+  font-weight: 500;
+  font-size: 0.9375rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-card-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  align-items: center;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.admin-card-meta {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin-top: 0.375rem;
+}
+
+.admin-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 0.625rem;
+  padding-top: 0.625rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.admin-sortbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.admin-sortbar select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.admin-sortbar select,
+.admin-sortbar button {
+  padding: 0.375rem 0.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--surface);
+  color: var(--text-primary);
+  font: inherit;
+  min-height: 36px;
+}
+
+.admin-sortbar button {
+  cursor: pointer;
+  width: 36px;
+  flex-shrink: 0;
+}
+
+/* Tab bar: matches AdminPage.tsx's underline-style tabs (Statistics/Users/
+   Missing Tracks/Schedules/Deemix/Lidarr/Logs) - a native radio group
+   styled as an underline tab strip, with :has() picking which panel shows,
+   so no JS is needed to keep tab UI and visible panel in sync. */
+.admin-tabbar {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid var(--border-color);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Settings+Admin merged into one bar now runs to ~15 tabs, which overflows
+   even a wide desktop window, not just phone width - so this cue used to be
+   mobile-only but now needs to apply everywhere overflow-x:auto above can
+   kick in. With no visual cue at all it just looks like the last visible
+   tab (e.g. "Users") is the final one, cut off mid-strip, rather than a
+   strip with more to scroll to. A mask-image fade was tried first and
+   abandoned - it rendered the whole bar blank in testing rather than just
+   fading its edges, not worth chasing further for a purely cosmetic hint.
+   position:sticky on a pseudo-element pinned to the scroll container's own
+   right edge is the standard "scroll shadow" technique and doesn't have
+   that failure mode. The bar itself is also sticky to the viewport top:
+   some tabs (Mixes especially, with its 4-card settings grid) run far
+   taller than one screen, and a non-sticky bar scrolls away with them,
+   leaving no way back to another tab without scrolling back up first. */
+.admin-tabbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--background);
+}
+.admin-tabbar::after {
+  content: '';
+  position: sticky;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 24px;
+  flex-shrink: 0;
+  margin-left: -24px;
+  background: linear-gradient(to right, transparent, var(--background));
+  pointer-events: none;
+}
+
+.admin-tab-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.admin-tab {
+  padding: 0.75rem 1.5rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  font-weight: 400;
+  white-space: nowrap;
+  flex-shrink: 0;
+  /* Settings' "Plex Server"/"Admin" tabs are real <a> (they navigate away)
+     while every other tab here is a <label> - a bare <a> carries the
+     browser's default underline, which no <label> ever would, so those
+     two looked broken/half-styled next to their siblings. */
+  text-decoration: none;
+}
+
+.admin-tab-input:checked + .admin-tab {
+  color: var(--primary-color);
+  border-bottom-color: var(--primary-color);
+  font-weight: 500;
+}
+
+.admin-tab-input:focus-visible + .admin-tab {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+/* Settings merges every former /admin tab into this same bar (see
+   SettingsPage.css's tab-wiring comment) - a vertical divider plus a
+   small caps label marks where "my settings" ends and "administration"
+   begins, and the admin tabs themselves default to a dimmer, muted color
+   so a long admin tab list doesn't visually compete with the personal
+   tabs every user sees. The :checked override below restores full color
+   the same way the base rule above already does for every other tab. */
+.admin-tabbar-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border-color);
+  margin: 0 0.25rem;
+  flex-shrink: 0;
+}
+
+.admin-tabbar-group-label {
+  display: flex;
+  align-items: center;
+  padding: 0 0.25rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.admin-tab--admin {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+.admin-tab-input:checked + .admin-tab--admin {
+  opacity: 1;
+}
+
+.admin-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+}
+
+.admin-stat-card h3 {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.admin-stat-value {
+  font-size: 2rem;
+  font-weight: bold;
+  color: var(--primary-color);
+  line-height: 1.2;
+}
+
+/* Stat tile sparkline (DESIGN.md §11.5/§8.10) - a plain inline SVG
+   <polyline>, see admin_stats.html's comment for why this isn't TanStack
+   Charts. Fixed small size, full width of its tile, stroke color is
+   --accent-teal - reserved for data-viz series only (§1), never reused on
+   an interactive control, so it can never be mistaken for something
+   clickable. */
+.admin-sparkline {
+  display: block;
+  width: 100%;
+  height: 28px;
+  margin: 0.375rem 0 0.25rem;
+}
+
+.admin-stat-caption {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* The dashboard's one larger trend chart (DESIGN.md §11.5/§8.10): sync
+   activity (schedule_executions succeeded/failed) over the last 14 days -
+   the closest existing proxy for the spec's "active syncs"/"error count"
+   example metrics. Same plain-SVG approach as the sparklines above, just
+   bigger, with gridlines and day-of-week labels. */
+.admin-trend-card {
+  margin-top: 1.5rem;
+}
+
+.admin-trend-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.admin-trend-header h3 {
+  margin: 0;
+}
+
+.admin-trend-subtitle {
+  font-weight: 400;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+}
+
+.admin-trend-legend {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.admin-trend-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.admin-trend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.admin-trend-swatch--ok { background: var(--accent-teal); }
+.admin-trend-swatch--err { background: var(--error); }
+
+.admin-trend-chart {
+  display: block;
+  width: 100%;
+  height: 156px;
+}
+
+.admin-trend-gridline {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+/* font-family comes from the .mono-data class already on this element (§2) */
+.admin-trend-axis-label {
+  fill: var(--text-secondary);
+  font-size: 10px;
+}
+
+.admin-deferred-note {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+/* Admin Logs tab. AdminPage.css only ever carried .admin-log-summary and
+   .admin-log-message (the two rules with a mobile override); everything else
+   in the React viewer was inline JSX style, reproduced here so the Go
+   template can stay markup-only. Values match AdminPage.tsx's originals. */
+.admin-logs-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+  margin-bottom: 0.75rem;
+}
+
+.admin-logs-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.admin-logs-notice {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin: 0 0 0.75rem;
+}
+
+.admin-logs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  max-height: 32rem;
+  overflow-y: auto;
+}
+
+.admin-log-entry {
+  background-color: var(--surface-hover);
+  border-radius: 4px;
+  padding: 0.625rem 0.75rem;
+}
+
+.admin-log-summary {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  cursor: default;
+}
+
+/* Only a real <details> (an entry with logged attrs to show) gets the
+   pointer cursor - a plain-row entry has no ::marker triangle at all
+   (it isn't a <summary>), so there's nothing to promise a click on. */
+.admin-log-entry--expandable > .admin-log-summary {
+  cursor: pointer;
+}
+
+.admin-log-attrs {
+  margin: 0.5rem 0 0;
+  padding: 0.625rem;
+  background-color: var(--surface);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 0.75rem;
+}
+
+.admin-log-attrs dt {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.admin-log-attrs dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.admin-log-level {
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--warning);
+}
+
+.admin-log-level-error { color: var(--error); }
+.admin-log-level-debug,
+.admin-log-level-info { color: var(--text-secondary); }
+
+.admin-log-time {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-log-message {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  min-width: 0;
+}
+
+.admin-log-detail {
+  margin-top: 0.5rem;
+  padding: 0.625rem;
+  background-color: var(--surface);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  overflow-x: auto;
+}
+
+.admin-users-delete {
+  color: var(--error);
+}
+
+/* Users tab: card grid with filters (DESIGN.md §11.5's one deliberate
+   table->card exception - see admin_users_panel.html's comment). Toolbar
+   follows the same inline chip/dropdown pattern as .admin-logs-toolbar. */
+.admin-users-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.admin-users-search {
+  flex: 1 1 200px;
+  min-width: 160px;
+}
+
+.admin-users-search,
+.admin-users-filter {
+  padding: 0.375rem 0.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--surface);
+  color: var(--text-primary);
+  font: inherit;
+  min-height: 36px;
+}
+
+.admin-users-count {
+  margin-left: auto;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.admin-user-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  object-fit: cover;
+  border: 1px solid var(--border-color);
+}
+
+.admin-user-avatar--fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.admin-card-summary .status-dot {
+  margin-right: 0.125rem;
+}
+
+.admin-schedules-subheading {
+  margin: 1.5rem 0 0.75rem;
+}
+.admin-schedules-subheading:first-child { margin-top: 0; }
+
+/* Background jobs: a compact status-dot list rather than a table - reuses
+   the canonical .status-dot (§8.3) instead of a separate "enabled" column. */
+.admin-jobs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.admin-jobs-row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.625rem;
+  background: var(--surface-hover);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+}
+
+.admin-jobs-name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.admin-jobs-spec,
+.admin-jobs-next {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+/* All schedules: a calendar/timeline view (DESIGN.md §11.5) - schedules
+   grouped into Overdue/Today/This week/Later/Not yet run buckets (computed
+   in admin_schedules.go's buildScheduleTimeline), laid out as a vertical
+   rail with one dot per group rather than a plain next-run list. */
+.admin-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.admin-timeline-group-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.9375rem;
+}
+
+.admin-timeline-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.admin-timeline-group--overdue .admin-timeline-dot { background: var(--error); }
+.admin-timeline-group--today .admin-timeline-dot {
+  background: var(--primary-color);
+  animation: status-pulse 1.2s ease-in-out infinite;
+}
+.admin-timeline-group--this-week .admin-timeline-dot { background: var(--accent-cyan); }
+
+.admin-timeline-count {
+  color: var(--text-secondary);
+  font-weight: 400;
+  font-size: 0.8125rem;
+}
+
+.admin-timeline-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding-left: 1.375rem;
+  border-left: 1px solid var(--border-color);
+  margin-left: 4px;
+}
+
+.admin-timeline-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.5rem 0.625rem;
+  background: var(--surface-hover);
+  border-radius: var(--radius-md);
+}
+
+.admin-timeline-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.admin-timeline-row-title {
+  font-weight: 500;
+  font-size: 0.9375rem;
+}
+
+.admin-timeline-row-meta {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.admin-timeline-row-times {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.admin-logs-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}

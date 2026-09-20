@@ -1,0 +1,342 @@
+/* Playlist editor (templates/editor.html): the toolbar/add-tracks/split
+   controls are still plain functional markup ported from
+   PlaylistEditor.tsx (static/css/pages/EditPlaylistsPage.css exists from
+   an earlier porting pass but targets the old React component's class
+   names, which don't match this template's actual markup, and was never
+   linked here). The header and track table below were redone per
+   DESIGN.md §11.2/§8.6 - detail-page header, canonical compact/sticky/
+   hover-reveal data table, drag+keyboard reordering, inline cell editing,
+   user-configurable columns. */
+
+.editor {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.editor h1 { margin: 0; }
+
+/* Detail-page header (DESIGN.md §11.2): cover, stats, schedule above the
+   track table, since the Editor doubles as the playlist detail page. */
+.editor-header {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin: 0.5rem 0 1.5rem;
+}
+
+.editor-cover {
+  width: 84px;
+  height: 84px;
+  border-radius: var(--radius-md);
+  background: var(--surface-hover);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.editor-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.editor-header-body { min-width: 0; }
+
+.editor-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.editor-stats .badge-button { gap: 0.4rem; }
+.editor-stats .status-dot { margin: 0; }
+
+.editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.editor-toolbar-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.editor-toolbar-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+/* Destructive action group: pushed to the far side and set off with a
+   divider so "Remove Duplicates" doesn't sit flush against the routine
+   controls - same "danger zone" convention as GitHub repo settings. */
+.editor-toolbar-danger {
+  margin-left: auto;
+  padding-left: 1.25rem;
+  border-left: 1px solid var(--border);
+}
+
+.editor-toolbar-danger .editor-toolbar-label { color: var(--error); }
+
+.editor-toolbar form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.editor-toolbar .settings-input { width: auto; min-width: 0; }
+.editor-rename-form .settings-input { width: 32ch; max-width: min(60vw, 480px); }
+
+.editor-missing {
+  margin-bottom: 1.5rem;
+}
+
+.editor-missing summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.editor-add-tracks {
+  margin-bottom: 1.5rem;
+  position: relative;
+}
+
+.editor-add-tracks .settings-input { width: 100%; }
+
+.editor-split-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.editor-split-bar .settings-input { flex: 1; min-width: 200px; }
+
+/* Column show/hide + drag-reorder popover (DESIGN.md §8.6/§11.2). */
+.editor-columns { position: relative; margin-left: auto; }
+
+.editor-columns-menu {
+  position: absolute;
+  top: calc(100% + 0.375rem);
+  right: 0;
+  z-index: 20;
+  min-width: 180px;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  box-shadow: var(--card-shadow);
+  padding: 0.375rem;
+}
+
+.editor-columns-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: var(--radius-sm);
+  cursor: grab;
+  color: var(--text-muted);
+}
+
+.editor-columns-item:hover { background: var(--surface-hover); }
+
+.editor-columns-item label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+/* The canonical data table (DESIGN.md §8.6): compact density, sticky
+   header, full-row hover, hover-reveal row actions. Shared by Playlists,
+   Editor, Missing Tracks and admin logs per spec - defined here scoped to
+   this page since no shared .data-table class exists in base.css yet. */
+.editor-tracks-container {
+  overflow: auto;
+  max-height: 70vh;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.data-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.data-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  padding: 0.5rem 0.625rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 0.5rem 0.625rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.data-table tbody tr:hover { background: var(--surface-hover); }
+
+.data-table .drag-handle {
+  cursor: grab;
+  color: var(--text-muted);
+  width: 1.25rem;
+  text-align: center;
+}
+
+.data-table .row-move-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 1.25rem;
+}
+
+.row-move-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 0;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.row-move-btn:hover, .row-move-btn:focus-visible { color: var(--primary-color); }
+
+.row-play-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  width: 1.75rem;
+  height: 1.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.row-play-btn:hover, .row-play-btn:focus-visible { border-color: var(--primary-color); color: var(--primary-color); }
+
+.row-remove-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--error);
+  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.row-remove-btn:hover { background: rgba(239, 83, 80, 0.08); }
+
+/* Row actions reveal on hover/focus (DESIGN.md §8.6), not always-visible -
+   applies to the play/remove buttons only; the drag handle and move
+   buttons stay visible since they're the row's primary reordering
+   controls, not secondary actions. Opacity (not display/visibility) keeps
+   these in the tab order, and :focus-within makes sure a keyboard user
+   tabbing into the row - not just hovering it - can still see and reach
+   them, instead of landing on an invisible focused button. */
+.row-play-btn, .row-remove-btn { opacity: 0; transition: opacity 0.15s; }
+tr:hover .row-play-btn, tr:hover .row-remove-btn,
+tr:focus-within .row-play-btn, tr:focus-within .row-remove-btn,
+.row-play-btn:focus-visible, .row-remove-btn:focus-visible {
+  opacity: 1;
+}
+
+.editor-cell-editable { cursor: pointer; border-radius: var(--radius-sm); }
+.editor-cell-editable:hover, .editor-cell-editable:focus-visible {
+  outline: 1px dashed var(--border-light);
+  outline-offset: -1px;
+  background: var(--surface-hover);
+}
+
+.editor-cell-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--background-elevated);
+  border: 1px solid var(--primary-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font: inherit;
+  padding: 0.25rem 0.375rem;
+}
+
+/* Lightweight toast for the preview-play/metadata-edit stubs (playlists.go's
+   notYetAvailable) - not the full notification-bell job queue, which is
+   overkill for "this isn't implemented yet". */
+.editor-toast {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 100;
+  max-width: 320px;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  box-shadow: var(--card-shadow);
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  padding: 0.75rem 1rem;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(0.5rem);
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.editor-toast.is-visible { opacity: 1; transform: translateY(0); }
+
+@media (max-width: 768px) {
+  /* Native drag-and-drop (the reordering script in editor.html) doesn't
+     fire from touch input at all, so the handle is just dead weight on a
+     phone - hiding it recovers the column space instead of showing a
+     grab affordance that can't do anything. The keyboard move buttons
+     stay - they're plain click targets, not drag/touch-dependent. */
+  .data-table .drag-handle { display: none; }
+
+  /* Each toolbar form still lays its own children out in a row (rename's
+     input+button, sort's two selects+button, export's select+button) - a
+     <select>'s intrinsic content width doesn't shrink just because a flex
+     ancestor asks it to, so two selects and a button never fit on one
+     360-400px row no matter how the row's own flex/wrap is set - the row
+     itself has to stop being a row. Stacking every toolbar form's children
+     full-width (same as the modal footer fix elsewhere in this app) is
+     the version of this that can't overflow regardless of a field's own
+     natural width. */
+  .editor-toolbar { flex-direction: column; align-items: stretch; }
+  .editor-toolbar-group { flex-direction: column; align-items: stretch; }
+  .editor-toolbar-danger { margin-left: 0; padding-left: 0; border-left: none; padding-top: 1rem; border-top: 1px solid var(--border); }
+  .editor-toolbar form { flex-direction: column; align-items: stretch; width: 100%; }
+  .editor-toolbar form > * { width: 100%; }
+
+  .editor-split-bar { flex-direction: column; align-items: stretch; }
+  .editor-columns { margin-left: 0; }
+
+  .editor-header { align-items: flex-start; }
+  .editor-cover { width: 56px; height: 56px; }
+}

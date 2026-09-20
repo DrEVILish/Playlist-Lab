@@ -1,0 +1,75 @@
+{{/* Ports TemplateList.tsx's grid + card markup. .Templates is a
+     []handlers.TemplateView (db.MixTemplate embedded, plus a precomputed
+     Metadata line and DateLabel - see buildTemplateView in
+     internal/handlers/mix_templates.go for why that's done in Go rather
+     than in this template). */}}
+{{define "partials/mix_templates_list.html"}}
+<div class="template-list" role="region" aria-label="Saved Mixes">
+  <div class="template-list-header">
+    <h2>Saved Mixes</h2>
+    <span class="template-count" aria-label="{{len .Templates}} mixes">{{len .Templates}}</span>
+  </div>
+
+  {{if not .Templates}}
+  <div class="template-list-empty" role="status">
+    <p>No saved mixes yet</p>
+    <p class="template-list-empty-hint">Create a custom mix and save it to get started</p>
+    <a href="/mixes" class="btn btn-primary btn-small">Create Custom Mix</a>
+  </div>
+  {{else}}
+  <div class="template-list-grid" role="list">
+    {{range .Templates}}
+    <div class="template-card" role="listitem">
+      <div class="template-card-header">
+        <div class="template-card-title">
+          <h3>{{.Name}}</h3>
+          <span class="template-type">{{.MixType}}</span>
+        </div>
+      </div>
+
+      {{if .Description.Valid}}<p class="template-description">{{.Description.String}}</p>{{end}}
+
+      <div class="template-metadata" aria-label="Template details"><span>{{.Metadata}}</span></div>
+
+      <div class="template-stats" aria-label="Template statistics">
+        <span class="template-stat">Used {{.UseCount}} {{if eq .UseCount 1}}time{{else}}times{{end}}</span>
+        <span class="template-stat">{{.DateLabel}}</span>
+      </div>
+
+      <form class="template-actions" role="group" aria-label="Template actions"
+        hx-post="/mix-templates/{{.ID}}/generate" hx-target="#notifications" hx-swap="innerHTML">
+        <input type="hidden" name="playlistName" value="{{.Name}}">
+        <button type="submit" class="btn btn-primary btn-small" title="Generate mix from template"
+          aria-label="Generate mix from {{.Name}} template">Generate</button>
+        <button type="button" class="btn btn-secondary btn-small" title="Edit template"
+          aria-label="Edit {{.Name}} template"
+          hx-get="/mix-templates/{{.ID}}" hx-target="#modal-root" hx-swap="innerHTML">Edit</button>
+        <button type="button" class="btn btn-danger btn-small" title="Delete template"
+          aria-label="Delete {{.Name}} template"
+          onclick="document.getElementById('delete-confirm-{{.ID}}').checked=true">Delete</button>
+      </form>
+
+      <input type="checkbox" id="delete-confirm-{{.ID}}" class="delete-dialog-checkbox">
+      <div class="delete-dialog-overlay">
+        <div class="delete-dialog-modal">
+          <div class="delete-dialog-header">
+            <div class="delete-dialog-icon">⚠️</div>
+            <h3 class="delete-dialog-title">Delete Template?</h3>
+          </div>
+          <div class="delete-dialog-content">
+            <p class="delete-dialog-message">Are you sure you want to delete <strong>"{{.Name}}"</strong>?</p>
+            <p class="delete-dialog-warning">This action cannot be undone.</p>
+          </div>
+          <div class="delete-dialog-actions">
+            <button type="button" class="btn-cancel" onclick="document.getElementById('delete-confirm-{{.ID}}').checked=false">Cancel</button>
+            <button type="button" class="btn-delete"
+              hx-delete="/mix-templates/{{.ID}}" hx-target="#mix-templates-list" hx-swap="innerHTML">Delete</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    {{end}}
+  </div>
+  {{end}}
+</div>
+{{end}}

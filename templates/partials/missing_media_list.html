@@ -1,0 +1,60 @@
+{{/* Missing Films/TV Shows (DESIGN.md §11.11) - the movie/show analog of
+     missing_list.html's scoped ("embedded inline under a ... row") variant,
+     always scoped to one collection: rendered into that collection's own
+     expando row in collection_list.html (integrated into the main table,
+     not a separate page section), the same way a Playlist row's Missing
+     Tracks count expands inline instead of navigating to /missing.
+     Movie/show level only: a missing "tv" row means the whole series isn't
+     in the library, never a single episode - see
+     scheduler.resolveExternalListTargets's doc comment. Reuses
+     missing_list.html's .data-table styling rather than new CSS. */}}
+{{define "partials/missing_media_list.html"}}
+{{if not .Items}}
+<p style="padding:0.5rem 0.75rem">No missing films or TV shows for this collection.</p>
+{{else}}
+{{$collectionID := .CollectionID}}
+<div class="bulk-select-scope">
+<div class="missing-table-container data-table-container">
+<table class="missing-table data-table">
+  <thead>
+    <tr>
+      <th class="col-select"><input type="checkbox" class="select-all-in-table" aria-label="Select all missing items"></th>
+      <th>Title</th>
+      <th>Type</th>
+      <th>Year</th>
+      <th>Source</th>
+      <th class="col-actions">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Items}}
+    <tr>
+      <td class="col-select"><input type="checkbox" name="id" value="{{.ID}}" class="row-select" aria-label="Select {{.Title}}"></td>
+      <td>{{.Title}}</td>
+      <td>{{if eq .MediaType "tv"}}TV Show{{else}}Movie{{end}}</td>
+      <td>{{if .Year.Valid}}{{.Year.Int64}}{{else}}—{{end}}</td>
+      <td>{{.ProviderLabel}}</td>
+      <td class="col-actions">
+        <div class="row-actions">
+          {{if .Link}}
+          <a class="icon-btn" title="View on {{.ProviderLabel}}" aria-label="View {{.Title}} on {{.ProviderLabel}}" href="{{.Link}}" target="_blank" rel="noopener">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          </a>
+          {{end}}
+          <button type="button" class="icon-btn" title="Dismiss until the next refresh" aria-label="Dismiss {{.Title}}" hx-delete="/collections/missing/{{.ID}}?collectionId={{$collectionID}}" hx-target="#missing-row-{{$collectionID}}-content" hx-swap="innerHTML">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+</div>
+<div class="bulk-actions-bar">
+  <span class="bulk-actions-count">Selected</span>
+  <button type="button" class="btn btn-secondary btn-small" style="color:var(--error)" hx-post="/collections/missing/bulk-remove?collectionId={{$collectionID}}" hx-include="closest .bulk-select-scope" hx-target="#missing-row-{{$collectionID}}-content" hx-swap="innerHTML" hx-confirm="Dismiss the selected missing item(s)?">Dismiss Selected</button>
+</div>
+</div>
+{{end}}
+{{end}}

@@ -1,0 +1,159 @@
+{{/* Create/edit modal for a Dynamic Collection set (DESIGN.md §11.11 /
+     Kometa's "dynamic_collections" feature). Reuses the same
+     .advanced-mix-* modal chrome as collection_form.html, and the same
+     section grouping (.collection-form-section) and read-only fact chips
+     (.collection-spec-plate) that page introduces - one visual language
+     for "a config modal in this app," not two competing ones. Library and
+     Type are only choosable at creation - changing what a set generates
+     from out from under its already-generated collections would leave
+     them orphaned rather than cleanly regenerated (same reasoning
+     collection_form.html's builderType already documents). */}}
+{{define "partials/dynamic_collection_form.html"}}
+<div class="advanced-mix-overlay">
+  <div class="advanced-mix-modal">
+    <div class="advanced-mix-header">
+      <h2 class="advanced-mix-title">{{if .Set}}Edit Dynamic Collection Set{{else}}New Dynamic Collection Set{{end}}</h2>
+      <button type="button" class="advanced-mix-close" onclick="closeTopModal()" aria-label="Close">&times;</button>
+    </div>
+
+    <form {{if .Set}}hx-put="/dynamic-collections/{{.Set.ID}}"{{else}}hx-post="/dynamic-collections"{{end}}
+      hx-target="#dynamic-collections-list" hx-swap="innerHTML"
+      hx-on::after-request="if(event.detail.successful) closeTopModal()">
+      <div class="advanced-mix-content">
+
+        {{if .Set}}
+        <div class="collection-spec-plate">
+          <span class="collection-builder-badge">{{.Set.ServerName}}</span>
+          <span class="collection-builder-badge">{{.Set.LibraryDisplay}}</span>
+          <span class="collection-builder-badge collection-builder-badge--smart">{{.Set.TypeLabel}}</span>
+        </div>
+        {{end}}
+
+        <div class="form-group">
+          <label class="form-label" for="dynamic-collection-name">Name</label>
+          <input id="dynamic-collection-name" class="form-input" type="text" name="name" maxlength="255" required
+            value="{{if .Set}}{{.Set.Name}}{{else if .PrefillName}}{{.PrefillName}}{{end}}" placeholder="e.g. Genres" autofocus>
+          <p class="field-hint">A label for this set - not the name of any collection it creates.</p>
+        </div>
+
+        {{if not .Set}}
+        <div class="form-group">
+          <label class="form-label" for="dynamic-collection-library">Library</label>
+          <select id="dynamic-collection-library" class="form-select" name="library" required>
+            <option value="">Select a library...</option>
+            {{range .ServerGroups}}
+            <optgroup label="{{.ServerName}}">
+              {{range .Libraries}}
+              <option value="{{.Value}}">{{.Name}}</option>
+              {{end}}
+            </optgroup>
+            {{end}}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="dynamic-collection-type">Type</label>
+          <select id="dynamic-collection-type" class="form-select" name="facetType" required>
+            <option value="">Select a type...</option>
+            <option value="genre" {{if eq .PrefillFacetType "genre"}}selected{{end}}>Genre</option>
+            <option value="decade" {{if eq .PrefillFacetType "decade"}}selected{{end}}>Decade</option>
+            <option value="year" {{if eq .PrefillFacetType "year"}}selected{{end}}>Year</option>
+            <option value="content_rating" {{if eq .PrefillFacetType "content_rating"}}selected{{end}}>Content Rating (movie)</option>
+            <option value="studio" {{if eq .PrefillFacetType "studio"}}selected{{end}}>Studio / Network</option>
+            <option value="actor" {{if eq .PrefillFacetType "actor"}}selected{{end}}>Actor</option>
+            <option value="director" {{if eq .PrefillFacetType "director"}}selected{{end}}>Director</option>
+            <option value="writer" {{if eq .PrefillFacetType "writer"}}selected{{end}}>Writer</option>
+            <option value="mood" {{if eq .PrefillFacetType "mood"}}selected{{end}}>Mood (music)</option>
+            <option value="style" {{if eq .PrefillFacetType "style"}}selected{{end}}>Style (music)</option>
+          </select>
+        </div>
+        {{end}}
+
+        <div class="collection-form-section">
+          <h3 class="collection-form-section-title">Name pattern</h3>
+          <div class="form-group">
+            <label class="form-label" for="dynamic-collection-title-format">Title Format</label>
+            {{$titleFormat := "<<key_name>>"}}{{$facetType := .PrefillFacetType}}{{if .Set}}{{$titleFormat = .Set.TitleFormat}}{{$facetType = .Set.FacetType}}{{end}}
+            <input id="dynamic-collection-title-format" class="form-input" type="text" name="titleFormat" maxlength="255" value="{{$titleFormat}}">
+            <p class="field-hint">Must contain <code>&lt;&lt;key_name&gt;&gt;</code> - Kometa's own placeholder convention. Preview: <span id="dynamic-collection-title-preview" class="mono-data">{{replace $titleFormat "<<key_name>>" (facetExample $facetType)}}</span></p>
+          </div>
+        </div>
+
+        <div class="collection-form-section">
+          <h3 class="collection-form-section-title">Which values get a collection</h3>
+          {{$scope := "all"}}{{if .Set}}{{if .Set.ParsedInclude}}{{$scope = "include"}}{{else if .Set.ParsedExclude}}{{$scope = "exclude"}}{{end}}{{end}}
+          <div class="update-mode-group cols-3">
+            <label class="update-mode-card">
+              <input type="radio" name="matchScope" value="all" {{if eq $scope "all"}}checked{{end}}>
+              <span class="update-mode-card-title">All values</span>
+              <span class="update-mode-card-desc">Every value found in the library gets a collection.</span>
+            </label>
+            <label class="update-mode-card">
+              <input type="radio" name="matchScope" value="include" {{if eq $scope "include"}}checked{{end}}>
+              <span class="update-mode-card-title">Only these</span>
+              <span class="update-mode-card-desc">Skip everything except a specific list.</span>
+            </label>
+            <label class="update-mode-card">
+              <input type="radio" name="matchScope" value="exclude" {{if eq $scope "exclude"}}checked{{end}}>
+              <span class="update-mode-card-title">All except</span>
+              <span class="update-mode-card-desc">Skip a specific list, keep the rest.</span>
+            </label>
+          </div>
+          <div class="form-group dynamic-scope-include">
+            <label class="form-label" for="dynamic-collection-include">Values to include</label>
+            <textarea id="dynamic-collection-include" class="form-textarea" name="include" rows="2"
+              placeholder="One per line, or comma-separated">{{if .Set}}{{range .Set.ParsedInclude}}{{.}}
+{{end}}{{end}}</textarea>
+          </div>
+          <div class="form-group dynamic-scope-exclude">
+            <label class="form-label" for="dynamic-collection-exclude">Values to exclude</label>
+            <textarea id="dynamic-collection-exclude" class="form-textarea" name="exclude" rows="2"
+              placeholder="One per line, or comma-separated">{{if .Set}}{{range .Set.ParsedExclude}}{{.}}
+{{end}}{{end}}</textarea>
+          </div>
+        </div>
+
+        <div class="collection-form-section">
+          <h3 class="collection-form-section-title">Behavior</h3>
+          <div class="form-group">
+            <label class="form-label">Sync Mode</label>
+            {{$syncMode := "sync"}}{{if .Set}}{{$syncMode = .Set.SyncMode}}{{end}}
+            <div class="update-mode-group">
+              <label class="update-mode-card">
+                <input type="radio" name="syncMode" value="sync" {{if eq $syncMode "sync"}}checked{{end}}>
+                <span class="update-mode-card-title">Sync</span>
+                <span class="update-mode-card-desc">A generated collection whose value no longer appears in the library is removed on the next Generate.</span>
+              </label>
+              <label class="update-mode-card">
+                <input type="radio" name="syncMode" value="add_only" {{if eq $syncMode "add_only"}}checked{{end}}>
+                <span class="update-mode-card-title">Add only</span>
+                <span class="update-mode-card-desc">Generated collections are never removed, even if their value disappears.</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {{if .Set}}
+        <div class="collection-form-section">
+          <h3 class="collection-form-section-title">Danger Zone</h3>
+          <label class="form-check">
+            <input type="checkbox" form="dynamic-collection-delete-form" name="deleteInPlex" value="true">
+            Also delete every generated collection from Plex itself
+          </label>
+          <form id="dynamic-collection-delete-form" hx-delete="/dynamic-collections/{{.Set.ID}}" hx-target="#dynamic-collections-list" hx-swap="innerHTML"
+            hx-confirm="Delete this set and every collection it generated?" hx-on::after-request="if(event.detail.successful) closeTopModal()">
+            <button type="submit" class="btn btn-secondary btn-small text-error">Delete Set</button>
+          </form>
+        </div>
+        {{end}}
+      </div>
+
+      <div class="advanced-mix-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeTopModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">{{if .Set}}Save Changes{{else}}Create &amp; Generate{{end}}</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script src="/static/js/dynamic-collection-form.js"></script>
+{{end}}

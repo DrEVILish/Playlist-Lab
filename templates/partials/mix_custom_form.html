@@ -1,0 +1,151 @@
+{{/* Custom mix builder modal, ported from pages/CustomMixModal.tsx. Rendered
+     via GET /mixes/custom-form into #modal-root; posts to /mixes/generate.
+
+     Deferred vs the React version - handlers/mixes.go's "custom" case (and
+     the underlying mixes.CustomMixSettings struct) only accepts the fields
+     below. Not wired here because there is no backend support at all:
+     excludeMoods, collections, labels, albumTitles, minDuration/maxDuration,
+     minTrackNumber/maxTrackNumber, discNumber, minBitrate/audioCodec/
+     minSampleRate/losslessOnly (quality filters), popularTracksPerArtist/
+     maxPopularArtists, the whole Sonic Analysis section (sonicSeedTrackKey
+     etc - track/artist search has no /api/search/* route in Go either), and
+     "Save as Template" (that's mix_templates.go/mix_templates.html, a
+     separate feature owned by another page - not wired into generation). */}}
+{{define "partials/mix_custom_form.html"}}
+<div class="custom-mix-overlay">
+  <div class="custom-mix-modal">
+    <div class="custom-mix-header">
+      <h2 class="custom-mix-title">Create Custom Mix</h2>
+      <button type="button" class="custom-mix-close" onclick="closeTopModal()" aria-label="Close">&times;</button>
+    </div>
+
+    <form hx-post="/mixes/generate" hx-target="#notifications" hx-swap="innerHTML" hx-on::after:request="closeTopModal()">
+      <input type="hidden" name="mixType" value="custom">
+      <div class="custom-mix-content">
+        <div class="form-group">
+          <label class="form-label" for="playlist-name">Playlist Name</label>
+          <input id="playlist-name" type="text" class="form-input" name="playlistName" value="My Custom Mix">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="track-count">Number of Tracks</label>
+          <input id="track-count" type="range" class="track-slider" name="trackCount" min="10" max="500" step="10" value="50">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="sort-by">Sort By</label>
+          <div class="sorting-inputs">
+            <select id="sort-by" class="form-select" name="sortBy">
+              <option value="random">Random</option>
+              <option value="playCount">Play Count</option>
+              <option value="dateAdded">Date Added</option>
+              <option value="rating">Rating</option>
+              <option value="title">Title</option>
+            </select>
+            <select class="form-select" name="sortDirection" aria-label="Sort direction">
+              <option value="desc">Descending</option>
+              <option value="asc">Ascending</option>
+            </select>
+          </div>
+        </div>
+
+        <details class="filter-section-collapsible">
+          <summary class="section-toggle">Time Filters</summary>
+          <div class="filter-section-content">
+            <div class="form-group">
+              <label class="form-label" for="played-in-last-days">Played in last (days)</label>
+              <input id="played-in-last-days" type="number" class="form-input" name="playedInLastDays" min="1" placeholder="e.g. 30">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="not-played-in-last-days">NOT played in last (days)</label>
+              <input id="not-played-in-last-days" type="number" class="form-input" name="notPlayedInLastDays" min="1" placeholder="e.g. 90">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="added-in-last-days">Added in last (days)</label>
+              <input id="added-in-last-days" type="number" class="form-input" name="addedInLastDays" min="1" placeholder="e.g. 30">
+            </div>
+          </div>
+        </details>
+
+        <details class="filter-section-collapsible">
+          <summary class="section-toggle">Release Date</summary>
+          <div class="filter-section-content">
+            <div class="form-group">
+              <label class="form-label" for="released-after-year">Release Year Range</label>
+              <div class="year-inputs">
+                <input id="released-after-year" type="number" class="form-input" name="releasedAfterYear" min="1900" max="2100" placeholder="After, e.g. 2010">
+                <input id="released-before-year" type="number" class="form-input" name="releasedBeforeYear" min="1900" max="2100" placeholder="Before, e.g. 2020">
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details class="filter-section-collapsible">
+          <summary class="section-toggle">Rating &amp; Popularity</summary>
+          <div class="filter-section-content">
+            <div class="form-group">
+              <label class="form-label" for="min-rating">Rating Range (0-10)</label>
+              <div class="year-inputs">
+                <input id="min-rating" type="number" class="form-input" name="minRating" min="0" max="10" step="0.5" placeholder="Min, e.g. 7.5">
+                <input id="max-rating" type="number" class="form-input" name="maxRating" min="0" max="10" step="0.5" placeholder="Max, e.g. 9.5">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="min-play-count">Play Count Range</label>
+              <div class="year-inputs">
+                <input id="min-play-count" type="number" class="form-input" name="minPlayCount" min="0" placeholder="Min, e.g. 5">
+                <input id="max-play-count" type="number" class="form-input" name="maxPlayCount" min="0" placeholder="Max, e.g. 100">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" name="popularTracksOnly" value="true">
+                <span>Only include popular tracks</span>
+              </label>
+              <p class="form-hint">Uses external popularity data (Last.fm, MusicBrainz) to select only the most popular tracks from each artist.</p>
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" name="popularArtistsOnly" value="true">
+                <span>Only include popular artists</span>
+              </label>
+              <p class="form-hint">Filters to only include tracks from well-known artists based on Last.fm popularity data.</p>
+            </div>
+          </div>
+        </details>
+
+        <details class="filter-section-collapsible">
+          <summary class="section-toggle">Metadata Filters</summary>
+          <div class="filter-section-content">
+            <div class="form-group">
+              <label class="form-label" for="genres">Include Genres (comma-separated)</label>
+              <input id="genres" type="text" class="form-input" name="genres" placeholder="e.g., Rock, Pop, Jazz">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="exclude-genres">Exclude Genres (comma-separated)</label>
+              <input id="exclude-genres" type="text" class="form-input" name="excludeGenres" placeholder="e.g., Country, Classical">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="moods">Include Moods (comma-separated)</label>
+              <input id="moods" type="text" class="form-input" name="moods" placeholder="e.g., Energetic, Chill, Upbeat">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="styles">Include Styles (comma-separated)</label>
+              <input id="styles" type="text" class="form-input" name="styles" placeholder="e.g., Indie Rock, Synthpop">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="artist-names">Artist Names (comma-separated)</label>
+              <input id="artist-names" type="text" class="form-input" name="artistNames" placeholder="e.g., Beatles, Pink Floyd">
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <div class="custom-mix-actions">
+        <button type="submit" class="btn-generate">Generate Mix</button>
+        <button type="button" class="btn-cancel" onclick="closeTopModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}

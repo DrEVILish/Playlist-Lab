@@ -1,0 +1,305 @@
+.notification-center {
+  position: relative;
+}
+
+.notification-bell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.notification-bell:hover {
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+.notification-bell-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--primary-color);
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+}
+
+.notification-bell-spinner {
+  position: absolute;
+  inset: -2px;
+  border: 2px solid transparent;
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: notification-spin 0.8s linear infinite;
+}
+
+@keyframes notification-spin {
+  to { transform: rotate(360deg); }
+}
+
+.notification-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 340px;
+  max-height: 420px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  z-index: 100;
+}
+
+.notification-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.notification-panel-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.notification-clear-btn {
+  background: none;
+  border: none;
+  color: var(--primary-color);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+}
+
+.notification-clear-btn:hover {
+  text-decoration: underline;
+}
+
+.notification-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.notification-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.notification-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.notification-item:last-child {
+  border-bottom: none;
+}
+
+.notification-item-icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.125rem;
+}
+
+.notification-item-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: notification-spin 0.8s linear infinite;
+}
+
+.notification-item-check {
+  color: var(--success);
+  font-weight: 700;
+}
+
+.notification-item-error {
+  color: var(--error);
+  font-weight: 700;
+}
+
+.notification-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.notification-item-title {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notification-item-detail {
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notification-item--error .notification-item-detail {
+  color: var(--error);
+}
+
+.notification-item-bar {
+  display: block;
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+  margin-top: 0.25rem;
+}
+
+.notification-item-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--primary-color);
+  transition: width 0.3s ease;
+}
+
+.notification-item-time {
+  font-size: 0.625rem;
+  color: var(--text-secondary);
+  margin-top: 0.125rem;
+}
+
+.notification-item-dismiss {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.125rem;
+}
+
+.notification-item-dismiss:hover {
+  color: var(--text-primary);
+}
+
+@media (max-width: 768px) {
+  .notification-panel {
+    width: 300px;
+    /* Anchored to the bell's position (near the header's right edge), not
+       centered - on very narrow phones a fixed width can push its left
+       edge past the viewport instead of just being a bit cramped. */
+    max-width: calc(100vw - 2rem);
+  }
+}
+
+/* Brief glow flash on the bell when a toast lands (DESIGN.md §4 case 2:
+   glow is allowed for live system activity, which this is) - restrained to
+   just this moment rather than a persistent glow. */
+.notification-bell-pulse {
+  color: var(--accent-cyan);
+  box-shadow: 0 0 0 4px rgba(0, 229, 255, 0.15);
+  transition: box-shadow 0.3s ease, color 0.3s ease;
+}
+
+/* Toast layer (DESIGN.md §6/§11.10): transient confirmations, top-right,
+   stacked newest-last. Sits above the modal overlay (Modal.css's
+   .modal-overlay/.advanced-mix-overlay are z-index:1000) so a toast fired
+   while a modal is open (e.g. a background sync finishing) still reads. */
+.toast-root {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  width: 300px;
+  max-width: calc(100vw - 2rem);
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-left: 3px solid var(--primary-color);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  transform: translate(0, 0) scale(1);
+  opacity: 1;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.toast--success { border-left-color: var(--success); }
+.toast--error { border-left-color: var(--error); }
+
+.toast-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.toast-detail {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin-top: 0.125rem;
+}
+
+/* Toast -> bell fly animation (DESIGN.md §6): shrinks and moves toward the
+   bell icon's actual on-screen position, set as --toast-dx/--toast-dy by
+   layout.html's flyToBell() via getBoundingClientRect() just before this
+   class is added. */
+.toast.toast-flying {
+  transform: translate(var(--toast-dx, 0), var(--toast-dy, 0)) scale(0.15);
+  opacity: 0;
+}
+
+/* Slim top offline banner (DESIGN.md §6/§10) - shown only while the app has
+   lost reachability outright, not per single failed action. */
+.offline-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1200;
+  padding: 0.4rem 1rem;
+  background: var(--warning);
+  color: #1a1200;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.offline-banner[hidden] { display: none; }

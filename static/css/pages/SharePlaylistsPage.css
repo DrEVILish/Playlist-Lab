@@ -1,0 +1,58 @@
+/* Only partials/shared_with_me.html links this file. It used to also carry
+   a full second copy of .modal-overlay/.modal-content plus several
+   ShareModal.tsx-era selectors (.tabs/.tab, .checkbox-label,
+   .select-all-container, .share-target-item, .friend-avatar/-name,
+   .modal-actions, .success-message, .info-message) that the current
+   share_form.html/share_result.html/shared_with_me.html markup never
+   renders - they use the shared .advanced-mix-overlay/.advanced-mix-modal
+   modal chrome (AdvancedMixModal.css, loaded globally in layout.html)
+   instead. DESIGN.md §8.11 calls out this exact duplication to consolidate
+   onto the shared modal system, so it's removed here rather than kept
+   as dead weight. */
+
+.share-description {
+  color: var(--text-secondary);
+  margin-bottom: 1.5rem;
+}
+
+.playlist-share-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.playlist-share-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 0.875rem;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.15s ease;
+}
+
+.playlist-share-item:hover {
+  border-color: var(--primary-color);
+}
+
+.playlist-share-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.playlist-share-name {
+  font-weight: 500;
+  margin-bottom: 0.125rem;
+}
+
+.playlist-share-meta {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-secondary);
+}

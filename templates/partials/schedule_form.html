@@ -1,0 +1,100 @@
+{{/* Create/manage modal for a single playlist's (or, per DESIGN.md §11.11,
+     collection's) refresh schedule, ported from ScheduleModal.tsx. Reuses
+     AdvancedMixModal.css's overlay/modal classes (generic dark-modal chrome
+     already loaded on every page); inner content styling lives in
+     ScheduleModal.css. Rendered via GET /playlists/{plexId}/schedule or
+     GET /collections/{id}/schedule into #modal-root. */}}
+{{define "partials/schedule_form.html"}}
+<div class="advanced-mix-overlay">
+  <div class="advanced-mix-modal">
+    <div class="advanced-mix-header">
+      <h2 class="advanced-mix-title">{{if .Schedule}}Manage Schedule{{else}}Create Schedule{{end}} — {{if .CollectionID}}{{.CollectionName}}{{else}}{{.PlaylistName}}{{end}}</h2>
+      <button type="button" class="advanced-mix-close" onclick="closeTopModal()" aria-label="Close">&times;</button>
+    </div>
+
+    <form {{if .Schedule}}hx-put="/schedules/{{.Schedule.ID}}"{{else}}hx-post="/schedules"{{end}} hx-swap="none"
+      hx-on::after-request="if(event.detail.successful) closeTopModal()">
+      <div class="advanced-mix-content">
+        {{if .CollectionID}}<input type="hidden" name="collectionId" value="{{.CollectionID}}">
+        {{else}}<input type="hidden" name="playlistId" value="{{.PlaylistID}}">{{end}}
+
+        {{if .Schedule}}{{if .Schedule.LastRun.Valid}}
+        <div class="schedule-meta">
+          <span>Last run: {{dateFromUnix .Schedule.LastRun.Int64}}</span>
+        </div>
+        {{end}}{{end}}
+
+        <div class="schedule-fields-row">
+          <div class="form-group">
+            <label class="form-label" for="schedule-frequency">Frequency</label>
+            <select id="schedule-frequency" class="form-select" name="frequency">
+              {{$freq := ""}}{{if .Schedule}}{{$freq = .Schedule.Frequency}}{{end}}
+              <option value="daily" {{if eq $freq "daily"}}selected{{end}}>Daily</option>
+              <option value="weekly" {{if or (eq $freq "weekly") (not $freq)}}selected{{end}}>Weekly</option>
+              <option value="fortnightly" {{if eq $freq "fortnightly"}}selected{{end}}>Fortnightly</option>
+              <option value="monthly" {{if eq $freq "monthly"}}selected{{end}}>Monthly</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="schedule-run-time" title="Leave blank to run on the next check after the start date">Run Time</label>
+            <input id="schedule-run-time" class="form-input" type="time" name="runTime" value="{{if .Schedule}}{{.Config.RunTime}}{{else}}{{now.Format "15:04"}}{{end}}">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="schedule-start-date">Start Date</label>
+          <input id="schedule-start-date" class="form-input" type="date" name="startDate" value="{{if .Schedule}}{{.Schedule.StartDate}}{{else}}{{now.Format "2006-01-02"}}{{end}}" required>
+        </div>
+
+        {{if not .CollectionID}}
+        <!-- Collection-linked schedules never read Config.UpdateMode - a
+             Collection already has its own Sync/Add-only mode (set on the
+             collection itself, DESIGN.md §11.11), so showing this
+             playlist-only "Replace/Accumulate" choice here just duplicated
+             a different setting under a misleading label. -->
+        <div class="form-group">
+          <label class="form-label">When the source changes</label>
+          {{$mode := "replace"}}{{if .Schedule}}{{if eq .Config.UpdateMode "accumulate"}}{{$mode = "accumulate"}}{{end}}{{end}}
+          <div class="update-mode-group">
+            <label class="update-mode-card">
+              <input type="radio" name="updateMode" value="replace" {{if eq $mode "replace"}}checked{{end}}>
+              <span class="update-mode-card-title">Replace</span>
+              <span class="update-mode-card-desc">The playlist mirrors the source. Tracks that drop out are removed.</span>
+            </label>
+            <label class="update-mode-card">
+              <input type="radio" name="updateMode" value="accumulate" {{if eq $mode "accumulate"}}checked{{end}}>
+              <span class="update-mode-card-title">Accumulate</span>
+              <span class="update-mode-card-desc">New tracks are added and nothing is removed - builds a running archive.</span>
+            </label>
+          </div>
+        </div>
+        {{end}}
+
+        {{if .Schedule}}{{if .Executions}}
+        <div class="form-group">
+          <label class="form-label">Recent runs</label>
+          <div class="schedule-runs-list">
+            {{range .Executions}}
+            <div class="schedule-run-row">
+              <span>{{dateFromUnix .StartedAt}}</span>
+              <span class="schedule-run-status schedule-run-status--{{.Status}}">{{.Status}}</span>
+            </div>
+            {{end}}
+          </div>
+        </div>
+        {{end}}{{end}}
+      </div>
+
+      <div class="advanced-mix-actions">
+        {{if .Schedule}}
+        <button type="button" class="btn btn-secondary" hx-post="/schedules/{{.Schedule.ID}}/run" hx-swap="none" onclick="closeTopModal()">Run Now</button>
+        <button type="button" class="btn btn-secondary" style="color:var(--error)" hx-delete="/schedules/{{.Schedule.ID}}" hx-swap="none" hx-confirm="Delete this schedule?">Delete Schedule</button>
+        {{end}}
+        <button type="button" class="btn btn-secondary" onclick="closeTopModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">{{if .Schedule}}Save Changes{{else}}Create Schedule{{end}}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}

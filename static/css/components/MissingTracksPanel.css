@@ -1,0 +1,144 @@
+.missing-tracks-panel {
+  padding: 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.875rem;
+}
+
+.missing-tracks-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.missing-tracks-summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.missing-tracks-summary::-webkit-details-marker { display: none; }
+
+.missing-tracks-summary h2 {
+  display: inline;
+}
+
+.missing-tracks-summary::before {
+  content: "\25B8";
+  display: inline-block;
+  margin-right: 0.375rem;
+  transition: transform 0.1s ease;
+}
+
+.missing-tracks-panel[open] > .missing-tracks-summary::before {
+  transform: rotate(90deg);
+}
+
+.missing-count-badge {
+  color: var(--text-secondary);
+  font-weight: 400;
+  font-size: 0.85em;
+}
+
+.missing-search-input {
+  width: 100%;
+  max-width: 420px;
+  margin: 0.75rem 0;
+}
+
+/* Toggled by missing.html's plain-JS filterMissingTracks() on both a
+   .missing-track-row (a <tr> now, DESIGN.md §11.6) and a whole
+   .missing-tracks-panel (a <details> group) - display:none works
+   identically on either element type, so no JS changes were needed when
+   this went from flex rows to table rows. */
+.missing-track-hidden {
+  display: none !important;
+}
+
+.missing-tracks-toolbar-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Table mechanics (sticky header, compact padding, full-row hover,
+   bulk-select checkbox reveal, row-actions hover/focus reveal, the "..."
+   row-menu) come from the shared DataTable.css (DESIGN.md §8.6) via the
+   "data-table"/"col-select"/"col-actions"/"row-actions"/"row-menu-toggle"
+   classes below - this file only adds what's specific to a missing-track
+   row's own cells. */
+.missing-table-container {
+  overflow-x: auto;
+}
+
+/* Each group's table is small (open by default only when <=10 tracks) and
+   sits inside a page that scrolls as a whole rather than a measured,
+   independently-scrolling container (unlike the Playlists table) - a
+   sticky thead here would just compete with the app header/Playlists
+   table's own sticky header at the same top:0 band once this panel is
+   embedded inside a Playlists row's expando, so it's turned back off for
+   this specific table rather than inherited from .data-table. */
+.missing-table th {
+  position: static;
+}
+
+.missing-table th:not(.col-select):not(.col-actions),
+.missing-table td:not(.col-select):not(.col-actions) {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.missing-track-title {
+  font-weight: 500;
+}
+
+.missing-track-artist,
+.missing-track-album {
+  color: var(--text-secondary);
+}
+
+/* Match modal's search results (partials/missing_match_results.html) -
+   plain buttons rather than the checkbox+label <li>s the editor's "add
+   tracks" search box uses (track_search_results.html), since clicking a
+   result here is itself the action (DESIGN.md §11.6), not a multi-select
+   staged for a separate submit. */
+.track-search-list {
+  list-style: none;
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.track-search-result {
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.625rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.track-search-result:hover {
+  border-color: var(--primary-color);
+  background: var(--surface-hover);
+}
+
+.track-search-result-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.track-search-result-meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}

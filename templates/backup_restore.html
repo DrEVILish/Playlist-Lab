@@ -1,0 +1,54 @@
+{{define "content"}}
+<div class="page-container backup-page">
+  <h1 class="page-title">Backup &amp; Restore</h1>
+  <p class="page-description">Backup your playlists to a JSON file or restore them from a previous backup.</p>
+
+  <div class="backup-card">
+    <h2>Restore from Backup</h2>
+    <p class="backup-description">
+      Select a backup file to restore playlists. Each playlist's tracks are re-matched
+      against your Plex library - tracks no longer in your library are added to the
+      missing-tracks list, same as any other import. Restoring never overwrites an
+      existing playlist.
+    </p>
+    <form hx-post="/backup/restore" hx-target="#backup-restore-results" hx-swap="innerHTML" hx-encoding="multipart/form-data">
+      <label class="btn btn-secondary file-input-label">
+        Select Backup File
+        <input type="file" name="file" accept=".json" class="file-input" required>
+      </label>
+      <button type="submit" class="btn btn-primary" style="margin-top:0.75rem">Restore</button>
+    </form>
+    <div id="backup-restore-results"></div>
+  </div>
+
+  <div class="backup-card">
+    <h2>Backup Playlists</h2>
+    <p class="backup-description">Select playlists to backup. The backup file can be used to restore playlists later.</p>
+    {{if not .Playlists}}
+    <p class="empty-state">No playlists found</p>
+    {{else}}
+    <form action="/backup/export" method="get">
+      <input type="search" class="form-input" placeholder="Search playlists..." style="margin-bottom:0.75rem"
+             oninput="this.closest('form').querySelectorAll('.backup-item').forEach(el=>el.style.display=el.querySelector('.backup-item-name').textContent.toLowerCase().includes(this.value.toLowerCase())?'':'none')">
+      <div class="backup-actions">
+        <button type="button" class="btn btn-secondary btn-small" onclick="this.closest('form').querySelectorAll('input[type=checkbox]').forEach(c=>c.checked=true)">Select All</button>
+        <button type="button" class="btn btn-secondary btn-small" onclick="this.closest('form').querySelectorAll('input[type=checkbox]').forEach(c=>c.checked=false)">Select None</button>
+      </div>
+      <div class="backup-list">
+        {{range .Playlists}}
+        <label class="backup-item">
+          <input type="checkbox" name="id" value="{{.RatingKey}}">
+          <div class="backup-item-info">
+            <span class="backup-item-name">{{.Title}}</span>
+            <span class="backup-item-meta">{{.LeafCount}} tracks</span>
+          </div>
+        </label>
+        {{end}}
+      </div>
+      <button type="submit" class="btn btn-primary btn-full">Backup Selected Playlist(s)</button>
+    </form>
+    {{end}}
+  </div>
+</div>
+<link rel="stylesheet" href="/static/css/pages/BackupRestorePage.css">
+{{end}}

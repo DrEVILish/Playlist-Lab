@@ -1,0 +1,7 @@
+{{define "partials/collection_poster_status.html"}}
+{{if .Error}}
+<p class="field-hint" style="color:var(--error)">Failed to set poster: {{.Error}}</p>
+{{else}}
+<p class="field-hint">Poster updated.</p>
+{{end}}
+{{end}}

@@ -1,0 +1,37 @@
+{{/* "Add another server" modal (DESIGN.md §11.11) - the same server+library
+     picker shape as the first-run wizard (setup.html), reused for Settings'
+     "add another server" flow rather than duplicated: same #libraries
+     cascading-select pattern (GET /setup/libraries), but posts to
+     POST /settings/servers (addServer, which re-renders the server list in
+     place) instead of /servers/select's full-page HX-Redirect. Rendered
+     via GET /settings/servers/new into #modal-root. */}}
+{{define "partials/server_picker.html"}}
+<div class="advanced-mix-overlay">
+  <div class="advanced-mix-modal">
+    <div class="advanced-mix-header">
+      <h2 class="advanced-mix-title">Add Another Server</h2>
+      <button type="button" class="advanced-mix-close" onclick="closeTopModal()" aria-label="Close">&times;</button>
+    </div>
+
+    <form hx-post="/settings/servers" hx-target="#settings-panel-servers" hx-swap="outerHTML"
+      hx-on::after-request="if(event.detail.successful) closeTopModal()">
+      <div class="advanced-mix-content">
+        <div class="form-group">
+          <label class="form-label" for="add-server-select">Server</label>
+          <select id="add-server-select" class="form-select" name="server" hx-get="/setup/libraries" hx-target="#add-server-libraries" hx-trigger="change" required>
+            <option value="">Select a server...</option>
+            {{range .Servers}}
+            <option value="{{.Value}}">{{.Name}}</option>
+            {{end}}
+          </select>
+        </div>
+        <div id="add-server-libraries" class="form-group"></div>
+      </div>
+      <div class="advanced-mix-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeTopModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Add Server</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}

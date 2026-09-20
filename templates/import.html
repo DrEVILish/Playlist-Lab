@@ -1,0 +1,172 @@
+{{define "content"}}
+<link rel="stylesheet" href="/static/css/pages/ImportPage.css">
+<!-- The review-track-list/.review-summary rules the new preview/review flow
+     below uses only exist in CrossImportPage.css today - reused as-is
+     rather than duplicated, since cross-import's review step and this one
+     are the same visual concept. -->
+<link rel="stylesheet" href="/static/css/pages/CrossImportPage.css">
+<div class="import page-container">
+  {{if not .HasServer}}
+  <p class="error-message">Select a Plex server and music library in setup before importing.</p>
+  {{else}}
+
+  {{if not .Sources}}
+  <div class="empty-state">
+    <div class="empty-state-icon">&#128193;</div>
+    <div class="empty-state-title">No import sources available</div>
+    <div class="empty-state-description">No source adapters are registered on this server yet.</div>
+  </div>
+  {{else}}
+
+  <!-- Source picker: React drove this with useState + onClick handlers over
+       a button list; a native radio group does the same "pick one" job with
+       no JS, and its own value doubles as the form's submitted "source"
+       field (see .source-tab-input rules appended to ImportPage.css).
+
+       Preview posts to /import/preview: ImportPage.tsx's handlePreview is
+       what every chart/search/URL import in the real app actually calls -
+       fetch and match synchronously, show the results, let the user fix
+       anything wrong, then POST /import/confirm/:sessionId (import_review.go)
+       actually creates the playlist. Import posts straight to /import
+       (import.go's startImport) instead - the older fire-and-forget path,
+       skipping the review step for a user who already trusts the match. -->
+  <style>
+    /* :has() is scoped to .import.page-container (not a sibling-of-
+       .source-tabs rule) since .billboard-week-picker/.import-browse-section
+       aren't guaranteed to be later siblings of .source-tabs once the file-
+       import button shares its row - :has() matches any descendant of the
+       page container regardless of nesting depth, so this holds either way. */
+    .import.page-container:has(#source-billboard:checked) .billboard-week-picker { display: block; }
+
+    /* Chart browsing / search-by-name only exist for sources with a
+       public or app-level playlist API to reuse (see charts.go's doc) -
+       Deezer and Spotify. */
+    .import.page-container:has(#source-deezer:checked) .import-browse-section,
+    .import.page-container:has(#source-spotify:checked) .import-browse-section { display: block; }
+    .import.page-container:has(#source-spotify:checked) .spotify-saved-users-section { display: block; }
+  </style>
+
+  <form>
+    <section class="import-form">
+      <div class="form-section">
+        <label class="form-label" for="import-identifier">Playlist URL or ID</label>
+        <input class="form-input" type="text" id="import-identifier" name="identifier" placeholder="https://..." required>
+        <p class="form-hint">Enter the playlist URL from a remote source to import.</p>
+      </div>
+
+      <!-- Preview/Import/Import-from-File all act on (or substitute for)
+           the URL/ID field above, so they stay together in this same
+           section/card. -->
+      <div class="form-section import-form-actions">
+        <button type="submit" class="btn btn-secondary" hx-post="/import/preview" hx-target="#modal-root" hx-swap="beforeend">Preview</button>
+        <button type="submit" class="btn btn-primary" hx-post="/import" hx-target="#notifications" hx-swap="innerHTML">Import</button>
+        <button type="button" class="btn btn-secondary" hx-get="/import/file/form" hx-target="#modal-root" hx-swap="beforeend">Import from File</button>
+      </div>
+    </section>
+
+    <!-- Source picker is its own card, separate from the URL/ID form above:
+         it selects which source's browse section (charts/search/saved
+         users) shows below, not what the pasted URL/ID means to
+         /import/preview (its "source" form value still comes from whichever
+         tab is checked, regardless of where the tabs sit in the DOM - both
+         cards are inside the same enclosing <form>). -->
+    <section class="import-form">
+      <div class="source-tabs-row">
+        <div class="source-tabs">
+          {{range $i, $s := .Sources}}
+          <input type="radio" name="source" id="source-{{$s.ID}}" value="{{$s.ID}}" class="source-tab-input" {{if eq $i 0}}checked{{end}}>
+          <label for="source-{{$s.ID}}" class="source-tab" title="{{$s.Name}}">
+            {{if serviceLogo $s.Icon}}
+            <span class="source-tab-icon-frame"><img class="source-tab-icon" src="{{serviceLogo $s.Icon}}" alt="{{$s.Name}}"></span>
+            {{else}}
+            {{$s.Name}}
+            {{end}}
+          </label>
+          {{end}}
+        </div>
+      </div>
+
+      <!-- Billboard-specific "browse a chart week" picker (user feedback:
+           bring back example/top-chart browsing like older versions had,
+           rather than only a raw URL paste box). Only shown when Billboard
+           is the selected source (:has() rule above). Doesn't touch the
+           form's actual submitted field - the week <select>'s onchange
+           just fills in #import-identifier, so /import/preview needs no
+           changes at all. -->
+      <div class="form-section billboard-week-picker">
+        <label class="form-label">Browse a chart week</label>
+        <div class="billboard-week-picker-row">
+          <select id="billboard-year-select" class="form-input" hx-get="/import/billboard/weeks" hx-target="#billboard-week-select" hx-swap="outerHTML" hx-trigger="change" hx-include="this" name="year">
+            <option value="">Year...</option>
+            {{range .BillboardYears}}<option value="{{.}}">{{.}}</option>{{end}}
+          </select>
+          <select id="billboard-week-select" class="form-input" disabled>
+            <option value="">Select a year first...</option>
+          </select>
+        </div>
+      </div>
+    </section>
+  </form>
+
+  <!-- Chart browsing / search-by-name / saved Spotify users, ported from
+       ImportPage.tsx's popular-playlists grid + search box + saved-user
+       list. Deliberately outside the /import/preview <form> above (HTML
+       doesn't allow nested forms, and the search box + saved-user add
+       form each need their own <form>) - the .import-browse-section CSS
+       toggle above uses :has() against the whole page container instead
+       of a sibling-of-.source-tabs rule, so this doesn't need to live
+       inside that form to react to the selected source tab. Each result
+       card (partials/import_playlist_cards.html) posts straight to the
+       same /import/preview endpoint the form above uses. -->
+  <section class="import-form import-browse-section">
+    <div class="form-section" style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;">
+      <div style="flex:1;min-width:200px;">
+        <label class="form-label" for="import-search-query">Search by name</label>
+        <div class="billboard-week-picker-row">
+          <input class="form-input" type="text" id="import-search-query" name="q" placeholder="Search playlists...">
+          <button type="button" class="btn btn-secondary"
+            hx-get="/import/search" hx-include="[name='source']:checked,#import-search-query" hx-target="#import-charts" hx-swap="innerHTML">Search</button>
+        </div>
+      </div>
+      <div style="min-width:160px;">
+        <label class="form-label" for="import-country">Country</label>
+        <select class="form-input" id="import-country" name="country"
+          hx-get="/import/charts" hx-include="[name='source']:checked,#import-country" hx-target="#import-charts" hx-swap="innerHTML">
+          <option value="global">Global</option>
+          {{range .Countries}}<option value="{{.Code}}" {{if eq .Code $.Country}}selected{{end}}>{{.Name}}</option>{{end}}
+        </select>
+      </div>
+    </div>
+
+    <div class="form-section spotify-saved-users-section">
+      <label class="form-label">Saved Spotify users</label>
+      <div id="import-spotify-users" hx-get="/import/spotify-users" hx-trigger="revealed" hx-swap="outerHTML">
+        <p class="settings-hint">Loading...</p>
+      </div>
+    </div>
+
+    <div id="import-charts" hx-get="/import/charts" hx-include="[name='source']:checked,#import-country" hx-trigger="load, change from:[name='source']" hx-swap="innerHTML"></div>
+  </section>
+  {{end}}
+
+  <!-- Generate with AI moved to the Generate page/modal (mixes.html,
+       GET /mixes/ai-form) per user feedback - describing a playlist and
+       matching library tracks against it reads as a generation flow, not
+       an import-from-an-external-source one. Still posts to the same
+       /import/ai route (ai_generate.go), only the UI entry point moved. -->
+
+  <!-- Plex Home import, ported from ImportFromPlexHome.tsx: copy another
+       Plex Home user's playlist into this account. Loaded on reveal, not
+       with the page - listing home users is a plex.tv API round trip
+       nobody importing from a chart/file/AI prompt needs to pay for. -->
+  <section class="import-form">
+    <h2 class="progress-title">Import from a Plex Home user</h2>
+    <p class="form-hint">Copy a playlist from another Plex Home user on this server into your own account.</p>
+    <div hx-get="/import/plex-home/users" hx-trigger="revealed" hx-swap="outerHTML">
+      <p class="settings-hint">Loading Plex Home users...</p>
+    </div>
+  </section>
+
+  {{end}}
+</div>
+{{end}}

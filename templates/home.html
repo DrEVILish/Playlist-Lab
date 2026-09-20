@@ -1,0 +1,523 @@
+{{define "content"}}
+<link rel="stylesheet" href="/static/css/components/DataTable.css">
+<link rel="stylesheet" href="/static/css/pages/PlaylistsPage.css">
+<link rel="stylesheet" href="/static/css/components/MissingTracksPanel.css">
+<script src="/static/js/data-table.js"></script>
+<div class="page-container">
+  <div class="playlists-stats">
+    <div class="playlists-stat">
+      <span class="playlists-stat-value">{{.TotalPlaylists}}</span>
+      <span class="playlists-stat-label">Playlists</span>
+    </div>
+    <a class="playlists-stat playlists-stat-link" href="{{.Query.With "fSchedule" "on"}}">
+      <span class="playlists-stat-value">{{.TotalScheduled}}</span>
+      <span class="playlists-stat-label">Scheduled</span>
+    </a>
+    <a class="playlists-stat playlists-stat-link{{if .TotalMissing}} warn{{end}}" href="/missing">
+      <span class="playlists-stat-value">{{.TotalMissing}}</span>
+      <span class="playlists-stat-label">Missing Tracks</span>
+    </a>
+    <a class="playlists-stat playlists-stat-link{{if .TotalAttention}} warn{{end}}" href="{{.Query.With "fAttention" "1"}}">
+      <span class="playlists-stat-value">{{.TotalAttention}}</span>
+      <span class="playlists-stat-label">Needs Attention</span>
+    </a>
+  </div>
+
+  {{if .PlexError}}
+    <p class="error-message">Couldn't reach your Plex server. Check your connection and refresh.</p>
+  {{else}}
+  {{if not .Playlists}}
+    <div style="text-align:center;padding:3rem;color:var(--text-secondary)">
+      {{if .Filter.Active}}No playlists match these filters.{{else}}No playlists found on your server yet.{{end}}
+    </div>
+  {{else}}
+  <!-- Row checkboxes, the bulk bar, and the table share one <form> so a
+       native submit just carries every checked "id" along - no JS state
+       needed to track a selection. The bar's visibility is a pure CSS
+       :has() rule (chrome-interactions.css), the same technique as the
+       mobile-nav checkbox hack elsewhere in this codebase. -->
+  <form method="post" action="/playlists/bulk-delete" class="bulk-select-scope">
+    <div class="playlists-table-container data-table-container">
+    <table class="playlists-table data-table">
+      <thead>
+        <tr>
+          <th class="col-select"><input type="checkbox" id="select-all" aria-label="Select all playlists"></th>
+          <!-- Per-column filter popovers: the real page portals a
+               JS-positioned floating menu per header (FilterMenu/
+               SearchFilterMenu in PlaylistsPage.tsx); <details> gives the
+               same click-to-open popover with no JS, just anchored directly
+               under its own header cell (chrome-interactions.css) instead of
+               being portalled to document.body. Every option link carries
+               the rest of the current query string via .Query.With, so
+               applying one filter/sort never silently drops another. -->
+          <th class="col-name sortable">
+            <div class="th-with-filter">
+              <a href="{{.Query.SortHref "name"}}"><span class="th-label">Playlist</span> <span class="sort-arrow">{{sortArrow "name" $.Sort $.Dir}}</span></a>
+              <details class="th-filter">
+                <summary class="th-filter-btn{{if .Filter.Search}} active{{end}}" title="Search"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+                <form class="th-filter-menu" method="get" action="/">
+                  {{range $k, $v := .Query}}{{if ne $k "q"}}<input type="hidden" name="{{$k}}" value="{{index $v 0}}">{{end}}{{end}}
+                  <input type="search" name="q" value="{{.Filter.Search}}" placeholder="Search playlists..." class="form-input" autofocus>
+                  <button type="submit" class="btn btn-primary btn-small" style="margin-top:0.375rem">Search</button>
+                </form>
+              </details>
+            </div>
+          </th>
+          <th class="sortable">
+            <div class="th-with-filter">
+              <a href="{{.Query.SortHref "source"}}"><span class="th-label">Source</span> <span class="sort-arrow">{{sortArrow "source" $.Sort $.Dir}}</span></a>
+              <details class="th-filter">
+                <summary class="th-filter-btn{{if .Filter.Source}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+                <div class="th-filter-menu">
+                  <a class="th-filter-option{{if not .Filter.Source}} active{{end}}" href="{{.Query.With "fSource" ""}}">All sources</a>
+                  {{range .Sources}}<a class="th-filter-option{{if eq . $.Filter.Source}} active{{end}}" href="{{$.Query.With "fSource" .}}">{{.}}</a>{{end}}
+                </div>
+              </details>
+            </div>
+          </th>
+          <th class="sortable">
+            <div class="th-with-filter">
+              <a href="{{.Query.SortHref "tracks"}}"><span class="th-label">Tracks</span> <span class="sort-arrow">{{sortArrow "tracks" $.Sort $.Dir}}</span></a>
+              <details class="th-filter">
+                <summary class="th-filter-btn{{if or .Filter.TracksMin .Filter.TracksMax}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+                <form class="th-filter-menu" method="get" action="/">
+                  {{range $k, $v := .Query}}{{if and (ne $k "fTracksMin") (ne $k "fTracksMax")}}<input type="hidden" name="{{$k}}" value="{{index $v 0}}">{{end}}{{end}}
+                  <input type="number" min="0" name="fTracksMin" value="{{.Filter.TracksMin}}" placeholder="Min tracks" class="form-input">
+                  <input type="number" min="0" name="fTracksMax" value="{{.Filter.TracksMax}}" placeholder="Max tracks" class="form-input" style="margin-top:0.375rem">
+                  <button type="submit" class="btn btn-primary btn-small" style="margin-top:0.375rem">Apply</button>
+                </form>
+              </details>
+            </div>
+          </th>
+          <th class="sortable col-hide-1">
+            <div class="th-with-filter">
+              <a href="{{.Query.SortHref "duration"}}"><span class="th-label">Duration</span> <span class="sort-arrow">{{sortArrow "duration" $.Sort $.Dir}}</span></a>
+              <details class="th-filter">
+                <summary class="th-filter-btn{{if or .Filter.DurationMin .Filter.DurationMax}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+                <form class="th-filter-menu" method="get" action="/">
+                  {{range $k, $v := .Query}}{{if and (ne $k "fDurationMin") (ne $k "fDurationMax")}}<input type="hidden" name="{{$k}}" value="{{index $v 0}}">{{end}}{{end}}
+                  <input type="number" min="0" name="fDurationMin" value="{{.Filter.DurationMin}}" placeholder="Min minutes" class="form-input">
+                  <input type="number" min="0" name="fDurationMax" value="{{.Filter.DurationMax}}" placeholder="Max minutes" class="form-input" style="margin-top:0.375rem">
+                  <button type="submit" class="btn btn-primary btn-small" style="margin-top:0.375rem">Apply</button>
+                </form>
+              </details>
+            </div>
+          </th>
+          <th class="sortable">
+            <div class="th-with-filter">
+              <a href="{{.Query.SortHref "missing"}}"><span class="th-label">Missing Tracks</span> <span class="sort-arrow">{{sortArrow "missing" $.Sort $.Dir}}</span></a>
+              <details class="th-filter">
+                <summary class="th-filter-btn{{if .Filter.Missing}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+                <div class="th-filter-menu">
+                  <a class="th-filter-option{{if not .Filter.Missing}} active{{end}}" href="{{.Query.With "fMissing" ""}}">Any missing</a>
+                  <a class="th-filter-option{{if eq .Filter.Missing "has"}} active{{end}}" href="{{.Query.With "fMissing" "has"}}">Has missing tracks</a>
+                  <a class="th-filter-option{{if eq .Filter.Missing "none"}} active{{end}}" href="{{.Query.With "fMissing" "none"}}">No missing tracks</a>
+                </div>
+              </details>
+            </div>
+          </th>
+          <th class="sortable col-hide-2">
+            <div class="th-with-filter">
+              <a href="{{.Query.SortHref "schedule"}}"><span class="th-label">Schedule</span> <span class="sort-arrow">{{sortArrow "schedule" $.Sort $.Dir}}</span></a>
+              <details class="th-filter">
+                <summary class="th-filter-btn{{if .Filter.Schedule}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+                <div class="th-filter-menu">
+                  <a class="th-filter-option{{if not .Filter.Schedule}} active{{end}}" href="{{.Query.With "fSchedule" ""}}">Any schedule</a>
+                  <a class="th-filter-option{{if eq .Filter.Schedule "on"}} active{{end}}" href="{{.Query.With "fSchedule" "on"}}">Scheduled</a>
+                  <a class="th-filter-option{{if eq .Filter.Schedule "off"}} active{{end}}" href="{{.Query.With "fSchedule" "off"}}">Not scheduled</a>
+                </div>
+              </details>
+            </div>
+          </th>
+          <th class="sortable col-hide-2">
+            <div class="th-with-filter">
+              <a href="{{.Query.SortHref "nextRun"}}"><span class="th-label">Next Run</span> <span class="sort-arrow">{{sortArrow "nextRun" $.Sort $.Dir}}</span></a>
+              <details class="th-filter">
+                <summary class="th-filter-btn{{if .Filter.NextRun}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+                <div class="th-filter-menu">
+                  <a class="th-filter-option{{if not .Filter.NextRun}} active{{end}}" href="{{.Query.With "fNextRun" ""}}">Any</a>
+                  <a class="th-filter-option{{if eq .Filter.NextRun "due"}} active{{end}}" href="{{.Query.With "fNextRun" "due"}}">Due now</a>
+                  <a class="th-filter-option{{if eq .Filter.NextRun "upcoming"}} active{{end}}" href="{{.Query.With "fNextRun" "upcoming"}}">Upcoming</a>
+                  <a class="th-filter-option{{if eq .Filter.NextRun "none"}} active{{end}}" href="{{.Query.With "fNextRun" "none"}}">Not scheduled</a>
+                </div>
+              </details>
+            </div>
+          </th>
+          <th class="sortable col-hide-1">
+            <div class="th-with-filter">
+              <a href="{{.Query.SortHref "lastRun"}}"><span class="th-label">Last Run</span> <span class="sort-arrow">{{sortArrow "lastRun" $.Sort $.Dir}}</span></a>
+              <details class="th-filter">
+                <summary class="th-filter-btn{{if .Filter.LastRun}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+                <div class="th-filter-menu">
+                  <a class="th-filter-option{{if not .Filter.LastRun}} active{{end}}" href="{{.Query.With "fLastRun" ""}}">Any</a>
+                  <a class="th-filter-option{{if eq .Filter.LastRun "success"}} active{{end}}" href="{{.Query.With "fLastRun" "success"}}">Succeeded</a>
+                  <a class="th-filter-option{{if eq .Filter.LastRun "failed"}} active{{end}}" href="{{.Query.With "fLastRun" "failed"}}">Failed</a>
+                  <a class="th-filter-option{{if eq .Filter.LastRun "never"}} active{{end}}" href="{{.Query.With "fLastRun" "never"}}">Never run</a>
+                </div>
+              </details>
+            </div>
+          </th>
+          <th class="sortable col-hide-1">
+            <div class="th-with-filter">
+              <a href="{{.Query.SortHref "dateAdded"}}"><span class="th-label">Date Added</span> <span class="sort-arrow">{{sortArrow "dateAdded" $.Sort $.Dir}}</span></a>
+              <details class="th-filter">
+                <summary class="th-filter-btn{{if or .Filter.AddedAfter .Filter.AddedBefore}} active{{end}}" title="Filter"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
+                <form class="th-filter-menu" method="get" action="/">
+                  {{range $k, $v := .Query}}{{if and (ne $k "fAddedAfter") (ne $k "fAddedBefore")}}<input type="hidden" name="{{$k}}" value="{{index $v 0}}">{{end}}{{end}}
+                  <input type="date" name="fAddedAfter" value="{{.Filter.AddedAfter}}" class="form-input">
+                  <input type="date" name="fAddedBefore" value="{{.Filter.AddedBefore}}" class="form-input" style="margin-top:0.375rem">
+                  <button type="submit" class="btn btn-primary btn-small" style="margin-top:0.375rem">Apply</button>
+                </form>
+              </details>
+            </div>
+          </th>
+          <th class="col-actions">{{if .Filter.Active}}<a class="btn btn-secondary btn-small" href="/" title="Clear all filters">Clear</a>{{end}}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Playlists}}
+        <!-- Row click expands the inline read-only track preview below
+             (data-table.js's isRowActionTarget() lets a click on any actual
+             control - checkbox, badge, action icon - pass through instead
+             of toggling the preview); a right-click, or the always-visible
+             "..." button, opens the same row's action icons as a context
+             menu (row-menu-open, see DataTable.css/data-table.js) rather
+             than navigating anywhere. Tracks/Duration/Missing use
+             .mono-data (DESIGN.md §7) since they're raw numeric/technical
+             values, not prose. -->
+        <tr{{if .NeedsAttention}} class="row-attention"{{end}} data-row-menu tabindex="0"
+            hx-on:click="if(!isRowActionTarget(event)) togglePlaylistPreview('{{.PlexID}}')"
+            hx-on:keydown="if(event.key==='Enter'&&!isRowActionTarget(event)) togglePlaylistPreview('{{.PlexID}}')">
+          <td class="col-select"><input type="checkbox" name="id" value="{{.PlexID}}" class="row-select" aria-label="Select {{.Name}}"></td>
+          <td class="playlist-name-cell">
+            <div class="playlist-cover">{{if .CoverURL}}<img src="{{.CoverURL}}" alt="" loading="lazy">{{end}}</div>
+            <span class="playlist-name">{{.Name}}</span>
+          </td>
+          <td>{{template "playlistSource" .}}</td>
+          <td class="mono-data">{{.TrackCount}}</td>
+          <td class="mono-data col-hide-1">{{formatDuration .Duration}}</td>
+          <td>
+            <!-- Expands an inline row (below) scoped to just this playlist's
+                 missing tracks via GET /missing/list?playlistId=, instead of
+                 navigating away to the full /missing page. -->
+            {{if .MissingCount}}<button type="button" class="badge-button warn mono-data expando-toggle" hx-get="/missing/list?playlistId={{.DBID}}" hx-target="#missing-row-{{.DBID}}-content" hx-swap="innerHTML" hx-on:click="document.getElementById('missing-row-{{.DBID}}').classList.toggle('is-open'); this.classList.toggle('is-open')">{{.MissingCount}}<svg class="expando-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+            {{else if .DBID}}<span class="mono-data">0</span>{{else}}—{{end}}
+          </td>
+          <td class="col-hide-2">
+            <!-- Shows the schedule's run interval (daily/weekly/fortnightly/
+                 monthly), not a duplicate of the Next Run column next to it -
+                 text-transform:capitalize on the raw lowercase Frequency
+                 value, same convention status.html already uses rather than
+                 a template helper. Reuses the same hx-get the row-actions
+                 icon and mobile card's "+ Schedule" button already open,
+                 so clicking either the badge or "off" opens the edit/create
+                 schedule modal. -->
+            {{if not .DBID}}—
+            {{else if .ScheduleID}}<button type="button" class="badge-button{{if .ScheduleFailed}} warn{{end}}" style="text-transform:capitalize" title="Edit schedule" hx-get="/playlists/{{.PlexID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">{{.Frequency}}</button>
+            {{else}}<button type="button" class="badge-button" style="color:var(--text-secondary)" title="Create schedule" hx-get="/playlists/{{.PlexID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">off</button>{{end}}
+          </td>
+          <td class="mono-data col-hide-2"{{if .NextRunAt}} title="{{dateFromUnix .NextRunAt}}"{{end}}>{{if .NextRun}}{{.NextRun}}{{else}}—{{end}}</td>
+          <td class="mono-data col-hide-1">
+            {{if .LastRun}}<span{{if eq .LastRunStatus "failed"}} class="badge-button warn"{{end}} title="{{.LastRunStatus}} · {{dateFromUnix .LastRun}}">{{relativeUnix .LastRun}}</span>
+            {{else}}—{{end}}
+          </td>
+          <td class="mono-data col-hide-1">{{if .DBID}}{{dateFromUnix .CreatedAt}}{{else}}—{{end}}</td>
+          <!-- .icon-btn is a 26x26 icon box (DataTable.css): it holds an
+               SVG, not a text label - text overflows and collides. Icon paths
+               are copied from apps/web/src/components/icons.tsx verbatim.
+               Shared with the mobile card list below (playlistRowActions),
+               since both views offer the exact same per-playlist actions.
+               .row-actions itself reveals on hover/focus (DataTable.css);
+               .row-menu-toggle ("...") stays visible always as the
+               keyboard/right-click-accessible way to reach the same icons
+               without hovering - see data-table.js. -->
+          <td class="col-actions">
+            <div class="row-actions">{{template "playlistRowActions" .}}</div>
+            <button type="button" class="icon-btn row-menu-toggle" title="More actions" aria-label="More actions for {{.Name}}" onclick="this.closest('tr').classList.toggle('row-menu-open')">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+            </button>
+          </td>
+        </tr>
+        {{if .MissingCount}}
+        <tr id="missing-row-{{.DBID}}" class="missing-row">
+          <td colspan="11"><div id="missing-row-{{.DBID}}-content" class="missing-tracks-scope"></div></td>
+        </tr>
+        {{end}}
+        <!-- Read-only track-list preview (DESIGN.md §11.1): lazy-loaded on
+             first expand via the <tr>'s own hx-get above, toggled open/
+             closed by class rather than re-fetched every click. -->
+        <tr id="preview-row-{{.PlexID}}" class="missing-row preview-row">
+          <td colspan="11"><div id="preview-row-{{.PlexID}}-content" class="playlist-preview-scope"></div></td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    </div>
+    <div class="bulk-actions-bar">
+      <span class="bulk-actions-count">Selected</span>
+      <button type="submit" formaction="/backup/export" formmethod="get" class="btn btn-secondary btn-small">Backup Selected</button>
+      <!-- Moved out of the always-visible top toolbar (user feedback: sitting
+           next to a "Select" toggle, it wasn't clear what "Export CSV" would
+           actually export) - living here instead makes the scope unambiguous
+           by context, the same way every other button in this bar is already
+           scoped to "whatever's checked." exportCSV (playlists.go) exports
+           just these checked ids when any are given, matching every sibling
+           button's semantics exactly. -->
+      <button type="submit" formaction="/playlists/export" formmethod="get" class="btn btn-secondary btn-small">Export Selected (CSV)</button>
+      <!-- Merge needs a name for the resulting playlist - prompt() rather
+           than a permanently-visible text field, since it's only relevant
+           right when this button is clicked (matches the React version's
+           promptDialog()). -->
+      <button type="submit" formaction="/playlists/merge" class="btn btn-secondary btn-small" title="Combine these playlists' tracks into a new playlist" onclick="var n=prompt('Combining the selected playlists into one new playlist.\n\nName for the new playlist:'); if(!n)return false; this.form.querySelector('[name=targetName]')?.remove(); var i=document.createElement('input'); i.type='hidden'; i.name='targetName'; i.value=n; this.form.appendChild(i);">Merge Selected</button>
+      <button type="submit" class="btn btn-secondary btn-small" style="color:var(--error)" onclick="return confirm('Delete the selected playlist(s) from Plex? This cannot be undone.')">Delete Selected</button>
+    </div>
+    <script>
+      // Drag-to-reorder columns: native HTML5 drag-and-drop, no library.
+      // Order persists per-browser in localStorage (column identity is just
+      // its position in the server-rendered markup, which is stable across
+      // reloads) and is replayed onto every row so header and body stay in
+      // sync - the missing-tracks expando row is a single colspan cell, so
+      // it's unaffected by reordering.
+      (function () {
+        var table = document.querySelector(".playlists-table");
+        if (!table || !table.tHead) return;
+        var storageKey = "playlistsColumnOrder";
+        var headerRow = table.tHead.rows[0];
+        var colCount = headerRow.cells.length;
+
+        // Snapshot every row's cells in their original, server-rendered
+        // order before any dragging happens - "order" below is always a
+        // permutation of these original positions, so it composes across
+        // repeated drags and survives being re-applied from a fresh (i.e.
+        // original-order) reload.
+        var originalCells = Array.from(table.rows).map(function (row) {
+          return Array.from(row.cells);
+        });
+
+        function applyOrder(order) {
+          Array.from(table.rows).forEach(function (row, r) {
+            var cells = originalCells[r];
+            if (!cells || cells.length !== order.length) return;
+            order.forEach(function (i) { row.appendChild(cells[i]); });
+          });
+        }
+
+        var order = Array.from({ length: colCount }, function (_, i) { return i; });
+        try {
+          var saved = JSON.parse(localStorage.getItem(storageKey) || "null");
+          if (saved && saved.length === colCount) order = saved;
+        } catch (e) {}
+        applyOrder(order);
+
+        function clearDropMarkers() {
+          Array.from(headerRow.cells).forEach(function (c) {
+            c.classList.remove("drop-before", "drop-after");
+          });
+        }
+
+        var dragSrc = null;
+        Array.from(headerRow.cells).forEach(function (th) {
+          if (th.classList.contains("col-select") || th.classList.contains("col-actions")) return;
+          th.draggable = true;
+          th.addEventListener("dragstart", function (e) {
+            dragSrc = th;
+            th.classList.add("dragging");
+            e.dataTransfer.effectAllowed = "move";
+          });
+          th.addEventListener("dragend", function () {
+            th.classList.remove("dragging");
+            clearDropMarkers();
+          });
+          // Shows which side of this header the dragged column will land on
+          // (based on cursor position within it), so the drop target is
+          // visible before the user releases rather than only after.
+          th.addEventListener("dragover", function (e) {
+            e.preventDefault();
+            if (!dragSrc || dragSrc === th) return;
+            clearDropMarkers();
+            var before = e.clientX - th.getBoundingClientRect().left < th.offsetWidth / 2;
+            th.classList.add(before ? "drop-before" : "drop-after");
+          });
+          th.addEventListener("dragleave", function () {
+            th.classList.remove("drop-before", "drop-after");
+          });
+          th.addEventListener("drop", function (e) {
+            e.preventDefault();
+            clearDropMarkers();
+            if (!dragSrc || dragSrc === th) return;
+            var before = e.clientX - th.getBoundingClientRect().left < th.offsetWidth / 2;
+            var from = Array.from(headerRow.cells).indexOf(dragSrc);
+            var to = Array.from(headerRow.cells).indexOf(th);
+            if (!before) to += 1;
+            if (from < to) to -= 1;
+            order.splice(to, 0, order.splice(from, 1)[0]);
+            applyOrder(order);
+            localStorage.setItem(storageKey, JSON.stringify(order));
+          });
+        });
+      })();
+    </script>
+
+    <!-- Mobile card list: PlaylistsPage.tsx swaps in this view entirely
+         (isMobile ? ... : <table>) below a 768px JS media-query check -
+         server-rendered HTML can't branch on viewport width, so both views
+         render and @media rules in PlaylistsPage.css pick one (see
+         ".playlists-table-container"/".playlists-cards" there). Each card's
+         expand/collapse is a checkbox-hack (input#card-toggle-X + label),
+         the same no-JS pattern as the admin tabs and the mobile nav drawer
+         elsewhere in this app, replacing React's isCardExpanded state. -->
+    <!-- Mobile has no equivalent of the desktop table's per-column search
+         popover (.th-filter, hidden below 768px along with the whole
+         table) - with 170+ playlists on a real library, that left phones
+         with no way to search at all, only sort. Same hidden-filter-carry
+         technique as .th-filter-menu above so a search doesn't drop
+         whatever sort is already applied. -->
+    <form class="playlists-mobile-search" method="get" action="/">
+      {{range $k, $v := .Query}}{{if ne $k "q"}}<input type="hidden" name="{{$k}}" value="{{index $v 0}}">{{end}}{{end}}
+      <input type="search" name="q" value="{{.Filter.Search}}" placeholder="Search playlists...">
+      <button type="submit" class="btn btn-secondary btn-small">Search</button>
+    </form>
+    <div class="playlists-sortbar">
+      <label for="mobile-sort">Sort</label>
+      <select id="mobile-sort" onchange="location.href=this.value">
+        <option value="{{.Query.With "sort" "name"}}"{{if eq .Sort "name"}} selected{{end}}>Name</option>
+        <option value="{{.Query.With "sort" "source"}}"{{if eq .Sort "source"}} selected{{end}}>Source</option>
+        <option value="{{.Query.With "sort" "tracks"}}"{{if eq .Sort "tracks"}} selected{{end}}>Tracks</option>
+        <option value="{{.Query.With "sort" "duration"}}"{{if eq .Sort "duration"}} selected{{end}}>Duration</option>
+        <option value="{{.Query.With "sort" "missing"}}"{{if eq .Sort "missing"}} selected{{end}}>Missing Tracks</option>
+        <option value="{{.Query.With "sort" "schedule"}}"{{if eq .Sort "schedule"}} selected{{end}}>Schedule</option>
+        <option value="{{.Query.With "sort" "nextRun"}}"{{if eq .Sort "nextRun"}} selected{{end}}>Next Run</option>
+        <option value="{{.Query.With "sort" "lastRun"}}"{{if eq .Sort "lastRun"}} selected{{end}}>Last Run</option>
+        <option value="{{.Query.With "sort" "dateAdded"}}"{{if eq .Sort "dateAdded"}} selected{{end}}>Date Added</option>
+      </select>
+      <a href="{{.Query.With "dir" (toggleDir .Dir)}}" title="{{if eq .Dir "desc"}}Descending - tap for ascending{{else}}Ascending - tap for descending{{end}}" aria-label="Sort direction: {{if eq .Dir "desc"}}descending{{else}}ascending{{end}}">{{if eq .Dir "desc"}}▼{{else}}▲{{end}}</a>
+    </div>
+    <div class="playlists-cards">
+      {{range .Playlists}}
+      <div class="playlist-card{{if .NeedsAttention}} row-attention{{end}}">
+        <input type="checkbox" id="card-toggle-{{.PlexID}}" class="playlist-card-toggle" hidden>
+        <div class="playlist-card-header">
+          <input type="checkbox" name="id" value="{{.PlexID}}" class="row-select" aria-label="Select {{.Name}}">
+          <label for="card-toggle-{{.PlexID}}" class="playlist-card-header-label">
+            <div class="playlist-cover">{{if .CoverURL}}<img src="{{.CoverURL}}" alt="" loading="lazy">{{end}}</div>
+            <div class="playlist-card-title">
+              <span class="playlist-name">{{.Name}}</span>
+              <span class="playlist-card-summary">{{.TrackCount}} tracks &middot; {{formatDuration .Duration}}{{if .MissingCount}} &middot; {{.MissingCount}} missing{{end}}</span>
+            </div>
+            <span class="playlist-card-chevron">&#9662;</span>
+          </label>
+        </div>
+        <div class="playlist-card-details">
+          <div class="playlist-card-detail-row">
+            <span class="playlist-card-detail-label">Source</span>
+            {{template "playlistSource" .}}
+          </div>
+          <div class="playlist-card-detail-row">
+            <span class="playlist-card-detail-label">Schedule</span>
+            {{if not .DBID}}<span class="playlist-source-label" title="This playlist wasn't imported through Playlist Lab, so it can't be scheduled yet">&mdash;</span>
+            {{else if .ScheduleID}}<button type="button" class="badge-button{{if .ScheduleFailed}} warn{{end}}" style="text-transform:capitalize" hx-get="/playlists/{{.PlexID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">{{.Frequency}}</button>
+            {{else}}<button type="button" class="badge-button" hx-get="/playlists/{{.PlexID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">+ Schedule</button>{{end}}
+          </div>
+          {{if .ScheduleID}}
+          <div class="playlist-card-detail-row">
+            <span class="playlist-card-detail-label">Next / Last Run</span>
+            <span>{{if .NextRun}}{{.NextRun}}{{else}}&mdash;{{end}} / {{if .LastRun}}{{dateFromUnix .LastRun}}{{else}}&mdash;{{end}}</span>
+          </div>
+          {{end}}
+          <div class="playlist-card-detail-row">
+            <span class="playlist-card-detail-label">Date Added</span>
+            <span>{{if .DBID}}{{dateFromUnix .CreatedAt}}{{else}}&mdash;{{end}}</span>
+          </div>
+          <div class="row-actions playlist-card-actions">{{template "playlistRowActions" .}}</div>
+        </div>
+      </div>
+      {{end}}
+    </div>
+  </form>
+  <!-- "Select all" toggling every row checkbox has no pure-CSS equivalent
+       (unlike the show/hide toggles elsewhere in this app, which are all
+       :checked/:has() tricks) - this is the one bit of real selection logic
+       that needs a script, same exception layout.html already makes for
+       Escape-to-close-modal. -->
+  <script>
+    document.getElementById('select-all')?.addEventListener('change', function () {
+      document.querySelectorAll('input.row-select').forEach(function (cb) { cb.checked = this.checked; }.bind(this));
+    });
+    // Row click -> inline read-only track preview (DESIGN.md §11.1). Lazy-
+    // loaded via htmx.ajax (rather than an hx-get/hx-trigger pair on the
+    // <tr> itself) so the guard against clicks on the row's own controls
+    // (isRowActionTarget, data-table.js) is a plain JS condition instead of
+    // depending on hx-trigger's bracket-filter syntax.
+    function togglePlaylistPreview(plexId) {
+      var row = document.getElementById('preview-row-' + plexId);
+      if (!row) return;
+      var opening = !row.classList.contains('is-open');
+      row.classList.toggle('is-open');
+      var content = document.getElementById('preview-row-' + plexId + '-content');
+      if (opening && content && !content.dataset.loaded) {
+        content.dataset.loaded = '1';
+        htmx.ajax('GET', '/playlists/' + encodeURIComponent(plexId) + '/preview', { target: content, swap: 'innerHTML' });
+      }
+    }
+  </script>
+  {{end}}{{/* not .Playlists */}}
+  {{end}}{{/* .PlexError */}}
+</div>
+{{end}}
+
+{{/* playlistSource renders the Source column/detail: a small monochrome
+     logo (the same PNGs the Import source-picker uses, forced to a white
+     silhouette via CSS - see .playlist-source-logo, PlaylistsPage.css)
+     rather than the service name as plain link text, per user feedback -
+     still a real link out to the source. Falls back to the name as text
+     for a source with no logo asset (serviceLogo returns ""). */}}
+{{define "playlistSource"}}
+{{if eq .Source "plex"}}<span class="playlist-source-label">—</span>
+{{else if .SourceURL}}
+  {{if serviceLogo .Source}}
+  <a href="{{.SourceURL}}" target="_blank" rel="noopener noreferrer" class="playlist-source-link" title="Open on {{.Source}}" aria-label="Open on {{.Source}}">
+    <img src="{{serviceLogo .Source}}" alt="{{.Source}}" class="playlist-source-logo">
+  </a>
+  {{else}}<a href="{{.SourceURL}}" target="_blank" rel="noopener noreferrer" class="playlist-source-link">{{.Source}} ↗</a>{{end}}
+{{else}}<span class="playlist-source-label">{{.Source}}</span>{{end}}
+{{end}}
+
+{{/* playlistRowActions is the per-playlist action button row, shared by the
+     desktop table and the mobile card list so the two views never drift out
+     of sync with each other. Takes a playlistRow as its context (the same
+     shape .Playlists ranges over above). */}}
+{{define "playlistRowActions"}}
+<a class="icon-btn" href="/playlists/{{.PlexID}}" title="Edit tracks" aria-label="Edit tracks in {{.Name}}">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+</a>
+<button type="button" class="icon-btn" hx-get="/playlists/{{.PlexID}}/share" hx-target="#modal-root" hx-swap="innerHTML" title="Share with another Playlist Lab user" aria-label="Share {{.Name}} with another Playlist Lab user">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+</button>
+{{if .DBID}}
+<button type="button" class="icon-btn" hx-get="/playlists/{{.PlexID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML" title="{{if .ScheduleID}}Manage schedule{{else}}Create schedule{{end}}" aria-label="Schedule {{.Name}}">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+</button>
+{{if .ScheduleID}}
+<!-- Reimport ("re-fetch from source now") only reaches scheduler.Run, which
+     needs a real schedules row for its execution-history bookkeeping - so
+     this only shows when one already exists (row.ScheduleID != 0), same
+     restriction PlaylistsPage.tsx applies via isReimportable(), just
+     enforced by data availability here instead of a source-name allowlist. -->
+<button type="button" class="icon-btn" hx-post="/schedules/{{.ScheduleID}}/run" hx-confirm="Re-fetch &quot;{{.Name}}&quot; from its source now?" title="Re-fetch this playlist from its original source now" aria-label="Re-import {{.Name}} from its source">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+</button>
+{{end}}
+<!-- /backup/export keys its "id" query params off the Plex rating key (see
+     backup.go's export(), matched against p.RatingKey), not the internal DB
+     row id - .PlexID here, not .DBID. -->
+<a class="icon-btn" href="/backup/export?id={{.PlexID}}" title="Download a JSON backup of this playlist" aria-label="Download a backup of {{.Name}}">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+</a>
+<button type="button" class="icon-btn" hx-post="/playlists/{{.PlexID}}/clone" hx-target="#notifications" hx-swap="innerHTML" hx-confirm="Duplicate &quot;{{.Name}}&quot;?" title="Duplicate this playlist" aria-label="Duplicate {{.Name}}">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+</button>
+{{end}}
+<button type="button" class="icon-btn icon-btn-danger" hx-delete="/playlists/{{.PlexID}}" hx-confirm="Delete &quot;{{.Name}}&quot; from Plex? This cannot be undone." title="Delete from Plex" aria-label="Delete {{.Name}} from Plex">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+</button>
+{{end}}

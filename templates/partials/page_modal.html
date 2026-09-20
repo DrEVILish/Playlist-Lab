@@ -1,0 +1,17 @@
+{{/* Generic "open a page as a modal" wrapper - see Templates.RenderModal.
+     Reuses whichever page's own "content" block was rendered into .Body
+     (already-escaped template.HTML), just adding the standard modal chrome
+     around it instead of layout.html's full header/footer. */}}
+{{define "partials/page_modal.html"}}
+<div class="advanced-mix-overlay">
+  <div class="advanced-mix-modal page-modal">
+    <div class="advanced-mix-header">
+      <h2 class="advanced-mix-title">{{.Title}}</h2>
+      <button type="button" class="advanced-mix-close" onclick="closeTopModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="advanced-mix-content">
+      {{.Body}}
+    </div>
+  </div>
+</div>
+{{end}}

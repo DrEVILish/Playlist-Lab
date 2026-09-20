@@ -1,0 +1,114 @@
+{{/* Admin Logs tab body, ported from AdminPage.tsx's log viewer. Rendered
+     into #admin-logs by GET /admin/logs and re-rendered in place by the
+     level/filter/limit controls, so the whole panel is one swap target and
+     the controls can't drift out of sync with the list they filter.
+
+     DESIGN.md §11.5/§17: live-tailing rather than polling. DESIGN.md
+     originally specified htmx's WebSocket extension for this, but this
+     app's vendored htmx build ships no ws extension and its SSE extension
+     already does the identical job (server push, no polling) with a
+     mechanism already proven working here (notifications.go's bell feed) -
+     adding an unverified third-party ws.js against a customized htmx
+     core carried real compatibility risk for no behavioral difference, so
+     this reuses SSE instead. New entries stream in via GET
+     /admin/logs/stream (admin_logs.go's stream handler, subscribed to
+     internal/logging's broadcaster) and prepend into .admin-logs-list
+     below (hx-swap="afterbegin") - the toolbar's level/filter/limit
+     controls still re-fetch the historical batch via a normal GET, same
+     as before, they just no longer also poll on a timer.
+
+     Entry markup mirrors the React original: LEVEL / timestamp / ellipsized
+     message, expandable to the entry's extra logged fields (error, path,
+     userId, ...) if it has any. Only entries with attrs render as a real
+     <details> - one with nothing behind it renders as a plain row instead,
+     so the disclosure triangle never promises detail that isn't there.
+     Factored into "adminLogEntry" below so the initial batch and each
+     SSE-pushed entry render from the exact same markup. */}}
+{{define "adminLogEntry"}}
+{{if .Attrs}}
+<details class="admin-log-entry admin-log-entry--expandable" data-log-key="{{.Key}}">
+  <summary class="admin-log-summary">
+    <span class="admin-log-level admin-log-level-{{.Level}}">{{.Level}}</span>
+    <span class="admin-log-time mono-data">{{if .Timestamp}}{{.Timestamp}}{{else}}unknown time{{end}}</span>
+    <span class="admin-log-message">{{.Message}}</span>
+  </summary>
+  <dl class="admin-log-attrs">
+    {{range .Attrs}}<dt>{{.Key}}</dt><dd>{{.Value}}</dd>{{end}}
+  </dl>
+</details>
+{{else}}
+<div class="admin-log-entry" data-log-key="{{.Key}}">
+  <div class="admin-log-summary">
+    <span class="admin-log-level admin-log-level-{{.Level}}">{{.Level}}</span>
+    <span class="admin-log-time mono-data">{{if .Timestamp}}{{.Timestamp}}{{else}}unknown time{{end}}</span>
+    <span class="admin-log-message">{{.Message}}</span>
+  </div>
+</div>
+{{end}}
+{{end}}
+{{define "partials/admin_logs.html"}}
+<div id="settings-panel-admin-logs" class="admin-logs"
+  hx-include=".admin-logs-toolbar">
+  <div class="admin-logs-toolbar">
+    <label class="admin-logs-control" for="admin-logs-level">
+      Server log level
+      <select id="admin-logs-level" name="level" hx-post="/admin/log-level" hx-target="#settings-panel-admin-logs" hx-swap="outerHTML"
+        hx-include="closest .admin-logs-toolbar">
+        {{$current := .Level}}
+        {{range .Levels}}<option value="{{.}}"{{if eq . $current}} selected{{end}}>{{.}}</option>{{end}}
+      </select>
+    </label>
+
+    <label class="admin-logs-control" for="admin-logs-filter">
+      Show only
+      <select id="admin-logs-filter" name="filter" hx-get="/admin/logs" hx-target="#settings-panel-admin-logs" hx-swap="outerHTML"
+        hx-include="closest .admin-logs-toolbar">
+        <option value=""{{if eq .Filter ""}} selected{{end}}>all levels</option>
+        {{$filter := .Filter}}
+        {{range .Levels}}<option value="{{.}}"{{if eq . $filter}} selected{{end}}>{{.}} only</option>{{end}}
+      </select>
+    </label>
+
+    <label class="admin-logs-control" for="admin-logs-limit">
+      Lines
+      <select id="admin-logs-limit" name="limit" hx-get="/admin/logs" hx-target="#settings-panel-admin-logs" hx-swap="outerHTML"
+        hx-include="closest .admin-logs-toolbar">
+        {{$limit := .Limit}}
+        {{range .LimitOptions}}<option value="{{.}}"{{if eq . $limit}} selected{{end}}>{{.}}</option>{{end}}
+      </select>
+    </label>
+
+    <span class="admin-logs-live" title="New entries stream in live as they're written">
+      <span class="status-dot status-dot-running"></span>Live
+    </span>
+
+    <button type="button" class="btn btn-secondary btn-small"
+      hx-get="/admin/logs" hx-target="#settings-panel-admin-logs" hx-swap="outerHTML"
+      hx-include="closest .admin-logs-toolbar">Refresh</button>
+    <a class="btn btn-secondary btn-small" href="/admin/logs/export?filter={{.Filter}}&limit={{.Limit}}" title="Download the currently-filtered entries as CSV">Export CSV</a>
+    <button type="button" class="btn btn-danger btn-small"
+      hx-post="/admin/logs/clear" hx-target="#settings-panel-admin-logs" hx-swap="outerHTML"
+      hx-include="closest .admin-logs-toolbar"
+      hx-confirm="Clear combined.log and delete its rotated files? This cannot be undone.">Clear logs</button>
+  </div>
+
+  {{if .Notice}}<p class="admin-logs-notice">{{.Notice}}</p>{{end}}
+
+  {{if .Truncated}}
+    <p class="admin-logs-notice">Showing the most recent {{.Limit}} matching entries - older ones exist beyond this view.</p>
+  {{end}}
+
+  {{if .Entries}}
+    {{/* admin_logs_stream.html's SSE push (DESIGN.md §17's live-tail) shares
+         this exact row markup via "adminLogEntry" - defined once so the
+         two can never drift apart. */}}
+    <div class="admin-logs-list" id="admin-logs-stream" hx-ext="sse" hx-sse:connect="/admin/logs/stream?filter={{.Filter}}" hx-swap="afterbegin" hx-trigger="load">
+      {{range .Entries}}{{template "adminLogEntry" .}}{{end}}
+    </div>
+  {{else}}
+    <p class="admin-deferred-note">No log entries match this filter. Note that the server log level ({{.Level}}) is also a floor for this view: entries written below it are hidden even if they are still in the file.</p>
+  {{end}}
+
+  <p class="admin-deferred-note">Not ported: the deemix-server journal (routes/admin.ts merged <code>journalctl -u deemix-server</code> output into this list). This shows Playlist Lab's own combined.log only.</p>
+</div>
+{{end}}

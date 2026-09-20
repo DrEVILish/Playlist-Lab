@@ -1,0 +1,60 @@
+{{/* Most Common Missing Tracks list, split out of admin.html into its own
+     lazy-loaded (hx-trigger="revealed") fragment: rendering all rows
+     up front on every /admin load regardless of which tab is active was
+     needless work on a library with hundreds of distinct missing tracks,
+     and - reproduced independently twice - having that much markup
+     present at initial paint made the .admin-tabbar itself render blank
+     in headless Chromium when this tab's :has() selector matched (a
+     :has()-plus-large-sibling-subtree rendering issue, not a logic bug -
+     every other tab's panel content was fine). Loading it on reveal
+     instead keeps the tab bar's initial paint small regardless.
+
+     Table rows (DESIGN.md §11.6's convention for missing tracks), not the
+     admin-cards look this tab used before - that card treatment is §11.5's
+     one deliberate exception for User management specifically (records
+     with more per-item context than a row wants), not a general admin-tab
+     default, and this aggregate (title/artist/count/last-reported) is
+     exactly the flat, scannable shape a table suits. */}}
+{{define "partials/admin_missing.html"}}
+{{if not .MissingStats}}
+<p class="settings-hint">No missing tracks reported.</p>
+{{else}}
+<div class="settings-actions" style="margin-bottom:0.75rem;">
+  <button class="btn btn-secondary" hx-post="/admin/missing/deemix-all" hx-target="#notifications" hx-swap="innerHTML" hx-confirm="Queue a deemix search for all {{len .MissingStats}} missing track(s)?">Deemix All</button>
+</div>
+<div class="data-table-container">
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Track</th>
+      <th>Artist</th>
+      <th>Missing For</th>
+      <th>Last Reported</th>
+      <th class="col-actions">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .MissingStats}}
+    <tr>
+      <td>{{.Title}}</td>
+      <td>{{.Artist}}</td>
+      <td><span class="mono-data">{{.Count}}</span> user(s)</td>
+      <td class="mono-data">{{if .AddedAt}}{{dateFromUnix .AddedAt}}{{else}}—{{end}}</td>
+      <td class="col-actions">
+        <div class="row-actions">
+          <form hx-post="/admin/missing/deemix-download" hx-target="#notifications" hx-swap="innerHTML">
+            <input type="hidden" name="title" value="{{.Title}}">
+            <input type="hidden" name="artist" value="{{.Artist}}">
+            <button type="submit" class="icon-btn" title="Search deemix for this track" aria-label="Search deemix for {{.Title}}">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </button>
+          </form>
+        </div>
+      </td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+</div>
+{{end}}
+{{end}}

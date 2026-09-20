@@ -1,0 +1,10 @@
+{{define "partials/missing_retry_status.html"}}
+{{if .Progress}}
+{{$p := .Progress}}
+<p{{if $p.Err}} class="error"{{end}}>
+  {{if $p.Err}}Retry failed: {{$p.Err}}
+  {{else}}Retrying missing tracks: {{$p.Current}} / {{$p.Total}}
+  {{end}}
+</p>
+{{end}}
+{{end}}

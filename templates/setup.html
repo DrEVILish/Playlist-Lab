@@ -1,0 +1,109 @@
+{{define "content"}}
+<link rel="stylesheet" href="/static/css/pages/SettingsPage.css">
+<!-- Shared with Login: the .hero-backdrop/.hero-backdrop-card grid-texture +
+     corner-accent treatment (DESIGN.md §9/§12 - Setup and Login are the app's
+     two "first impression" moments and are meant to look visually paired).
+     Defined in LoginPage.css rather than duplicated here; nothing else from
+     that file is used on this page. -->
+<link rel="stylesheet" href="/static/css/pages/LoginPage.css">
+<div class="page-container settings-page hero-backdrop setup-wizard" id="setup-wizard">
+  <div class="page-header">
+    <h1 class="page-title">Plex Server</h1>
+  </div>
+
+  <!-- CSS-only step indicator: no JS/backend state to track since both
+       steps live in one form on one page - "step 2" lights up once the
+       library <select> partial has actually loaded into #libraries,
+       detected purely via :has(), the same trick already used by
+       cross_import_review.html's show-only-unmatched filter. -->
+  <ol class="setup-step-indicator">
+    <li class="setup-step setup-step--active">
+      <span class="setup-step-dot">1</span>
+      <span class="setup-step-label">Select server</span>
+    </li>
+    <li class="setup-step">
+      <span class="setup-step-dot">2</span>
+      <span class="setup-step-label">Choose library</span>
+    </li>
+  </ol>
+
+  <section class="settings-section hero-backdrop-card">
+    <div class="settings-section-header">
+      <h2>Plex Server</h2>
+      <p>Connect Playlist Lab to your Plex Media Server and choose a music library.</p>
+    </div>
+    <form hx-post="/servers/select" hx-target="body" hx-swap="outerHTML">
+      <div class="settings-field-group">
+        <div class="settings-field">
+          <label class="settings-label" for="setup-server">Server</label>
+          <select id="setup-server" name="server" class="settings-select" hx-get="/setup/libraries" hx-target="#libraries" hx-trigger="change">
+            <option value="">Select a server...</option>
+            {{range .Servers}}
+            <option value="{{.Value}}">{{.Name}}</option>
+            {{end}}
+          </select>
+        </div>
+        <div id="libraries" class="settings-field"></div>
+      </div>
+      <div class="settings-actions">
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </section>
+</div>
+<style>
+  /* Setup has no dedicated page stylesheet of its own (it borrows
+     SettingsPage.css, out of scope here) - kept inline rather than adding a
+     new CSS file for a handful of rules only this page uses. */
+  .setup-step-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    list-style: none;
+    margin: 0 0 1.5rem;
+    padding: 0;
+  }
+  .setup-step {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    transition: opacity 0.2s ease;
+  }
+  .setup-step-dot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1px solid var(--border-light);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+  }
+  .setup-step--active .setup-step-dot {
+    background: var(--primary-color);
+    border-color: transparent;
+    color: #fff;
+  }
+  .setup-step--active .setup-step-label { color: var(--text-primary); }
+  .setup-step:not(:last-child)::after {
+    content: '';
+    width: 24px;
+    height: 1px;
+    background: var(--border-light);
+    margin-left: 0.5rem;
+  }
+
+  /* ponytail: CSS-only step-2 highlight, mirroring the :has() toggle already
+     used in partials/cross_import_review.html - no JS/backend state needed
+     for a 2-step reveal that already lives in one form. */
+  #setup-wizard:has(#libraries select) .setup-step:nth-child(1) { opacity: 0.6; }
+  #setup-wizard:has(#libraries select) .setup-step:nth-child(1) .setup-step-dot { background: var(--success); border-color: var(--success); }
+  #setup-wizard:has(#libraries select) .setup-step:nth-child(2) { opacity: 1; }
+  #setup-wizard:has(#libraries select) .setup-step:nth-child(2) .setup-step-dot { background: var(--primary-color); border-color: transparent; color: #fff; }
+</style>
+{{end}}

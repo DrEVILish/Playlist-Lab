@@ -1,0 +1,31 @@
+{{/* A Plex Home user's playlists, ported from ImportFromPlexHome.tsx's
+     playlist list. Each row posts straight to the copy endpoint - no name
+     prompt in this port (unlike merge's window.prompt elsewhere in this
+     app) since the source playlist's own name is already a sensible
+     default (plexHomeCopyPlaylist falls back to it when newName is
+     empty). */}}
+{{define "partials/plex_home_playlists.html"}}
+{{if .UsedAdminToken}}
+<p class="settings-hint">Could not access this user's own Plex token - showing every playlist on the server instead.</p>
+{{end}}
+{{if not .Playlists}}
+  <p class="settings-hint">This user has no playlists.</p>
+{{else}}
+  <div class="plex-home-playlist-list">
+    {{range .Playlists}}
+    <div class="card plex-home-playlist-row">
+      <div>
+        <div class="plex-home-playlist-name">{{.Name}}</div>
+        <div class="settings-hint">{{.TrackCount}} tracks</div>
+      </div>
+      <button type="button" class="btn btn-primary btn-small"
+        hx-post="/import/plex-home/playlists/{{.ID}}/copy"
+        hx-vals='{"sourceHomeUserId": "{{.SourceHomeUser}}", "newName": "{{.Name}}"}'
+        hx-target="#notifications" hx-swap="innerHTML">
+        Import
+      </button>
+    </div>
+    {{end}}
+  </div>
+{{end}}
+{{end}}

@@ -1,0 +1,15 @@
+{{define "partials/admin_trakt_panel.html"}}
+<form hx-post="/admin/trakt/config" hx-target="#settings-panel-admin-trakt" hx-swap="innerHTML">
+  <div class="settings-field-group">
+    <div class="settings-field">
+      <label class="settings-label" for="trakt-api-key">Client ID</label>
+      <input id="trakt-api-key" type="password" name="apiKey" class="settings-input" value="{{.APIKey}}" placeholder="trakt.tv/oauth/applications" autocomplete="off">
+    </div>
+  </div>
+  {{if .Notice}}<div class="settings-alert settings-alert--success">{{.Notice}}</div>{{end}}
+  {{if .Error}}<div class="settings-alert settings-alert--error">{{.Error}}</div>{{end}}
+  <div class="settings-actions">
+    <button type="submit" class="btn btn-primary">Save Trakt Config</button>
+  </div>
+</form>
+{{end}}

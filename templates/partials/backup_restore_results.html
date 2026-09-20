@@ -1,0 +1,12 @@
+{{range .Results}}
+<div class="backup-item">
+  <div class="backup-item-info">
+    <span class="backup-item-name">{{.Name}}</span>
+    <span class="backup-item-meta">
+      {{if .Error}}⚠ {{.Error}}{{else}}✓ restored, {{.Matched}}/{{.Total}} tracks matched{{end}}
+    </span>
+  </div>
+</div>
+{{else}}
+<p class="empty-state">No playlists in this backup.</p>
+{{end}}

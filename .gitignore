@@ -1,76 +1,26 @@
-# Dependencies
-node_modules/
-jspm_packages/
+# Claude Code local session state
+.claude/
+
+# Scratch preview server (built binary + DB copy) used to test the Go/HTMX
+# rewrite locally without touching the live systemd service or its DB.
+.preview/
 
 # Build outputs
-dist/
-build/
-scripts/release/
-packages/*/dist
-apps/*/dist
-apps/*/build
+bin/
 
 # Logs
 logs/
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
-.pnpm-debug.log*
 
 # Environment variables
 .env
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Testing
-coverage/
-.nyc_output/
-*.lcov
-
-# Cache
-.cache/
-.parcel-cache/
-.eslintcache
-.stylelintcache
-*.tsbuildinfo
-.npm
-.yarn/cache
-.yarn/unplugged
-.yarn/build-state.yml
-.yarn/install-state.gz
-.pnp.*
 
 # Database files
 *.db
 *.db-shm
 *.db-wal
 data/
-
-# Installer
-installer/nodejs/
-temp/
-scripts/temp/
-# scripts/cache/ contains Node.js runtime for installer builds
-# Exclude large binaries (node.exe is 66MB, over GitHub's 50MB limit)
-scripts/cache/
-
-# Expo (mobile app)
-.expo/
-.expo-shared/
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
-*.orig.*
-web-build/
-
-# Mobile app (deprecated - using responsive web app instead)
-apps/mobile/
 
 # IDE
 .vscode/
@@ -86,13 +36,3 @@ Thumbs.db
 # Backup files
 *.backup
 *.bak
-
-# Documentation (keep in repo but ignore generated docs)
-docs/
-
-# Scripts (keep in repo)
-scripts/
-!.github/scripts/
-
-# Kiro specs (keep in repo)
-.kiro/

@@ -1,0 +1,15 @@
+{{/* Week <select> for the Billboard year picker (import.html) - rendered
+     into #billboard-week-select by GET /import/billboard/weeks?year=YYYY.
+     Its own onchange fills the real "Playlist URL or ID" field (the form's
+     actual source of truth) with the chosen week's chart URL, so nothing
+     else about the import form/backend needs to know this picker exists. */}}
+{{define "partials/billboard_weeks.html"}}
+<select id="billboard-week-select" class="form-input" onchange="document.getElementById('import-identifier').value=this.value">
+  {{if not .Weeks}}
+  <option value="">No charts found for this year</option>
+  {{else}}
+  <option value="">Select a week...</option>
+  {{range .Weeks}}<option value="{{.URL}}">{{.Label}}</option>{{end}}
+  {{end}}
+</select>
+{{end}}

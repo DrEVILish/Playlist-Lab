@@ -1,0 +1,54 @@
+{{/* "New Template" modal, ports SaveTemplateModal.tsx. That component only
+     collects name+description because its caller (GenerateMixesPage) already
+     has a just-built custom-mix configuration in hand; this standalone page
+     has no such context, so mixType + a raw configuration JSON field are
+     kept here (same fields the previous version of this page exposed). */}}
+{{define "partials/mix_template_new_form.html"}}
+<div class="save-template-overlay">
+  <div class="save-template-modal" role="dialog" aria-modal="true" aria-label="Save Mix">
+    <form hx-post="/mix-templates" hx-target="#mix-templates-list" hx-swap="innerHTML"
+      hx-on::after:request="if(event.detail.ctx.response.status<400)closeTopModal()">
+      <div class="save-template-header">
+        <h2 class="save-template-title">Save Mix</h2>
+        <button type="button" class="save-template-close" title="Close (Esc)"
+          onclick="closeTopModal()">&times;</button>
+      </div>
+
+      <div class="save-template-content">
+        <div class="form-group">
+          <label class="form-label" for="new-template-name">Mix Name <span class="required">*</span></label>
+          <input id="new-template-name" class="form-input" type="text" name="name" placeholder="e.g., Chill Evening Mix" required maxlength="255" autofocus>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="new-template-description">Description (optional)</label>
+          <textarea id="new-template-description" class="form-textarea" name="description" placeholder="Add a description for this saved mix..." rows="3" maxlength="1000"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="new-template-mixtype">Mix type</label>
+          <select id="new-template-mixtype" class="form-select" name="mixType" required>
+            <option value="custom">Custom</option>
+            <option value="artist">Artist</option>
+            <option value="album">Album</option>
+            <option value="genre">Genre</option>
+            <option value="mood">Mood</option>
+            <option value="decade">Decade</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="new-template-configuration">Configuration (JSON, must include trackCount)</label>
+          <textarea id="new-template-configuration" class="form-textarea" name="configuration" rows="4" required>{"trackCount": 50}</textarea>
+          <div class="field-hint">Advanced field: exact JSON this template will generate from. Editing a saved template later exposes friendlier fields for this.</div>
+        </div>
+      </div>
+
+      <div class="save-template-actions">
+        <button type="submit" class="btn-save">Save Mix</button>
+        <button type="button" class="btn-cancel" onclick="closeTopModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}

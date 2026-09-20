@@ -1,0 +1,26 @@
+{{/* Missing Tracks "Match" modal (DESIGN.md §11.6): search Plex for the
+     right track and click it to apply, replacing a raw "type a Plex
+     ratingKey" field a user had no reason to understand. Reuses
+     AdvancedMixModal.css's generic dark-modal chrome (already loaded on
+     every page, see schedule_form.html's identical approach) rather than a
+     third modal stylesheet. Rendered via GET /missing/{id}/match into
+     #modal-root. */}}
+{{define "partials/missing_match.html"}}
+<div class="advanced-mix-overlay">
+  <div class="advanced-mix-modal">
+    <div class="advanced-mix-header">
+      <h2 class="advanced-mix-title">Find a match for "{{.Title}}"</h2>
+      <button type="button" class="advanced-mix-close" onclick="closeTopModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="advanced-mix-content">
+      <p class="settings-hint" style="margin-bottom:0.75rem">{{.Artist}} &mdash; searching your Plex library. Click a result to use it.</p>
+      <input type="search" class="form-input" value="{{.Query}}" placeholder="Search your library..." autofocus
+        hx-get="/missing/{{.TrackID}}/match-search{{if .ListScope}}?listScope={{.ListScope}}{{end}}" hx-trigger="input changed delay:400ms, search"
+        hx-target="#match-results" hx-swap="innerHTML" name="q">
+      <div id="match-results" style="margin-top:0.75rem">
+        {{template "matchResults" .}}
+      </div>
+    </div>
+  </div>
+</div>
+{{end}}

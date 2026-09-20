@@ -1,0 +1,15 @@
+{{define "content"}}
+<link rel="stylesheet" href="/static/css/pages/LoginPage.css">
+<div class="login-page hero-backdrop">
+  <div class="login-card hero-backdrop-card">
+    <div class="login-logo">
+      <h1><span class="logo-playlist">Playlist </span><span class="logo-lab">Lab</span></h1>
+    </div>
+    <p class="login-subtitle">Sign in with your Plex account to continue</p>
+    <button class="login-btn" hx-post="/auth/start" hx-target="#auth-status" hx-swap="innerHTML">
+      Sign in with Plex
+    </button>
+    <div id="auth-status"></div>
+  </div>
+</div>
+{{end}}

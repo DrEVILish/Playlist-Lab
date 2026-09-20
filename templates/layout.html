@@ -1,0 +1,683 @@
+{{define "base"}}
+<!doctype html>
+<!-- App-wide text-size preference (Settings > Appearance, DESIGN.md §14):
+     rendered server-side (pageData in internal/handlers/templates.go, from
+     user_settings.text_scale) directly into the initial HTML, so the page
+     never renders once at the default scale and then jumps the way a
+     client-side localStorage read+apply would. Settings' own inline script
+     only needs to update this property live when the radio changes and
+     persist the choice via its normal autosave PUT. -->
+<html lang="en" style="--text-scale: {{.TextScale}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0a1018">
+  <title>{{if .PageTitle}}{{.PageTitle}} - {{end}}Playlist Lab</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+  <link rel="manifest" href="/static/manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/base.css">
+  <link rel="stylesheet" href="/static/css/components/Layout.css">
+  <link rel="stylesheet" href="/static/css/components/Header.css">
+  <link rel="stylesheet" href="/static/css/components/HeaderActions.css">
+  <link rel="stylesheet" href="/static/css/components/NotificationCenter.css">
+  <link rel="stylesheet" href="/static/css/components/MobileNav.css">
+  <link rel="stylesheet" href="/static/css/components/Footer.css">
+  <link rel="stylesheet" href="/static/css/components/Modal.css">
+  <!-- AdvancedMixModal.css's .advanced-mix-overlay/.advanced-mix-modal
+       classes are reused as the generic dark-modal chrome for several
+       partials swapped into the global #modal-root below (schedule_form,
+       share_form, shared_with_me) - loaded here rather than per-page, since
+       any page can trigger one of them and a page that forgot to link this
+       file would render a real modal response as invisible unstyled HTML,
+       which looks indistinguishable from "the modal doesn't work" to
+       whoever's clicking the button. -->
+  <link rel="stylesheet" href="/static/css/components/AdvancedMixModal.css">
+  <link rel="stylesheet" href="/static/css/components/ScheduleModal.css">
+  <link rel="stylesheet" href="/static/css/components/chrome-interactions.css">
+  <script src="/static/js/htmx.min.js"></script>
+  <script src="/static/js/htmx-sse.min.js"></script>
+  <script>
+    // htmx 4 swaps every response body into its target by default, even a
+    // 4xx/5xx one - only 204/304 are skipped out of the box. Every error
+    // response in this app is a plain http.Error() text body, never markup
+    // meant for a target: an hx-post on a "Delete" button returning 400
+    // would otherwise dump "playlist not found" as raw text into the
+    // playlist row it was trying to delete. htmx 2 (and this app's own
+    // error handling, built against it) assumed 4xx/5xx never got swapped,
+    // so restoring that as the default here is a compatibility fix, not a
+    // preference - it is not something any individual handler should have
+    // to opt into.
+    htmx.config.noSwap = [204, 304, '4xx', '5xx'];
+
+    // Global click feedback for every hx-* button/form in the app: with
+    // none of this, clicking Retry/Delete/Rematch/... gave no visible sign
+    // the click registered until the response eventually swapped in,
+    // which reads as broken on anything slower than instant (a Plex
+    // search, a deemix/Lidarr lookup) and invites impatient double-clicks.
+    // Every button in elt (or elt itself, if it IS a button) is disabled
+    // for the request's duration, and whichever one was actually clicked
+    // (the form's submitter, for a <form>) gets a spinner via .is-loading.
+    // Wrapped in DOMContentLoaded because this whole script block runs in
+    // <head>, before <body> (and therefore document.body) exists yet -
+    // referencing it unguarded here throws immediately and silently kills
+    // the rest of the script tag, this listener included.
+    document.addEventListener('DOMContentLoaded', function () {
+      document.body.addEventListener('submit', function (e) {
+        if (e.submitter) e.target.__submitter = e.submitter;
+      }, true);
+
+      function loadingButtons(elt) {
+        var btns = Array.from(elt.querySelectorAll('button, input[type=submit]'));
+        if (elt.matches('button, input[type=submit]')) btns.push(elt);
+        return btns;
+      }
+
+      htmx.on('htmx:beforeRequest', function (e) {
+        var elt = e.detail.elt;
+        var btn = elt.matches('button, input[type=submit]') ? elt
+          : (elt.__submitter || elt.querySelector('button[type=submit], input[type=submit]'));
+        elt.__loadingBtn = btn;
+        loadingButtons(elt).forEach(function (b) { b.disabled = true; });
+        if (btn) btn.classList.add('is-loading');
+      });
+      htmx.on('htmx:afterRequest', function (e) {
+        var elt = e.detail.elt;
+        loadingButtons(elt).forEach(function (b) { b.disabled = false; });
+        if (elt.__loadingBtn) elt.__loadingBtn.classList.remove('is-loading');
+      });
+
+      // Offline banner (DESIGN.md §6/§10): the app losing reachability
+      // outright, not a single action's validation error - htmx:sendError
+      // fires when the request itself can't complete (network down/DNS
+      // failure), which is exactly "connection lost", vs. htmx:responseError
+      // firing on every ordinary 4xx a form validation produces. A 502/503/
+      // 504 response (the server process itself unreachable/restarting)
+      // counts the same way; a plain 400/404/etc. does not. Same
+      // beforeRequest/afterRequest hook point as the loading-state listeners
+      // just above, not a separate mechanism.
+      var offlineBanner = document.getElementById('offline-banner');
+      if (offlineBanner) {
+        htmx.on('htmx:sendError', function () { offlineBanner.hidden = false; });
+        htmx.on('htmx:responseError', function (e) {
+          var status = e.detail.xhr && e.detail.xhr.status;
+          if (status === 0 || status >= 502) offlineBanner.hidden = false;
+        });
+        htmx.on('htmx:afterRequest', function (e) {
+          if (e.detail.successful) offlineBanner.hidden = true;
+        });
+      }
+    });
+  </script>
+</head>
+<body>
+  <div id="offline-banner" class="offline-banner" role="status" hidden>Connection lost, retrying&hellip;</div>
+  <div class="layout">
+    {{if .User}}
+    <!-- Mobile nav: React toggled a slide-out panel with useState; here a
+         checkbox hack drives the same open/close purely in CSS (no JS
+         needed for a single boolean UI-only toggle). The checkbox has to
+         live here, a sibling of .mobile-nav/.mobile-nav-overlay below, for
+         their :checked ~ selectors to work - the visible toggle *button*
+         is a separate label for this same checkbox, rendered inside
+         header-left further down. -->
+    <input type="checkbox" id="mobile-nav-toggle" class="mobile-nav-checkbox">
+    <label for="mobile-nav-toggle" class="mobile-nav-overlay" aria-hidden="true"></label>
+
+    <nav class="mobile-nav">
+      <div class="mobile-nav-header">
+        <h2>Menu</h2>
+        <button type="button" class="mobile-nav-close" aria-label="Close menu" onclick="document.getElementById('mobile-nav-toggle').checked=false">&times;</button>
+      </div>
+      <div class="mobile-nav-content">
+        <a class="mobile-nav-link" href="/">Home</a>
+        <a class="mobile-nav-link" href="/import">Import</a>
+        <a class="mobile-nav-link" href="/mixes">Generate Mixes</a>
+        <!-- Collections (DESIGN.md §11.11) is gated to the real Plex server
+             owner, not this app's own admin flag - IsPlexOwner is
+             centrally injected by Templates.pageData for every page, so
+             non-owners never see the link (and are 403'd if they hit the
+             URL directly). -->
+        {{if .IsPlexOwner}}<a class="mobile-nav-link" href="/collections">Collections</a>
+        <a class="mobile-nav-link" href="/dynamic-collections">Dynamic Collections</a>{{end}}
+        <!-- Shared With Me has to live here, not only in .header-actions:
+             Header.css hides that whole button row below 768px, so on a
+             phone this drawer is the only way to reach it - which is exactly
+             why MobileNav.tsx's navItems listed it. It opens the same
+             #modal-root fragment the header button does; the inline onclick
+             unchecks the drawer toggle because, unlike the plain links
+             around it, an hx-get doesn't navigate, so nothing else would
+             close the drawer covering the modal it just opened. -->
+        <button type="button" class="mobile-nav-link" hx-get="/playlists/shared-with-me" hx-target="#modal-root" hx-swap="innerHTML"
+          onclick="document.getElementById('mobile-nav-toggle').checked=false">Shared With Me</button>
+        <!-- Labeled to match what the page actually does (its own <h1> and
+             the "Export History"/"Connect to YouTube" copy below it) - the
+             route is a Plex-to-YouTube export flow, not a general
+             multi-service cross-import hub, despite the URL's name. -->
+        <a class="mobile-nav-link" href="/cross-import">Export to YouTube</a>
+        <a class="mobile-nav-link" href="/mix-templates">Mix Templates</a>
+        <a class="mobile-nav-link" href="/backup">Backup / Restore</a>
+        <a class="mobile-nav-link" href="/status">Status</a>
+        <a class="mobile-nav-link" href="/settings">Settings</a>
+      </div>
+      <div class="mobile-nav-footer">
+        <div class="mobile-nav-user">
+          {{if .User.PlexThumb.Valid}}<img src="{{.User.PlexThumb.String}}" alt="" class="mobile-nav-user-avatar">{{end}}
+          <span class="mobile-nav-user-name">{{.User.PlexUsername}}</span>
+          <form hx-post="/auth/logout"><button type="submit" class="btn btn-secondary btn-logout">Logout</button></form>
+        </div>
+        {{template "footer-content"}}
+      </div>
+    </nav>
+    {{end}}
+
+    {{if .User}}
+    <header class="header">
+      <div class="header-content">
+        <div class="header-left">
+          <!-- Second <label for="mobile-nav-toggle"> pointing at the same
+               checkbox declared above (line ~59) - HTML allows more than
+               one label per control, and clicking either toggles it. Kept
+               as a second label rather than moving the original here:
+               the checkbox has to stay a sibling of .mobile-nav/
+               .mobile-nav-overlay up in .layout for their ~ (general
+               sibling) CSS rules to keep working, but the toggle *button*
+               needs to render inside header-left (matching Header.tsx,
+               which nested <MobileNav>'s toggle here) so it sits on the
+               header's row instead of stacking above it as .layout's own
+               flex child. -->
+          <button type="button" class="mobile-nav-toggle" aria-label="Open navigation menu" onclick="document.getElementById('mobile-nav-toggle').checked=true">
+            <span class="hamburger"><span></span><span></span><span></span></span>
+          </button>
+          <a href="/" class="header-logo">
+            <img src="/static/logo.svg" alt="Playlist Lab" class="header-logo-icon">
+            <h1><span class="logo-playlist">Playlist </span><span class="logo-lab">Lab</span></h1>
+          </a>
+          <!-- Matches the real React header's 5-button set (Header.tsx
+               lines 46-52): Import/Generate/Shared With Me/Backup-Restore/
+               Status - not Cross-Import/Mix Templates. Those two are this
+               port's own additions to the mobile drawer above, not a mirror
+               of React: MobileNav.tsx's navItems has neither, App.tsx
+               redirects /cross-import straight back to /, and mix templates
+               were only ever reachable as modals inside GenerateMixesPage
+               (SaveTemplateModal/EditTemplateModal), never as a page. They
+               are kept because this port did build both as real pages, and
+               a page with no nav entry is unreachable. All five now open as
+               a modal (via IsModalRequest/RenderModal - each still exists as
+               a real page too, at the same URL, for a direct visit/bookmark/
+               refresh) rather than navigating away, matching React's own
+               portal-modal pattern for these buttons. -->
+          <nav class="header-actions">
+            <button type="button" class="btn btn-secondary btn-small" hx-get="/import" hx-target="#modal-root" hx-swap="innerHTML">Import</button>
+            <button type="button" class="btn btn-secondary btn-small" hx-get="/mixes" hx-target="#modal-root" hx-swap="innerHTML">Generate</button>
+            <button type="button" class="btn btn-secondary btn-small" hx-get="/playlists/shared-with-me" hx-target="#modal-root" hx-swap="innerHTML">Shared With Me</button>
+            <button type="button" class="btn btn-secondary btn-small" hx-get="/backup" hx-target="#modal-root" hx-swap="innerHTML">Backup / Restore</button>
+            <button type="button" class="btn btn-secondary btn-small" hx-get="/status" hx-target="#modal-root" hx-swap="innerHTML">Status</button>
+            <!-- Fix: the mobile-nav drawer's own Collections link
+                 (DESIGN.md §11.11) is unreachable on desktop -
+                 .mobile-nav-toggle (the only way to open that drawer) is
+                 display:none until 768px (MobileNav.css) - so this was the
+                 page's only entry point at all on a desktop browser. Plain
+                 <a>, not an hx-get modal button like its neighbors:
+                 Collections was never built with IsModalRequest/RenderModal
+                 fragment support, only as a real page. -->
+            {{if .IsPlexOwner}}<a href="/collections" class="btn btn-secondary btn-small">Collections</a>
+            <a href="/dynamic-collections" class="btn btn-secondary btn-small">Dynamic Collections</a>{{end}}
+          </nav>
+        </div>
+
+        <div class="header-user">
+          <!-- Actions menu: React used a popover hook driven by JS state;
+               <details>/<summary> gives the same click-to-toggle disclosure
+               natively and needs no script. -->
+          <!-- name= makes this and .notification-center a native exclusive
+               group (same HTML feature, no JS): opening one now closes the
+               other automatically instead of both sitting open at once. -->
+          <details class="header-actions-menu" name="header-menu-group">
+            <summary class="header-actions-btn" aria-label="Actions" title="Actions">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+            </summary>
+            <!-- Endpoints must match what's actually registered: deemix-all
+                 and retry live under /missing (internal/handlers/missing.go),
+                 not /playlists/missing, and "Retry All" is plain POST
+                 /missing/retry with no trackId/playlistId - that handler
+                 treats "no filter" as "everything", which is exactly this
+                 menu item. Each also needs an explicit target: htmx defaults
+                 to swapping the response into the element that triggered it,
+                 which would replace the menu item's own label with the
+                 response body (or blank it, for run-all's empty 202).
+                 deemix-all returns the notifications fragment, so it targets
+                 #notifications like every other action-queue trigger;
+                 retry returns the missing-page retry-status fragment, which
+                 doesn't belong in the header, and run-all returns nothing -
+                 both report progress through the notification bell's SSE
+                 feed on their own, so they swap nothing here. -->
+            <div class="header-actions-popover" role="menu">
+              <button type="button" role="menuitem" class="header-actions-item" hx-post="/missing/deemix-all" hx-target="#notifications" hx-swap="innerHTML" hx-confirm="Retry matching, then queue every still-missing track for deemix download?">Deemix All</button>
+              <button type="button" role="menuitem" class="header-actions-item" hx-post="/missing/retry" hx-swap="none" hx-confirm="Retry matching every missing track against your Plex library?">Retry All</button>
+              <button type="button" role="menuitem" class="header-actions-item" hx-post="/schedules/run-all" hx-swap="none" hx-confirm="Run every scheduled playlist refresh now?">Refresh</button>
+            </div>
+          </details>
+
+          <!-- Notification bell: SSE-fed fragment (unchanged plumbing, see
+               internal/handlers/notifications.go). <details> supplies the
+               open/close disclosure; hx-ext="sse" keeps pushing new HTML
+               into #notifications whether the panel is open or not. -->
+          <details class="notification-center" name="header-menu-group">
+            <!-- Bell icon copied verbatim from NotificationCenter.tsx - this
+                 summary had no content at all before, rendering as an empty
+                 clickable blank spot in the header. The badge/spinner below
+                 are empty placeholders updated out-of-band by the same SSE
+                 payload that fills #notifications - see the hx-swap-oob
+                 elements at the top of partials/notifications.html. -->
+            <summary class="notification-bell" aria-label="Notifications" title="Notifications">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+              <span id="notification-bell-badge" class="notification-bell-badge" hidden></span>
+              <span id="notification-bell-spinner" class="notification-bell-spinner" hidden></span>
+            </summary>
+            <!-- id="notifications" wraps both the header's Clear
+                 complete/Clear all actions and the item list, not just the
+                 list: those buttons are conditional on what's in the feed
+                 (NotificationCenter.tsx only shows them when there's
+                 something they'd affect), so the whole thing has to be one
+                 SSE-swapped unit rather than a static header plus a
+                 separately-swapped list. -->
+            <!-- htmx 4's SSE extension (registered name unchanged: "sse")
+                 dropped sse-swap - it auto-swaps unnamed messages straight
+                 into this element, which is exactly what this stream sends
+                 (see writeSSEEvent's doc). hx-sse:connect replaces
+                 sse-connect; the old name still works via the extension's
+                 own back-compat shim but logs a deprecation warning. -->
+            <div class="notification-panel">
+              <div id="notifications" hx-ext="sse" hx-sse:connect="/notifications/stream" hx-swap="innerHTML" hx-trigger="load"></div>
+            </div>
+          </details>
+
+          {{if .User.PlexThumb.Valid}}<img src="{{.User.PlexThumb.String}}" alt="{{.User.PlexUsername}}" class="header-user-avatar">{{end}}
+          <span class="header-user-name">{{.User.PlexUsername}}</span>
+          <a href="/settings" class="header-settings-btn" title="Settings" aria-label="Settings">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </a>
+          <form hx-post="/auth/logout"><button type="submit" class="btn btn-secondary btn-logout">Logout</button></form>
+        </div>
+      </div>
+    </header>
+    {{end}}
+
+    <main class="layout-main">
+      {{block "content" .}}{{end}}
+    </main>
+
+    {{if .User}}
+    <footer class="footer">
+      {{template "footer-content"}}
+    </footer>
+    {{end}}
+  </div>
+
+  <!-- Reusable modal target for HTMX-loaded fragments: a page triggers
+       hx-get="/some/fragment" hx-target="#modal-root" hx-swap="innerHTML"
+       and the fragment renders a single root overlay element wrapping its
+       content (schedule_form.html is the smallest example). The script below
+       supplies every behaviour beyond that, so the fragment needs no
+       close/focus/keyboard wiring of its own. -->
+  <div id="modal-root"></div>
+
+  <!-- Global toast layer, top-right (DESIGN.md §6/§11.10): the only place
+       transient confirmations ("saved", "deleted") appear - anything
+       persistent/actionable stays in the bell dropdown above.
+       window.showToast is exposed globally so any fragment (e.g. a
+       copy-to-clipboard "Copied" toast, §8.12) can reuse it instead of a
+       second toast mechanism. -->
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+  <script>
+    (function () {
+      var root = document.getElementById('toast-root');
+      var bell = document.querySelector('.notification-bell');
+      if (!root) return;
+
+      window.showToast = function (status, title, detail) {
+        var toast = document.createElement('div');
+        toast.className = 'toast toast--' + (status || 'success');
+        var titleEl = document.createElement('div');
+        titleEl.className = 'toast-title';
+        titleEl.textContent = title || '';
+        toast.appendChild(titleEl);
+        if (detail) {
+          var detailEl = document.createElement('div');
+          detailEl.className = 'toast-detail';
+          detailEl.textContent = detail;
+          toast.appendChild(detailEl);
+        }
+        root.appendChild(toast);
+        var flyTimer = setTimeout(function () { flyToBell(toast); }, 3000);
+        toast.addEventListener('click', function () {
+          clearTimeout(flyTimer);
+          flyToBell(toast);
+        });
+        return toast;
+      };
+
+      // Toast -> bell animation (DESIGN.md §6): on resolve/dismiss the toast
+      // shrinks and flies toward the bell instead of just fading, so landing
+      // there reads as "this became a notification". The bell's badge/
+      // dropdown are already kept current by the existing SSE stream
+      // (#notifications, live regardless of this animation) - this only
+      // supplies the choreography on top of data that's already correct
+      // without it, rather than re-driving the count from here too.
+      function flyToBell(toast) {
+        if (!bell || toast.classList.contains('toast-flying')) return;
+        var toastRect = toast.getBoundingClientRect();
+        var bellRect = bell.getBoundingClientRect();
+        var dx = (bellRect.left + bellRect.width / 2) - (toastRect.left + toastRect.width / 2);
+        var dy = (bellRect.top + bellRect.height / 2) - (toastRect.top + toastRect.height / 2);
+        toast.style.setProperty('--toast-dx', dx + 'px');
+        toast.style.setProperty('--toast-dy', dy + 'px');
+        toast.classList.add('toast-flying');
+        bell.classList.add('notification-bell-pulse');
+        setTimeout(function () { bell.classList.remove('notification-bell-pulse'); }, 400);
+        toast.addEventListener('transitionend', function () { toast.remove(); }, { once: true });
+      }
+
+      // Auto-toast transient confirmations straight from the bell's own SSE
+      // feed (#notifications) rather than a second server-side trigger: a
+      // notification reaching success/error there already carries the
+      // title/detail text a "saved"/"deleted"/"failed" toast needs
+      // (DESIGN.md §11.10). `primed` skips the very first render (the
+      // stream's initial payload, which can include already-resolved
+      // history) so only resolutions that happen while this page is open
+      // get toasted - not everything that was already sitting in the feed
+      // on load/refresh.
+      var container = document.getElementById('notifications');
+      if (container) {
+        var toasted = new Map();
+        var primed = false;
+        new MutationObserver(function () {
+          var items = container.querySelectorAll('.notification-item[data-id]');
+          items.forEach(function (item) {
+            var id = item.dataset.id;
+            var status = item.dataset.status;
+            if (!status) return;
+            if (primed && (status === 'success' || status === 'error') && toasted.get(id) !== status) {
+              var titleEl = item.querySelector('.notification-item-title');
+              var detailEl = item.querySelector('.notification-item-detail');
+              window.showToast(status, titleEl ? titleEl.textContent : '', detailEl ? detailEl.textContent : '');
+              // A background job (e.g. Collections' "Refresh Now", which
+              // runs on h.Queue rather than blocking the HTTP response -
+              // collections.go's run()) can finish well after its request
+              // already returned, so the row it changed (missing count,
+              // last run, membership) has no other way to hear about it.
+              // Reusing collections-changed (already fired by the schedule
+              // modal's own mutations) is a no-op on any page without
+              // #collections-list in the DOM, so this is safe to fire on
+              // every success, not just ones known to be collection-related.
+              if (status === 'success') {
+                document.body.dispatchEvent(new CustomEvent('collections-changed'));
+              }
+            }
+            toasted.set(id, status);
+          });
+          primed = true;
+        }).observe(container, { childList: true, subtree: true });
+      }
+    })();
+  </script>
+
+  <!-- Themed replacement for the browser's native confirm() popup that
+       hx-confirm triggers by default - every hx-confirm="..." attribute in
+       the app (Delete user, Deemix All, Remove Duplicates, etc.) already
+       works unmodified; htmx just asks this dialog for the yes/no instead
+       of window.confirm, so every one of those call sites gets the app's
+       own dark theme instead of an OS-chrome popup for free. -->
+  <dialog id="confirm-dialog" class="confirm-dialog">
+    <p id="confirm-dialog-question"></p>
+    <div class="confirm-dialog-actions">
+      <button type="button" class="btn btn-secondary" id="confirm-dialog-cancel">Cancel</button>
+      <button type="button" class="btn btn-primary" id="confirm-dialog-ok">OK</button>
+    </div>
+  </dialog>
+  <script>
+    (function () {
+      var dialog = document.getElementById('confirm-dialog');
+      var question = document.getElementById('confirm-dialog-question');
+      document.body.addEventListener('htmx:confirm', function (e) {
+        if (!e.detail.question) return;
+        e.preventDefault();
+        question.textContent = e.detail.question;
+        dialog.showModal();
+        function cleanup() {
+          document.getElementById('confirm-dialog-ok').removeEventListener('click', onOk);
+          document.getElementById('confirm-dialog-cancel').removeEventListener('click', onCancel);
+        }
+        function onOk() { cleanup(); dialog.close(); e.detail.issueRequest(true); }
+        function onCancel() { cleanup(); dialog.close(); }
+        document.getElementById('confirm-dialog-ok').addEventListener('click', onOk);
+        document.getElementById('confirm-dialog-cancel').addEventListener('click', onCancel);
+      });
+    })();
+  </script>
+  <script>
+    // The behaviour Modal.tsx used to own, applied once here to whatever is
+    // currently in #modal-root instead of being re-implemented per partial:
+    // focus handling, the Tab trap, Escape, and click-outside-to-close. Each
+    // modal partial only supplies its own overlay + content markup, so a new
+    // one gets all of this for free and none of them can drift apart.
+    (function () {
+      var root = document.getElementById('modal-root');
+      if (!root) return;
+      var FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+      var trigger = null;
+      var downOnOverlay = false;
+
+      // Matched on the shared "*-overlay" class rather than by position:
+      // some partials (shared_with_me.html, mix_custom_form.html) emit a
+      // <link rel="stylesheet"> for their page CSS ahead of the overlay, so
+      // firstElementChild is not reliably the dialog. The partials variously
+      // use .modal-overlay, .advanced-mix-overlay, .quick-mix-settings-overlay,
+      // .custom-mix-overlay, .save-template-overlay and .edit-template-overlay.
+      //
+      // Modals can stack: an action inside an already-open modal (e.g.
+      // import.html's Preview/Import-from-File buttons) appends its response
+      // with hx-swap="beforeend" instead of replacing #modal-root, so more
+      // than one "*-overlay" can be present at once, each covering the last.
+      // The *last* one in the DOM is always the topmost/active one - the
+      // querySelectorAll below (not querySelector, which would find the
+      // oldest/bottom layer instead) picks that.
+      function overlays() { return root.querySelectorAll('[class*="overlay"]'); }
+      function overlay() { var els = overlays(); return els.length ? els[els.length - 1] : null; }
+      // Closes only the topmost layer, revealing whatever was stacked
+      // underneath it - not the whole root - so "close" and "click away"
+      // behave like closing the top window on a desktop, per user request.
+      function close() {
+        var el = overlay();
+        if (!el) { root.innerHTML = ''; return; }
+        var prev = el.previousElementSibling;
+        if (prev && prev.tagName === 'LINK') prev.remove();
+        el.remove();
+      }
+      window.closeTopModal = close;
+
+      // Move focus into the dialog when one opens, and hand it back to
+      // whatever opened it when it closes - otherwise focus is left stranded
+      // on a detached node and keyboard users restart from the top of the
+      // document. Watching #modal-root covers every close path there is
+      // (close button, overlay, Escape, hx-on::after:request), so no partial
+      // has to remember to participate.
+      new MutationObserver(function () {
+        var el = overlay();
+        if (el) {
+          if (!trigger) trigger = document.activeElement;
+          var first = el.querySelector(FOCUSABLE);
+          if (first) {
+            first.focus();
+          } else {
+            el.setAttribute('tabindex', '-1');
+            el.focus();
+          }
+        } else if (trigger) {
+          if (document.body.contains(trigger)) trigger.focus();
+          trigger = null;
+        }
+      }).observe(root, { childList: true });
+
+      document.addEventListener('keydown', function (e) {
+        var el = overlay();
+        if (!el) {
+          // The delete-template confirmation is a checkbox-hack dialog
+          // rendered inline in the templates list rather than swapped into
+          // #modal-root, so it is invisible to everything above - but a
+          // dialog that ignores Escape when every other one accepts it is
+          // just a bug the user has to learn. Unchecking closes it.
+          if (e.key === 'Escape') {
+            var open = document.querySelectorAll('.delete-dialog-checkbox:checked, .mobile-nav-checkbox:checked');
+            for (var i = 0; i < open.length; i++) open[i].checked = false;
+          }
+          return;
+        }
+        if (e.key === 'Escape') { close(); return; }
+        if (e.key !== 'Tab') return;
+        // Trap Tab inside the dialog: without this, tabbing past the last
+        // control walks into the page behind the overlay, which is still
+        // fully interactive.
+        var items = Array.prototype.filter.call(el.querySelectorAll(FOCUSABLE), function (n) {
+          return n.offsetParent !== null && !n.disabled;
+        });
+        if (!items.length) return;
+        var first = items[0], last = items[items.length - 1];
+        if (e.shiftKey && (document.activeElement === first || !el.contains(document.activeElement))) {
+          e.preventDefault(); last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault(); first.focus();
+        }
+      });
+
+      // Close only on a click that both starts and ends on the overlay. A
+      // plain onclick (what each partial used to carry inline) resolves its
+      // target from mouseup via the nearest common ancestor of the two
+      // events, so selecting text inside a modal and releasing the drag
+      // outside it counted as an outside click and threw away whatever had
+      // been typed into the form. Modal.tsx guarded this for the same reason.
+      root.addEventListener('mousedown', function (e) { downOnOverlay = e.target === overlay(); });
+      root.addEventListener('mouseup', function (e) {
+        if (downOnOverlay && e.target === overlay()) close();
+        downOnOverlay = false;
+      });
+    })();
+
+    // Action-menu <details> (the header "Actions" menu above, and the
+    // missing-tracks row's "More actions" menu, partials/missing_list.html)
+    // only close when their own <summary> is clicked again, not when a
+    // button/form inside the popover is - so picking any one action left
+    // the menu sitting open over the page. Delegated on document rather
+    // than attached per-button, so a menu item added later is covered
+    // automatically. Deliberately not applied to every <details> in the
+    // app: the column filter menus (.th-filter) hold checkboxes meant to
+    // stay open across multiple selections, and search-reveal <details>
+    // (.ci-search) get removed wholesale when their pick swaps the page
+    // section around them, so there's nothing left to explicitly close.
+    document.addEventListener('click', function (e) {
+      var item = e.target.closest('.header-actions-item, .missing-track-more-menu button');
+      if (item) {
+        var itemMenu = item.closest('details.header-actions-menu, details.missing-track-more');
+        if (itemMenu) itemMenu.removeAttribute('open');
+      }
+
+      // Clicking anywhere outside one of these three menus closes it - the
+      // browser's native <details> only toggles on its own <summary>, it
+      // has no concept of "clicking away", so without this an open Actions
+      // menu or notification panel just sits open until something above
+      // explicitly closes it.
+      var openMenus = document.querySelectorAll('details.header-actions-menu[open], details.notification-center[open], details.missing-track-more[open]');
+      for (var i = 0; i < openMenus.length; i++) {
+        if (!openMenus[i].contains(e.target)) openMenus[i].removeAttribute('open');
+      }
+    });
+
+    // Settings and Admin's tab bars (.admin-tabbar) are plain radio+CSS -
+    // no JS needed to switch panels - but that also means the active tab
+    // lives nowhere but transient DOM state: a reload always lands back on
+    // the first tab, and there's no way to link or bookmark, say,
+    // Settings > AI Features. Reading/writing the URL hash fixes both
+    // without needing real per-tab routes, and works for every page that
+    // uses this component since every tab input's id already follows
+    // "{page}-tab-{slug}" (settings-tab-matching, admin-tab-users, ...).
+    (function () {
+      var bar = document.querySelector('.admin-tabbar');
+      if (!bar) return;
+      var inputs = bar.querySelectorAll('.admin-tab-input');
+      var slugOf = function (input) { return input.id.replace(/^[a-z]+-tab-/, ''); };
+      var defaultInput = bar.querySelector('.admin-tab-input:checked') || inputs[0];
+      var checkSlug = function (slug) {
+        if (!slug) { if (defaultInput) defaultInput.checked = true; return; }
+        for (var i = 0; i < inputs.length; i++) {
+          if (slugOf(inputs[i]) === slug) { inputs[i].checked = true; return; }
+        }
+      };
+      var hash = location.hash.slice(1);
+      if (hash) checkSlug(hash);
+      // pushState (not replaceState) so each tab switch is a real history
+      // entry Back/Forward can step through; popstate re-syncs the radio
+      // when the user does that (including back past the last tab switch,
+      // to the page's hash-less starting tab), since changing history
+      // alone doesn't touch the DOM.
+      window.addEventListener('popstate', function () {
+        checkSlug(location.hash.slice(1));
+      });
+      bar.addEventListener('change', function (e) {
+        if (!e.target.classList.contains('admin-tab-input')) return;
+        history.pushState(null, '', '#' + slugOf(e.target));
+      });
+    })();
+  </script>
+  <script>
+    // Horizontally-scrollable tables/tab bars (.data-table-container,
+    // .admin-tabbar) hide their scrollbar on real mobile browsers - iOS
+    // Safari and Android Chrome both ignore ::-webkit-scrollbar styling
+    // there, unlike desktop Chrome/Firefox - so a table wider than the
+    // screen just looks like its rightmost columns are permanently
+    // clipped, with nothing suggesting there's more to see. A soft edge
+    // shadow (base.css's .has-scroll-left/.has-scroll-right) fixes that
+    // everywhere; this only tracks which edge, if any, still has hidden
+    // content, toggled on scroll/resize and whenever htmx swaps a new
+    // table/tab bar into the page.
+    (function () {
+      var SELECTOR = '.data-table-container, .admin-tabbar';
+      function update(el) {
+        var overflowing = el.scrollWidth > el.clientWidth + 1;
+        el.classList.toggle('has-scroll-left', overflowing && el.scrollLeft > 1);
+        el.classList.toggle('has-scroll-right', overflowing && el.scrollLeft < el.scrollWidth - el.clientWidth - 1);
+      }
+      function updateAll() {
+        document.querySelectorAll(SELECTOR).forEach(update);
+      }
+      document.addEventListener('scroll', function (e) {
+        if (e.target.matches && e.target.matches(SELECTOR)) update(e.target);
+      }, true);
+      window.addEventListener('resize', updateAll);
+      new MutationObserver(updateAll).observe(document.body, { childList: true, subtree: true });
+      updateAll();
+    })();
+  </script>
+</body>
+</html>
+{{end}}
+
+{{define "footer-content"}}
+<div class="footer-content">
+  <p class="footer-text">&copy; {{now.Year}} Playlist Lab. Multi-user web application for managing Plex playlists.</p>
+</div>
+{{end}}

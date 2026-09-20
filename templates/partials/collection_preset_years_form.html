@@ -1,0 +1,48 @@
+{{/* "All Years" bulk-create modal for one year-parameterized preset
+     (collection_presets.go) - creates one Collection row per year in the
+     chosen range in a single action, rather than picking one year at a
+     time from the Browse Presets gallery. Reuses the same modal chrome as
+     collection_form.html/collection_presets.html. */}}
+{{define "partials/collection_preset_years_form.html"}}
+<div class="advanced-mix-overlay">
+  <div class="advanced-mix-modal">
+    <div class="advanced-mix-header">
+      <h2 class="advanced-mix-title">{{.Preset.Name}} - All Years</h2>
+      <button type="button" class="advanced-mix-close" onclick="closeTopModal()" aria-label="Close">&times;</button>
+    </div>
+    <form hx-post="/collections/presets/{{.Preset.Slug}}/years" hx-target="#collections-list" hx-swap="innerHTML"
+      hx-on::after-request="if(event.detail.successful) closeTopModal()">
+      <div class="advanced-mix-content">
+        <p class="field-hint">Creates one collection per year - up to {{.MaxRange}} at once. Each is created empty; use "Refresh Selected" on the Collections table afterward to populate them.</p>
+        <div class="form-group">
+          <label class="form-label" for="preset-years-library">Library</label>
+          <select id="preset-years-library" class="form-select" name="library" required>
+            <option value="">Select a library...</option>
+            {{range .ServerGroups}}
+            <optgroup label="{{.ServerName}}">
+              {{range .Libraries}}
+              <option value="{{.Value}}"{{if and $.RecommendedLibrary (eq .Value $.RecommendedLibrary)}} selected{{end}}>{{.Name}}</option>
+              {{end}}
+            </optgroup>
+            {{end}}
+          </select>
+        </div>
+        <div class="update-mode-group" style="grid-template-columns:1fr 1fr">
+          <div class="form-group">
+            <label class="form-label" for="preset-years-from">From year</label>
+            <input id="preset-years-from" class="form-input" type="number" name="fromYear" min="1927" max="2030" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="preset-years-to">To year</label>
+            <input id="preset-years-to" class="form-input" type="number" name="toYear" min="1927" max="2030" required>
+          </div>
+        </div>
+      </div>
+      <div class="advanced-mix-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeTopModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create Collections</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}

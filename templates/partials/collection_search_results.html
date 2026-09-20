@@ -1,0 +1,27 @@
+{{/* Manual builder's debounced library search (DESIGN.md §11.11), same
+     click-to-add-immediately shape as the Missing Tracks Match modal's
+     results (missing_match_results.html) - clicking a result posts it
+     straight to POST /collections/{id}/manual-items, no separate "add"
+     step. */}}
+{{define "partials/collection_search_results.html"}}
+<div id="collection-search-results">
+  {{if .Query}}
+    {{if not .Results}}
+    <p class="settings-hint">No matches for "{{.Query}}".</p>
+    {{else}}
+    <ul class="track-search-list">
+      {{range .Results}}
+      <li>
+        <button type="button" class="track-search-result"
+          hx-post="/collections/{{$.CollectionID}}/manual-items" hx-vals='{"ratingKey": "{{.RatingKey}}"}'
+          hx-target="#collection-manual-items" hx-swap="outerHTML">
+          <span class="track-search-result-title">{{.Title}}</span>
+          {{if .Artist}}<span class="track-search-result-meta">{{.Artist}}{{if .Album}} — {{.Album}}{{end}}</span>{{end}}
+        </button>
+      </li>
+      {{end}}
+    </ul>
+    {{end}}
+  {{end}}
+</div>
+{{end}}

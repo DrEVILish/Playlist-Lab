@@ -1,0 +1,21 @@
+{{define "partials/libraries_select.html"}}
+{{if .Error}}
+<div class="settings-alert settings-alert--error">{{.Error}}</div>
+{{else if not .Libraries}}
+<!-- Not an error - a server linked purely for other libraries (movies,
+     TV shows) legitimately has no music library, and this app's matching
+     engine is music-only (DESIGN.md §11.11) so there's nothing to list.
+     Explained rather than left looking stuck: no options to pick, but the
+     form is still submittable with none selected. -->
+<p class="settings-hint">No music library found on this server - that's fine if you're linking it for other Plex libraries, like movies or TV shows.</p>
+{{else}}
+<label class="settings-label">Music library
+  <select name="library" class="settings-select">
+    <option value="">Select a library...</option>
+    {{range .Libraries}}
+    <option value="{{.Value}}">{{.Name}}</option>
+    {{end}}
+  </select>
+</label>
+{{end}}
+{{end}}

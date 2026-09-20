@@ -1,0 +1,27 @@
+{{/* playlist_preview.html: the Playlists table's row-click expando (DESIGN.md
+     §11.1) - a lightweight, read-only track list, not the full Editor. Takes
+     {Tracks: []trackPreviewRow, Error: bool}. */}}
+{{define "partials/playlist_preview.html"}}
+{{if .Error}}
+<p class="playlist-preview-empty">Couldn't load this playlist's tracks.</p>
+{{else if not .Tracks}}
+<p class="playlist-preview-empty">This playlist has no tracks.</p>
+{{else}}
+<table class="playlist-preview-table">
+  <thead>
+    <tr><th>#</th><th>Title</th><th>Artist</th><th>Album</th><th>Duration</th></tr>
+  </thead>
+  <tbody>
+    {{range $i, $t := .Tracks}}
+    <tr>
+      <td class="mono-data">{{add $i 1}}</td>
+      <td>{{$t.Title}}</td>
+      <td>{{$t.Artist}}</td>
+      <td>{{$t.Album}}</td>
+      <td class="mono-data">{{formatTrackDuration $t.Duration}}</td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{end}}
+{{end}}
