@@ -36,6 +36,10 @@ var additiveColumns = []columnSpec{
 	// text_scale is a simple enum, editor_columns is structured.
 	{"user_settings", "text_scale", "ALTER TABLE user_settings ADD COLUMN text_scale TEXT DEFAULT 'medium'"},
 	{"user_settings", "editor_columns", "ALTER TABLE user_settings ADD COLUMN editor_columns TEXT"},
+	// Settings > Appearance theme choice: an ftl-themes slug, or 'none' for
+	// the app's own look. Defaults to 'none' so existing installs keep
+	// rendering exactly as they did.
+	{"user_settings", "theme", "ALTER TABLE user_settings ADD COLUMN theme TEXT DEFAULT 'none'"},
 	// DESIGN.md §11.4: lets Settings > Sessions list a user's active sessions
 	// by an indexed column instead of scanning every row in the table and
 	// JSON-decoding sess to find the ones that match.

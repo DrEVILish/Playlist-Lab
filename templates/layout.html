@@ -7,7 +7,7 @@
      client-side localStorage read+apply would. Settings' own inline script
      only needs to update this property live when the radio changes and
      persist the choice via its normal autosave PUT. -->
-<html lang="en" style="--text-scale: {{.TextScale}}">
+<html lang="en" data-theme="{{.Theme}}" style="--text-scale: {{.TextScale}}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -41,6 +41,11 @@
   <link rel="stylesheet" href="/static/css/components/AdvancedMixModal.css">
   <link rel="stylesheet" href="/static/css/components/ScheduleModal.css">
   <link rel="stylesheet" href="/static/css/components/chrome-interactions.css">
+  <!-- ftl-themes: loaded last so a theme's --ftl-* tokens win over the
+       fallbacks in base.css's bridge. No href at all when the user is on
+       the app's own look: href="" would resolve to this page and the
+       browser would fetch the HTML and try to parse it as CSS. -->
+  <link id="ftl-theme" rel="stylesheet"{{if .ThemeCSS}} href="{{.ThemeCSS}}"{{end}}>
   <script src="/static/js/htmx.min.js"></script>
   <script src="/static/js/htmx-sse.min.js"></script>
   <script>

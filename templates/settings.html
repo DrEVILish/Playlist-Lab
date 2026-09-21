@@ -297,6 +297,21 @@
           </div>
           <p class="settings-hint">Applied instantly, and remembered on this account across every device.</p>
         </form>
+
+        <!-- Theme swaps the stylesheet and the data-theme marker together.
+             Both are set here for an instant preview; the POST persists the
+             choice so it survives a reload, exactly like text size above. -->
+        <form class="settings-field"
+              onchange="(function(v){document.documentElement.setAttribute('data-theme',v);var l=document.getElementById('ftl-theme');if(!l)return;if(v==='none'){l.removeAttribute('href');}else{l.href='/static/themes/'+v+'.css';}})(event.target.value)">
+          <label class="settings-label" for="theme-select">Theme</label>
+          <select id="theme-select" name="theme" class="settings-select"
+                  hx-post="/settings/appearance" hx-trigger="change" hx-include="closest form"
+                  hx-target="#theme-status" hx-indicator="#theme-status" hx-swap="innerHTML">
+            {{range .Themes}}<option value="{{.Slug}}" {{if eq $.ThemeChoice .Slug}}selected{{end}}>{{.Label}}</option>{{end}}
+          </select>
+          <span id="theme-status" class="settings-save-status" aria-live="polite"></span>
+          <p class="settings-hint">Changes the app's colours and layout. &ldquo;Playlist Lab&rdquo; is the app's own look.</p>
+        </form>
       </section>
 
       <section id="sessions" class="settings-section">

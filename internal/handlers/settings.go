@@ -106,6 +106,7 @@ func (h *SettingsHandler) page(w http.ResponseWriter, r *http.Request) {
 	isAdmin, _ := db.IsAdmin(h.DB, user.ID)
 	userServer, _ := db.GetUserMusicServer(h.DB, user.ID)
 	textScale, _ := db.GetTextScale(h.DB, user.ID)
+	themeChoice, _ := db.GetTheme(h.DB, user.ID)
 
 	h.Tmpl.RenderPage(w, r, "settings", map[string]any{
 		"User":      user,
@@ -120,6 +121,11 @@ func (h *SettingsHandler) page(w http.ResponseWriter, r *http.Request) {
 		// and only fills it in when the caller hasn't set it, so reusing the
 		// name here would silently break every page's --text-scale value.
 		"TextScaleChoice": textScale,
+		// Same reasoning as TextScaleChoice: pageData reserves "Theme" for
+		// the slug <html data-theme> uses, so the picker's selected value
+		// gets its own key rather than colliding with it.
+		"ThemeChoice": themeChoice,
+		"Themes":      AvailableThemes(),
 		// Server Info (§11.4) - user feedback: the old "Version: (not set
 		// by this build)" placeholder read as an unfinished feature since
 		// this deploy has no ldflags/git-describe wiring to fill it in.
@@ -253,11 +259,25 @@ func (h *SettingsHandler) saveAppearance(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
 	}
-	scale := r.FormValue("textScale")
-	if scale != "small" && scale != "medium" && scale != "large" {
-		scale = "medium"
+	// The section posts two independent controls to this one endpoint, and
+	// htmx sends only the form that changed - so each field is saved only
+	// when it is actually present, rather than being reset to a default by
+	// the other form's submission.
+	var err error
+	if _, ok := r.Form["textScale"]; ok {
+		scale := r.FormValue("textScale")
+		if scale != "small" && scale != "medium" && scale != "large" {
+			scale = "medium"
+		}
+		err = db.SaveTextScale(h.DB, user.ID, scale)
 	}
-	err := db.SaveTextScale(h.DB, user.ID, scale)
+	if _, ok := r.Form["theme"]; ok && err == nil {
+		slug := r.FormValue("theme")
+		if slug != ThemeNone && !IsKnownTheme(slug) {
+			slug = ThemeNone
+		}
+		err = db.SaveTheme(h.DB, user.ID, slug)
+	}
 	h.notifySettingsSave(user.ID, "Save appearance settings", err)
 	h.renderFieldStatus(w, err)
 }
