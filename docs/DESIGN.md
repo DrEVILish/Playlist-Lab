@@ -47,7 +47,7 @@ colours."
 
 **Changed again:** `--gradient-primary` is banned outright, per later user
 direction taken for ftl-themes compatibility — that theme system's token
-contract (`--ctp-*`) has no gradient
+contract (`--ftl-*`, formerly `--ctp-*`) has no gradient
 concept at all, only flat accent colors plus glow, so a bespoke brand
 gradient is one more thing an external theme can't override cleanly.
 Every former `--gradient-primary` call site (primary buttons, active tab/
@@ -957,14 +957,41 @@ instance-admin privilege, and the nav link (mobile drawer only, after
 
 ## 14. Accessibility & personalization
 
-- Dark theme only — no light-mode variant. The brief's identity is built
-  around the dark control-room aesthetic; a light mode would need a
-  near-total parallel palette for limited benefit.
-- No separate high-contrast theme — the single dark theme is tuned to
-  meet WCAG AA contrast on its own.
-- `prefers-reduced-motion` not handled (§6, deliberate).
+- **The app's own look is dark-only and is the default** — no light-mode
+  variant of it. The brief's identity is built around the dark control-room
+  aesthetic; a light parallel palette of it would be a near-total rewrite
+  for limited benefit.
+- **Changed:** the palette is no longer fixed. Settings > Appearance now
+  offers an optional theme from the shared `ftl-themes` library (§14.1),
+  which may be light. That does not reopen the point above: the app's own
+  look stays dark-only, and a theme is an opt-in replacement for it rather
+  than a variant of it.
+- No separate high-contrast theme — the app's own look is tuned to meet
+  WCAG AA contrast on its own, and every ftl-themes theme is contrast-
+  checked by that library's own lint.
+- `prefers-reduced-motion` not handled here (§6, deliberate); ftl-themes
+  themes do respect it.
 - Text-size setting (§2, §11.4).
-- Blue/cyan accent (§1) is fixed, not user-customizable.
+
+### 14.1 Themes (ftl-themes)
+
+- The default is `none` — the app's own look, with **no theme stylesheet
+  linked at all**, so an existing install renders exactly as it always has.
+- A theme is selected per user, persisted in `user_settings.theme`, and
+  rendered server-side into `<html data-theme>` plus a single `<link>` —
+  the same pattern as `--text-scale`, and for the same reason: a
+  client-side read-and-apply would flash the wrong theme on every load.
+- `static/css/base.css`'s `:root` bridges the app's tokens onto `--ftl-*`
+  with the current values as fallbacks, e.g.
+  `--primary-color: var(--ftl-accent, #2f8fff)`. No template or class
+  changes were needed, and nothing changes until a theme is chosen.
+- App-owned tokens are deliberately not bridged: `--text-scale`,
+  `--sidebar-width`/`--header-height`, the `--radius-*` scale,
+  `--card-shadow`/`--glow-*`, and `--gradient-surface`/`-card`. They are
+  this app's structure, not a theme's palette.
+- The `--gradient-primary` ban (§1) remains correct and is now load-bearing
+  rather than anticipatory. Note §1 refers to the contract as `--ctp-*`;
+  it was renamed to `--ftl-*` upstream.
 - Firefox gets matching thin dark scrollbars via
   `scrollbar-color: var(--border-light) transparent; scrollbar-width: thin;`
   alongside the existing `::-webkit-scrollbar` rules — near-zero cost,

@@ -435,6 +435,23 @@ func (t *Templates) pageData(r *http.Request, data any) map[string]any {
 			}
 		}
 	}
+	// Theme rides alongside TextScale for the same reason: rendering it
+	// server-side avoids the flash of the wrong theme that a client-side
+	// localStorage read-and-apply would cause on every page load.
+	if _, exists := m["Theme"]; !exists {
+		m["Theme"] = ThemeNone
+		if t.DB != nil {
+			if user := auth.CurrentUser(r); user != nil {
+				if slug, err := db.GetTheme(t.DB, user.ID); err == nil && IsKnownTheme(slug) {
+					m["Theme"] = slug
+				}
+			}
+		}
+	}
+	if _, exists := m["ThemeCSS"]; !exists {
+		slug, _ := m["Theme"].(string)
+		m["ThemeCSS"] = ThemeStylesheet(slug)
+	}
 	if _, exists := m["IsPlexOwner"]; !exists {
 		m["IsPlexOwner"] = false
 		if t.DB != nil {

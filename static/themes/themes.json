@@ -1,0 +1,11 @@
+[
+  {"slug": "aqua", "label": "Aqua", "description": "macOS Snow Leopard — brushed metal, pinstripes, candy gloss.", "hasChrome": false},
+  {"slug": "blue-future", "label": "Blue Future", "description": "Futuristic sci-fi HUD — deep-space navy with cyan neon glow.", "hasChrome": false},
+  {"slug": "cue-lab", "label": "Cue Lab", "description": "Flat live-show console — hairline grids, amber accent, no glow.", "hasChrome": false},
+  {"slug": "lcars", "label": "LCARS", "description": "Star Trek TNG/DS9/Voyager on-screen computer — candy pills on black.", "hasChrome": true},
+  {"slug": "matrix", "label": "The Matrix", "description": "Green phosphor on black — monospace terminal cascade.", "hasChrome": false},
+  {"slug": "tron", "label": "TRON", "description": "Electric cyan line-grid on black — glowing, angular edges.", "hasChrome": false},
+  {"slug": "winamp-classic", "label": "WinAmp Classic", "description": "Steel-gray skinned player — tiny caps, llama-green readouts.", "hasChrome": false},
+  {"slug": "windows95", "label": "Windows 95", "description": "Beveled 3D gray — classic system dialog chrome on teal.", "hasChrome": false},
+  {"slug": "wmp11", "label": "Windows Media Player 11", "description": "Black glass with a cool blue glow — WMP11's signature skin.", "hasChrome": false}
+]

@@ -1,26 +1,43 @@
+/* --- ftl-themes bridge --------------------------------------------------
+ * Every colour/typography token below reads its ftl-themes equivalent and
+ * falls back to the value it has always had. With no theme stylesheet
+ * linked - the default - no --ftl-* token exists, every fallback applies,
+ * and the app renders exactly as before. With a theme linked the tokens
+ * resolve and all ~10k lines of existing CSS re-colour through these same
+ * names, with no template or class changes.
+ *
+ * App-owned tokens are deliberately NOT bridged: --text-scale (Settings >
+ * Appearance), --sidebar-width/--header-height (layout geometry), the
+ * --radius-* scale, --card-shadow/--glow-*, and --gradient-surface/-card.
+ * They are this app's structure, not a theme's palette.
+ *
+ * DESIGN.md §1 bans --gradient-primary for exactly this reason: the token
+ * contract has no gradient concept, so a bespoke brand gradient is one more
+ * thing an external theme cannot override cleanly.
+ */
 :root {
-  --primary-color: #2f8fff;
-  --primary-hover: #4da1ff;
+  --primary-color: var(--ftl-accent, #2f8fff);
+  --primary-hover: var(--ftl-accent-2, #4da1ff);
   --primary-dark: #1d6fe0;
   --primary-glow: rgba(47, 143, 255, 0.28);
-  --accent-teal: #1fb8c4;
-  --accent-cyan: #00e5ff;
-  --font-mono: 'JetBrains Mono', source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+  --accent-teal: var(--ftl-flare, #1fb8c4);
+  --accent-cyan: var(--ftl-accent-2, #00e5ff);
+  --font-mono: var(--ftl-font-mono, 'JetBrains Mono', source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace);
   --text-scale: 1;
-  --background: #0a1018;
-  --background-elevated: #0e1520;
-  --surface: #131d2a;
-  --surface-hover: #1a2736;
-  --surface-border: #1e2d3d;
-  --sidebar-bg: #0c1420;
-  --text-primary: #e8edf2;
-  --text-secondary: #7a8fa3;
-  --text-muted: #7488a0;
-  --border: #1a2a3a;
-  --border-light: #243447;
-  --error: #ef5350;
-  --success: #66bb6a;
-  --warning: #ffa726;
+  --background: var(--ftl-bg, #0a1018);
+  --background-elevated: var(--ftl-surface-2, #0e1520);
+  --surface: var(--ftl-surface, #131d2a);
+  --surface-hover: var(--ftl-surface-2, #1a2736);
+  --surface-border: var(--ftl-hairline, #1e2d3d);
+  --sidebar-bg: var(--ftl-surface, #0c1420);
+  --text-primary: var(--ftl-text, #e8edf2);
+  --text-secondary: var(--ftl-muted, #7a8fa3);
+  --text-muted: var(--ftl-muted, #7488a0);
+  --border: var(--ftl-border, #1a2a3a);
+  --border-light: var(--ftl-hairline, #243447);
+  --error: var(--ftl-danger, #ef5350);
+  --success: var(--ftl-success, #66bb6a);
+  --warning: var(--ftl-warning, #ffa726);
   --sidebar-width: 240px;
   --header-height: 60px;
   --card-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
@@ -52,6 +69,14 @@
   --bg-secondary: var(--surface);
   --bg-hover: var(--surface-hover);
   --text-tertiary: var(--text-muted);
+
+  /* ftl-themes requires an explicit foreground for each filled control; the
+     app had no such concept because its palette is dark-only. These are the
+     values its buttons already use, so nothing changes until a theme
+     overrides them. */
+  --ftl-on-accent: #05070a;
+  --ftl-on-danger: #ffffff;
+  --ftl-on-success: #05070a;
 }
 
 * {
