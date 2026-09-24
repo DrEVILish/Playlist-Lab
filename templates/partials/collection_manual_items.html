@@ -10,7 +10,7 @@
   {{range .ManualItems}}
   <li>
     <span>{{.Title}}{{if .Artist}} — {{.Artist}}{{end}}</span>
-    <button type="button" class="icon-btn" title="Remove" aria-label="Remove {{.Title}}"
+    <button type="button" class="ftl-btn ftl-btn-icon" title="Remove" aria-label="Remove {{.Title}}"
       hx-delete="/collections/{{$collectionID}}/manual-items/{{.RatingKey}}" hx-target="#collection-manual-items" hx-swap="outerHTML">&times;</button>
   </li>
   {{end}}

@@ -1299,6 +1299,11 @@ func (h *CollectionsHandler) bulkDelete(w http.ResponseWriter, r *http.Request) 
 func (h *CollectionsHandler) bulkRun(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
 	_ = r.ParseForm()
+	// Cached per server, same reasoning as bulkDelete above: a bulk refresh
+	// can easily select dozens/hundreds of collections on the same server,
+	// which used to mean one GetUserServerByID round trip per collection
+	// instead of per distinct server.
+	servers := map[int64]*db.UserServer{}
 	for _, raw := range r.Form["id"] {
 		id, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil {
@@ -1308,8 +1313,12 @@ func (h *CollectionsHandler) bulkRun(w http.ResponseWriter, r *http.Request) {
 		if err != nil || coll == nil {
 			continue
 		}
-		server, err := db.GetUserServerByID(h.DB, coll.ServerID)
-		if err != nil || server == nil {
+		server, ok := servers[coll.ServerID]
+		if !ok {
+			server, _ = db.GetUserServerByID(h.DB, coll.ServerID)
+			servers[coll.ServerID] = server
+		}
+		if server == nil {
 			continue
 		}
 		h.Queue.Enqueue(user.ID, "Refreshing "+coll.Name, notifications.TypeSchedule, func(notificationID string) error {

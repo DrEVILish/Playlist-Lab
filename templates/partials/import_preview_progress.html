@@ -20,11 +20,11 @@
     <div class="progress-title">
       {{if eq $p.Phase "scraping"}}Fetching playlist…{{else}}Matching tracks against your library…{{end}}
     </div>
-    <div class="progress-bar-container">
+    <div class="ftl-progress" style="margin-bottom:1rem">
       {{if gt $p.Total 0}}
-      <div class="progress-bar" style="width: {{percent $p.Current $p.Total}}%"></div>
+      <div class="ftl-progress-bar" style="width: {{percent $p.Current $p.Total}}%"></div>
       {{else}}
-      <div class="progress-bar" style="width: 30%"></div>
+      <div class="ftl-progress-bar" style="width: 30%"></div>
       {{end}}
     </div>
     {{if gt $p.Total 0}}

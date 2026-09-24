@@ -10,10 +10,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
 	"time"
 
@@ -143,39 +141,20 @@ func (t *Target) MatchTracks(ctx context.Context, tracks []adapters.TrackInfo, c
 		return nil, ErrNotConnected
 	}
 
-	results := make([]adapters.MatchResult, 0, len(tracks))
-	for i, track := range tracks {
-		if isCancelled != nil && isCancelled() {
-			break
-		}
-		query := fmt.Sprintf(`recording:"%s" AND artist:"%s"`, track.Title, track.Artist)
-		result := adapters.MatchResult{SourceTrack: track}
-
-		items, err := t.searchMusicBrainz(ctx, query, 5)
-		if err != nil {
-			slog.Warn("musicbrainz search failed for track", "track", track, "error", err)
-		} else if len(items) > 0 {
-			sort.SliceStable(items, func(a, b int) bool {
-				return shared.ScoreResult(track.Title, track.Artist, items[a].Title, items[a].artistName()) >
-					shared.ScoreResult(track.Title, track.Artist, items[b].Title, items[b].artistName())
-			})
-			best := items[0]
-			score := shared.ScoreResult(track.Title, track.Artist, best.Title, best.artistName())
-			result = toMatchResult(track, best, score, score >= 50)
-		}
-
-		results = append(results, result)
-		if progress != nil {
-			progress(i+1, len(tracks))
-		}
-
-		// MusicBrainz allows 1 request/sec - skip the wait after the last
-		// track so a playlist's total match time isn't padded needlessly.
-		if i < len(tracks)-1 {
-			time.Sleep(1100 * time.Millisecond)
-		}
-	}
-	return results, nil
+	return shared.MatchTracksBySearch(ctx, tracks, progress, isCancelled, "musicbrainz", 50,
+		func(ctx context.Context, track adapters.TrackInfo) ([]recording, error) {
+			query := fmt.Sprintf(`recording:"%s" AND artist:"%s"`, track.Title, track.Artist)
+			return t.searchMusicBrainz(ctx, query, 5)
+		},
+		func(sourceTitle, sourceArtist string, item recording) float64 {
+			return shared.ScoreResult(sourceTitle, sourceArtist, item.Title, item.artistName())
+		},
+		toMatchResult,
+		// MusicBrainz allows 1 request/sec - shared.MatchTracksBySearch
+		// skips this after the last track so a playlist's total match
+		// time isn't padded needlessly.
+		func() { time.Sleep(1100 * time.Millisecond) },
+	)
 }
 
 func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adapters.MatchResult, cfg adapters.TargetConfig, userID int64) (string, string, int, error) {

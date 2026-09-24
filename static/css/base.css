@@ -158,34 +158,6 @@ p {
   display: none;
 }
 
-.btn {
-  padding: 0.625rem 1.25rem;
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: 0.875rem;
-  font-weight: 500;
-  transition: all 0.2s ease;
-  display: inline-flex;
-  align-items: center;
-  /* Flex items default to justify-content:flex-start - invisible on a
-     button sized to its own content, but every full-width .btn (the login
-     button, "Backup Selected Playlist(s)", the settings Save/Reset row on
-     mobile, ...) left its label pinned to the left edge instead of
-     centered like a normal button. */
-  justify-content: center;
-  gap: 0.5rem;
-  /* .btn is applied to real <button>s everywhere except cross_import.html's
-     "Connect YouTube" (an <a> so it can be a plain navigable link) - an
-     anchor carries a default underline a button never would, so without
-     this override that one link looked broken/half-styled next to every
-     other .btn in the app. */
-  text-decoration: none;
-}
-
-.btn:hover { transform: translateY(-1px); }
-.btn:active { transform: translateY(0); }
-
 /* Global click feedback (see layout.html's htmx:beforeRequest/afterRequest
    listeners): every disabled button dims instead of looking identical to
    an enabled one, and whichever button was actually clicked additionally
@@ -196,7 +168,6 @@ input[type=submit]:disabled {
   cursor: not-allowed;
 }
 
-.btn.is-loading,
 button.is-loading {
   position: relative;
 }
@@ -217,56 +188,17 @@ button.is-loading {
   to { transform: rotate(360deg); }
 }
 
-/* Keyboard-only users got no visible focus indicator on any button/icon-
-   button/link-styled-as-button in the app - only .input/select replace the
-   browser's default outline with something visible (a box-shadow ring
-   above). Reusing that same ring here rather than just re-enabling the
-   default outline, so keyboard focus looks like part of this theme
-   instead of a generic browser blue rectangle. */
-.btn:focus-visible,
-.icon-btn:focus-visible,
+/* Keyboard-only users got no visible focus indicator on plain links - only
+   .input/select replace the browser's default outline with something
+   visible (a box-shadow ring above). Reusing that same ring here rather
+   than just re-enabling the default outline, so keyboard focus looks like
+   part of this theme instead of a generic browser blue rectangle. Icon
+   buttons no longer need an entry here: ftl-core.css's own universal
+   :focus-visible rule already rings them now that they're ftl-btn/
+   ftl-btn-icon. */
 a:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px rgba(47, 143, 255, 0.4);
-}
-
-.btn-small {
-  padding: 0.375rem 0.75rem;
-  font-size: 0.75rem;
-}
-
-/* Changed: was a solid --gradient-primary fill with white text - clashed
-   once every other control switched to the flat dark/glowing-border
-   instrument-panel language (§4), and --gradient-primary itself is gone
-   now (banned app-wide, per user direction, for ftl-themes compatibility -
-   that theme system's tokens have no gradient concept, only flat accent
-   colors + glow). Primary actions now use the same transparent-with-
-   glowing-border shape as everything else, distinguished from
-   .btn-secondary only by using the accent color instead of a neutral
-   border. Every other former --gradient-primary call site (active tab/
-   pill fills, progress bars, the .logo-lab wordmark) moved to a flat
-   var(--primary-color)/var(--accent-cyan) fill for the same reason. */
-.btn-primary {
-  background: transparent;
-  color: var(--accent-cyan);
-  border: 1px solid var(--accent-cyan);
-}
-
-.btn-primary:hover {
-  background: rgba(0, 229, 255, 0.12);
-  box-shadow: 0 0 14px rgba(0, 229, 255, 0.4);
-}
-
-.btn-secondary {
-  background-color: var(--surface);
-  color: var(--text-primary);
-  border: 1px solid var(--border-light);
-}
-
-.btn-secondary:hover {
-  background-color: var(--surface-hover);
-  border-color: var(--accent-cyan);
-  box-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
 }
 
 /* Cards */
@@ -501,24 +433,6 @@ a:focus-visible {
 input[type="checkbox"] { accent-color: var(--primary-color); }
 input[type="checkbox"]:checked { box-shadow: 0 0 6px rgba(0, 229, 255, 0.5); }
 
-/* Form Groups */
-.form-group { margin-bottom: 1.5rem; }
-
-.form-label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.form-hint {
-  display: block;
-  margin-top: 0.375rem;
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-}
-
 /* Select Dropdown */
 select {
   width: 100%;
@@ -555,43 +469,18 @@ select option {
   color: var(--text-primary);
 }
 
-/* Badges */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.25rem 0.75rem;
-  border-radius: var(--radius-sm);
-  font-size: 0.75rem;
-  font-weight: 500;
-}
+/* Badges: migrated to .ftl-badge/.ftl-badge-accent/.ftl-badge-success/
+   .ftl-badge-warning (ftl-core.css). .badge-warning/.badge-error below
+   were unused before this migration too (no template ever referenced
+   them) - now that ftl-core ships a real .ftl-badge-warning (adopted for
+   the schedule/missing pills' warn state), there's no remaining reason to
+   keep these, so they're removed rather than left as unreachable dead
+   code with a "not ported yet" note. */
 
-.badge-primary { background-color: rgba(47, 143, 255, 0.15); color: var(--primary-color); }
-.badge-success { background-color: rgba(102, 187, 106, 0.15); color: var(--success); }
-.badge-warning { background-color: rgba(255, 167, 38, 0.15); color: var(--warning); }
-.badge-error { background-color: rgba(239, 83, 80, 0.15); color: var(--error); }
-
-/* Status Dot (DESIGN.md §8.3) - the canonical status primitive: a solid
-   dot colored by state, with a pulsing animation reserved for "in
-   progress" states. Reuse this anywhere status is currently shown as a
-   badge alone (e.g. connected/disconnected). */
-.status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--text-muted);
-  display: inline-block;
-}
-
-.status-dot-success { background: var(--success); }
-.status-dot-failed { background: var(--error); }
-.status-dot-running { background: var(--primary-color); animation: status-pulse 1.2s ease-in-out infinite; }
-.status-dot-never { background: var(--text-muted); }
-
-@keyframes status-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
+/* Status dot: migrated to ftl-core.css's .ftl-lamp (is-on/is-warn/is-error/
+   is-active, bare = off/unlit) - see internal/handlers/templates.go's
+   lampState template func for the success/failed/running/"" -> is-on/
+   is-error/is-active/"" mapping. */
 
 /* Loading Spinner */
 .spinner {

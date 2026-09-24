@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // formatForBitrate maps a Settings.MaxBitrate value to the format string
@@ -280,7 +282,12 @@ func (s *Service) downloadOneTrack(track gwTrack, bitrate string, onProgress fun
 		return dest, nil
 	}
 
-	tmpPath := dest + ".part"
+	// Suffixed with a fresh uuid, not just ".part": a fixed path derived
+	// only from track metadata let two concurrent downloads of the same
+	// track (e.g. QueueDownload's now-fixed TOCTOU window, or the same
+	// track showing up in two separate queue entries) interleave writes
+	// into the same file and corrupt it.
+	tmpPath := dest + "." + uuid.NewString() + ".part"
 	if err := downloadAndDecrypt(downloadURL, track.SNG_ID.String(), tmpPath, onProgress); err != nil {
 		os.Remove(tmpPath)
 		return "", err

@@ -27,8 +27,8 @@
      reopen the modal to try a different file. */}}
 {{define "partials/import_file_picker.html"}}
 <div class="form-section">
-  <label class="form-label" for="import-file-input">Playlist file (M3U, M3U8, PLS, XSPF, CSV, or TXT - max 100KB)</label>
-  <label class="btn btn-secondary file-input-label">
+  <label class="ftl-label" for="import-file-input">Playlist file (M3U, M3U8, PLS, XSPF, CSV, or TXT - max 100KB)</label>
+  <label class="ftl-btn ftl-btn-secondary file-input-label">
     Choose File
     <input class="file-input" type="file" id="import-file-input" name="file" accept=".m3u,.m3u8,.pls,.xspf,.csv,.txt"
       hx-post="/import/file/preview" hx-target="#import-file-body" hx-swap="innerHTML"

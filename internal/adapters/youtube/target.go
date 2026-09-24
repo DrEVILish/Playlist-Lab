@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -96,8 +97,19 @@ func GetValidAccessToken(sqlDB *sql.DB, secret string, oauth OAuthConfig, userID
 	}
 	tokens, err := oauth.RefreshToken(refreshTok)
 	if err != nil {
-		_ = db.DeleteOAuthConnection(sqlDB, userID, ServiceName)
-		return "", fmt.Errorf("YouTube session expired. Please reconnect your YouTube account")
+		var tokErr *TokenError
+		if errors.As(err, &tokErr) && tokErr.Permanent() {
+			// Google rejected the refresh token itself (e.g. invalid_grant)
+			// - it can never succeed again as-is, so clear it now rather
+			// than fail the same way on every future call.
+			_ = db.DeleteOAuthConnection(sqlDB, userID, ServiceName)
+			return "", fmt.Errorf("YouTube session expired. Please reconnect your YouTube account")
+		}
+		// A network error or a 5xx from Google's own token endpoint is
+		// transient - the refresh token may well still be valid, so don't
+		// delete the connection out from under the user over what might
+		// just be a passing outage.
+		return "", fmt.Errorf("failed to refresh YouTube token, please try again: %w", err)
 	}
 	if err := StoreTokens(sqlDB, secret, userID, tokens); err != nil {
 		return "", err

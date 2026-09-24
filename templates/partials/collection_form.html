@@ -13,7 +13,7 @@
      field with a caption underneath, so it's immediately legible as "this
      can't change here" rather than looking like a broken input. */}}
 {{define "collectionRuleFieldSelect"}}
-<select name="ruleField" class="form-select collection-rule-field">
+<select name="ruleField" class="ftl-select collection-rule-field">
   <option value="genre" {{if eq . "genre"}}selected{{end}}>Genre</option>
   <option value="mood" {{if eq . "mood"}}selected{{end}}>Mood (music)</option>
   <option value="style" {{if eq . "style"}}selected{{end}}>Style (music)</option>
@@ -48,20 +48,20 @@
         </div>
         {{end}}
 
-        <div class="form-group">
-          <label class="form-label" for="collection-name">Name</label>
+        <div class="ftl-field">
+          <label class="ftl-label" for="collection-name">Name</label>
           <input id="collection-name" class="form-input" type="text" name="name" maxlength="255" required
             value="{{if .Collection}}{{.Collection.Name}}{{else if .Prefill}}{{.Prefill.Name}}{{end}}" autofocus>
         </div>
 
-        <div class="form-group">
-          <label class="form-label" for="collection-description">Description (optional)</label>
-          <textarea id="collection-description" class="form-textarea" name="description" rows="2">{{if .Collection}}{{.Collection.Description.String}}{{end}}</textarea>
+        <div class="ftl-field">
+          <label class="ftl-label" for="collection-description">Description (optional)</label>
+          <textarea id="collection-description" class="ftl-textarea" name="description" rows="2">{{if .Collection}}{{.Collection.Description.String}}{{end}}</textarea>
         </div>
 
         {{if not .Collection}}
-        <div class="form-group">
-          <label class="form-label" for="collection-library">Library</label>
+        <div class="ftl-field">
+          <label class="ftl-label" for="collection-library">Library</label>
           <!-- Grouped by server (DESIGN.md §11.11 multi-server support) -
                a user with more than one linked Plex server (e.g. one for
                movies/TV, one for music) picks a library from any of them. -->
@@ -73,7 +73,7 @@
                which a user could have named anything), so there's one less
                thing to pick by hand on the common path. Still a plain
                select the user can freely change either way. -->
-          <select id="collection-library" class="form-select" name="library" required>
+          <select id="collection-library" class="ftl-select" name="library" required>
             <option value="">Select a library...</option>
             {{range .ServerGroups}}
             <optgroup label="{{.ServerName}}">
@@ -85,8 +85,8 @@
           </select>
         </div>
 
-        <div class="form-group">
-          <label class="form-label">Membership</label>
+        <div class="ftl-field">
+          <label class="ftl-label">Membership</label>
           {{$presetIsList := .Prefill}}
           <div class="update-mode-group">
             <label class="update-mode-card">
@@ -119,7 +119,7 @@
                 <div class="collection-rule-row card">
                   {{template "collectionRuleFieldSelect" .Field}}
                   <input type="text" name="ruleValue" class="form-input" value="{{.Value}}" placeholder="value">
-                  <button type="button" class="icon-btn" data-remove-rule aria-label="Remove rule">&times;</button>
+                  <button type="button" class="ftl-btn ftl-btn-icon" data-remove-rule aria-label="Remove rule">&times;</button>
                 </div>
                 {{end}}
               {{end}}
@@ -127,16 +127,16 @@
             <div class="collection-rule-row card">
               {{template "collectionRuleFieldSelect" ""}}
               <input type="text" name="ruleValue" class="form-input" placeholder="value">
-              <button type="button" class="icon-btn" data-remove-rule aria-label="Remove rule">&times;</button>
+              <button type="button" class="ftl-btn ftl-btn-icon" data-remove-rule aria-label="Remove rule">&times;</button>
             </div>
             {{end}}
           </div>
-          <button type="button" class="btn btn-secondary btn-small" data-add-rule>Add Rule</button>
+          <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" data-add-rule>Add Rule</button>
           <template id="collection-rule-row-template">
             <div class="collection-rule-row card">
               {{template "collectionRuleFieldSelect" ""}}
               <input type="text" name="ruleValue" class="form-input" placeholder="value">
-              <button type="button" class="icon-btn" data-remove-rule aria-label="Remove rule">&times;</button>
+              <button type="button" class="ftl-btn ftl-btn-icon" data-remove-rule aria-label="Remove rule">&times;</button>
             </div>
           </template>
           <label class="form-check">
@@ -160,9 +160,9 @@
           <input type="hidden" name="externalProvider" value="{{$extProvider}}">
           <p class="field-hint">{{.Collection.ProviderLabel}}</p>
           {{else}}
-          <div class="form-group">
-            <label class="form-label" for="collection-external-provider">Source</label>
-            <select id="collection-external-provider" class="form-select" name="externalProvider">
+          <div class="ftl-field">
+            <label class="ftl-label" for="collection-external-provider">Source</label>
+            <select id="collection-external-provider" class="ftl-select" name="externalProvider">
               <option value="tmdb" {{if eq $extProvider "tmdb"}}selected{{end}}>TMDb</option>
               <option value="imdb" {{if eq $extProvider "imdb"}}selected{{end}}>IMDb</option>
               <option value="tvdb" {{if eq $extProvider "tvdb"}}selected{{end}}>TVDb</option>
@@ -171,9 +171,9 @@
             </select>
           </div>
           {{end}}
-          <div class="form-group collection-tmdb-mode-group{{if not (or (eq $extProvider "tmdb") (eq $extProvider "imdb"))}} is-hidden{{end}}">
-            <label class="form-label" for="collection-tmdb-mode">List Type</label>
-            <select id="collection-tmdb-mode" class="form-select" name="tmdbMode">
+          <div class="ftl-field collection-tmdb-mode-group{{if not (or (eq $extProvider "tmdb") (eq $extProvider "imdb"))}} is-hidden{{end}}">
+            <label class="ftl-label" for="collection-tmdb-mode">List Type</label>
+            <select id="collection-tmdb-mode" class="ftl-select" name="tmdbMode">
               <option value="list" {{if eq $tmdbMode "list"}}selected{{end}}>Public list</option>
               <option value="popular" data-provider="tmdb" {{if eq $tmdbMode "popular"}}selected{{end}}>Popular</option>
               <option value="top_rated" data-provider="tmdb" {{if eq $tmdbMode "top_rated"}}selected{{end}}>Top Rated</option>
@@ -183,12 +183,12 @@
               <option value="top250" data-provider="imdb" {{if eq $tmdbMode "top250"}}selected{{end}}>Top 250</option>
             </select>
           </div>
-          <div class="form-group collection-tmdb-list-id{{if not (or (eq $tmdbMode "list") (eq $tmdbMode "collection"))}} is-hidden{{end}}">
-            <label class="form-label" for="collection-tmdb-list-id">{{if eq $tmdbMode "collection"}}Collection ID or URL{{else}}List ID or URL{{end}}</label>
+          <div class="ftl-field collection-tmdb-list-id{{if not (or (eq $tmdbMode "list") (eq $tmdbMode "collection"))}} is-hidden{{end}}">
+            <label class="ftl-label" for="collection-tmdb-list-id">{{if eq $tmdbMode "collection"}}Collection ID or URL{{else}}List ID or URL{{end}}</label>
             <input id="collection-tmdb-list-id" type="text" class="form-input" name="tmdbListId" value="{{$tmdbListID}}" placeholder="e.g. themoviedb.org/list/12345-my-list, or a Trakt/franchise URL">
           </div>
-          <div class="form-group">
-            <label class="form-label" for="collection-tmdb-limit">Max items</label>
+          <div class="ftl-field">
+            <label class="ftl-label" for="collection-tmdb-limit">Max items</label>
             <input id="collection-tmdb-limit" type="number" class="form-input" name="tmdbLimit" min="1" max="200" value="{{$tmdbLimit}}">
           </div>
         </div>
@@ -196,7 +196,7 @@
         {{if and .Collection (eq .Collection.BuilderType "manual")}}
         <div class="collection-form-section">
           <h3 class="collection-form-section-title">Items</h3>
-          <div class="form-group">
+          <div class="ftl-field">
             <input type="text" class="form-input" placeholder="Search this library..."
               hx-get="/collections/{{.Collection.ID}}/search" hx-trigger="input changed delay:400ms, search"
               hx-target="#collection-search-results" hx-swap="innerHTML">
@@ -205,7 +205,7 @@
               {{range .ManualItems}}
               <li>
                 <span>{{.Title}}{{if .Artist}} — {{.Artist}}{{end}}</span>
-                <button type="button" class="icon-btn" title="Remove" aria-label="Remove {{.Title}}"
+                <button type="button" class="ftl-btn ftl-btn-icon" title="Remove" aria-label="Remove {{.Title}}"
                   hx-delete="/collections/{{$.Collection.ID}}/manual-items/{{.RatingKey}}" hx-target="#collection-manual-items" hx-swap="outerHTML">&times;</button>
               </li>
               {{end}}
@@ -216,15 +216,15 @@
 
         <div class="collection-form-section">
           <h3 class="collection-form-section-title">Behavior</h3>
-          <div class="form-group">
-            <label class="form-label" for="collection-sort-title">Sort Title (optional)</label>
+          <div class="ftl-field">
+            <label class="ftl-label" for="collection-sort-title">Sort Title (optional)</label>
             <input id="collection-sort-title" class="form-input" type="text" name="sortTitle" maxlength="255"
               value="{{if .Collection}}{{.Collection.SortTitle.String}}{{end}}" placeholder="e.g. +1_Trending">
             <p class="field-hint">Plex sorts collections by this instead of the name when set - Kometa's own convention is a numeric prefix like "+1_" to force order.</p>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Sync Mode</label>
+          <div class="ftl-field">
+            <label class="ftl-label">Sync Mode</label>
             {{$syncMode := "sync"}}{{if .Collection}}{{$syncMode = .Collection.SyncMode}}{{end}}
             <div class="update-mode-group">
               <label class="update-mode-card">
@@ -241,11 +241,11 @@
           </div>
 
           {{if and .Collection .Collection.PlexCollectionID.Valid}}
-          <div class="form-group">
-            <label class="form-label" for="collection-poster-url">Poster</label>
+          <div class="ftl-field">
+            <label class="ftl-label" for="collection-poster-url">Poster</label>
             <div class="update-mode-group collection-poster-row">
               <input id="collection-poster-url" type="text" class="form-input" name="imageUrl" placeholder="Image URL">
-              <button type="button" class="btn btn-secondary btn-small"
+              <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm"
                 hx-post="/collections/{{.Collection.ID}}/poster" hx-include="#collection-poster-url"
                 hx-target="#collection-poster-status" hx-swap="innerHTML">Set Poster</button>
             </div>
@@ -263,15 +263,15 @@
           </label>
           <form id="collection-delete-form" hx-delete="/collections/{{.Collection.ID}}" hx-target="#collections-list" hx-swap="innerHTML"
             hx-confirm="Delete this collection?" hx-on::after-request="if(event.detail.successful) closeTopModal()">
-            <button type="submit" class="btn btn-secondary btn-small text-error">Delete Collection</button>
+            <button type="submit" class="ftl-btn ftl-btn-secondary ftl-btn-sm text-error">Delete Collection</button>
           </form>
         </div>
         {{end}}
       </div>
 
       <div class="advanced-mix-actions">
-        <button type="button" class="btn btn-secondary" onclick="closeTopModal()">Cancel</button>
-        <button type="submit" class="btn btn-primary">{{if .Collection}}Save Changes{{else}}Create Collection{{end}}</button>
+        <button type="button" class="ftl-btn ftl-btn-secondary" onclick="closeTopModal()">Cancel</button>
+        <button type="submit" class="ftl-btn ftl-btn-primary">{{if .Collection}}Save Changes{{else}}Create Collection{{end}}</button>
       </div>
     </form>
   </div>

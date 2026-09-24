@@ -14,9 +14,9 @@
       hx-on::after-request="if(event.detail.successful) closeTopModal()">
       <div class="advanced-mix-content">
         <p class="field-hint">Creates one collection per year - up to {{.MaxRange}} at once. Each is created empty; use "Refresh Selected" on the Collections table afterward to populate them.</p>
-        <div class="form-group">
-          <label class="form-label" for="preset-years-library">Library</label>
-          <select id="preset-years-library" class="form-select" name="library" required>
+        <div class="ftl-field">
+          <label class="ftl-label" for="preset-years-library">Library</label>
+          <select id="preset-years-library" class="ftl-select" name="library" required>
             <option value="">Select a library...</option>
             {{range .ServerGroups}}
             <optgroup label="{{.ServerName}}">
@@ -28,19 +28,19 @@
           </select>
         </div>
         <div class="update-mode-group" style="grid-template-columns:1fr 1fr">
-          <div class="form-group">
-            <label class="form-label" for="preset-years-from">From year</label>
+          <div class="ftl-field">
+            <label class="ftl-label" for="preset-years-from">From year</label>
             <input id="preset-years-from" class="form-input" type="number" name="fromYear" min="1927" max="2030" required>
           </div>
-          <div class="form-group">
-            <label class="form-label" for="preset-years-to">To year</label>
+          <div class="ftl-field">
+            <label class="ftl-label" for="preset-years-to">To year</label>
             <input id="preset-years-to" class="form-input" type="number" name="toYear" min="1927" max="2030" required>
           </div>
         </div>
       </div>
       <div class="advanced-mix-actions">
-        <button type="button" class="btn btn-secondary" onclick="closeTopModal()">Cancel</button>
-        <button type="submit" class="btn btn-primary">Create Collections</button>
+        <button type="button" class="ftl-btn ftl-btn-secondary" onclick="closeTopModal()">Cancel</button>
+        <button type="submit" class="ftl-btn ftl-btn-primary">Create Collections</button>
       </div>
     </form>
   </div>

@@ -70,6 +70,24 @@ func (c OAuthConfig) RefreshToken(refreshToken string) (*GoogleTokens, error) {
 	return tokens, nil
 }
 
+// TokenError is returned by requestToken for a non-2xx response, carrying
+// the status code so a caller (GetValidAccessToken) can tell a rejected
+// refresh token (4xx - Google looked at it and said no) apart from a
+// transient outage (network error, or a 5xx from Google's own token
+// endpoint) - only the former means the stored refresh token is actually
+// dead and the connection should be deleted.
+type TokenError struct {
+	StatusCode int
+	Err        error
+}
+
+func (e *TokenError) Error() string { return e.Err.Error() }
+func (e *TokenError) Unwrap() error { return e.Err }
+
+// Permanent reports whether Google rejected the request outright (the
+// refresh token itself is bad) rather than merely being unavailable.
+func (e *TokenError) Permanent() bool { return e.StatusCode >= 400 && e.StatusCode < 500 }
+
 func (c OAuthConfig) requestToken(form url.Values) (*GoogleTokens, error) {
 	resp, err := http.PostForm(tokenURL, form)
 	if err != nil {
@@ -81,10 +99,11 @@ func (c OAuthConfig) requestToken(form url.Values) (*GoogleTokens, error) {
 			ErrorDescription string `json:"error_description"`
 		}
 		_ = json.NewDecoder(resp.Body).Decode(&errBody)
+		msg := fmt.Sprintf("token request failed: status %d", resp.StatusCode)
 		if errBody.ErrorDescription != "" {
-			return nil, fmt.Errorf("%s", errBody.ErrorDescription)
+			msg = errBody.ErrorDescription
 		}
-		return nil, fmt.Errorf("token request failed: status %d", resp.StatusCode)
+		return nil, &TokenError{StatusCode: resp.StatusCode, Err: fmt.Errorf("%s", msg)}
 	}
 	var tokens GoogleTokens
 	if err := json.NewDecoder(resp.Body).Decode(&tokens); err != nil {

@@ -16,7 +16,7 @@
     <div class="preset-card-title">{{.Name}}</div>
     {{if .Description}}<div class="preset-card-desc">{{.Description}}</div>{{end}}
     <div class="preset-card-source">{{.Detail}}</div>
-    <button type="button" class="btn btn-secondary btn-small" hx-get="/collections/new?provider={{.Provider}}&amp;mode={{.Mode}}&amp;listId={{.ListID | urlquery}}&amp;name={{.Name | urlquery}}&amp;mediaType={{.MediaType}}" hx-target="#modal-root" hx-swap="innerHTML">Add</button>
+    <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" hx-get="/collections/new?provider={{.Provider}}&amp;mode={{.Mode}}&amp;listId={{.ListID | urlquery}}&amp;name={{.Name | urlquery}}&amp;mediaType={{.MediaType}}" hx-target="#modal-root" hx-swap="innerHTML">Add</button>
   </div>
   {{end}}
 </div>

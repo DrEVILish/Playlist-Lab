@@ -186,7 +186,6 @@
   gap: 0.5rem;
 }
 
-.settings-select,
 .settings-input {
   padding: 0.625rem 0.875rem;
   border: 1px solid var(--border);
@@ -198,7 +197,6 @@
   transition: border-color 0.15s;
 }
 
-.settings-select:focus,
 .settings-input:focus {
   outline: none;
   border-color: var(--primary-color);

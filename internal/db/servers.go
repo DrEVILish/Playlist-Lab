@@ -174,12 +174,16 @@ func CascadeCountsForServer(sqlDB *sql.DB, serverID int64) (collections, schedul
 	return collections, schedules, nil
 }
 
-// UpdateServerURL refreshes a linked server's stored connection URL - the
-// Settings "refresh connection" action (DESIGN.md §11.11), for when network
-// topology changes which of a server's connections (local/remote/relay)
-// is best after it was originally linked.
-func UpdateServerURL(sqlDB *sql.DB, id int64, url string) error {
-	_, err := sqlDB.Exec("UPDATE user_servers SET server_url = ? WHERE id = ?", url, id)
+// UpdateServerConnection refreshes a linked server's stored connection URL
+// and ownership flag - the Settings "refresh connection" action (DESIGN.md
+// §11.11), for when network topology changes which of a server's
+// connections (local/remote/relay) is best after it was originally linked.
+// Ownership is re-synced here too (not just at link time): RequirePlexOwner
+// gates Collections on is_owner, and Plex ownership of a server can change
+// after linking (transferred/revoked), so this is the one place that
+// already re-fetches the server's live Plex data and can catch it.
+func UpdateServerConnection(sqlDB *sql.DB, id int64, url string, owned bool) error {
+	_, err := sqlDB.Exec("UPDATE user_servers SET server_url = ?, is_owner = ? WHERE id = ?", url, owned, id)
 	return err
 }
 

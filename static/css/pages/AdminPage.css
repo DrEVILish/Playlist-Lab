@@ -518,7 +518,7 @@
   font-weight: 600;
 }
 
-.admin-card-summary .status-dot {
+.admin-card-summary .ftl-lamp {
   margin-right: 0.125rem;
 }
 
@@ -527,8 +527,8 @@
 }
 .admin-schedules-subheading:first-child { margin-top: 0; }
 
-/* Background jobs: a compact status-dot list rather than a table - reuses
-   the canonical .status-dot (§8.3) instead of a separate "enabled" column. */
+/* Background jobs: a compact lamp list rather than a table - reuses
+   ftl-core.css's .ftl-lamp instead of a separate "enabled" column. */
 .admin-jobs-list {
   display: flex;
   flex-direction: column;

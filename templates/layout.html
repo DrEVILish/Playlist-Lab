@@ -7,7 +7,14 @@
      client-side localStorage read+apply would. Settings' own inline script
      only needs to update this property live when the radio changes and
      persist the choice via its normal autosave PUT. -->
-<html lang="en" style="--text-scale: {{.TextScale}}">
+<!-- Theme preference (Settings > Appearance): an ftl-themes slug
+     (github.com/DrEVILish/ftl-themes) or "" for this app's own look, set
+     server-side into data-theme before first paint - same reasoning as
+     --text-scale above. static/css/ftl-bridge.css maps this app's own
+     tokens onto/from that repo's --ftl-* contract; the theme file itself
+     (linked further down, only when a theme is actually picked) supplies
+     the --ftl-* values data-theme selects. -->
+<html lang="en" style="--text-scale: {{.TextScale}}"{{if .Theme}} data-theme="{{.Theme}}"{{end}}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -23,6 +30,18 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/base.css">
+  <link rel="stylesheet" href="/static/css/ftl-bridge.css">
+  <!-- Templates now use .ftl-* classes (buttons, form fields, badges,
+       progress bars - see ftl-bridge.css's own doc comment). ftl-core.css
+       is the reset+component-structure-only bundle (no theme baked in) -
+       loaded whenever no theme is picked, so those classes still render
+       correctly (styled via ftl-bridge.css's :root defaults) rather than
+       ftl-core's own achromatic gray fallbacks. A picked theme's own
+       dist/<slug>.css already bundles that same component CSS plus its
+       palette, so ftl-core.css would be redundant (not harmful, just
+       duplicate) once a theme is loaded - only one or the other is ever
+       linked. -->
+  {{if .Theme}}<link id="theme-stylesheet" rel="stylesheet" href="/static/themes/{{.Theme}}.css">{{else}}<link rel="stylesheet" href="/static/themes/ftl-core.css">{{end}}
   <link rel="stylesheet" href="/static/css/components/Layout.css">
   <link rel="stylesheet" href="/static/css/components/Header.css">
   <link rel="stylesheet" href="/static/css/components/HeaderActions.css">
@@ -170,7 +189,7 @@
         <div class="mobile-nav-user">
           {{if .User.PlexThumb.Valid}}<img src="{{.User.PlexThumb.String}}" alt="" class="mobile-nav-user-avatar">{{end}}
           <span class="mobile-nav-user-name">{{.User.PlexUsername}}</span>
-          <form hx-post="/auth/logout"><button type="submit" class="btn btn-secondary btn-logout">Logout</button></form>
+          <form hx-post="/auth/logout"><button type="submit" class="ftl-btn ftl-btn-secondary btn-logout">Logout</button></form>
         </div>
         {{template "footer-content"}}
       </div>
@@ -214,11 +233,11 @@
                refresh) rather than navigating away, matching React's own
                portal-modal pattern for these buttons. -->
           <nav class="header-actions">
-            <button type="button" class="btn btn-secondary btn-small" hx-get="/import" hx-target="#modal-root" hx-swap="innerHTML">Import</button>
-            <button type="button" class="btn btn-secondary btn-small" hx-get="/mixes" hx-target="#modal-root" hx-swap="innerHTML">Generate</button>
-            <button type="button" class="btn btn-secondary btn-small" hx-get="/playlists/shared-with-me" hx-target="#modal-root" hx-swap="innerHTML">Shared With Me</button>
-            <button type="button" class="btn btn-secondary btn-small" hx-get="/backup" hx-target="#modal-root" hx-swap="innerHTML">Backup / Restore</button>
-            <button type="button" class="btn btn-secondary btn-small" hx-get="/status" hx-target="#modal-root" hx-swap="innerHTML">Status</button>
+            <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" hx-get="/import" hx-target="#modal-root" hx-swap="innerHTML">Import</button>
+            <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" hx-get="/mixes" hx-target="#modal-root" hx-swap="innerHTML">Generate</button>
+            <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" hx-get="/playlists/shared-with-me" hx-target="#modal-root" hx-swap="innerHTML">Shared With Me</button>
+            <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" hx-get="/backup" hx-target="#modal-root" hx-swap="innerHTML">Backup / Restore</button>
+            <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" hx-get="/status" hx-target="#modal-root" hx-swap="innerHTML">Status</button>
             <!-- Fix: the mobile-nav drawer's own Collections link
                  (DESIGN.md §11.11) is unreachable on desktop -
                  .mobile-nav-toggle (the only way to open that drawer) is
@@ -227,8 +246,8 @@
                  <a>, not an hx-get modal button like its neighbors:
                  Collections was never built with IsModalRequest/RenderModal
                  fragment support, only as a real page. -->
-            {{if .IsPlexOwner}}<a href="/collections" class="btn btn-secondary btn-small">Collections</a>
-            <a href="/dynamic-collections" class="btn btn-secondary btn-small">Dynamic Collections</a>{{end}}
+            {{if .IsPlexOwner}}<a href="/collections" class="ftl-btn ftl-btn-secondary ftl-btn-sm">Collections</a>
+            <a href="/dynamic-collections" class="ftl-btn ftl-btn-secondary ftl-btn-sm">Dynamic Collections</a>{{end}}
           </nav>
         </div>
 
@@ -312,7 +331,7 @@
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
           </a>
-          <form hx-post="/auth/logout"><button type="submit" class="btn btn-secondary btn-logout">Logout</button></form>
+          <form hx-post="/auth/logout"><button type="submit" class="ftl-btn ftl-btn-secondary btn-logout">Logout</button></form>
         </div>
       </div>
     </header>
@@ -446,8 +465,8 @@
   <dialog id="confirm-dialog" class="confirm-dialog">
     <p id="confirm-dialog-question"></p>
     <div class="confirm-dialog-actions">
-      <button type="button" class="btn btn-secondary" id="confirm-dialog-cancel">Cancel</button>
-      <button type="button" class="btn btn-primary" id="confirm-dialog-ok">OK</button>
+      <button type="button" class="ftl-btn ftl-btn-secondary" id="confirm-dialog-cancel">Cancel</button>
+      <button type="button" class="ftl-btn ftl-btn-primary" id="confirm-dialog-ok">OK</button>
     </div>
   </dialog>
   <script>

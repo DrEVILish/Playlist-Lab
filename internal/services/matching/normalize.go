@@ -3,6 +3,7 @@ package matching
 import (
 	"regexp"
 	"strings"
+	"sync"
 	"unicode"
 )
 
@@ -39,6 +40,11 @@ var (
 	whitespacePattern       = regexp.MustCompile(`\s+`)
 	ampmPattern             = regexp.MustCompile(`(?i)(\d)\s+([ap]m)\b`)
 	hanScriptPattern        = regexp.MustCompile(`\p{Han}`)
+	// kanaScriptPattern catches hiragana/katakana toRomaji left
+	// unconverted (e.g. a leading or otherwise-unanchored long-vowel mark
+	// ー) - just as much garbage in a "romanized" search query as leftover
+	// kanji, and not itself \p{Han}, so hanScriptPattern alone missed it.
+	kanaScriptPattern = regexp.MustCompile(`[\x{3040}-\x{30FF}]`)
 )
 
 // containsWholeWord ports matching.ts's word-boundary-aware containment
@@ -105,6 +111,27 @@ func splitArtists(artist string) []string {
 	return out
 }
 
+// featuredArtistPatternCache caches the compiled regex for each distinct
+// FeaturedArtistPatterns entry ever seen, keyed by the pattern string -
+// the same literal pattern always compiles to the same regex regardless of
+// which user's Settings it came from, so this stays small (bounded by the
+// handful of distinct patterns in practice) while avoiding a
+// regexp.MustCompile per pattern on every single stripFeaturedArtists call,
+// which score.go's normalizeList/bestArtistScore call once per Plex
+// candidate per source track - tens of thousands of recompiles of the same
+// handful of patterns on a large library import.
+var featuredArtistPatternCache sync.Map // pattern string -> *regexp.Regexp
+
+func compiledFeaturedArtistPattern(pattern string) *regexp.Regexp {
+	if cached, ok := featuredArtistPatternCache.Load(pattern); ok {
+		return cached.(*regexp.Regexp)
+	}
+	escaped := regexp.QuoteMeta(strings.TrimSuffix(pattern, "."))
+	re := regexp.MustCompile(`(?i)\s+` + escaped + `\.?\s+.+$`)
+	featuredArtistPatternCache.Store(pattern, re)
+	return re
+}
+
 // stripFeaturedArtists removes a trailing "feat./featuring X" credit when
 // settings.IgnoreFeaturedArtists is on.
 func stripFeaturedArtists(artist string, settings Settings) string {
@@ -114,9 +141,7 @@ func stripFeaturedArtists(artist string, settings Settings) string {
 	cleaned := artist
 	if settings.IgnoreFeaturedArtists {
 		for _, pattern := range settings.FeaturedArtistPatterns {
-			escaped := regexp.QuoteMeta(strings.TrimSuffix(pattern, "."))
-			re := regexp.MustCompile(`(?i)\s+` + escaped + `\.?\s+.+$`)
-			cleaned = re.ReplaceAllString(cleaned, "")
+			cleaned = compiledFeaturedArtistPattern(pattern).ReplaceAllString(cleaned, "")
 		}
 	}
 	cleaned = strings.TrimSpace(whitespacePattern.ReplaceAllString(cleaned, " "))

@@ -367,6 +367,34 @@ func (s *Service) GetQueueItem(uuid string) (*QueueItem, error) {
 	return nil, nil
 }
 
+// reserveQueueSlot atomically checks-and-inserts a placeholder queue entry
+// for uuid, closing the gap between "is it already queued?" and "insert
+// it" that QueueDownload used to leave open across its network resolve
+// call. If the slot already existed, reserved is false and existing is
+// its current state; the caller must not start a second download. If it
+// didn't, this claims it immediately (before any network I/O) so a second
+// concurrent call for the same uuid sees it as taken.
+func (s *Service) reserveQueueSlot(uuid string) (existing *QueueItem, reserved bool) {
+	s.queueMu.Lock()
+	defer s.queueMu.Unlock()
+	if item, ok := s.queue[uuid]; ok {
+		return &item, false
+	}
+	s.queue[uuid] = QueueItem{Status: "inQueue"}
+	return nil, true
+}
+
+// releaseQueueSlot undoes a reserveQueueSlot call that didn't end up
+// starting a download (resolve failed, or a fallback URL is being tried
+// under a different uuid instead) - otherwise the placeholder would sit in
+// the queue forever, permanently reporting AlreadyQueued for a track that
+// was never actually queued.
+func (s *Service) releaseQueueSlot(uuid string) {
+	s.queueMu.Lock()
+	delete(s.queue, uuid)
+	s.queueMu.Unlock()
+}
+
 // QueueDownload resolves trackURL (a deezer.com track or album link) against
 // Deezer, then starts downloading it in the background - StartDownload's
 // poller (see trackDownload) picks the resulting uuid's progress up from
@@ -389,7 +417,12 @@ func (s *Service) QueueDownload(trackURL, fallbackURL string) (QueuedTrack, erro
 	bitrate := s.Settings().MaxBitrate
 	uuid := fmt.Sprintf("%s_%s_%s", typ, id, bitrate)
 
-	if existing, _ := s.GetQueueItem(uuid); existing != nil {
+	// Reserve the slot before any network resolve call below - checking
+	// with GetQueueItem and inserting separately left a window where two
+	// near-simultaneous calls for the same track/album could both see "not
+	// queued yet" and both start downloading it.
+	existing, reserved := s.reserveQueueSlot(uuid)
+	if !reserved {
 		slog.Info("[Deemix] Already in queue, reporting its existing state", "uuid", uuid, "status", existing.Status)
 		return QueuedTrack{UUID: uuid, Title: existing.Title, Artist: existing.Artist, AlreadyQueued: true}, nil
 	}
@@ -398,6 +431,7 @@ func (s *Service) QueueDownload(trackURL, fallbackURL string) (QueuedTrack, erro
 	case "track":
 		track, err := s.dz.getTrack(id)
 		if err != nil {
+			s.releaseQueueSlot(uuid)
 			if fallbackURL != "" && fallbackURL != trackURL {
 				return s.QueueDownload(fallbackURL, "")
 			}
@@ -410,6 +444,7 @@ func (s *Service) QueueDownload(trackURL, fallbackURL string) (QueuedTrack, erro
 	case "album":
 		tracks, err := s.dz.getAlbumTracks(id)
 		if err != nil || len(tracks) == 0 {
+			s.releaseQueueSlot(uuid)
 			if fallbackURL != "" && fallbackURL != trackURL {
 				slog.Warn("[Deemix] could not resolve album, retrying with the single track", "albumUrl", trackURL, "fallbackUrl", fallbackURL, "error", err)
 				return s.QueueDownload(fallbackURL, "")

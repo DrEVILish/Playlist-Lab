@@ -49,6 +49,30 @@ func getCredentials(sqlDB *sql.DB, secret string, userID int64) (clientID, clien
 	return clientID, clientSecret, nil
 }
 
+// refreshLocks serializes GetToken's refresh path per user - two
+// concurrent callers (e.g. two browser tabs, or a live request overlapping
+// a batch job) both seeing the same expired token would otherwise both
+// redeem the same encrypted refresh token against Spotify at once, and
+// their two SaveSpotifyTokens writes would race on whichever lands last.
+var refreshLocks struct {
+	mu   sync.Mutex
+	byID map[int64]*sync.Mutex
+}
+
+func refreshLockFor(userID int64) *sync.Mutex {
+	refreshLocks.mu.Lock()
+	defer refreshLocks.mu.Unlock()
+	if refreshLocks.byID == nil {
+		refreshLocks.byID = map[int64]*sync.Mutex{}
+	}
+	l, ok := refreshLocks.byID[userID]
+	if !ok {
+		l = &sync.Mutex{}
+		refreshLocks.byID[userID] = l
+	}
+	return l
+}
+
 // GetToken returns a valid, decrypted Spotify access token for userID,
 // refreshing it first if expired. Returns ("", nil) - not an error - if the
 // user has never connected Spotify, matching getSpotifyToken()'s "null
@@ -61,15 +85,31 @@ func GetToken(ctx context.Context, sqlDB *sql.DB, secret string, userID int64) (
 	if tokens == nil {
 		return "", nil
 	}
-
-	if time.Now().UnixMilli() >= tokens.ExpiresAt {
-		if !tokens.RefreshToken.Valid || tokens.RefreshToken.String == "" {
-			return "", nil
-		}
-		return refreshToken(ctx, sqlDB, secret, userID, tokens.RefreshToken.String)
+	if time.Now().UnixMilli() < tokens.ExpiresAt {
+		return crypto.Decrypt(tokens.AccessToken, secret)
 	}
 
-	return crypto.Decrypt(tokens.AccessToken, secret)
+	lock := refreshLockFor(userID)
+	lock.Lock()
+	defer lock.Unlock()
+
+	// Re-read rather than trusting the copy read above: another goroutine
+	// may have already refreshed (and saved) it while this one waited for
+	// the lock, in which case there's nothing left to do here.
+	tokens, err = db.GetSpotifyTokens(sqlDB, userID)
+	if err != nil {
+		return "", err
+	}
+	if tokens == nil {
+		return "", nil
+	}
+	if time.Now().UnixMilli() < tokens.ExpiresAt {
+		return crypto.Decrypt(tokens.AccessToken, secret)
+	}
+	if !tokens.RefreshToken.Valid || tokens.RefreshToken.String == "" {
+		return "", nil
+	}
+	return refreshToken(ctx, sqlDB, secret, userID, tokens.RefreshToken.String)
 }
 
 // refreshToken matches refreshSpotifyToken() in spotify-auth.ts, including

@@ -18,7 +18,7 @@
         <div class="plex-home-playlist-name">{{.Name}}</div>
         <div class="settings-hint">{{.TrackCount}} tracks</div>
       </div>
-      <button type="button" class="btn btn-primary btn-small"
+      <button type="button" class="ftl-btn ftl-btn-primary ftl-btn-sm"
         hx-post="/import/plex-home/playlists/{{.ID}}/copy"
         hx-vals='{"sourceHomeUserId": "{{.SourceHomeUser}}", "newName": "{{.Name}}"}'
         hx-target="#notifications" hx-swap="innerHTML">

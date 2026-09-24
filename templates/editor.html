@@ -3,7 +3,7 @@
      (rename field, sort/export dropdowns, search box, split-name field)
      rather than duplicated - without it every one of those rendered as an
      unstyled browser-default white control on this page's dark theme.
-     PlaylistsPage.css owns .badge-button (schedule/missing pills, same
+     .ftl-badge/.ftl-badge-button (ftl-core.css) style the schedule/missing pills, same
      hx-get="/playlists/{id}/schedule" modal trigger the Playlists table
      already uses) - reused here for the same reason rather than redefined,
      so the header's schedule/missing pills look and behave identically to
@@ -35,21 +35,21 @@
       <div class="editor-stats">
         <span class="editor-stat">{{$header.TrackCount}} tracks</span>
         <span class="editor-stat">{{formatDuration $header.Duration}}</span>
-        {{if $header.Source}}<span class="badge badge-primary">{{$header.Source}}</span>{{end}}
+        {{if $header.Source}}<span class="ftl-badge ftl-badge-accent">{{$header.Source}}</span>{{end}}
         {{if $header.AddedAt}}<span class="editor-stat" title="{{dateFromUnix $header.AddedAt}}">Added {{relativeUnix $header.AddedAt}}</span>{{end}}
         {{if .DBID}}
         {{if $header.MissingCount}}
-        <button type="button" class="badge-button warn" title="Jump to missing tracks"
+        <button type="button" class="ftl-badge ftl-badge-button ftl-badge-warning" title="Jump to missing tracks"
           onclick="var d=document.getElementById('editor-missing-details'); d.open=true; d.scrollIntoView({behavior:'smooth', block:'start'});">{{$header.MissingCount}} missing</button>
         {{end}}
         {{if $header.ScheduleID}}
-        <button type="button" class="badge-button{{if $header.ScheduleFailed}} warn{{end}}" title="Edit schedule"
+        <button type="button" class="ftl-badge ftl-badge-button{{if $header.ScheduleFailed}} ftl-badge-warning{{end}}" title="Edit schedule"
           hx-get="/playlists/{{$plexId}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">
-          <span class="status-dot status-dot-{{if $header.LastRunStatus}}{{$header.LastRunStatus}}{{else}}never{{end}}"></span>
+          <span class="ftl-lamp{{with lampState $header.LastRunStatus}} {{.}}{{end}}"></span>
           <span style="text-transform:capitalize">{{$header.Frequency}}</span>{{if $header.NextRun}} &middot; next {{$header.NextRun}}{{end}}
         </button>
         {{else}}
-        <button type="button" class="badge-button" title="Create schedule" hx-get="/playlists/{{$plexId}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">+ Schedule</button>
+        <button type="button" class="ftl-badge ftl-badge-button" title="Create schedule" hx-get="/playlists/{{$plexId}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">+ Schedule</button>
         {{end}}
         {{end}}
       </div>
@@ -66,35 +66,35 @@
       <span class="editor-toolbar-label">Edit</span>
       <form class="editor-rename-form" hx-put="/playlists/{{$plexId}}/rename" hx-swap="none">
         <input type="text" name="name" value="{{.Name}}" class="settings-input" aria-label="Playlist name">
-        <button type="submit" class="btn btn-secondary btn-small">Rename</button>
+        <button type="submit" class="ftl-btn ftl-btn-secondary ftl-btn-sm">Rename</button>
       </form>
 
-      <button type="button" class="btn btn-secondary btn-small" hx-post="/playlists/{{$plexId}}/shuffle"
+      <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" hx-post="/playlists/{{$plexId}}/shuffle"
         hx-target="#notifications" hx-swap="innerHTML">Shuffle</button>
     </div>
 
     <div class="editor-toolbar-group">
       <span class="editor-toolbar-label">Sort</span>
       <form class="editor-sort-form" hx-post="/playlists/{{$plexId}}/sort" hx-target="#notifications" hx-swap="innerHTML">
-        <select name="by" class="settings-input" aria-label="Sort by">
+        <select name="by" class="ftl-select" aria-label="Sort by">
           <option value="title">Title</option>
           <option value="artist">Artist</option>
           <option value="album">Album</option>
           <option value="year">Year</option>
           <option value="duration">Duration</option>
         </select>
-        <select name="direction" class="settings-input" aria-label="Sort direction">
+        <select name="direction" class="ftl-select" aria-label="Sort direction">
           <option value="asc">Ascending</option>
           <option value="desc">Descending</option>
         </select>
-        <button type="submit" class="btn btn-secondary btn-small">Sort</button>
+        <button type="submit" class="ftl-btn ftl-btn-secondary ftl-btn-sm">Sort</button>
       </form>
     </div>
 
     <div class="editor-toolbar-group">
       <span class="editor-toolbar-label">Export</span>
       <form class="editor-cover-form" hx-post="/playlists/{{$plexId}}/cover" hx-encoding="multipart/form-data" hx-swap="none">
-        <label class="btn btn-secondary btn-small">
+        <label class="ftl-btn ftl-btn-secondary ftl-btn-sm">
           Upload Cover
           <input type="file" name="cover" accept="image/*" style="display:none"
             onchange="this.closest('form').requestSubmit()">
@@ -107,7 +107,7 @@
            the file's raw bytes into some element as if it were an HTML
            fragment. -->
       <form class="editor-export-form" method="post" action="/playlists/{{$plexId}}/export">
-        <select name="format" class="settings-input" aria-label="Export format">
+        <select name="format" class="ftl-select" aria-label="Export format">
           <option value="m3u8">M3U8 (UTF-8)</option>
           <option value="m3u">M3U</option>
           <option value="pls">PLS</option>
@@ -115,13 +115,13 @@
           <option value="csv">CSV</option>
           <option value="txt">TXT (Artist - Title)</option>
         </select>
-        <button type="submit" class="btn btn-secondary btn-small">Export</button>
+        <button type="submit" class="ftl-btn ftl-btn-secondary ftl-btn-sm">Export</button>
       </form>
     </div>
 
     <div class="editor-toolbar-group editor-toolbar-danger">
       <span class="editor-toolbar-label">Danger zone</span>
-      <button type="button" class="btn btn-secondary btn-small" hx-post="/playlists/{{$plexId}}/dedupe"
+      <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" hx-post="/playlists/{{$plexId}}/dedupe"
         hx-target="#notifications" hx-swap="innerHTML"
         hx-confirm="Remove duplicate tracks (same Plex track added more than once)?">Remove Duplicates</button>
     </div>
@@ -160,14 +160,14 @@
   <form hx-post="/playlists/{{$plexId}}/split" hx-target="#notifications" hx-swap="innerHTML">
     <div class="editor-split-bar">
       <input type="text" name="name" placeholder="New playlist name" class="settings-input" required>
-      <button type="submit" class="btn btn-secondary btn-small">Split Checked Tracks Into New Playlist</button>
+      <button type="submit" class="ftl-btn ftl-btn-secondary ftl-btn-sm">Split Checked Tracks Into New Playlist</button>
 
       <!-- Column show/hide + drag-reorder (DESIGN.md §8.6/§11.2). No
            per-user settings table exists in internal/db for this today, so
            state lives in localStorage (see the "ponytail:" note in the
            script below) - the pragmatic default, not a permanent choice. -->
       <div class="editor-columns">
-        <button type="button" class="btn btn-secondary btn-small" id="columns-toggle" aria-haspopup="true" aria-expanded="false">Columns</button>
+        <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" id="columns-toggle" aria-haspopup="true" aria-expanded="false">Columns</button>
         <div class="editor-columns-menu" id="columns-menu" hidden></div>
       </div>
     </div>

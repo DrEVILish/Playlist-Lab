@@ -12,11 +12,11 @@
       existing playlist.
     </p>
     <form hx-post="/backup/restore" hx-target="#backup-restore-results" hx-swap="innerHTML" hx-encoding="multipart/form-data">
-      <label class="btn btn-secondary file-input-label">
+      <label class="ftl-btn ftl-btn-secondary file-input-label">
         Select Backup File
         <input type="file" name="file" accept=".json" class="file-input" required>
       </label>
-      <button type="submit" class="btn btn-primary" style="margin-top:0.75rem">Restore</button>
+      <button type="submit" class="ftl-btn ftl-btn-primary" style="margin-top:0.75rem">Restore</button>
     </form>
     <div id="backup-restore-results"></div>
   </div>
@@ -31,8 +31,8 @@
       <input type="search" class="form-input" placeholder="Search playlists..." style="margin-bottom:0.75rem"
              oninput="this.closest('form').querySelectorAll('.backup-item').forEach(el=>el.style.display=el.querySelector('.backup-item-name').textContent.toLowerCase().includes(this.value.toLowerCase())?'':'none')">
       <div class="backup-actions">
-        <button type="button" class="btn btn-secondary btn-small" onclick="this.closest('form').querySelectorAll('input[type=checkbox]').forEach(c=>c.checked=true)">Select All</button>
-        <button type="button" class="btn btn-secondary btn-small" onclick="this.closest('form').querySelectorAll('input[type=checkbox]').forEach(c=>c.checked=false)">Select None</button>
+        <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" onclick="this.closest('form').querySelectorAll('input[type=checkbox]').forEach(c=>c.checked=true)">Select All</button>
+        <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" onclick="this.closest('form').querySelectorAll('input[type=checkbox]').forEach(c=>c.checked=false)">Select None</button>
       </div>
       <div class="backup-list">
         {{range .Playlists}}
@@ -45,7 +45,7 @@
         </label>
         {{end}}
       </div>
-      <button type="submit" class="btn btn-primary btn-full">Backup Selected Playlist(s)</button>
+      <button type="submit" class="ftl-btn ftl-btn-primary btn-full">Backup Selected Playlist(s)</button>
     </form>
     {{end}}
   </div>

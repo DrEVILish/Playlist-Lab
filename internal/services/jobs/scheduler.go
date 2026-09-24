@@ -32,7 +32,27 @@ type Scheduler struct {
 }
 
 func NewScheduler() *Scheduler {
-	return &Scheduler{cron: cron.New()}
+	// SkipIfStillRunning is applied per registered job (robfig/cron wraps
+	// each AddFunc call independently, so each job's overlap-tracking is
+	// its own): without it, a job whose handler runs longer than its own
+	// interval (e.g. schedule-checker running past its 10-minute cadence
+	// under load) gets a second overlapping invocation fired on top of the
+	// first, which for e.g. a first-ever mix-generation schedule race can
+	// create the same playlist twice.
+	return &Scheduler{cron: cron.New(cron.WithChain(cron.SkipIfStillRunning(slogCronLogger{})))}
+}
+
+// slogCronLogger adapts this app's log/slog use to cron.Logger, so a
+// skipped overlapping run logs consistently with everything else instead
+// of going to a separate stdlib-log stream via cron.DefaultLogger.
+type slogCronLogger struct{}
+
+func (slogCronLogger) Info(msg string, keysAndValues ...interface{}) {
+	slog.Info("cron: "+msg, keysAndValues...)
+}
+
+func (slogCronLogger) Error(err error, msg string, keysAndValues ...interface{}) {
+	slog.Error("cron: "+msg, append([]interface{}{"error", err}, keysAndValues...)...)
 }
 
 // Register adds a job. Unlike jobs.ts's registerJob (which builds the

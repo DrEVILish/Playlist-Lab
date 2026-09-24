@@ -52,7 +52,7 @@
   <div class="admin-logs-toolbar">
     <label class="admin-logs-control" for="admin-logs-level">
       Server log level
-      <select id="admin-logs-level" name="level" hx-post="/admin/log-level" hx-target="#settings-panel-admin-logs" hx-swap="outerHTML"
+      <select class="ftl-select" id="admin-logs-level" name="level" hx-post="/admin/log-level" hx-target="#settings-panel-admin-logs" hx-swap="outerHTML"
         hx-include="closest .admin-logs-toolbar">
         {{$current := .Level}}
         {{range .Levels}}<option value="{{.}}"{{if eq . $current}} selected{{end}}>{{.}}</option>{{end}}
@@ -61,7 +61,7 @@
 
     <label class="admin-logs-control" for="admin-logs-filter">
       Show only
-      <select id="admin-logs-filter" name="filter" hx-get="/admin/logs" hx-target="#settings-panel-admin-logs" hx-swap="outerHTML"
+      <select class="ftl-select" id="admin-logs-filter" name="filter" hx-get="/admin/logs" hx-target="#settings-panel-admin-logs" hx-swap="outerHTML"
         hx-include="closest .admin-logs-toolbar">
         <option value=""{{if eq .Filter ""}} selected{{end}}>all levels</option>
         {{$filter := .Filter}}
@@ -71,7 +71,7 @@
 
     <label class="admin-logs-control" for="admin-logs-limit">
       Lines
-      <select id="admin-logs-limit" name="limit" hx-get="/admin/logs" hx-target="#settings-panel-admin-logs" hx-swap="outerHTML"
+      <select class="ftl-select" id="admin-logs-limit" name="limit" hx-get="/admin/logs" hx-target="#settings-panel-admin-logs" hx-swap="outerHTML"
         hx-include="closest .admin-logs-toolbar">
         {{$limit := .Limit}}
         {{range .LimitOptions}}<option value="{{.}}"{{if eq . $limit}} selected{{end}}>{{.}}</option>{{end}}
@@ -79,14 +79,14 @@
     </label>
 
     <span class="admin-logs-live" title="New entries stream in live as they're written">
-      <span class="status-dot status-dot-running"></span>Live
+      <span class="ftl-lamp is-active"></span>Live
     </span>
 
-    <button type="button" class="btn btn-secondary btn-small"
+    <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm"
       hx-get="/admin/logs" hx-target="#settings-panel-admin-logs" hx-swap="outerHTML"
       hx-include="closest .admin-logs-toolbar">Refresh</button>
-    <a class="btn btn-secondary btn-small" href="/admin/logs/export?filter={{.Filter}}&limit={{.Limit}}" title="Download the currently-filtered entries as CSV">Export CSV</a>
-    <button type="button" class="btn btn-danger btn-small"
+    <a class="ftl-btn ftl-btn-secondary ftl-btn-sm" href="/admin/logs/export?filter={{.Filter}}&limit={{.Limit}}" title="Download the currently-filtered entries as CSV">Export CSV</a>
+    <button type="button" class="ftl-btn ftl-btn-danger ftl-btn-sm"
       hx-post="/admin/logs/clear" hx-target="#settings-panel-admin-logs" hx-swap="outerHTML"
       hx-include="closest .admin-logs-toolbar"
       hx-confirm="Clear combined.log and delete its rotated files? This cannot be undone.">Clear logs</button>

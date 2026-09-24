@@ -9,10 +9,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -76,6 +74,19 @@ func (t *Target) deezerRequest(ctx context.Context, method, path, arl string, bo
 	var data map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return nil, err
+	}
+	// Deezer reports its own errors (expired/invalid ARL, quota, bad
+	// session, ...) as a {"error": {...}} object body with HTTP 200 - the
+	// status check above never catches these, so without this every caller
+	// (most importantly CreatePlaylist) would read zero-valued fields out
+	// of an error body and report success with a fake id/count. Only a
+	// non-empty *object* counts: some endpoints include "error": [] as a
+	// literal "no error" marker on success, which must not trip this.
+	if errMap, ok := data["error"].(map[string]any); ok && len(errMap) > 0 {
+		if msg, ok := errMap["message"].(string); ok && msg != "" {
+			return nil, fmt.Errorf("Deezer API error: %s", msg)
+		}
+		return nil, fmt.Errorf("Deezer API error: %v", errMap)
 	}
 	return data, nil
 }
@@ -145,33 +156,17 @@ func (t *Target) MatchTracks(ctx context.Context, tracks []adapters.TrackInfo, c
 		return nil, ErrNotConnected
 	}
 
-	results := make([]adapters.MatchResult, 0, len(tracks))
-	for i, track := range tracks {
-		if isCancelled != nil && isCancelled() {
-			break
-		}
-		query := strings.TrimSpace(track.Title + " " + track.Artist)
-		result := adapters.MatchResult{SourceTrack: track}
-
-		items, err := t.searchTracks(ctx, arl, query, 5)
-		if err != nil {
-			slog.Warn("deezer search failed for track", "track", track, "error", err)
-		} else if len(items) > 0 {
-			sort.SliceStable(items, func(a, b int) bool {
-				return shared.ScoreResult(track.Title, track.Artist, items[a].Title, items[a].Artist.Name) >
-					shared.ScoreResult(track.Title, track.Artist, items[b].Title, items[b].Artist.Name)
-			})
-			best := items[0]
-			score := shared.ScoreResult(track.Title, track.Artist, best.Title, best.Artist.Name)
-			result = toMatchResult(track, best, score, score >= 50)
-		}
-
-		results = append(results, result)
-		if progress != nil {
-			progress(i+1, len(tracks))
-		}
-	}
-	return results, nil
+	return shared.MatchTracksBySearch(ctx, tracks, progress, isCancelled, "deezer", 50,
+		func(ctx context.Context, track adapters.TrackInfo) ([]deezerTrack, error) {
+			query := strings.TrimSpace(track.Title + " " + track.Artist)
+			return t.searchTracks(ctx, arl, query, 5)
+		},
+		func(sourceTitle, sourceArtist string, item deezerTrack) float64 {
+			return shared.ScoreResult(sourceTitle, sourceArtist, item.Title, item.Artist.Name)
+		},
+		toMatchResult,
+		nil,
+	)
 }
 
 func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adapters.MatchResult, cfg adapters.TargetConfig, userID int64) (string, string, int, error) {

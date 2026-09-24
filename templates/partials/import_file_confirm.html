@@ -8,10 +8,10 @@
 <form hx-post="/import/file/confirm/{{.SessionID}}" hx-target="#notifications" hx-swap="innerHTML"
   hx-on::after-request="if(event.detail.successful) closeTopModal()">
   <div class="form-section">
-    <label class="form-label" for="import-file-confirm-name">Playlist name</label>
+    <label class="ftl-label" for="import-file-confirm-name">Playlist name</label>
     <input class="form-input" type="text" id="import-file-confirm-name" name="playlistName" value="{{.Name}}" required autofocus>
-    <p class="form-hint">{{.TrackCount}} track{{if ne .TrackCount 1}}s{{end}} found.</p>
+    <p class="ftl-field-hint">{{.TrackCount}} track{{if ne .TrackCount 1}}s{{end}} found.</p>
   </div>
-  <button type="submit" class="btn btn-primary">Import</button>
+  <button type="submit" class="ftl-btn ftl-btn-primary">Import</button>
 </form>
 {{end}}

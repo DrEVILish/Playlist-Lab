@@ -10,7 +10,7 @@
   {{else}}
     <div class="plex-home-user-list">
       {{range .Users}}
-      <button type="button" class="btn btn-secondary btn-small"
+      <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm"
         hx-get="/import/plex-home/users/{{.ID}}/playlists" hx-target="#plex-home-playlists" hx-swap="innerHTML">
         {{.Title}}
       </button>

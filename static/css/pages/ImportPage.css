@@ -500,23 +500,6 @@
   color: var(--text-secondary);
 }
 
-.progress-bar-container {
-  width: 100%;
-  height: 6px;
-  background-color: var(--background);
-  border-radius: 3px;
-  overflow: hidden;
-  margin-bottom: 1rem;
-}
-
-.progress-bar {
-  height: 100%;
-  background: var(--primary-color);
-  border-radius: 3px;
-  transition: width 0.3s ease;
-  box-shadow: 0 0 8px rgba(79, 195, 247, 0.4);
-}
-
 .progress-text {
   font-size: 0.875rem;
   color: var(--text-secondary);

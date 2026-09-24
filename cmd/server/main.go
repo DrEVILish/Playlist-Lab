@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -224,13 +225,15 @@ func main() {
 	}
 	youtubeTarget := youtube.NewTarget(sqlDB, cfg.SessionSecret, youtubeClientID, youtubeClientSecret, youtubeRedirectURI)
 	registry.RegisterTarget(youtubeTarget)
+	crossImportSessions := crossimport.NewStore()
 	handlers.RegisterCrossImport(r, mw, &handlers.CrossImportHandler{
 		DB: sqlDB, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue,
-		Registry: registry, Sessions: crossimport.NewStore(), Store: store,
+		Registry: registry, Sessions: crossImportSessions, Store: store,
 	})
+	reviewSessions := importreview.NewStore()
 	importHandler := &handlers.ImportHandler{
 		DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue,
-		Registry: registry, Reviews: importreview.NewStore(),
+		Registry: registry, Reviews: reviewSessions,
 	}
 	handlers.RegisterImport(r, mw, importHandler)
 	handlers.RegisterImportReview(r, mw, importHandler)
@@ -339,6 +342,22 @@ func main() {
 			Name: "schedule-checker", Spec: cfg.ScheduleCheckerSchedule,
 			Handler: func() error { return jobs.RunScheduleChecker(schedulerDeps) },
 			Enabled: cfg.EnableScheduleChecker,
+		},
+		// These three in-memory stores (cross-import review, plain-import
+		// review, "Import from File" preview) have no other expiry - a
+		// session an abandoned browser tab never confirms/cancels sits in
+		// memory for the life of the process otherwise. maxAge is well
+		// past how long any of these interactive flows plausibly takes.
+		{
+			Name: "session-cleanup", Spec: "0 * * * *", // hourly
+			Handler: func() error {
+				const maxAge = 6 * time.Hour
+				crossImportSessions.Sweep(maxAge)
+				reviewSessions.Sweep(maxAge)
+				importHandler.PendingFiles.Sweep(maxAge)
+				return nil
+			},
+			Enabled: true,
 		},
 	}
 	// Fed straight to the admin Schedules tab (handlers.BackgroundJob), so

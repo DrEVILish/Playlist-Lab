@@ -1,6 +1,9 @@
 package matching
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // RememberedMatch mirrors a user's saved manual match row (database.ts's
 // ManualMatch shape).
@@ -15,10 +18,18 @@ type RememberedMatch struct {
 // addMissingTracks()/recordManualMatch() dedupe on - kept as one function so
 // building the map and looking it up can never use two different notions of
 // "the same track".
+// Fields are joined length-prefixed rather than with a fixed "|||"
+// separator: a title/artist containing "|||" itself used to be able to
+// make two distinct (title, artist, album) triples collide onto the same
+// key (e.g. ("a|||b", "c", "") and ("a", "b|||c", "") both produced
+// "a|||b|||c|||"), silently applying one track's remembered match to a
+// different one. Prefixing each field with its own byte length makes the
+// encoding unambiguous regardless of what characters the fields contain.
 func RememberedMatchKey(title, artist, album string) string {
-	return strings.ToLower(strings.TrimSpace(title)) + "|||" +
-		strings.ToLower(strings.TrimSpace(artist)) + "|||" +
-		strings.ToLower(strings.TrimSpace(album))
+	t := strings.ToLower(strings.TrimSpace(title))
+	a := strings.ToLower(strings.TrimSpace(artist))
+	b := strings.ToLower(strings.TrimSpace(album))
+	return strconv.Itoa(len(t)) + ":" + t + strconv.Itoa(len(a)) + ":" + a + strconv.Itoa(len(b)) + ":" + b
 }
 
 // BuildRememberedMatchMap builds matchPlaylist()'s remembered-match lookup

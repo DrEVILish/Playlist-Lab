@@ -322,7 +322,7 @@ func (h *ServersHandler) refreshServerConnection(w http.ResponseWriter, r *http.
 	found := false
 	for _, s := range servers {
 		if s.ClientIdentifier == server.ServerClientID {
-			if err := db.UpdateServerURL(h.DB, id, s.BestURL()); err != nil {
+			if err := db.UpdateServerConnection(h.DB, id, s.BestURL(), s.Owned); err != nil {
 				slog.Error("failed to update server connection", "error", err, "serverId", id)
 				h.Notifications.Add(user.ID, notifications.TypeAction, "Refresh server connection", err.Error(), notifications.StatusError, nil)
 				http.Error(w, "Failed to update server connection", http.StatusInternalServerError)

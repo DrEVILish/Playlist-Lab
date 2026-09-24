@@ -17,6 +17,15 @@ type Track struct {
 func titlesMatch(sourceTitle, plexTitle string, settings Settings) bool {
 	cleanSource := normalizeForComparison(cleanTrackTitle(sourceTitle, settings))
 	cleanPlex := normalizeForComparison(cleanTrackTitle(plexTitle, settings))
+	// Same guard as calculateMatchScore: two titles that both normalize
+	// away to nothing (pure punctuation/symbols) are not the same track,
+	// they're two things that can't be compared - without this,
+	// cleanSource == cleanPlex ("" == "") let any two such tracks pass this
+	// gate, the exact non-Latin-script false-positive class the scoring
+	// path already guards against.
+	if cleanSource == "" || cleanPlex == "" {
+		return false
+	}
 	if cleanSource == cleanPlex {
 		return true
 	}
@@ -68,22 +77,27 @@ func anyArtistCreditMatches(sourceArtist string, plexArtistFields ...string) boo
 	return false
 }
 
+// isVariousArtistsAlbum and isSoundtrackAlbum use containsWholeWord rather
+// than strings.Contains for their short default tokens: an unguarded
+// substring check made "Nirvana" match "VA" (contains "va") and "Broadcast"
+// or "Newcastle" match "cast", wrongly flagging ordinary single-artist
+// albums as compilations/soundtracks and tanking their match score.
 func isVariousArtistsAlbum(albumArtist string, settings Settings) bool {
 	lower := strings.ToLower(albumArtist)
 	for _, name := range settings.VariousArtistsNames {
 		nameLower := strings.ToLower(name)
-		if lower == nameLower || strings.Contains(lower, nameLower) {
+		if lower == nameLower || containsWholeWord(lower, nameLower) {
 			return true
 		}
 	}
 	normalized := normalizeForComparison(albumArtist)
-	return strings.Contains(normalized, "various") || strings.Contains(normalized, "compilation")
+	return containsWholeWord(normalized, "various") || containsWholeWord(normalized, "compilation")
 }
 
 func isSoundtrackAlbum(albumArtist, albumName string) bool {
 	a, n := strings.ToLower(albumArtist), strings.ToLower(albumName)
-	return strings.Contains(n, "soundtrack") || strings.Contains(n, "ost") ||
-		strings.Contains(a, "cast") || strings.Contains(a, "soundtrack")
+	return containsWholeWord(n, "soundtrack") || containsWholeWord(n, "ost") ||
+		containsWholeWord(a, "cast") || containsWholeWord(a, "soundtrack")
 }
 
 // MatchGateResult is the single title/artist gate a Plex search result must

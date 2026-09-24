@@ -63,41 +63,19 @@
   vertical-align: middle;
 }
 
-.icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  vertical-align: middle;
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-secondary);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.icon-btn:hover:not(:disabled) {
-  border-color: var(--accent-cyan);
-  color: var(--text-primary);
-  box-shadow: 0 0 8px rgba(0, 229, 255, 0.35);
-}
-
-.icon-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
+/* Structure/shape/hover/disabled all now come from ftl-bridge.css's
+   .ftl-btn/.ftl-btn-icon (markup is `class="ftl-btn ftl-btn-icon"`) - only
+   the danger-on-hover-only affordance below has no ftl-core equivalent
+   (.ftl-btn-danger fills the button red always; this app wants a delete
+   icon to stay neutral until hovered, not shout from a dense row). */
 .icon-btn-danger:hover:not(:disabled) {
   border-color: var(--error);
   color: var(--error);
 }
 
 @media (max-width: 768px) {
-  .icon-btn {
-    width: 40px;
-    height: 40px;
+  .ftl-btn-icon {
+    --ftl-btn-icon-size: 40px;
   }
 }
 

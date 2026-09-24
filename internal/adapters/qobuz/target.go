@@ -10,10 +10,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -140,33 +138,17 @@ func (t *Target) MatchTracks(ctx context.Context, tracks []adapters.TrackInfo, c
 		return nil, ErrNotConnected
 	}
 
-	results := make([]adapters.MatchResult, 0, len(tracks))
-	for i, track := range tracks {
-		if isCancelled != nil && isCancelled() {
-			break
-		}
-		query := strings.TrimSpace(track.Title + " " + track.Artist)
-		result := adapters.MatchResult{SourceTrack: track}
-
-		items, err := t.search(ctx, token, query, 5)
-		if err != nil {
-			slog.Warn("qobuz search failed for track", "track", track, "error", err)
-		} else if len(items) > 0 {
-			sort.SliceStable(items, func(a, b int) bool {
-				return shared.ScoreResult(track.Title, track.Artist, items[a].Title, items[a].Performer.Name) >
-					shared.ScoreResult(track.Title, track.Artist, items[b].Title, items[b].Performer.Name)
-			})
-			best := items[0]
-			score := shared.ScoreResult(track.Title, track.Artist, best.Title, best.Performer.Name)
-			result = toMatchResult(track, best, score, score >= 50)
-		}
-
-		results = append(results, result)
-		if progress != nil {
-			progress(i+1, len(tracks))
-		}
-	}
-	return results, nil
+	return shared.MatchTracksBySearch(ctx, tracks, progress, isCancelled, "qobuz", 50,
+		func(ctx context.Context, track adapters.TrackInfo) ([]qobuzTrack, error) {
+			query := strings.TrimSpace(track.Title + " " + track.Artist)
+			return t.search(ctx, token, query, 5)
+		},
+		func(sourceTitle, sourceArtist string, item qobuzTrack) float64 {
+			return shared.ScoreResult(sourceTitle, sourceArtist, item.Title, item.Performer.Name)
+		},
+		toMatchResult,
+		nil,
+	)
 }
 
 func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adapters.MatchResult, cfg adapters.TargetConfig, userID int64) (string, string, int, error) {
@@ -208,8 +190,13 @@ func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adap
 			"&track_ids=" + strings.Join(trackIDs, ",") + "&app_id=" + t.AppID
 		addReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, addURL, nil)
 		addReq.Header.Set("X-User-Auth-Token", token)
-		if addResp, err := t.httpClient.Do(addReq); err == nil {
-			addResp.Body.Close()
+		addResp, err := t.httpClient.Do(addReq)
+		if err != nil {
+			return playlistID, name, 0, fmt.Errorf("playlist created but failed to add tracks: %w", err)
+		}
+		addResp.Body.Close()
+		if addResp.StatusCode >= 400 {
+			return playlistID, name, 0, fmt.Errorf("playlist created but failed to add tracks: status %d", addResp.StatusCode)
 		}
 	}
 

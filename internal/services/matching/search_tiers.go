@@ -53,7 +53,13 @@ func FindPlexCandidates(track Track, client *plex.Client, libraryID string, sett
 	// guard would see a fully Japanese/Cyrillic/Korean title as having no
 	// characters at all and never search Plex for it even once.
 	titleWithoutPunctuation := letterOrDigitOnlyPattern.ReplaceAllString(track.Title, "")
-	if len([]rune(titleWithoutPunctuation)) < 2 {
+	titleRunes := []rune(titleWithoutPunctuation)
+	// The <2 floor below assumes a real title needs at least two letters/
+	// digits to be worth searching for - true for Latin scripts, but a
+	// single kanji/kana character is a complete, common J-pop/C-pop track
+	// title (e.g. "雪"/"Snow") that this would otherwise reject outright
+	// before ever trying Plex.
+	if len(titleRunes) < 2 && !(len(titleRunes) == 1 && isJapanese(titleWithoutPunctuation)) {
 		return nil, nil
 	}
 

@@ -36,7 +36,7 @@
       <div class="settings-field-group">
         <div class="settings-field">
           <label class="settings-label" for="setup-server">Server</label>
-          <select id="setup-server" name="server" class="settings-select" hx-get="/setup/libraries" hx-target="#libraries" hx-trigger="change">
+          <select id="setup-server" name="server" class="ftl-select" hx-get="/setup/libraries" hx-target="#libraries" hx-trigger="change">
             <option value="">Select a server...</option>
             {{range .Servers}}
             <option value="{{.Value}}">{{.Name}}</option>
@@ -46,7 +46,7 @@
         <div id="libraries" class="settings-field"></div>
       </div>
       <div class="settings-actions">
-        <button type="submit" class="btn btn-primary">Save</button>
+        <button type="submit" class="ftl-btn ftl-btn-primary">Save</button>
       </div>
     </form>
   </section>

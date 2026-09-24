@@ -18,6 +18,7 @@ package crossimport
 
 import (
 	"sync"
+	"time"
 
 	"github.com/drevilish/playlist-lab/internal/adapters"
 )
@@ -47,10 +48,12 @@ type Progress struct {
 type Session struct {
 	mu sync.Mutex
 
+	UserID       int64
 	JobID        int64
 	TargetID     string
 	TargetConfig adapters.TargetConfig
 	PlaylistName string
+	CreatedAt    time.Time
 
 	Progress  Progress
 	Results   []adapters.MatchResult
@@ -133,18 +136,40 @@ func NewStore() *Store {
 	return &Store{sessions: map[string]*Session{}}
 }
 
-func (s *Store) New(sessionID string, jobID int64, targetID string, cfg adapters.TargetConfig) *Session {
-	sess := &Session{JobID: jobID, TargetID: targetID, TargetConfig: cfg}
+func (s *Store) New(sessionID string, jobID int64, targetID string, cfg adapters.TargetConfig, userID int64) *Session {
+	sess := &Session{UserID: userID, JobID: jobID, TargetID: targetID, TargetConfig: cfg, CreatedAt: time.Now()}
 	s.mu.Lock()
 	s.sessions[sessionID] = sess
 	s.mu.Unlock()
 	return sess
 }
 
-func (s *Store) Get(sessionID string) (*Session, bool) {
+// Sweep removes sessions older than maxAge - these are interactive,
+// minutes-long review flows with no other expiry, so an abandoned one
+// (matching finished, user never returned to review/execute it) would
+// otherwise stay in memory for the life of the process.
+func (s *Store) Sweep(maxAge time.Duration) {
+	cutoff := time.Now().Add(-maxAge)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id, sess := range s.sessions {
+		if sess.CreatedAt.Before(cutoff) {
+			delete(s.sessions, id)
+		}
+	}
+}
+
+// Get returns sessionID's session only if it belongs to userID - same
+// "mismatched or unknown id both report not found" contract as
+// importreview.Store.Get, so a guessed/leaked session id can't be used to
+// reach another user's in-flight match/review state.
+func (s *Store) Get(sessionID string, userID int64) (*Session, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	sess, ok := s.sessions[sessionID]
+	if !ok || sess.UserID != userID {
+		return nil, false
+	}
 	return sess, ok
 }
 

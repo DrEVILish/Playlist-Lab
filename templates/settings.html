@@ -118,7 +118,7 @@
             <!-- Destructive (discards the user's customised matching config)
                  so it confirms through the shared modal pattern rather than
                  firing on a single click (DESIGN.md §8.11/§11.4). -->
-            <button type="button" class="btn btn-secondary" onclick="document.getElementById('confirm-reset-matching').checked=true">Reset to defaults</button>
+            <button type="button" class="ftl-btn ftl-btn-secondary" onclick="document.getElementById('confirm-reset-matching').checked=true">Reset to defaults</button>
           </div>
         </form>
 
@@ -128,8 +128,8 @@
             <h3>Reset matching settings?</h3>
             <p>This discards your customised matching configuration and restores the defaults. This cannot be undone.</p>
             <div class="settings-actions">
-              <button type="button" class="btn btn-secondary" onclick="document.getElementById('confirm-reset-matching').checked=false">Cancel</button>
-              <button type="button" class="btn btn-primary" hx-post="/settings/matching/reset" hx-target="#matching-result" hx-swap="innerHTML"
+              <button type="button" class="ftl-btn ftl-btn-secondary" onclick="document.getElementById('confirm-reset-matching').checked=false">Cancel</button>
+              <button type="button" class="ftl-btn ftl-btn-primary" hx-post="/settings/matching/reset" hx-target="#matching-result" hx-swap="innerHTML"
                 onclick="document.getElementById('confirm-reset-matching').checked=false">Reset to defaults</button>
             </div>
           </div>
@@ -180,7 +180,7 @@
             </div>
           </div>
           <div class="settings-actions">
-            <button type="button" class="btn btn-secondary" onclick="document.getElementById('confirm-reset-mixes').checked=true">Reset to defaults</button>
+            <button type="button" class="ftl-btn ftl-btn-secondary" onclick="document.getElementById('confirm-reset-mixes').checked=true">Reset to defaults</button>
           </div>
         </form>
 
@@ -190,8 +190,8 @@
             <h3>Reset mix defaults?</h3>
             <p>This discards your customised mix-generation defaults and restores the originals. This cannot be undone.</p>
             <div class="settings-actions">
-              <button type="button" class="btn btn-secondary" onclick="document.getElementById('confirm-reset-mixes').checked=false">Cancel</button>
-              <button type="button" class="btn btn-primary" hx-post="/settings/mixes/reset" hx-target="#mixes-result" hx-swap="innerHTML"
+              <button type="button" class="ftl-btn ftl-btn-secondary" onclick="document.getElementById('confirm-reset-mixes').checked=false">Cancel</button>
+              <button type="button" class="ftl-btn ftl-btn-primary" hx-post="/settings/mixes/reset" hx-target="#mixes-result" hx-swap="innerHTML"
                 onclick="document.getElementById('confirm-reset-mixes').checked=false">Reset to defaults</button>
             </div>
           </div>
@@ -208,7 +208,7 @@
           <div class="settings-field-group">
             <div class="settings-field">
               <label class="settings-label" for="ai-provider">Provider <span id="ai-provider-status" class="settings-save-status" aria-live="polite"></span></label>
-              <select id="ai-provider" name="aiProvider" class="settings-select"
+              <select id="ai-provider" name="aiProvider" class="ftl-select"
                 hx-post="/settings/ai" hx-trigger="change" hx-include="closest form" hx-target="#ai-provider-status" hx-indicator="#ai-provider-status" hx-swap="innerHTML">
                 <option value="gemini" {{if eq .AI.Provider "gemini"}}selected{{end}}>Gemini</option>
                 <option value="grok" {{if eq .AI.Provider "grok"}}selected{{end}}>Grok</option>
@@ -238,7 +238,7 @@
             </div>
           </div>
           <div class="settings-actions">
-            <button type="button" hx-post="/settings/ai/test" hx-include="closest form" hx-target="#ai-result" hx-swap="innerHTML" class="btn btn-secondary">Test Connection</button>
+            <button type="button" hx-post="/settings/ai/test" hx-include="closest form" hx-target="#ai-result" hx-swap="innerHTML" class="ftl-btn ftl-btn-secondary">Test Connection</button>
           </div>
         </form>
         <div id="ai-result"></div>
@@ -262,7 +262,7 @@
         </div>
         <div class="settings-scan">
           <form hx-post="/settings/scan-library" hx-target="#library-scan-result" hx-swap="innerHTML">
-            <button type="submit" class="btn btn-primary">Scan Entire Library</button>
+            <button type="submit" class="ftl-btn ftl-btn-primary">Scan Entire Library</button>
           </form>
           <div class="settings-scan-folder">
             <label class="settings-label">Scan a specific folder</label>
@@ -271,7 +271,7 @@
             </div>
             <form hx-post="/settings/scan-library" hx-target="#library-scan-result" hx-swap="innerHTML" class="settings-input-group">
               <input type="text" name="path" class="settings-input settings-input--mono" placeholder="/music/Artist or C:\Music\Artist">
-              <button type="submit" class="btn btn-secondary">Scan Folder</button>
+              <button type="submit" class="ftl-btn ftl-btn-secondary">Scan Folder</button>
             </form>
           </div>
         </div>
@@ -282,7 +282,7 @@
       <section id="appearance" class="settings-section">
         <div class="settings-section-header">
           <h2>Appearance</h2>
-          <p>Personalise text size across the app (DESIGN.md §2/§14).</p>
+          <p>Personalise text size and theme across the app (DESIGN.md §2/§14).</p>
         </div>
         <form class="settings-field" onchange="document.documentElement.style.setProperty('--text-scale', {small:'0.9',medium:'1',large:'1.15'}[event.target.value] || '1')">
           <label class="settings-label">Text size</label>
@@ -297,6 +297,47 @@
           </div>
           <p class="settings-hint">Applied instantly, and remembered on this account across every device.</p>
         </form>
+
+        <!-- ftl-themes picker (github.com/DrEVILish/ftl-themes) - swaps
+             #theme-stylesheet's href and <html>'s data-theme attribute
+             instantly on change (same "apply now, persist via the normal
+             hx-post autosave underneath" split as the text-size radios
+             above), rather than waiting on the server round-trip so the
+             preview is immediate. setThemeLink handles the case where no
+             theme was active on page load (no #theme-stylesheet <link> to
+             reuse yet) by creating one. -->
+        <form class="settings-field" onchange="setTheme(event.target.value)">
+          <label class="settings-label" for="theme-select">Theme</label>
+          <div class="settings-textsize-group">
+            <select id="theme-select" name="theme" class="ftl-select" style="width:auto"
+              hx-post="/settings/appearance" hx-trigger="change" hx-include="closest form" hx-target="#theme-status" hx-indicator="#theme-status" hx-swap="innerHTML">
+              <option value="" {{if not .ThemeChoice}}selected{{end}}>Default</option>
+              {{range .Themes}}
+              <option value="{{.Slug}}" title="{{.Description}}" {{if eq $.ThemeChoice .Slug}}selected{{end}}>{{.Label}}</option>
+              {{end}}
+            </select>
+            <span id="theme-status" class="settings-save-status" aria-live="polite"></span>
+          </div>
+          <p class="settings-hint">Restyles the whole app - from <a href="https://github.com/DrEVILish/ftl-themes" target="_blank" rel="noopener">ftl-themes</a>, applied instantly and remembered on this account across every device.</p>
+        </form>
+        <script>
+          function setTheme(slug) {
+            document.documentElement.toggleAttribute('data-theme', !!slug);
+            if (slug) document.documentElement.setAttribute('data-theme', slug);
+            var link = document.getElementById('theme-stylesheet');
+            if (slug) {
+              if (!link) {
+                link = document.createElement('link');
+                link.id = 'theme-stylesheet';
+                link.rel = 'stylesheet';
+                document.head.appendChild(link);
+              }
+              link.href = '/static/themes/' + slug + '.css';
+            } else if (link) {
+              link.remove();
+            }
+          }
+        </script>
       </section>
 
       <section id="sessions" class="settings-section">

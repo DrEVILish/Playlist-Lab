@@ -1,0 +1,82 @@
+/* Bridge stylesheet adopting ftl-themes (github.com/DrEVILish/ftl-themes)
+   into this app, per that repo's CONTRACT.md ("Adopting ftl-themes in an
+   existing app" - kept in this app's own repo, not the theme repo, exactly
+   as that section instructs).
+
+   Two directions, since this app has its own pre-existing token/component
+   system (base.css's --primary-color etc.) rather than the .ftl-* class
+   vocabulary:
+
+   1. Unscoped :root - defines every --ftl-* token in terms of this app's
+      own tokens, so a template using a .ftl-* class (see CONTRACT.md's
+      "move templates onto .ftl-* classes incrementally" - buttons, form
+      fields, badges and progress bars are migrated as of this pass) looks
+      like this app's normal SciFi palette even with no theme picked,
+      instead of ftl-core.css's achromatic gray fallbacks. layout.html
+      loads ftl-core.css whenever no theme is picked specifically so these
+      defaults have real component CSS to apply to.
+
+   2. Scoped to html[data-theme] (any theme picked, via Settings >
+      Appearance - see templates/layout.html) - the reverse mapping,
+      overriding this app's own tokens FROM the active theme's --ftl-*
+      values. This is what actually re-themes the app's existing
+      components today, without waiting on a .ftl-* migration: every
+      component here already reads --primary-color/--background/etc.
+      exclusively (enforced through this whole SciFi-palette pass), so
+      re-pointing those tokens re-skins the entire app in one place. */
+
+:root {
+  --ftl-bg: var(--background);
+  --ftl-surface: var(--surface);
+  --ftl-surface-2: var(--surface-hover);
+  --ftl-border: var(--border);
+  --ftl-hairline: var(--border);
+  --ftl-text: var(--text-primary);
+  --ftl-muted: var(--text-secondary);
+  --ftl-accent: var(--primary-color);
+  --ftl-accent-2: var(--accent-cyan);
+  --ftl-danger: var(--error);
+  --ftl-success: var(--success);
+  --ftl-warning: var(--warning);
+  --ftl-on-accent: #ffffff;
+  --ftl-on-danger: #ffffff;
+  --ftl-on-success: #ffffff;
+  --ftl-on-surface: var(--text-primary);
+  --ftl-radius: var(--radius-md);
+  --ftl-font: 'Inter', sans-serif;
+  --ftl-font-mono: var(--font-mono);
+  --ftl-flare: var(--accent-cyan);
+}
+
+/* [data-theme] (attribute present with any value) rather than naming each
+   theme slug - matches every current and future ftl-themes theme without
+   this file needing an update when a new one ships. */
+html[data-theme] {
+  --background: var(--ftl-bg);
+  --background-elevated: var(--ftl-surface);
+  --surface: var(--ftl-surface);
+  --surface-hover: var(--ftl-surface-2);
+  --surface-border: var(--ftl-border);
+  --sidebar-bg: var(--ftl-surface);
+  --text-primary: var(--ftl-text);
+  --text-secondary: var(--ftl-muted);
+  --text-muted: var(--ftl-muted);
+  --border: var(--ftl-border);
+  --border-light: var(--ftl-border);
+  --error: var(--ftl-danger);
+  --success: var(--ftl-success);
+  --warning: var(--ftl-warning);
+  --primary-color: var(--ftl-accent);
+  --primary-hover: var(--ftl-accent-2);
+  --primary-dark: var(--ftl-accent);
+  --accent-cyan: var(--ftl-accent);
+  --accent-teal: var(--ftl-accent-2);
+  --font-mono: var(--ftl-font-mono);
+  /* One shared base radius rather than four independently-scaled sizes -
+     ftl-themes itself only defines one (sharp-cornered themes set it to
+     0), so there's nothing to derive the sm/lg/xl steps from anyway. */
+  --radius-sm: var(--ftl-radius);
+  --radius-md: var(--ftl-radius);
+  --radius-lg: var(--ftl-radius);
+  --radius-xl: var(--ftl-radius);
+}

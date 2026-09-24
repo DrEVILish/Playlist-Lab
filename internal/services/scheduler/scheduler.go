@@ -782,12 +782,18 @@ func reconcileCollectionMembership(client *plex.Client, plexCollectionID string,
 			return 0, 0, err
 		}
 	}
+	removedCount := 0
 	for _, key := range toRemove {
 		if err := client.RemoveFromCollection(plexCollectionID, key); err != nil {
-			return len(toAdd), 0, err
+			// Report what actually succeeded before the failure, not 0 -
+			// removals already applied to the live Plex collection must
+			// not be lost from the schedule_executions record just
+			// because a later one in the same batch failed.
+			return len(toAdd), removedCount, err
 		}
+		removedCount++
 	}
-	return len(toAdd), len(toRemove), nil
+	return len(toAdd), removedCount, nil
 }
 
 // generateMixByType dispatches to the mixes.Service method for mixType,

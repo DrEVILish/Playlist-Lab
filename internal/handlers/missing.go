@@ -263,6 +263,14 @@ func (h *MissingHandler) retry(w http.ResponseWriter, r *http.Request) {
 		h.renderRetryStatus(w, user.ID)
 		return
 	}
+	// Reserve activeRetries[user.ID] here, synchronously, rather than
+	// leaving it to be set inside the goroutine below: startRetryChain only
+	// acquires h.mu and sets it after the goroutine actually gets scheduled,
+	// so a second retry() call (a double-click, or two tabs) landing in
+	// that gap used to see existing == nil too and spawn its own chain over
+	// the same tracks. Reserving it here, still under the same lock as the
+	// check above, closes that window.
+	h.activeRetries[user.ID] = &retryProgress{Total: len(toRetry)}
 	h.mu.Unlock()
 
 	go h.startRetryChain(user.ID, dbUser, userServer, toRetry)
@@ -599,10 +607,35 @@ func (h *MissingHandler) deemixAll(w http.ResponseWriter, r *http.Request) {
 func (h *MissingHandler) startRetryChainSync(userID int64, user *db.User, userServer *db.UserServer, tracks []db.MissingTrack) {
 	done := make(chan struct{})
 	go func() {
+		// close(done) must still run even if startRetryChain panics, or
+		// the actionqueue worker calling this blocks on <-done forever -
+		// deferred in this order (LIFO) so recover runs first, then close.
+		defer close(done)
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("startRetryChain panicked", "userId", userID, "panic", r)
+			}
+		}()
 		h.startRetryChain(userID, user, userServer, tracks)
-		close(done)
 	}()
 	<-done
+}
+
+// goRecover runs fn in a new goroutine with panic recovery, logging via
+// slog instead of taking down the whole process - for background work
+// that intentionally runs outside actionqueue (whose own worker already
+// recovers panics for everything it dispatches) but still shouldn't be
+// able to crash every other user's request over one bad response or nil
+// dereference.
+func goRecover(name string, fn func()) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("background goroutine panicked", "name", name, "panic", r)
+			}
+		}()
+		fn()
+	}()
 }
 
 // lidarrDownload ports POST /:id/lidarr-download.
@@ -656,10 +689,12 @@ func (h *MissingHandler) lidarrDownload(w http.ResponseWriter, r *http.Request) 
 	notification := h.Notifications.Add(user.ID, notifications.TypeLidarr, track.Title, detail, notifications.StatusInProgress, nil)
 
 	if dbUser != nil && userServer != nil {
-		go h.Lidarr.TrackSearch(user.ID, notification.ID, commandID, lidarrsvc.ReconcileContext{
-			MissingTrackID: trackID, ServerURL: userServer.ServerURL,
-			PlexToken: plex.ResolveToken(dbUser.PlexToken, userServer.AccessToken.String),
-			LibraryID: userServer.LibraryID.String, ServerClientID: userServer.ServerClientID,
+		goRecover("Lidarr.TrackSearch", func() {
+			h.Lidarr.TrackSearch(user.ID, notification.ID, commandID, lidarrsvc.ReconcileContext{
+				MissingTrackID: trackID, ServerURL: userServer.ServerURL,
+				PlexToken: plex.ResolveToken(dbUser.PlexToken, userServer.AccessToken.String),
+				LibraryID: userServer.LibraryID.String, ServerClientID: userServer.ServerClientID,
+			})
 		})
 	} else {
 		status, errDetail := notifications.StatusError, "No Plex server configured to reconcile against"

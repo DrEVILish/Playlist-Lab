@@ -1,5 +1,6 @@
 /* Collections page (DESIGN.md §11.11) - reuses the app-wide DataTable
-   (sticky header, row-actions, icon-btn - components/DataTable.css, linked
+   (sticky header, row-actions - components/DataTable.css; icon buttons are
+   ftl-btn/ftl-btn-icon from ftl-core.css, linked
    from collections.html same as home.html/missing.html) and .advanced-mix-*
    modal chrome already loaded globally; this file only adds what's
    specific to this page's own cells and form fields. No new color tokens -
@@ -37,8 +38,7 @@
 
 /* Sortable column headers (Name, Missing, Last Run, Next Run, Last Updated,
    Date Added) - mirrors PlaylistsPage.css's own .playlists-table .sort-arrow
-   (same small duplication precedent as .badge-button above: page-specific
-   files here don't share table-row rules with each other). */
+   (page-specific files here don't share table-row rules with each other). */
 .collections-table .sort-arrow {
   margin-left: 0.25rem;
   opacity: 0.6;
@@ -187,29 +187,6 @@ a.collection-builder-badge:hover {
 .collection-builder-badge--external_list {
   color: var(--primary-color);
   border-color: var(--primary-color);
-}
-
-/* Same shape as PlaylistsPage.css/EditorPage.css's .badge-button (no shared
-   component file for it yet - this is the third copy of an established
-   small duplication, not a new pattern) for the Schedule column's
-   frequency/"off" pill. */
-.badge-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  border: 1px solid var(--border);
-  background: var(--surface-hover);
-  color: var(--text-primary);
-  cursor: pointer;
-}
-
-.badge-button:hover {
-  border-color: var(--accent-cyan);
-  box-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
 }
 
 .collection-rules-summary {

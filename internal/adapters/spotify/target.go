@@ -5,10 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
 	"time"
 
@@ -137,32 +135,15 @@ func (t *Target) MatchTracks(ctx context.Context, tracks []adapters.TrackInfo, c
 		return nil, ErrNotConnected
 	}
 
-	results := make([]adapters.MatchResult, 0, len(tracks))
-	for i, track := range tracks {
-		if isCancelled != nil && isCancelled() {
-			break
-		}
-		query := strings.TrimSpace(track.Title + " " + track.Artist)
-		result := adapters.MatchResult{SourceTrack: track}
-
-		items, err := t.searchTracks(ctx, token, query, 5)
-		if err != nil {
-			slog.Warn("spotify search failed for track", "track", track, "error", err)
-		} else if len(items) > 0 {
-			sort.SliceStable(items, func(a, b int) bool {
-				return scoreResult(track.Title, track.Artist, items[a]) > scoreResult(track.Title, track.Artist, items[b])
-			})
-			best := items[0]
-			score := scoreResult(track.Title, track.Artist, best)
-			result = toMatchResult(track, best, score, score >= 50)
-		}
-
-		results = append(results, result)
-		if progress != nil {
-			progress(i+1, len(tracks))
-		}
-	}
-	return results, nil
+	return shared.MatchTracksBySearch(ctx, tracks, progress, isCancelled, "spotify", 50,
+		func(ctx context.Context, track adapters.TrackInfo) ([]spotifyTrack, error) {
+			query := strings.TrimSpace(track.Title + " " + track.Artist)
+			return t.searchTracks(ctx, token, query, 5)
+		},
+		scoreResult,
+		toMatchResult,
+		nil,
+	)
 }
 
 func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adapters.MatchResult, cfg adapters.TargetConfig, userID int64) (string, string, int, error) {

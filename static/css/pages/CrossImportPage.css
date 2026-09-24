@@ -408,22 +408,6 @@
   padding: 2rem;
 }
 
-.progress-bar-track {
-  width: 100%;
-  height: 8px;
-  background-color: var(--background);
-  border-radius: 4px;
-  overflow: hidden;
-  margin: 1rem 0;
-}
-
-.progress-bar-fill {
-  height: 100%;
-  background: var(--primary-color);
-  border-radius: 4px;
-  transition: width 0.3s ease;
-}
-
 .progress-phase {
   font-size: 0.875rem;
   color: var(--text-secondary);

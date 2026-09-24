@@ -52,8 +52,8 @@
   color: var(--text-secondary);
 }
 
-.editor-stats .badge-button { gap: 0.4rem; }
-.editor-stats .status-dot { margin: 0; }
+.editor-stats .ftl-badge-button { gap: 0.4rem; }
+.editor-stats .ftl-lamp { margin: 0; }
 
 .editor-toolbar {
   display: flex;

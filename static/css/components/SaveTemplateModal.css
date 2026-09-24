@@ -158,8 +158,7 @@
   color: var(--error);
 }
 
-.form-input,
-.form-textarea {
+.form-input {
   width: 100%;
   padding: 0.75rem;
   background-color: var(--background);
@@ -171,39 +170,29 @@
   transition: all 0.2s ease;
 }
 
-.form-input.error,
-.form-textarea.error {
+.form-input.error {
   border-color: var(--error);
   background-color: rgba(244, 67, 54, 0.05);
 }
 
-.form-input:focus,
-.form-textarea:focus {
+.form-input:focus {
   outline: none;
   border-color: var(--primary-color);
   box-shadow: 0 0 0 3px var(--primary-glow);
 }
 
-.form-input.error:focus,
-.form-textarea.error:focus {
+.form-input.error:focus {
   border-color: var(--error);
   box-shadow: 0 0 0 3px rgba(244, 67, 54, 0.2);
 }
 
-.form-input::placeholder,
-.form-textarea::placeholder {
+.form-input::placeholder {
   color: var(--text-muted);
 }
 
-.form-input:disabled,
-.form-textarea:disabled {
+.form-input:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.form-textarea {
-  resize: vertical;
-  min-height: 80px;
 }
 
 .save-template-hint {

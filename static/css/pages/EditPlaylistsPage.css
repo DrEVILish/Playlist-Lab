@@ -392,22 +392,6 @@ tr.selected-for-removal td {
   color: var(--text-secondary);
 }
 
-.btn-primary {
-  background: var(--primary-color);
-  color: white;
-  border: none;
-  padding: 0.625rem 1.25rem;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-primary:hover {
-  opacity: 0.9;
-}
-
 @media (max-width: 768px) {
   .playlist-header {
     flex-direction: column;
@@ -559,23 +543,6 @@ tr.selected-for-removal td {
   margin-top: 1.5rem;
   justify-content: flex-end;
 }
-
-.btn-secondary {
-  padding: 0.625rem 1.25rem;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-primary);
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-secondary:hover {
-  background: var(--surface-hover);
-}
-
 
 /* Replace Track Modal */
 .replace-track-info {

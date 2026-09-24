@@ -25,6 +25,30 @@ func SaveTextScale(sqlDB *sql.DB, userID int64, scale string) error {
 	return err
 }
 
+// GetTheme returns the user's saved Settings > Appearance theme choice - an
+// ftl-themes slug (static/themes/themes.json, e.g. "blue-future"), or "" for
+// this app's own default look (no user_settings row / no value saved yet,
+// same as GetTextScale's "no value" case).
+func GetTheme(sqlDB *sql.DB, userID int64) (string, error) {
+	var theme sql.NullString
+	err := sqlDB.QueryRow("SELECT theme FROM user_settings WHERE user_id = ?", userID).Scan(&theme)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return theme.String, nil
+}
+
+func SaveTheme(sqlDB *sql.DB, userID int64, theme string) error {
+	if err := ensureUserSettingsRow(sqlDB, userID); err != nil {
+		return err
+	}
+	_, err := sqlDB.Exec("UPDATE user_settings SET theme = ? WHERE user_id = ?", theme, userID)
+	return err
+}
+
 // GetEditorColumnsJSON returns the raw JSON stored in
 // user_settings.editor_columns for a user, or "" if they have no
 // user_settings row / no value saved yet - the caller (templates/editor.html)

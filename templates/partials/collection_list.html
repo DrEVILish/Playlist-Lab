@@ -41,7 +41,7 @@
                    round-trip, not just the first. -->
               {{range $k, $v := .Query}}{{if ne $k "q"}}{{range $val := $v}}<input type="hidden" name="{{$k}}" value="{{$val}}">{{end}}{{end}}{{end}}
               <input type="search" name="q" value="{{.Filter.Search}}" placeholder="Search collections..." class="form-input" autofocus>
-              <button type="submit" class="btn btn-primary btn-small" style="margin-top:0.375rem">Search</button>
+              <button type="submit" class="ftl-btn ftl-btn-primary ftl-btn-sm" style="margin-top:0.375rem">Search</button>
             </form>
           </details>
         </div>
@@ -176,12 +176,12 @@
               {{range $k, $v := .Query}}{{if and (ne $k "fAddedAfter") (ne $k "fAddedBefore")}}{{range $val := $v}}<input type="hidden" name="{{$k}}" value="{{$val}}">{{end}}{{end}}{{end}}
               <input type="date" name="fAddedAfter" value="{{.Filter.AddedAfter}}" class="form-input">
               <input type="date" name="fAddedBefore" value="{{.Filter.AddedBefore}}" class="form-input" style="margin-top:0.375rem">
-              <button type="submit" class="btn btn-primary btn-small" style="margin-top:0.375rem">Apply</button>
+              <button type="submit" class="ftl-btn ftl-btn-primary ftl-btn-sm" style="margin-top:0.375rem">Apply</button>
             </form>
           </details>
         </div>
       </th>
-      <th class="col-actions">{{if .Filter.Active}}<a class="btn btn-secondary btn-small" href="/collections/list" hx-get="/collections/list" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true" title="Clear all filters">Clear</a>{{end}}</th>
+      <th class="col-actions">{{if .Filter.Active}}<a class="ftl-btn ftl-btn-secondary ftl-btn-sm" href="/collections/list" hx-get="/collections/list" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true" title="Clear all filters">Clear</a>{{end}}</th>
     </tr>
   </thead>
   <tbody>
@@ -210,14 +210,14 @@
         <!-- Expands an inline row (below) scoped to just this collection's
              missing items via GET /collections/{id}/missing, same pattern
              as home.html's Missing Tracks column. -->
-        {{if .MissingCount}}<button type="button" class="badge-button warn mono-data expando-toggle" hx-get="/collections/{{.ID}}/missing" hx-target="#missing-row-{{$rowKey}}-content" hx-swap="innerHTML" hx-on:click="document.getElementById('missing-row-{{$rowKey}}').classList.toggle('is-open'); this.classList.toggle('is-open')">{{.MissingCount}}<svg class="expando-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+        {{if .MissingCount}}<button type="button" class="ftl-badge ftl-badge-button ftl-badge-warning mono-data expando-toggle" hx-get="/collections/{{.ID}}/missing" hx-target="#missing-row-{{$rowKey}}-content" hx-swap="innerHTML" hx-on:click="document.getElementById('missing-row-{{$rowKey}}').classList.toggle('is-open'); this.classList.toggle('is-open')">{{.MissingCount}}<svg class="expando-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
         {{else if eq .BuilderType "external_list"}}<span class="mono-data">0</span>
         {{else}}—{{end}}
       </td>
       <td>
         {{if not .ID}}—
-        {{else if .ScheduleID}}<button type="button" class="badge-button" style="text-transform:capitalize" title="Edit schedule{{if .NextRun}} - next run {{.NextRun}}{{end}}" hx-get="/collections/{{.ID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">{{.Frequency}}</button>
-        {{else}}<button type="button" class="badge-button" style="color:var(--text-secondary)" title="Create schedule" hx-get="/collections/{{.ID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">off</button>{{end}}
+        {{else if .ScheduleID}}<button type="button" class="ftl-badge ftl-badge-button" style="text-transform:capitalize" title="Edit schedule{{if .NextRun}} - next run {{.NextRun}}{{end}}" hx-get="/collections/{{.ID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">{{.Frequency}}</button>
+        {{else}}<button type="button" class="ftl-badge ftl-badge-button" style="color:var(--text-secondary)" title="Create schedule" hx-get="/collections/{{.ID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">off</button>{{end}}
       </td>
       <td class="mono-data">{{if .LastRun}}<span title="{{dateFromUnix .LastRun}}">{{relativeUnix .LastRun}}</span>{{else}}—{{end}}</td>
       <td class="mono-data">{{if .NextRunAt}}<span title="{{dateFromUnix .NextRunAt}}">{{.NextRun}}</span>{{else}}—{{end}}</td>
@@ -251,7 +251,7 @@
 <form class="collections-mobile-search" hx-get="/collections/list" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">
   {{range $k, $v := .Query}}{{if ne $k "q"}}{{range $val := $v}}<input type="hidden" name="{{$k}}" value="{{$val}}">{{end}}{{end}}{{end}}
   <input type="search" name="q" value="{{.Filter.Search}}" placeholder="Search collections...">
-  <button type="submit" class="btn btn-secondary btn-small">Search</button>
+  <button type="submit" class="ftl-btn ftl-btn-secondary ftl-btn-sm">Search</button>
 </form>
 <div class="collections-sortbar">
   <label for="collections-mobile-sort">Sort</label>
@@ -263,7 +263,7 @@
        read the just-changed <select>'s own value at request time) fires
        the fragment swap the same way every other filter/sort link here
        does. -->
-  <select id="collections-mobile-sort" onchange="htmx.ajax('GET', this.value, {target:'#collections-list', swap:'innerHTML', pushUrl:true})">
+  <select class="ftl-select" id="collections-mobile-sort" onchange="htmx.ajax('GET', this.value, {target:'#collections-list', swap:'innerHTML', pushUrl:true})">
     <option value="{{.Query.With "sort" "name"}}"{{if eq .Sort "name"}} selected{{end}}>Name</option>
     <option value="{{.Query.With "sort" "missing"}}"{{if eq .Sort "missing"}} selected{{end}}>Missing</option>
     <option value="{{.Query.With "sort" "lastRun"}}"{{if eq .Sort "lastRun"}} selected{{end}}>Last Run</option>
@@ -315,8 +315,8 @@
       <div class="collection-card-detail-row">
         <span class="collection-card-detail-label">Schedule</span>
         {{if not .ID}}—
-        {{else if .ScheduleID}}<button type="button" class="badge-button" style="text-transform:capitalize" hx-get="/collections/{{.ID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">{{.Frequency}}</button>
-        {{else}}<button type="button" class="badge-button" hx-get="/collections/{{.ID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">+ Schedule</button>{{end}}
+        {{else if .ScheduleID}}<button type="button" class="ftl-badge ftl-badge-button" style="text-transform:capitalize" hx-get="/collections/{{.ID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">{{.Frequency}}</button>
+        {{else}}<button type="button" class="ftl-badge ftl-badge-button" hx-get="/collections/{{.ID}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">+ Schedule</button>{{end}}
       </div>
       {{if .ScheduleID}}
       <div class="collection-card-detail-row">
@@ -350,8 +350,8 @@
        (confirmed with the same harness: only checked boxes are included,
        unchecked ones correctly excluded), which is exactly the "every
        selected row in this table" semantics both buttons want. -->
-  <button type="button" class="btn btn-secondary btn-small" hx-post="/collections/bulk-run" hx-include="closest .bulk-select-scope" hx-target="#notifications" hx-swap="innerHTML" hx-confirm="Refresh the selected collection(s) now?">Refresh Selected</button>
-  <button type="button" class="btn btn-secondary btn-small" style="color:var(--error)" hx-post="/collections/bulk-delete" hx-include="closest .bulk-select-scope" hx-target="#collections-list" hx-swap="innerHTML" hx-confirm="Delete the selected collection(s)? Ones tracked by Playlist Lab are removed from Playlist Lab only (Plex is left alone) - ones not tracked by Playlist Lab (no local row to keep) are deleted from Plex directly.">Delete Selected</button>
+  <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" hx-post="/collections/bulk-run" hx-include="closest .bulk-select-scope" hx-target="#notifications" hx-swap="innerHTML" hx-confirm="Refresh the selected collection(s) now?">Refresh Selected</button>
+  <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" style="color:var(--error)" hx-post="/collections/bulk-delete" hx-include="closest .bulk-select-scope" hx-target="#collections-list" hx-swap="innerHTML" hx-confirm="Delete the selected collection(s)? Ones tracked by Playlist Lab are removed from Playlist Lab only (Plex is left alone) - ones not tracked by Playlist Lab (no local row to keep) are deleted from Plex directly.">Delete Selected</button>
 </div>
 </div>
 {{end}}
@@ -363,22 +363,22 @@
      CollectionView as context. */}}
 {{define "collectionRowActions"}}
 {{if .ID}}
-<button type="button" class="icon-btn" title="Edit this collection" aria-label="Edit {{.Name}}" hx-get="/collections/{{.ID}}" hx-target="#modal-root" hx-swap="innerHTML">
+<button type="button" class="ftl-btn ftl-btn-icon" title="Edit this collection" aria-label="Edit {{.Name}}" hx-get="/collections/{{.ID}}" hx-target="#modal-root" hx-swap="innerHTML">
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
 </button>
-<button type="button" class="icon-btn" title="Refresh" aria-label="Refresh {{.Name}} now" hx-post="/collections/{{.ID}}/run" hx-target="#notifications" hx-swap="innerHTML">
+<button type="button" class="ftl-btn ftl-btn-icon" title="Refresh" aria-label="Refresh {{.Name}} now" hx-post="/collections/{{.ID}}/run" hx-target="#notifications" hx-swap="innerHTML">
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
 </button>
 <!-- Plain confirm+delete here (Plex-side left alone by default, matching
      Kometa's own convention); the rarer "also delete on Plex" option lives
      in the edit modal's Danger Zone instead of cluttering this row action. -->
-<button type="button" class="icon-btn icon-btn-danger" title="Delete this collection" aria-label="Delete {{.Name}}" hx-delete="/collections/{{.ID}}" hx-target="#collections-list" hx-swap="innerHTML" hx-confirm="Delete this collection? The Plex collection itself (if one was created) is left alone.">
+<button type="button" class="ftl-btn ftl-btn-icon icon-btn-danger" title="Delete this collection" aria-label="Delete {{.Name}}" hx-delete="/collections/{{.ID}}" hx-target="#collections-list" hx-swap="innerHTML" hx-confirm="Delete this collection? The Plex collection itself (if one was created) is left alone.">
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
 </button>
 {{else}}
 <!-- Not tracked by Playlist Lab - nothing local to edit/refresh against,
      just the option to remove it from Plex directly. -->
-<button type="button" class="icon-btn icon-btn-danger" title="Delete this collection from Plex" aria-label="Delete {{.Name}} from Plex" hx-delete="/collections/unmanaged?serverId={{.ServerID}}&amp;plexId={{.PlexCollectionID.String | urlquery}}" hx-target="#collections-list" hx-swap="innerHTML" hx-confirm="Delete &quot;{{.Name}}&quot; from Plex? This collection isn't tracked by Playlist Lab - this removes it from Plex directly.">
+<button type="button" class="ftl-btn ftl-btn-icon icon-btn-danger" title="Delete this collection from Plex" aria-label="Delete {{.Name}} from Plex" hx-delete="/collections/unmanaged?serverId={{.ServerID}}&amp;plexId={{.PlexCollectionID.String | urlquery}}" hx-target="#collections-list" hx-swap="innerHTML" hx-confirm="Delete &quot;{{.Name}}&quot; from Plex? This collection isn't tracked by Playlist Lab - this removes it from Plex directly.">
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
 </button>
 {{end}}

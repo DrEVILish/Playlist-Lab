@@ -57,6 +57,9 @@ var additiveColumns = []columnSpec{
 	{"collections", "sort_title", "ALTER TABLE collections ADD COLUMN sort_title TEXT"},
 	{"collections", "dynamic_set_id", "ALTER TABLE collections ADD COLUMN dynamic_set_id INTEGER REFERENCES dynamic_collections(id) ON DELETE CASCADE"},
 	{"collections", "dynamic_key", "ALTER TABLE collections ADD COLUMN dynamic_key TEXT"},
+	// Settings > Appearance: an ftl-themes slug (see internal/db/ui_preferences.go's
+	// GetTheme/SaveTheme), alongside the existing text_scale preference.
+	{"user_settings", "theme", "ALTER TABLE user_settings ADD COLUMN theme TEXT"},
 }
 
 // runMigrations applies any additive columns missing from an existing

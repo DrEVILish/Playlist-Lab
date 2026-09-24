@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -280,9 +281,10 @@ type cacheEntry[T any] struct {
 }
 
 const (
-	searchCacheTTL   = 5 * time.Minute
-	maxCacheEntries  = 500
-	maxArtistCatalog = 3000
+	searchCacheTTL    = 5 * time.Minute
+	maxCacheEntries   = 500
+	maxArtistCatalog  = 3000
+	maxPlaylistTracks = 10000
 )
 
 func NewClient(serverURL, token, clientID, product string) *Client {
@@ -467,7 +469,13 @@ func (c *Client) CreatePlaylist(name, libraryURI string, trackURIs []string) (*P
 }
 
 func (c *Client) GetPlaylistTracks(playlistID string) ([]Track, error) {
-	mc, err := c.get("/playlists/" + url.PathEscape(playlistID) + "/items")
+	// getWithHeaders, not get(): do()'s default X-Plex-Container-Size
+	// header is 50, which used to silently truncate any playlist with more
+	// tracks than that on every import/export of it.
+	mc, err := c.getWithHeaders(
+		"/playlists/"+url.PathEscape(playlistID)+"/items",
+		map[string]string{"X-Plex-Container-Size": strconv.Itoa(maxPlaylistTracks)},
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -20,10 +20,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -290,33 +288,17 @@ func (t *Target) MatchTracks(ctx context.Context, tracks []adapters.TrackInfo, c
 		return nil, ErrNotConnected
 	}
 
-	results := make([]adapters.MatchResult, 0, len(tracks))
-	for i, track := range tracks {
-		if isCancelled != nil && isCancelled() {
-			break
-		}
-		query := strings.TrimSpace(track.Title + " " + track.Artist)
-		result := adapters.MatchResult{SourceTrack: track}
-
-		candidates, err := t.search(ctx, cookie, query)
-		if err != nil {
-			slog.Warn("youtube music search failed for track", "track", track, "error", err)
-		} else if len(candidates) > 0 {
-			sort.SliceStable(candidates, func(a, b int) bool {
-				return shared.ScoreResult(track.Title, track.Artist, candidates[a].Title, candidates[a].Artist) >
-					shared.ScoreResult(track.Title, track.Artist, candidates[b].Title, candidates[b].Artist)
-			})
-			best := candidates[0]
-			score := shared.ScoreResult(track.Title, track.Artist, best.Title, best.Artist)
-			result = toMatchResult(track, best, score, score >= 40)
-		}
-
-		results = append(results, result)
-		if progress != nil {
-			progress(i+1, len(tracks))
-		}
-	}
-	return results, nil
+	return shared.MatchTracksBySearch(ctx, tracks, progress, isCancelled, "youtube music", 40,
+		func(ctx context.Context, track adapters.TrackInfo) ([]ytmTrack, error) {
+			query := strings.TrimSpace(track.Title + " " + track.Artist)
+			return t.search(ctx, cookie, query)
+		},
+		func(sourceTitle, sourceArtist string, item ytmTrack) float64 {
+			return shared.ScoreResult(sourceTitle, sourceArtist, item.Title, item.Artist)
+		},
+		toMatchResult,
+		nil,
+	)
 }
 
 func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adapters.MatchResult, cfg adapters.TargetConfig, userID int64) (string, string, int, error) {

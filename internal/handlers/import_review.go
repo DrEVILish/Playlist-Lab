@@ -88,7 +88,9 @@ func (h *ImportHandler) preview(w http.ResponseWriter, r *http.Request) {
 	// before the fetch/match finishes), so it must not inherit r.Context()
 	// - that gets cancelled the moment this response is written, same
 	// gotcha cross_import.go's startMatch calls out for its own job.
-	go h.runPreview(context.Background(), user.ID, userServer.LibraryID.String, client, source, identifier, customName, sess)
+	goRecover("runPreview", func() {
+		h.runPreview(context.Background(), user.ID, userServer.LibraryID.String, client, source, identifier, customName, sess)
+	})
 
 	h.Tmpl.RenderPartial(w, "partials/import_review_modal.html", map[string]any{
 		"SessionID": sess.ID, "Progress": sess.GetProgress(),

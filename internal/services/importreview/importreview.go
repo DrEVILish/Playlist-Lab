@@ -261,3 +261,18 @@ func (s *Store) Delete(id string) {
 	delete(s.sessions, id)
 	s.mu.Unlock()
 }
+
+// Sweep removes sessions older than maxAge, using the CreatedAt every
+// session already carries - an abandoned preview (fetch/match finished,
+// user never confirmed or navigated away mid-review) otherwise has no
+// other expiry and stays in memory for the life of the process.
+func (s *Store) Sweep(maxAge time.Duration) {
+	cutoff := time.Now().Add(-maxAge)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id, sess := range s.sessions {
+		if sess.CreatedAt.Before(cutoff) {
+			delete(s.sessions, id)
+		}
+	}
+}

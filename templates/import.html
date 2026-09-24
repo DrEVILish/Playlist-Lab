@@ -49,18 +49,18 @@
   <form>
     <section class="import-form">
       <div class="form-section">
-        <label class="form-label" for="import-identifier">Playlist URL or ID</label>
+        <label class="ftl-label" for="import-identifier">Playlist URL or ID</label>
         <input class="form-input" type="text" id="import-identifier" name="identifier" placeholder="https://..." required>
-        <p class="form-hint">Enter the playlist URL from a remote source to import.</p>
+        <p class="ftl-field-hint">Enter the playlist URL from a remote source to import.</p>
       </div>
 
       <!-- Preview/Import/Import-from-File all act on (or substitute for)
            the URL/ID field above, so they stay together in this same
            section/card. -->
       <div class="form-section import-form-actions">
-        <button type="submit" class="btn btn-secondary" hx-post="/import/preview" hx-target="#modal-root" hx-swap="beforeend">Preview</button>
-        <button type="submit" class="btn btn-primary" hx-post="/import" hx-target="#notifications" hx-swap="innerHTML">Import</button>
-        <button type="button" class="btn btn-secondary" hx-get="/import/file/form" hx-target="#modal-root" hx-swap="beforeend">Import from File</button>
+        <button type="submit" class="ftl-btn ftl-btn-secondary" hx-post="/import/preview" hx-target="#modal-root" hx-swap="beforeend">Preview</button>
+        <button type="submit" class="ftl-btn ftl-btn-primary" hx-post="/import" hx-target="#notifications" hx-swap="innerHTML">Import</button>
+        <button type="button" class="ftl-btn ftl-btn-secondary" hx-get="/import/file/form" hx-target="#modal-root" hx-swap="beforeend">Import from File</button>
       </div>
     </section>
 
@@ -94,13 +94,13 @@
            just fills in #import-identifier, so /import/preview needs no
            changes at all. -->
       <div class="form-section billboard-week-picker">
-        <label class="form-label">Browse a chart week</label>
+        <label class="ftl-label">Browse a chart week</label>
         <div class="billboard-week-picker-row">
-          <select id="billboard-year-select" class="form-input" hx-get="/import/billboard/weeks" hx-target="#billboard-week-select" hx-swap="outerHTML" hx-trigger="change" hx-include="this" name="year">
+          <select id="billboard-year-select" class="ftl-select" hx-get="/import/billboard/weeks" hx-target="#billboard-week-select" hx-swap="outerHTML" hx-trigger="change" hx-include="this" name="year">
             <option value="">Year...</option>
             {{range .BillboardYears}}<option value="{{.}}">{{.}}</option>{{end}}
           </select>
-          <select id="billboard-week-select" class="form-input" disabled>
+          <select id="billboard-week-select" class="ftl-select" disabled>
             <option value="">Select a year first...</option>
           </select>
         </div>
@@ -121,16 +121,16 @@
   <section class="import-form import-browse-section">
     <div class="form-section" style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;">
       <div style="flex:1;min-width:200px;">
-        <label class="form-label" for="import-search-query">Search by name</label>
+        <label class="ftl-label" for="import-search-query">Search by name</label>
         <div class="billboard-week-picker-row">
           <input class="form-input" type="text" id="import-search-query" name="q" placeholder="Search playlists...">
-          <button type="button" class="btn btn-secondary"
+          <button type="button" class="ftl-btn ftl-btn-secondary"
             hx-get="/import/search" hx-include="[name='source']:checked,#import-search-query" hx-target="#import-charts" hx-swap="innerHTML">Search</button>
         </div>
       </div>
       <div style="min-width:160px;">
-        <label class="form-label" for="import-country">Country</label>
-        <select class="form-input" id="import-country" name="country"
+        <label class="ftl-label" for="import-country">Country</label>
+        <select class="ftl-select" id="import-country" name="country"
           hx-get="/import/charts" hx-include="[name='source']:checked,#import-country" hx-target="#import-charts" hx-swap="innerHTML">
           <option value="global">Global</option>
           {{range .Countries}}<option value="{{.Code}}" {{if eq .Code $.Country}}selected{{end}}>{{.Name}}</option>{{end}}
@@ -139,7 +139,7 @@
     </div>
 
     <div class="form-section spotify-saved-users-section">
-      <label class="form-label">Saved Spotify users</label>
+      <label class="ftl-label">Saved Spotify users</label>
       <div id="import-spotify-users" hx-get="/import/spotify-users" hx-trigger="revealed" hx-swap="outerHTML">
         <p class="settings-hint">Loading...</p>
       </div>
@@ -161,7 +161,7 @@
        nobody importing from a chart/file/AI prompt needs to pay for. -->
   <section class="import-form">
     <h2 class="progress-title">Import from a Plex Home user</h2>
-    <p class="form-hint">Copy a playlist from another Plex Home user on this server into your own account.</p>
+    <p class="ftl-field-hint">Copy a playlist from another Plex Home user on this server into your own account.</p>
     <div hx-get="/import/plex-home/users" hx-trigger="revealed" hx-swap="outerHTML">
       <p class="settings-hint">Loading Plex Home users...</p>
     </div>

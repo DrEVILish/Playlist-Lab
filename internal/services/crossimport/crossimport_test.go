@@ -93,15 +93,18 @@ func TestSessionSetResultsSetsReviewPhase(t *testing.T) {
 
 func TestStoreNewAndDelete(t *testing.T) {
 	store := NewStore()
-	sess := store.New("sid", 42, "youtube", adapters.TargetConfig{})
-	if sess.JobID != 42 || sess.TargetID != "youtube" {
+	sess := store.New("sid", 42, "youtube", adapters.TargetConfig{}, 7)
+	if sess.JobID != 42 || sess.TargetID != "youtube" || sess.UserID != 7 {
 		t.Fatalf("unexpected session fields: %+v", sess)
 	}
-	if _, ok := store.Get("sid"); !ok {
-		t.Fatal("expected session to be retrievable after New")
+	if _, ok := store.Get("sid", 7); !ok {
+		t.Fatal("expected session to be retrievable by its owner after New")
+	}
+	if _, ok := store.Get("sid", 99); ok {
+		t.Fatal("expected session to be hidden from a different user")
 	}
 	store.Delete("sid")
-	if _, ok := store.Get("sid"); ok {
+	if _, ok := store.Get("sid", 7); ok {
 		t.Fatal("expected session to be gone after Delete")
 	}
 }

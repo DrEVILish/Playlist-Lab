@@ -106,6 +106,7 @@ func (h *SettingsHandler) page(w http.ResponseWriter, r *http.Request) {
 	isAdmin, _ := db.IsAdmin(h.DB, user.ID)
 	userServer, _ := db.GetUserMusicServer(h.DB, user.ID)
 	textScale, _ := db.GetTextScale(h.DB, user.ID)
+	theme, _ := db.GetTheme(h.DB, user.ID)
 
 	h.Tmpl.RenderPage(w, r, "settings", map[string]any{
 		"User":      user,
@@ -120,6 +121,12 @@ func (h *SettingsHandler) page(w http.ResponseWriter, r *http.Request) {
 		// and only fills it in when the caller hasn't set it, so reusing the
 		// name here would silently break every page's --text-scale value.
 		"TextScaleChoice": textScale,
+		// Same reserved-key reasoning as TextScaleChoice above - pageData
+		// reserves "Theme" for the data-theme attribute value every page's
+		// <html> needs, so the radio group's own current value gets its own
+		// key here instead.
+		"ThemeChoice": theme,
+		"Themes":      ftlThemes,
 		// Server Info (§11.4) - user feedback: the old "Version: (not set
 		// by this build)" placeholder read as an unfinished feature since
 		// this deploy has no ldflags/git-describe wiring to fill it in.
@@ -244,20 +251,36 @@ func (h *SettingsHandler) resetMixes(w http.ResponseWriter, r *http.Request) {
 	h.renderAlert(w, "Mix defaults reset", err)
 }
 
-// saveAppearance persists Settings > Appearance's text-size choice
-// (DESIGN.md §14) - the only Appearance field today, same autosave shape
-// as saveMatching/saveMixes/saveAI above.
+// saveAppearance persists Settings > Appearance's fields - text size
+// (DESIGN.md §14) and theme (an ftl-themes slug, or "" for this app's own
+// look). The two live in separate <form>s in templates/settings.html (each
+// with its own status element/hx-target), so a single submission only ever
+// carries one of these two form keys - r.Form.Has, not a zero-value check,
+// distinguishes "field absent, leave it alone" from "field present and
+// blank", so changing the theme never resets text size back to its
+// default and vice versa.
 func (h *SettingsHandler) saveAppearance(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
 	}
-	scale := r.FormValue("textScale")
-	if scale != "small" && scale != "medium" && scale != "large" {
-		scale = "medium"
+
+	var err error
+	if r.Form.Has("textScale") {
+		scale := r.FormValue("textScale")
+		if scale != "small" && scale != "medium" && scale != "large" {
+			scale = "medium"
+		}
+		err = db.SaveTextScale(h.DB, user.ID, scale)
 	}
-	err := db.SaveTextScale(h.DB, user.ID, scale)
+	if r.Form.Has("theme") {
+		theme := r.FormValue("theme")
+		if !isValidTheme(theme) {
+			theme = ""
+		}
+		err = db.SaveTheme(h.DB, user.ID, theme)
+	}
 	h.notifySettingsSave(user.ID, "Save appearance settings", err)
 	h.renderFieldStatus(w, err)
 }

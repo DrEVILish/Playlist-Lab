@@ -103,6 +103,23 @@ var tmplFuncs = template.FuncMap{
 		}
 		return t
 	},
+	// lampState maps a "success"/"failed"/"running"/"" status string (the
+	// shape playlists.go/collections.go's LastRunStatus and admin
+	// enabled/disabled flags already use) onto ftl-core.css's .ftl-lamp
+	// modifier class - "" (never run) deliberately maps to "", since a bare
+	// .ftl-lamp with no is-* class is already the lamp's off/unlit state.
+	"lampState": func(status string) string {
+		switch status {
+		case "success":
+			return "is-on"
+		case "failed":
+			return "is-error"
+		case "running":
+			return "is-active"
+		default:
+			return ""
+		}
+	},
 	// relativeTime backs the bell's per-item timestamp, matching
 	// NotificationCenter.tsx's relativeTime().
 	"relativeTime": func(t time.Time) string {
@@ -409,8 +426,8 @@ var textScaleMultiplier = map[string]string{
 }
 
 // pageData ensures data (RenderPage/RenderModal's map[string]any, or nil)
-// has "User", "TextScale", and "IsPlexOwner" keys, filling them in from the
-// request's session/DB if the caller didn't already set one - see
+// has "User", "TextScale", "Theme", and "IsPlexOwner" keys, filling them in
+// from the request's session/DB if the caller didn't already set one - see
 // RenderPage's original doc comment for why this can't just be left to each
 // caller. IsPlexOwner drives the Collections nav link (DESIGN.md §11.11)
 // across every page via the shared layout.html base, so it's centralized
@@ -431,6 +448,21 @@ func (t *Templates) pageData(r *http.Request, data any) map[string]any {
 					if mult, ok := textScaleMultiplier[scale]; ok {
 						m["TextScale"] = mult
 					}
+				}
+			}
+		}
+	}
+	// Theme: an ftl-themes slug for <html data-theme="...">, or "" (this
+	// app's own default look, no theme file loaded). Server-rendered like
+	// TextScale above, for the same reason - set before first paint, no
+	// flash of the wrong theme while a client-side script reads a saved
+	// preference.
+	if _, exists := m["Theme"]; !exists {
+		m["Theme"] = ""
+		if t.DB != nil {
+			if user := auth.CurrentUser(r); user != nil {
+				if theme, err := db.GetTheme(t.DB, user.ID); err == nil {
+					m["Theme"] = theme
 				}
 			}
 		}

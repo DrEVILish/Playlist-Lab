@@ -12,10 +12,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -243,33 +241,17 @@ func (t *Target) MatchTracks(ctx context.Context, tracks []adapters.TrackInfo, c
 		return nil, ErrNotConnected
 	}
 
-	results := make([]adapters.MatchResult, 0, len(tracks))
-	for i, track := range tracks {
-		if isCancelled != nil && isCancelled() {
-			break
-		}
-		query := strings.TrimSpace(track.Title + " " + track.Artist)
-		result := adapters.MatchResult{SourceTrack: track}
-
-		items, err := t.search(ctx, auth.Token, query, 5)
-		if err != nil {
-			slog.Warn("tidal search failed for track", "track", track, "error", err)
-		} else if len(items) > 0 {
-			sort.SliceStable(items, func(a, b int) bool {
-				return shared.ScoreResult(track.Title, track.Artist, items[a].Title, items[a].artistName()) >
-					shared.ScoreResult(track.Title, track.Artist, items[b].Title, items[b].artistName())
-			})
-			best := items[0]
-			score := shared.ScoreResult(track.Title, track.Artist, best.Title, best.artistName())
-			result = toMatchResult(track, best, score, score >= 50)
-		}
-
-		results = append(results, result)
-		if progress != nil {
-			progress(i+1, len(tracks))
-		}
-	}
-	return results, nil
+	return shared.MatchTracksBySearch(ctx, tracks, progress, isCancelled, "tidal", 50,
+		func(ctx context.Context, track adapters.TrackInfo) ([]tidalTrack, error) {
+			query := strings.TrimSpace(track.Title + " " + track.Artist)
+			return t.search(ctx, auth.Token, query, 5)
+		},
+		func(sourceTitle, sourceArtist string, item tidalTrack) float64 {
+			return shared.ScoreResult(sourceTitle, sourceArtist, item.Title, item.artistName())
+		},
+		toMatchResult,
+		nil,
+	)
 }
 
 func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adapters.MatchResult, cfg adapters.TargetConfig, userID int64) (string, string, int, error) {
@@ -316,8 +298,13 @@ func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adap
 		addReq.Header.Set("X-Tidal-Token", t.ClientID)
 		addReq.Header.Set("Content-Type", "application/json")
 		addReq.Header.Set("If-None-Match", "*")
-		if addResp, err := t.httpClient.Do(addReq); err == nil {
-			addResp.Body.Close()
+		addResp, err := t.httpClient.Do(addReq)
+		if err != nil {
+			return created.UUID, name, 0, fmt.Errorf("playlist created but failed to add tracks: %w", err)
+		}
+		addResp.Body.Close()
+		if addResp.StatusCode >= 400 {
+			return created.UUID, name, 0, fmt.Errorf("playlist created but failed to add tracks: status %d", addResp.StatusCode)
 		}
 	}
 

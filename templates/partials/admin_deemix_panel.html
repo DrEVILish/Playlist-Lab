@@ -13,8 +13,8 @@
   </div>
   {{end}}
   <div class="settings-actions" style="border-top:none;padding-top:0;margin-top:0.25rem">
-    <button type="submit" class="btn btn-primary">Save ARL</button>
-    <button type="submit" formaction="/admin/deemix/arl/check" class="btn btn-secondary">Test ARL</button>
+    <button type="submit" class="ftl-btn ftl-btn-primary">Save ARL</button>
+    <button type="submit" formaction="/admin/deemix/arl/check" class="ftl-btn ftl-btn-secondary">Test ARL</button>
   </div>
 </form>
 
@@ -46,7 +46,7 @@
           </div>
           <div class="settings-slider-row">
             <label class="settings-label" for="deemix-max-bitrate">Preferred quality</label>
-            <select id="deemix-max-bitrate" name="maxBitrate" class="settings-select">
+            <select id="deemix-max-bitrate" name="maxBitrate" class="ftl-select">
               <option value="9" {{if eq $s.MaxBitrate "9"}}selected{{end}}>FLAC (lossless, requires Deezer HiFi)</option>
               <option value="3" {{if eq $s.MaxBitrate "3"}}selected{{end}}>MP3 320kbps</option>
               <option value="1" {{if eq $s.MaxBitrate "1"}}selected{{end}}>MP3 128kbps</option>
@@ -54,7 +54,7 @@
           </div>
           <div class="settings-slider-row">
             <label class="settings-label" for="deemix-overwrite">If a file already exists</label>
-            <select id="deemix-overwrite" name="overwriteFile" class="settings-select">
+            <select id="deemix-overwrite" name="overwriteFile" class="ftl-select">
               <option value="n" {{if eq $s.OverwriteFile "n"}}selected{{end}}>Skip it</option>
               <option value="y" {{if eq $s.OverwriteFile "y"}}selected{{end}}>Overwrite it</option>
               <option value="b" {{if eq $s.OverwriteFile "b"}}selected{{end}}>Keep both</option>
@@ -75,7 +75,7 @@
           <h3>Text Processing</h3>
           <div class="settings-slider-row">
             <label class="settings-label" for="deemix-title-casing">Title casing</label>
-            <select id="deemix-title-casing" name="titleCasing" class="settings-select">
+            <select id="deemix-title-casing" name="titleCasing" class="ftl-select">
               <option value="nothing" {{if eq $s.TitleCasing "nothing"}}selected{{end}}>Leave as-is</option>
               <option value="lower" {{if eq $s.TitleCasing "lower"}}selected{{end}}>lower case</option>
               <option value="upper" {{if eq $s.TitleCasing "upper"}}selected{{end}}>UPPER CASE</option>
@@ -84,7 +84,7 @@
           </div>
           <div class="settings-slider-row">
             <label class="settings-label" for="deemix-artist-casing">Artist casing</label>
-            <select id="deemix-artist-casing" name="artistCasing" class="settings-select">
+            <select id="deemix-artist-casing" name="artistCasing" class="ftl-select">
               <option value="nothing" {{if eq $s.ArtistCasing "nothing"}}selected{{end}}>Leave as-is</option>
               <option value="lower" {{if eq $s.ArtistCasing "lower"}}selected{{end}}>lower case</option>
               <option value="upper" {{if eq $s.ArtistCasing "upper"}}selected{{end}}>UPPER CASE</option>
@@ -93,7 +93,7 @@
           </div>
           <div class="settings-slider-row">
             <label class="settings-label" for="deemix-featured-to-title">Featured artists</label>
-            <select id="deemix-featured-to-title" name="featuredToTitle" class="settings-select">
+            <select id="deemix-featured-to-title" name="featuredToTitle" class="ftl-select">
               <option value="0" {{if eq $s.FeaturedToTitle "0"}}selected{{end}}>Leave as-is</option>
               <option value="1" {{if eq $s.FeaturedToTitle "1"}}selected{{end}}>Remove from title</option>
               <option value="2" {{if eq $s.FeaturedToTitle "2"}}selected{{end}}>Move into title</option>
@@ -189,7 +189,7 @@
           </div>
           <div class="settings-slider-row">
             <label class="settings-label" for="deemix-local-artwork-format">Separate image format</label>
-            <select id="deemix-local-artwork-format" name="localArtworkFormat" class="settings-select">
+            <select id="deemix-local-artwork-format" name="localArtworkFormat" class="ftl-select">
               <option value="jpg" {{if ne $s.LocalArtworkFormat "png"}}selected{{end}}>JPEG</option>
               <option value="png" {{if eq $s.LocalArtworkFormat "png"}}selected{{end}}>PNG</option>
             </select>
@@ -313,7 +313,7 @@
 
   {{if .Error}}<div class="settings-alert settings-alert--error" style="margin-top:1.5rem">{{.Error}}</div>{{end}}
   <div class="settings-actions">
-    <button type="submit" class="btn btn-primary">Save Settings</button>
+    <button type="submit" class="ftl-btn ftl-btn-primary">Save Settings</button>
   </div>
 </form>
 {{end}}

@@ -10,7 +10,7 @@
 <p class="settings-hint">No music library found on this server - that's fine if you're linking it for other Plex libraries, like movies or TV shows.</p>
 {{else}}
 <label class="settings-label">Music library
-  <select name="library" class="settings-select">
+  <select name="library" class="ftl-select">
     <option value="">Select a library...</option>
     {{range .Libraries}}
     <option value="{{.Value}}">{{.Name}}</option>

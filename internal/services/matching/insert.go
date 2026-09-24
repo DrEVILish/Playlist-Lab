@@ -93,13 +93,17 @@ func InsertMatchedTrackIntoPlaylist(sqlDB *sql.DB, client *plex.Client, target P
 // RememberMatches records every matched track from a matching run as a
 // manual match, so a repeated retry/import of the same source track reuses
 // the resolved Plex track instead of re-running the fuzzy search. Ports
-// matching.ts's rememberMatches.
+// matching.ts's rememberMatches. Batched into one RecordManualMatches call
+// (one transaction) rather than one RecordManualMatch call per track - a
+// large playlist otherwise meant one BEGIN/COMMIT round trip per track.
 func RememberMatches(sqlDB *sql.DB, userID int64, matches []MatchedTrack) {
+	var inputs []db.ManualMatchInput
 	for _, m := range matches {
 		if m.Matched && m.PlexRatingKey != "" {
-			if err := db.RecordManualMatch(sqlDB, userID, m.Title, m.Artist, m.Album, m.PlexRatingKey); err != nil {
-				slog.Warn("[Matching] Failed to remember match", "error", err, "title", m.Title, "artist", m.Artist)
-			}
+			inputs = append(inputs, db.ManualMatchInput{Title: m.Title, Artist: m.Artist, Album: m.Album, PlexRatingKey: m.PlexRatingKey})
 		}
+	}
+	if err := db.RecordManualMatches(sqlDB, userID, inputs); err != nil {
+		slog.Warn("[Matching] Failed to remember matches", "error", err, "count", len(inputs))
 	}
 }

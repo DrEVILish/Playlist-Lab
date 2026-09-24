@@ -10,10 +10,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
 	"time"
 
@@ -57,7 +55,15 @@ func (t *Target) getUserToken(userID int64) (string, error) {
 	}
 	token, err := crypto.Decrypt(conn.AccessToken, t.Secret)
 	if err != nil {
-		return "", nil
+		// Same self-healing behavior as spotify/token.go's refreshToken: a
+		// decrypt failure means SESSION_SECRET changed since this was
+		// encrypted, so it can never succeed again as-is. Previously this
+		// returned ("", nil), which every caller reads as "not connected"
+		// and reports as the generic ErrNotConnected forever - clearing
+		// the now-unusable row surfaces a real error instead and lets the
+		// user just reconnect.
+		_ = db.DeleteOAuthConnection(t.DB, userID, serviceName)
+		return "", fmt.Errorf("failed to decrypt Apple Music token, please reconnect: %w", err)
 	}
 	return token, nil
 }
@@ -148,33 +154,17 @@ func (t *Target) MatchTracks(ctx context.Context, tracks []adapters.TrackInfo, c
 		return nil, err
 	}
 
-	results := make([]adapters.MatchResult, 0, len(tracks))
-	for i, track := range tracks {
-		if isCancelled != nil && isCancelled() {
-			break
-		}
-		query := strings.TrimSpace(track.Title + " " + track.Artist)
-		result := adapters.MatchResult{SourceTrack: track}
-
-		items, err := t.search(ctx, devToken, userToken, query, 5)
-		if err != nil {
-			slog.Warn("apple music search failed for track", "track", track, "error", err)
-		} else if len(items) > 0 {
-			sort.SliceStable(items, func(a, b int) bool {
-				return shared.ScoreResult(track.Title, track.Artist, items[a].Attributes.Name, items[a].Attributes.ArtistName) >
-					shared.ScoreResult(track.Title, track.Artist, items[b].Attributes.Name, items[b].Attributes.ArtistName)
-			})
-			best := items[0]
-			score := shared.ScoreResult(track.Title, track.Artist, best.Attributes.Name, best.Attributes.ArtistName)
-			result = toMatchResult(track, best, score, score >= 50)
-		}
-
-		results = append(results, result)
-		if progress != nil {
-			progress(i+1, len(tracks))
-		}
-	}
-	return results, nil
+	return shared.MatchTracksBySearch(ctx, tracks, progress, isCancelled, "apple music", 50,
+		func(ctx context.Context, track adapters.TrackInfo) ([]appleSong, error) {
+			query := strings.TrimSpace(track.Title + " " + track.Artist)
+			return t.search(ctx, devToken, userToken, query, 5)
+		},
+		func(sourceTitle, sourceArtist string, item appleSong) float64 {
+			return shared.ScoreResult(sourceTitle, sourceArtist, item.Attributes.Name, item.Attributes.ArtistName)
+		},
+		toMatchResult,
+		nil,
+	)
 }
 
 func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adapters.MatchResult, cfg adapters.TargetConfig, userID int64) (string, string, int, error) {

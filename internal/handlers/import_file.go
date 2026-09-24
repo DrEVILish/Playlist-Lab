@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -40,10 +41,11 @@ const maxFileImportPreviewSize = 100 << 10
 // importreview.Session, just without per-track review since this flow only
 // ever lets the user edit the playlist name before confirming.
 type pendingFileImport struct {
-	UserID   int64
-	Filename string
-	Name     string
-	Tracks   []adapters.TrackInfo
+	UserID    int64
+	Filename  string
+	Name      string
+	Tracks    []adapters.TrackInfo
+	CreatedAt time.Time
 }
 
 type pendingFileStore struct {
@@ -58,9 +60,24 @@ func newPendingFileStore() *pendingFileStore {
 func (s *pendingFileStore) New(userID int64, filename, name string, tracks []adapters.TrackInfo) string {
 	id := uuid.NewString()
 	s.mu.Lock()
-	s.items[id] = &pendingFileImport{UserID: userID, Filename: filename, Name: name, Tracks: tracks}
+	s.items[id] = &pendingFileImport{UserID: userID, Filename: filename, Name: name, Tracks: tracks, CreatedAt: time.Now()}
 	s.mu.Unlock()
 	return id
+}
+
+// Sweep removes entries older than maxAge - a user who previews a file
+// import and never confirms it (closes the modal, walks away) otherwise
+// leaves its parsed tracks in memory for the life of the process, with no
+// other code path that ever removes them.
+func (s *pendingFileStore) Sweep(maxAge time.Duration) {
+	cutoff := time.Now().Add(-maxAge)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id, p := range s.items {
+		if p.CreatedAt.Before(cutoff) {
+			delete(s.items, id)
+		}
+	}
 }
 
 func (s *pendingFileStore) Get(id string, userID int64) (*pendingFileImport, bool) {

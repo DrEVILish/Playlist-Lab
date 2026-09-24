@@ -16,9 +16,9 @@
        wrapper (if it were also a <form>) invalid, so neither wrapper is one;
        hx-include reaches across to gather the checked checkboxes instead. -->
   <div class="missing-tracks-toolbar-actions">
-    <button type="button" class="btn btn-primary btn-small" hx-post="/missing/retry" hx-target="#retry-status" hx-swap="innerHTML">Retry All</button>
-    <button type="button" class="btn btn-secondary btn-small" hx-post="/missing/deemix-all" hx-target="#notifications" hx-swap="innerHTML">Deemix All</button>
-    <a class="btn btn-secondary btn-small" href="/missing/export" title="Download every missing track as CSV">Export CSV</a>
+    <button type="button" class="ftl-btn ftl-btn-primary ftl-btn-sm" hx-post="/missing/retry" hx-target="#retry-status" hx-swap="innerHTML">Retry All</button>
+    <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" hx-post="/missing/deemix-all" hx-target="#notifications" hx-swap="innerHTML">Deemix All</button>
+    <a class="ftl-btn ftl-btn-secondary ftl-btn-sm" href="/missing/export" title="Download every missing track as CSV">Export CSV</a>
   </div>
 
   <input type="search" id="missing-search" class="form-input missing-search-input" placeholder="Filter by track title, artist, or playlist..." oninput="filterMissingTracks(this.value)">
@@ -27,8 +27,8 @@
     <div id="missing-list" hx-get="/missing/list" hx-trigger="load" hx-swap="innerHTML"></div>
     <div class="bulk-actions-bar">
       <span class="bulk-actions-count">Selected</span>
-      <button type="button" class="btn btn-secondary btn-small" hx-post="/missing/retry" hx-include="#missing-list [name='id']:checked" hx-target="#retry-status" hx-swap="innerHTML">Retry Selected</button>
-      <button type="button" class="btn btn-secondary btn-small" style="color:var(--error)" hx-post="/missing/bulk-remove" hx-include="#missing-list [name='id']:checked" hx-target="#missing-list" hx-swap="innerHTML" hx-confirm="Remove the selected missing track(s) from the list?">Remove Selected</button>
+      <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" hx-post="/missing/retry" hx-include="#missing-list [name='id']:checked" hx-target="#retry-status" hx-swap="innerHTML">Retry Selected</button>
+      <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" style="color:var(--error)" hx-post="/missing/bulk-remove" hx-include="#missing-list [name='id']:checked" hx-target="#missing-list" hx-swap="innerHTML" hx-confirm="Remove the selected missing track(s) from the list?">Remove Selected</button>
     </div>
   </div>
 </div>

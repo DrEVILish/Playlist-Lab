@@ -29,17 +29,17 @@
         </div>
         {{end}}
 
-        <div class="form-group">
-          <label class="form-label" for="dynamic-collection-name">Name</label>
+        <div class="ftl-field">
+          <label class="ftl-label" for="dynamic-collection-name">Name</label>
           <input id="dynamic-collection-name" class="form-input" type="text" name="name" maxlength="255" required
             value="{{if .Set}}{{.Set.Name}}{{else if .PrefillName}}{{.PrefillName}}{{end}}" placeholder="e.g. Genres" autofocus>
           <p class="field-hint">A label for this set - not the name of any collection it creates.</p>
         </div>
 
         {{if not .Set}}
-        <div class="form-group">
-          <label class="form-label" for="dynamic-collection-library">Library</label>
-          <select id="dynamic-collection-library" class="form-select" name="library" required>
+        <div class="ftl-field">
+          <label class="ftl-label" for="dynamic-collection-library">Library</label>
+          <select id="dynamic-collection-library" class="ftl-select" name="library" required>
             <option value="">Select a library...</option>
             {{range .ServerGroups}}
             <optgroup label="{{.ServerName}}">
@@ -51,9 +51,9 @@
           </select>
         </div>
 
-        <div class="form-group">
-          <label class="form-label" for="dynamic-collection-type">Type</label>
-          <select id="dynamic-collection-type" class="form-select" name="facetType" required>
+        <div class="ftl-field">
+          <label class="ftl-label" for="dynamic-collection-type">Type</label>
+          <select id="dynamic-collection-type" class="ftl-select" name="facetType" required>
             <option value="">Select a type...</option>
             <option value="genre" {{if eq .PrefillFacetType "genre"}}selected{{end}}>Genre</option>
             <option value="decade" {{if eq .PrefillFacetType "decade"}}selected{{end}}>Decade</option>
@@ -71,8 +71,8 @@
 
         <div class="collection-form-section">
           <h3 class="collection-form-section-title">Name pattern</h3>
-          <div class="form-group">
-            <label class="form-label" for="dynamic-collection-title-format">Title Format</label>
+          <div class="ftl-field">
+            <label class="ftl-label" for="dynamic-collection-title-format">Title Format</label>
             {{$titleFormat := "<<key_name>>"}}{{$facetType := .PrefillFacetType}}{{if .Set}}{{$titleFormat = .Set.TitleFormat}}{{$facetType = .Set.FacetType}}{{end}}
             <input id="dynamic-collection-title-format" class="form-input" type="text" name="titleFormat" maxlength="255" value="{{$titleFormat}}">
             <p class="field-hint">Must contain <code>&lt;&lt;key_name&gt;&gt;</code> - Kometa's own placeholder convention. Preview: <span id="dynamic-collection-title-preview" class="mono-data">{{replace $titleFormat "<<key_name>>" (facetExample $facetType)}}</span></p>
@@ -99,15 +99,15 @@
               <span class="update-mode-card-desc">Skip a specific list, keep the rest.</span>
             </label>
           </div>
-          <div class="form-group dynamic-scope-include">
-            <label class="form-label" for="dynamic-collection-include">Values to include</label>
-            <textarea id="dynamic-collection-include" class="form-textarea" name="include" rows="2"
+          <div class="ftl-field dynamic-scope-include">
+            <label class="ftl-label" for="dynamic-collection-include">Values to include</label>
+            <textarea id="dynamic-collection-include" class="ftl-textarea" name="include" rows="2"
               placeholder="One per line, or comma-separated">{{if .Set}}{{range .Set.ParsedInclude}}{{.}}
 {{end}}{{end}}</textarea>
           </div>
-          <div class="form-group dynamic-scope-exclude">
-            <label class="form-label" for="dynamic-collection-exclude">Values to exclude</label>
-            <textarea id="dynamic-collection-exclude" class="form-textarea" name="exclude" rows="2"
+          <div class="ftl-field dynamic-scope-exclude">
+            <label class="ftl-label" for="dynamic-collection-exclude">Values to exclude</label>
+            <textarea id="dynamic-collection-exclude" class="ftl-textarea" name="exclude" rows="2"
               placeholder="One per line, or comma-separated">{{if .Set}}{{range .Set.ParsedExclude}}{{.}}
 {{end}}{{end}}</textarea>
           </div>
@@ -115,8 +115,8 @@
 
         <div class="collection-form-section">
           <h3 class="collection-form-section-title">Behavior</h3>
-          <div class="form-group">
-            <label class="form-label">Sync Mode</label>
+          <div class="ftl-field">
+            <label class="ftl-label">Sync Mode</label>
             {{$syncMode := "sync"}}{{if .Set}}{{$syncMode = .Set.SyncMode}}{{end}}
             <div class="update-mode-group">
               <label class="update-mode-card">
@@ -142,15 +142,15 @@
           </label>
           <form id="dynamic-collection-delete-form" hx-delete="/dynamic-collections/{{.Set.ID}}" hx-target="#dynamic-collections-list" hx-swap="innerHTML"
             hx-confirm="Delete this set and every collection it generated?" hx-on::after-request="if(event.detail.successful) closeTopModal()">
-            <button type="submit" class="btn btn-secondary btn-small text-error">Delete Set</button>
+            <button type="submit" class="ftl-btn ftl-btn-secondary ftl-btn-sm text-error">Delete Set</button>
           </form>
         </div>
         {{end}}
       </div>
 
       <div class="advanced-mix-actions">
-        <button type="button" class="btn btn-secondary" onclick="closeTopModal()">Cancel</button>
-        <button type="submit" class="btn btn-primary">{{if .Set}}Save Changes{{else}}Create &amp; Generate{{end}}</button>
+        <button type="button" class="ftl-btn ftl-btn-secondary" onclick="closeTopModal()">Cancel</button>
+        <button type="submit" class="ftl-btn ftl-btn-primary">{{if .Set}}Save Changes{{else}}Create &amp; Generate{{end}}</button>
       </div>
     </form>
   </div>

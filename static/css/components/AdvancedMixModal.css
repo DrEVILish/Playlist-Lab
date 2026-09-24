@@ -133,21 +133,6 @@
 .form-input:focus { outline: none; border-color: var(--primary-color); }
 .form-input::placeholder { color: var(--text-muted); }
 
-.form-select {
-  width: 100%;
-  padding: 0.75rem;
-  background-color: var(--background);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.form-select:focus { outline: none; border-color: var(--primary-color); }
-.form-select:disabled { opacity: 0.5; cursor: not-allowed; }
-.form-select option { background-color: var(--surface); color: var(--text-primary); }
 
 /* Track Slider */
 .track-slider {

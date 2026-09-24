@@ -14,7 +14,7 @@ func romanizeKana(text string) (string, bool) {
 		return "", false
 	}
 	romanized := toRomaji(text)
-	if hanScriptPattern.MatchString(romanized) {
+	if hanScriptPattern.MatchString(romanized) || kanaScriptPattern.MatchString(romanized) {
 		return "", false
 	}
 	return romanized, true

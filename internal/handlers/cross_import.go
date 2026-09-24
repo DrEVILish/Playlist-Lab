@@ -136,7 +136,7 @@ func (h *CrossImportHandler) startMatch(w http.ResponseWriter, r *http.Request) 
 	}
 
 	sessionID := uuid.NewString()
-	sess := h.Sessions.New(sessionID, jobID, defaultTargetID, adapters.TargetConfig{})
+	sess := h.Sessions.New(sessionID, jobID, defaultTargetID, adapters.TargetConfig{}, user.ID)
 	sess.SetProgress(crossimport.Progress{Phase: crossimport.PhaseFetching})
 
 	// The background job outlives this request (the handler returns well
@@ -208,8 +208,9 @@ func (h *CrossImportHandler) runMatch(ctx context.Context, userID, jobID int64, 
 }
 
 func (h *CrossImportHandler) matchStatus(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
 	sessionID := chi.URLParam(r, "sessionId")
-	sess, ok := h.Sessions.Get(sessionID)
+	sess, ok := h.Sessions.Get(sessionID, user.ID)
 	if !ok {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
@@ -225,8 +226,9 @@ func (h *CrossImportHandler) matchStatus(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *CrossImportHandler) cancelMatch(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
 	sessionID := chi.URLParam(r, "sessionId")
-	if sess, ok := h.Sessions.Get(sessionID); ok {
+	if sess, ok := h.Sessions.Get(sessionID, user.ID); ok {
 		sess.Cancel()
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -237,8 +239,9 @@ func (h *CrossImportHandler) trackIndex(r *http.Request) (int, error) {
 }
 
 func (h *CrossImportHandler) toggleSkip(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
 	sessionID := chi.URLParam(r, "sessionId")
-	sess, ok := h.Sessions.Get(sessionID)
+	sess, ok := h.Sessions.Get(sessionID, user.ID)
 	if !ok {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
@@ -277,8 +280,9 @@ func (h *CrossImportHandler) renderReview(w http.ResponseWriter, sessionID strin
 // searchCandidates lets the review page re-search the target catalog for a
 // track the automatic match got wrong, mirroring POST /api/cross-import/search.
 func (h *CrossImportHandler) searchCandidates(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
 	sessionID := chi.URLParam(r, "sessionId")
-	sess, ok := h.Sessions.Get(sessionID)
+	sess, ok := h.Sessions.Get(sessionID, user.ID)
 	if !ok {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
@@ -298,7 +302,6 @@ func (h *CrossImportHandler) searchCandidates(w http.ResponseWriter, r *http.Req
 		http.Error(w, "target adapter not available", http.StatusInternalServerError)
 		return
 	}
-	user := auth.CurrentUser(r)
 	results, err := target.SearchCatalog(r.Context(), query, user.ID, false, false)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
@@ -310,8 +313,9 @@ func (h *CrossImportHandler) searchCandidates(w http.ResponseWriter, r *http.Req
 }
 
 func (h *CrossImportHandler) selectCandidate(w http.ResponseWriter, r *http.Request) {
+	user := auth.CurrentUser(r)
 	sessionID := chi.URLParam(r, "sessionId")
-	sess, ok := h.Sessions.Get(sessionID)
+	sess, ok := h.Sessions.Get(sessionID, user.ID)
 	if !ok {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
@@ -344,7 +348,7 @@ func (h *CrossImportHandler) selectCandidate(w http.ResponseWriter, r *http.Requ
 func (h *CrossImportHandler) execute(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
 	sessionID := chi.URLParam(r, "sessionId")
-	sess, ok := h.Sessions.Get(sessionID)
+	sess, ok := h.Sessions.Get(sessionID, user.ID)
 	if !ok {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
