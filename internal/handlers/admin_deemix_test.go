@@ -3,6 +3,8 @@ package handlers
 import (
 	"database/sql"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -73,5 +75,23 @@ func TestDeemixSettingsPanel_RendersAndSaves(t *testing.T) {
 	saved := deemixService.Settings()
 	if saved.DownloadLocation != "/music" || saved.QueueConcurrency != 5 || !saved.Tags.Title || saved.Tags.Genre {
 		t.Fatalf("Settings() after save = %+v, want the posted values applied in-process (ReloadSettings)", saved)
+	}
+}
+
+func TestSubmittedSecretKeepsSavedWhenBlank(t *testing.T) {
+	form := func(v url.Values) *http.Request {
+		r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(v.Encode()))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		_ = r.ParseForm()
+		return r
+	}
+	if got := submittedSecret(form(url.Values{"arl": {""}}), "arl", "saved"); got != "saved" {
+		t.Errorf("blank field: got %q, want the saved secret", got)
+	}
+	if got := submittedSecret(form(url.Values{"arl": {" new "}}), "arl", "saved"); got != "new" {
+		t.Errorf("new value: got %q, want %q", got, "new")
+	}
+	if got := submittedSecret(form(url.Values{"arl": {""}, "clear": {"1"}}), "arl", "saved"); got != "" {
+		t.Errorf("clear: got %q, want empty", got)
 	}
 }

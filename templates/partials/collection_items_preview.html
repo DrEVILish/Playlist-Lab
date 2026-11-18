@@ -8,21 +8,21 @@
      onto the row. Takes {Items: []collectionItemRow, Error: bool}. */}}
 {{define "partials/collection_items_preview.html"}}
 {{if .Error}}
-<p class="collection-preview-empty">Couldn't load this collection's items.</p>
+<p class="text-muted">Couldn't load this collection's items.</p>
 {{else if not .Items}}
-<p class="collection-preview-empty">This collection has no items yet - refresh it to populate membership.</p>
+<p class="text-muted">This collection has no items yet - refresh it to populate membership.</p>
 {{else}}
-<p class="collection-preview-count">{{len .Items}} item(s), in the order they appear in the Plex collection.</p>
-<table class="collection-preview-table data-table">
+<p class="text-muted">{{len .Items}} item(s), in the order they appear in the Plex collection.</p>
+<table class="table">
   <thead>
-    <tr><th class="collection-preview-rank">#</th><th>Title</th><th>Year</th></tr>
+    <tr><th class="mono">#</th><th>Title</th><th>Year</th></tr>
   </thead>
   <tbody>
     {{range $i, $it := .Items}}
     <tr>
-      <td class="collection-preview-rank mono-data">{{add $i 1}}</td>
+      <td class="mono">{{add $i 1}}</td>
       <td>{{$it.Title}}</td>
-      <td class="mono-data">{{if $it.Year}}{{$it.Year}}{{else}}—{{end}}</td>
+      <td class="mono">{{if $it.Year}}{{$it.Year}}{{else}}—{{end}}</td>
     </tr>
     {{end}}
   </tbody>

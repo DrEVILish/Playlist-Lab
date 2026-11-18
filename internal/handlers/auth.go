@@ -68,11 +68,21 @@ func (h *AuthHandler) callback(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) loginPage(w http.ResponseWriter, r *http.Request) {
+	expired := r.URL.Query().Get("expired") == "1"
 	if u := auth.CurrentUser(r); u != nil {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
+		// ?expired=1 (redirectToReauth) ends the session only when Plex
+		// really does reject this user's token, so a stray link can't log
+		// anyone out.
+		if _, err := h.Plex.GetUserInfo(u.PlexToken); !expired || !isPlexAuthError(err) {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
+		if sid := auth.SessionID(r); sid != "" {
+			_ = h.Store.Destroy(sid)
+		}
+		session.ClearCookie(w, h.Secure)
 	}
-	h.Tmpl.RenderPage(w, r, "login", nil)
+	h.Tmpl.RenderPage(w, r, "login", map[string]any{"User": nil, "Expired": expired})
 }
 
 // start begins the Plex PIN flow and returns an HTMX fragment: a link to

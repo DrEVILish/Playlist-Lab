@@ -1,140 +1,108 @@
 {{define "content"}}
-<!-- SettingsPage.css owns .settings-input/.settings-select, reused here
-     (rename field, sort/export dropdowns, search box, split-name field)
-     rather than duplicated - without it every one of those rendered as an
-     unstyled browser-default white control on this page's dark theme.
-     .ftl-badge/.ftl-badge-button (ftl-core.css) style the schedule/missing pills, same
-     hx-get="/playlists/{id}/schedule" modal trigger the Playlists table
-     already uses) - reused here for the same reason rather than redefined,
-     so the header's schedule/missing pills look and behave identically to
-     the ones on the Playlists table. -->
-<link rel="stylesheet" href="/static/css/pages/SettingsPage.css">
-<link rel="stylesheet" href="/static/css/pages/PlaylistsPage.css">
-<link rel="stylesheet" href="/static/css/pages/EditorPage.css">
-<link rel="stylesheet" href="/static/css/components/MissingTracksPanel.css">
-<div class="editor page-container">
-  <p><a href="/">&larr; Back to library</a></p>
+<div class="stack">
+  <p><a href="/">&larr; Playlists</a></p>
   {{if .PlexError}}
   <h1>Couldn't load this playlist</h1>
-  <p class="error-message">Couldn't reach your Plex server to load this playlist's tracks. Check your connection and try again.</p>
+  <p class="alert alert-danger">Couldn't reach your Plex server to load this playlist's tracks. Check your connection and try again.</p>
   {{else}}
 
   {{$plexId := .PlexID}}
   {{$header := .Header}}
 
   <!-- Detail-page header (DESIGN.md §11.2): the Editor doubles as the
-       playlist detail page, so cover/stats/schedule live here instead of
-       on a separate view. Built only from fields the handler already
-       fetches (GetPlaylists()/schedules tables) - there's no "description"
-       field anywhere in this app's Plex client or DB, so that part of
-       §11.2 is simply not shown rather than invented. -->
-  <div class="editor-header">
-    <div class="editor-cover">{{if $header.CoverURL}}<img src="{{$header.CoverURL}}" alt="" loading="lazy">{{end}}</div>
-    <div class="editor-header-body">
-      <h1>{{.Name}}</h1>
-      <div class="editor-stats">
-        <span class="editor-stat">{{$header.TrackCount}} tracks</span>
-        <span class="editor-stat">{{formatDuration $header.Duration}}</span>
-        {{if $header.Source}}<span class="ftl-badge ftl-badge-accent">{{$header.Source}}</span>{{end}}
-        {{if $header.AddedAt}}<span class="editor-stat" title="{{dateFromUnix $header.AddedAt}}">Added {{relativeUnix $header.AddedAt}}</span>{{end}}
+       playlist detail page, so cover/stats/schedule live here. Every
+       playlist-wide operation is in the heading's actions: Sort and Export
+       are popover forms, the rest is under "More". -->
+  <header class="page-heading">
+    <div class="page-heading-main">
+      <div class="row is-gap-m is-items-center">
+        {{if $header.CoverURL}}<img src="{{$header.CoverURL}}" alt="" loading="lazy" class="avatar avatar-lg">{{end}}
+        <h1>{{.Name}}</h1>
+      </div>
+      <p class="page-heading-meta">
+        <span class="mono">{{$header.TrackCount}} tracks</span>
+        <span class="mono">{{formatDuration $header.Duration}}</span>
+        {{if and $header.Source (ne $header.Source "plex")}}<span>From {{sourceLabel $header.Source}}</span>{{end}}
+        {{if $header.AddedAt}}<span title="{{dateFromUnix $header.AddedAt}}">Added {{relativeUnix $header.AddedAt}}</span>{{end}}
         {{if .DBID}}
         {{if $header.MissingCount}}
-        <button type="button" class="ftl-badge ftl-badge-button ftl-badge-warning" title="Jump to missing tracks"
+        <button type="button" class="badge badge-button badge-warning" title="Show the missing tracks"
           onclick="var d=document.getElementById('editor-missing-details'); d.open=true; d.scrollIntoView({behavior:'smooth', block:'start'});">{{$header.MissingCount}} missing</button>
         {{end}}
         {{if $header.ScheduleID}}
-        <button type="button" class="ftl-badge ftl-badge-button{{if $header.ScheduleFailed}} ftl-badge-warning{{end}}" title="Edit schedule"
+        <button type="button" class="badge badge-button{{if $header.ScheduleFailed}} badge-warning{{end}}" title="Edit schedule"
           hx-get="/playlists/{{$plexId}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">
-          <span class="ftl-lamp{{with lampState $header.LastRunStatus}} {{.}}{{end}}"></span>
-          <span style="text-transform:capitalize">{{$header.Frequency}}</span>{{if $header.NextRun}} &middot; next {{$header.NextRun}}{{end}}
+          <span class="lamp{{with lampState $header.LastRunStatus}} {{.}}{{end}}"></span>
+          {{$header.Frequency}}{{if $header.NextRun}}, next {{$header.NextRun}}{{end}}
         </button>
         {{else}}
-        <button type="button" class="ftl-badge ftl-badge-button" title="Create schedule" hx-get="/playlists/{{$plexId}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">+ Schedule</button>
+        <button type="button" class="badge badge-button" title="Refresh this playlist from its source on a schedule" hx-get="/playlists/{{$plexId}}/schedule" hx-target="#modal-root" hx-swap="innerHTML">Set schedule</button>
         {{end}}
         {{end}}
-      </div>
+      </p>
     </div>
-  </div>
-
-  <!-- Operations toolbar: rename/shuffle/sort/dedupe/cover all ported from
-       PlaylistEditor.tsx. Functional parity, not a pixel-for-pixel port of
-       that component's styling (EditPlaylistsPage.css isn't ported to
-       static/css yet - a separate, larger follow-up) - plain form controls
-       using the app's existing btn classes. -->
-  <div class="editor-toolbar">
-    <div class="editor-toolbar-group">
-      <span class="editor-toolbar-label">Edit</span>
-      <form class="editor-rename-form" hx-put="/playlists/{{$plexId}}/rename" hx-swap="none">
-        <input type="text" name="name" value="{{.Name}}" class="settings-input" aria-label="Playlist name">
-        <button type="submit" class="ftl-btn ftl-btn-secondary ftl-btn-sm">Rename</button>
-      </form>
-
-      <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" hx-post="/playlists/{{$plexId}}/shuffle"
-        hx-target="#notifications" hx-swap="innerHTML">Shuffle</button>
-    </div>
-
-    <div class="editor-toolbar-group">
-      <span class="editor-toolbar-label">Sort</span>
-      <form class="editor-sort-form" hx-post="/playlists/{{$plexId}}/sort" hx-target="#notifications" hx-swap="innerHTML">
-        <select name="by" class="ftl-select" aria-label="Sort by">
+    <div class="page-heading-actions">
+      <button type="button" class="btn btn-secondary btn-sm" popovertarget="editor-sort">Sort&hellip;</button>
+      <form class="dropdown stack stack-sm" popover id="editor-sort" hx-post="/playlists/{{$plexId}}/sort" hx-target="#notifications" hx-swap="innerHTML">
+        <label class="label" for="editor-sort-by">Sort tracks by</label>
+        <select id="editor-sort-by" name="by" class="select input-sm">
           <option value="title">Title</option>
           <option value="artist">Artist</option>
           <option value="album">Album</option>
           <option value="year">Year</option>
           <option value="duration">Duration</option>
         </select>
-        <select name="direction" class="ftl-select" aria-label="Sort direction">
-          <option value="asc">Ascending</option>
-          <option value="desc">Descending</option>
+        <select name="direction" class="select input-sm" aria-label="Sort direction">
+          <option value="asc">A to Z, oldest or shortest first</option>
+          <option value="desc">Z to A, newest or longest first</option>
         </select>
-        <button type="submit" class="ftl-btn ftl-btn-secondary ftl-btn-sm">Sort</button>
+        <button type="submit" class="btn btn-primary btn-sm">Sort playlist</button>
+      </form>
+      <button type="button" class="btn btn-secondary btn-sm" hx-post="/playlists/{{$plexId}}/shuffle"
+        hx-target="#notifications" hx-swap="innerHTML" hx-confirm="Shuffle the track order? The current order isn't kept.">Shuffle</button>
+      <!-- Plain (non-htmx) form: the response is the file itself
+           (Content-Disposition: attachment), which a real submit downloads. -->
+      <button type="button" class="btn btn-secondary btn-sm" popovertarget="editor-export">Save as file&hellip;</button>
+      <form class="dropdown" popover id="editor-export" method="post" action="/playlists/{{$plexId}}/export">
+        <button type="submit" name="format" value="m3u8" class="dropdown-item">M3U8 (most players)</button>
+        <button type="submit" name="format" value="m3u" class="dropdown-item">M3U</button>
+        <button type="submit" name="format" value="pls" class="dropdown-item">PLS</button>
+        <button type="submit" name="format" value="xspf" class="dropdown-item">XSPF</button>
+        <button type="submit" name="format" value="csv" class="dropdown-item">CSV (spreadsheet)</button>
+        <button type="submit" name="format" value="txt" class="dropdown-item">Text (Artist - Title)</button>
+      </form>
+      <button type="button" class="btn btn-ghost btn-icon btn-sm" popovertarget="editor-more" title="More" aria-label="More playlist actions">
+        <svg class="icon" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+      </button>
+      <div class="context-menu" popover id="editor-more" role="menu">
+        <button type="button" class="context-menu-item" role="menuitem" popovertarget="editor-rename">Rename&hellip;</button>
+        <button type="button" class="context-menu-item" role="menuitem" onclick="document.getElementById('editor-cover-input').click()">Upload cover&hellip;</button>
+        <button type="button" class="context-menu-item" role="menuitem" hx-get="/playlists/{{$plexId}}/share" hx-target="#modal-root" hx-swap="innerHTML">Share&hellip;</button>
+        <button type="button" class="context-menu-item" role="menuitem" hx-post="/playlists/{{$plexId}}/dedupe"
+          hx-target="#notifications" hx-swap="innerHTML"
+          hx-confirm="Remove tracks that appear more than once, keeping the first?">Remove duplicates</button>
+        <div class="context-menu-divider"></div>
+        <button type="button" class="context-menu-item is-danger" role="menuitem" hx-delete="/playlists/{{$plexId}}" hx-confirm="Delete &quot;{{.Name}}&quot; from Plex? This can't be undone.">Delete playlist</button>
+      </div>
+      <form class="dropdown stack stack-sm" popover id="editor-rename" hx-put="/playlists/{{$plexId}}/rename" hx-swap="none">
+        <label class="label" for="editor-rename-input">Playlist name</label>
+        <input type="text" id="editor-rename-input" name="name" value="{{.Name}}" class="input input-sm" required>
+        <button type="submit" class="btn btn-primary btn-sm">Rename</button>
+      </form>
+      <form hx-post="/playlists/{{$plexId}}/cover" hx-encoding="multipart/form-data" hx-swap="none" hidden>
+        <input type="file" id="editor-cover-input" name="cover" accept="image/*" onchange="this.closest('form').requestSubmit()">
       </form>
     </div>
-
-    <div class="editor-toolbar-group">
-      <span class="editor-toolbar-label">Export</span>
-      <form class="editor-cover-form" hx-post="/playlists/{{$plexId}}/cover" hx-encoding="multipart/form-data" hx-swap="none">
-        <label class="ftl-btn ftl-btn-secondary ftl-btn-sm">
-          Upload Cover
-          <input type="file" name="cover" accept="image/*" style="display:none"
-            onchange="this.closest('form').requestSubmit()">
-        </label>
-      </form>
-
-      <!-- Plain (non-htmx) form: the response is the actual file with
-           Content-Disposition: attachment, which a real form submit downloads
-           natively - an htmx-intercepted request would instead try to swap
-           the file's raw bytes into some element as if it were an HTML
-           fragment. -->
-      <form class="editor-export-form" method="post" action="/playlists/{{$plexId}}/export">
-        <select name="format" class="ftl-select" aria-label="Export format">
-          <option value="m3u8">M3U8 (UTF-8)</option>
-          <option value="m3u">M3U</option>
-          <option value="pls">PLS</option>
-          <option value="xspf">XSPF</option>
-          <option value="csv">CSV</option>
-          <option value="txt">TXT (Artist - Title)</option>
-        </select>
-        <button type="submit" class="ftl-btn ftl-btn-secondary ftl-btn-sm">Export</button>
-      </form>
-    </div>
-
-    <div class="editor-toolbar-group editor-toolbar-danger">
-      <span class="editor-toolbar-label">Danger zone</span>
-      <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" hx-post="/playlists/{{$plexId}}/dedupe"
-        hx-target="#notifications" hx-swap="innerHTML"
-        hx-confirm="Remove duplicate tracks (same Plex track added more than once)?">Remove Duplicates</button>
-    </div>
-  </div>
+  </header>
 
   {{if .DBID}}
   <!-- Reuses the same partial/endpoint as the dashboard's per-row missing
        expando (GET /missing/list?playlistId=) so a user editing a playlist
        doesn't have to leave the page to see what's missing from it. id
        lets the header's "N missing" pill (above) jump straight here. -->
-  <details class="editor-missing" id="editor-missing-details">
-    <summary>Missing Tracks</summary>
-    <div class="missing-tracks-scope" hx-get="/missing/list?playlistId={{.DBID}}" hx-trigger="toggle from:closest details once" hx-swap="innerHTML"></div>
+  <details class="accordion-item" id="editor-missing-details">
+    <summary class="accordion-trigger">Missing tracks{{if $header.MissingCount}} <span class="badge badge-warning">{{$header.MissingCount}}</span>{{end}}</summary>
+    <div class="accordion-panel missing-tracks-scope" hx-get="/missing/list?playlistId={{.DBID}}" hx-trigger="toggle from:closest details once" hx-swap="innerHTML"></div>
   </details>
   {{end}}
 
@@ -142,8 +110,8 @@
        ported as an htmx search-as-you-navigate form - hx-get re-fetches
        #search-results on every keystroke (debounced) rather than needing a
        separate "Search" button click. -->
-  <div class="editor-add-tracks">
-    <input type="search" class="settings-input" placeholder="Search your library to add a track..."
+  <div class="stack stack-sm">
+    <input type="search" class="input" placeholder="Add a track: search your library by title or artist" aria-label="Search your library to add a track"
       hx-get="/playlists/{{$plexId}}/search-tracks" hx-trigger="input changed delay:400ms, search"
       hx-target="#search-results" hx-swap="outerHTML" name="q">
     <div id="search-results"></div>
@@ -158,21 +126,23 @@
        checkboxes added below are deliberately left without a "name"
        attribute so FormData(form) skips them on this same submit. -->
   <form hx-post="/playlists/{{$plexId}}/split" hx-target="#notifications" hx-swap="innerHTML">
-    <div class="editor-split-bar">
-      <input type="text" name="name" placeholder="New playlist name" class="settings-input" required>
-      <button type="submit" class="ftl-btn ftl-btn-secondary ftl-btn-sm">Split Checked Tracks Into New Playlist</button>
+    <div class="toolbar is-plain">
+      <div class="btn-group">
+        <input type="text" name="name" placeholder="Name for a new playlist" aria-label="Name for a new playlist from the checked tracks" class="input input-sm is-auto" required>
+        <button type="submit" class="btn btn-secondary btn-sm" title="Copy the checked tracks into a new playlist; this one is unchanged">Copy checked to new playlist</button>
+      </div>
 
       <!-- Column show/hide + drag-reorder (DESIGN.md §8.6/§11.2). No
            per-user settings table exists in internal/db for this today, so
            state lives in localStorage (see the "ponytail:" note in the
            script below) - the pragmatic default, not a permanent choice. -->
-      <div class="editor-columns">
-        <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" id="columns-toggle" aria-haspopup="true" aria-expanded="false">Columns</button>
-        <div class="editor-columns-menu" id="columns-menu" hidden></div>
-      </div>
+      <span class="anchor editor-columns push">
+        <button type="button" class="btn btn-secondary btn-sm" id="columns-toggle" aria-haspopup="true" aria-expanded="false">Columns</button>
+        <div class="dropdown is-below is-end" id="columns-menu" hidden></div>
+      </span>
     </div>
-    <div class="editor-tracks-container">
-    <table id="tracks" class="data-table">
+    <div class="table-wrap scroll" style="--scroll-max: 75vh" tabindex="0" role="region" aria-label="Tracks">
+    <table id="tracks" class="table is-sticky">
       <thead>
         <tr>
           <th aria-label="Reorder"></th>
@@ -191,39 +161,39 @@
         {{range .Tracks}}
         {{if .PlaylistItemID}}
         <tr draggable="false" data-item-id="{{.PlaylistItemID}}" data-rating-key="{{.RatingKey}}">
-          <td class="drag-handle" title="Drag to reorder" aria-hidden="true">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-grip"></use></svg>
+          <td class="drag-handle text-muted" title="Drag to reorder" aria-hidden="true">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-grip"></use></svg>
           </td>
-          <td class="row-move-cell">
-            <button type="button" class="row-move-btn" data-dir="up" title="Move up" aria-label="Move &quot;{{.Title}}&quot; up">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-chevron-up"></use></svg>
+          <td><span class="row is-gap-none">
+            <button type="button" class="btn btn-ghost btn-icon btn-sm row-move-btn" data-dir="up" title="Move up" aria-label="Move &quot;{{.Title}}&quot; up">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-chevron-up"></use></svg>
             </button>
-            <button type="button" class="row-move-btn" data-dir="down" title="Move down" aria-label="Move &quot;{{.Title}}&quot; down">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-chevron-down"></use></svg>
+            <button type="button" class="btn btn-ghost btn-icon btn-sm row-move-btn" data-dir="down" title="Move down" aria-label="Move &quot;{{.Title}}&quot; down">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-chevron-down"></use></svg>
             </button>
-          </td>
-          <td><input type="checkbox" name="trackId" value="{{.RatingKey}}" aria-label="Select {{.Title}} for split"></td>
+          </span></td>
+          <td><input type="checkbox" class="checkbox" name="trackId" value="{{.RatingKey}}" aria-label="Select {{.Title}} for split"></td>
           <td>
             <!-- Stub: DESIGN.md §17 calls out real preview-audio playback
                  as backend-scoped (per-service streaming integration). This
                  wires the affordance to a handler that's clearly a stub
                  (notYetAvailable in playlists.go) rather than doing nothing
                  or faking playback. -->
-            <button type="button" class="row-play-btn" title="Preview playback (not yet available)" aria-label="Preview {{.Title}}"
+            <button type="button" class="btn btn-ghost btn-icon btn-sm" title="Preview playback (not yet available)" aria-label="Preview {{.Title}}"
               hx-post="/playlists/{{$plexId}}/tracks/{{.PlaylistItemID}}/preview" hx-swap="none">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none"><use href="#icon-play"></use></svg>
+              <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><use href="#icon-play"></use></svg>
             </button>
           </td>
           <td data-col="title" class="editor-cell-editable" tabindex="0" role="button" data-field="title" data-value="{{.Title}}" title="Click to edit">{{.Title}}</td>
           <td data-col="artist" class="editor-cell-editable" tabindex="0" role="button" data-field="artist" data-value="{{.Artist}}" title="Click to edit">{{.Artist}}</td>
           <td data-col="album">{{.Album}}</td>
-          <td data-col="duration" class="mono-data">{{formatTrackDuration .Duration}}</td>
-          <td data-col="codec" class="mono-data">{{.Codec}}</td>
-          <td class="col-actions row-actions">
-            <button type="button" class="row-remove-btn" title="Remove from playlist" aria-label="Remove {{.Title}}"
+          <td data-col="duration" class="mono">{{formatTrackDuration .Duration}}</td>
+          <td data-col="codec" class="mono">{{.Codec}}</td>
+          <td class="col-actions cluster cluster-sm">
+            <button type="button" class="btn btn-ghost btn-icon btn-sm" title="Remove from playlist" aria-label="Remove {{.Title}}"
               hx-delete="/playlists/{{$plexId}}/tracks/{{.PlaylistItemID}}" hx-target="closest tr" hx-swap="outerHTML swap:0s"
               hx-confirm="Remove &quot;{{.Title}}&quot; from this playlist?">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-trash"></use></svg>
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-trash"></use></svg>
             </button>
           </td>
         </tr>
@@ -236,8 +206,8 @@
           <td data-col="title">{{.Title}}</td>
           <td data-col="artist">{{.Artist}}</td>
           <td data-col="album">{{.Album}}</td>
-          <td data-col="duration" class="mono-data">{{formatTrackDuration .Duration}}</td>
-          <td data-col="codec" class="mono-data">{{.Codec}}</td>
+          <td data-col="duration" class="mono">{{formatTrackDuration .Duration}}</td>
+          <td data-col="codec" class="mono">{{.Codec}}</td>
           <td class="col-actions"><em>smart playlist - not editable</em></td>
         </tr>
         {{end}}
@@ -268,23 +238,10 @@
   const table = document.getElementById('tracks');
   const tbody = table.querySelector('tbody');
 
-  // --- Toast: shared by the preview-play and inline-metadata-edit stubs
-  // (both respond with HX-Trigger: {"editor-toast": "..."}), and by
-  // anything else on this page that wants a lightweight, non-blocking
-  // status message instead of the full notification-bell job queue. ---
-  function showToast(msg) {
-    let el = document.getElementById('editor-toast');
-    if (!el) {
-      el = document.createElement('div');
-      el.id = 'editor-toast';
-      el.className = 'editor-toast';
-      document.body.appendChild(el);
-    }
-    el.textContent = msg;
-    el.classList.add('is-visible');
-    clearTimeout(el._hideTimer);
-    el._hideTimer = setTimeout(() => el.classList.remove('is-visible'), 4000);
-  }
+  // --- Toast: the preview-play and inline-edit stubs respond with
+  // HX-Trigger: {"editor-toast": "..."}; shown via layout.html's global
+  // toast layer. ---
+  function showToast(msg) { window.showToast('success', msg); }
   document.body.addEventListener('editor-toast', (e) => showToast(e.detail.value));
 
   // --- Generic drag-to-reorder: dragstart/dragover/drop on a container of
@@ -449,11 +406,11 @@
     colState.order.forEach((key) => {
       const col = COLUMNS.find((c) => c.key === key);
       const item = document.createElement('div');
-      item.className = 'editor-columns-item';
+      item.className = 'dropdown-item editor-columns-item';
       item.draggable = true;
       item.dataset.key = key;
-      item.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#icon-grip"></use></svg>'
-        + '<label><input type="checkbox"' + (colState.hidden.includes(key) ? '' : ' checked') + '> ' + col.label + '</label>';
+      item.innerHTML = '<span class="row is-gap-s is-items-center"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#icon-grip"></use></svg>'
+        + '<label class="check"><input class="checkbox" type="checkbox"' + (colState.hidden.includes(key) ? '' : ' checked') + '> ' + col.label + '</label></span>';
       item.querySelector('input').addEventListener('change', (e) => {
         colState.hidden = e.target.checked ? colState.hidden.filter((k) => k !== key) : colState.hidden.concat([key]);
         saveColumnState(colState);

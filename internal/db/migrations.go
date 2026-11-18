@@ -60,6 +60,11 @@ var additiveColumns = []columnSpec{
 	// Settings > Appearance: an ftl-themes slug (see internal/db/ui_preferences.go's
 	// GetTheme/SaveTheme), alongside the existing text_scale preference.
 	{"user_settings", "theme", "ALTER TABLE user_settings ADD COLUMN theme TEXT"},
+	// The theme's palette variant (data-variant) and, per theme slug, a
+	// user-chosen tint colour (ftl-themes CONTRACT.md "Palette variants" /
+	// "Theme tint") - see GetThemeVariant/GetThemeTints.
+	{"user_settings", "theme_variant", "ALTER TABLE user_settings ADD COLUMN theme_variant TEXT"},
+	{"user_settings", "theme_tints", "ALTER TABLE user_settings ADD COLUMN theme_tints TEXT"},
 }
 
 // runMigrations applies any additive columns missing from an existing

@@ -12,138 +12,141 @@
      "Save as Template" (that's mix_templates.go/mix_templates.html, a
      separate feature owned by another page - not wired into generation). */}}
 {{define "partials/mix_custom_form.html"}}
-<div class="custom-mix-overlay">
-  <div class="custom-mix-modal">
-    <div class="custom-mix-header">
-      <h2 class="custom-mix-title">Create Custom Mix</h2>
-      <button type="button" class="custom-mix-close" onclick="closeTopModal()" aria-label="Close">&times;</button>
+<div class="modal-overlay">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h2>Create Custom Mix</h2>
+      <button type="button" class="btn-close" onclick="closeTopModal()" aria-label="Close"></button>
     </div>
 
     <form hx-post="/mixes/generate" hx-target="#notifications" hx-swap="innerHTML" hx-on::after:request="closeTopModal()">
       <input type="hidden" name="mixType" value="custom">
-      <div class="custom-mix-content">
-        <div class="ftl-field">
-          <label class="ftl-label" for="playlist-name">Playlist Name</label>
-          <input id="playlist-name" type="text" class="form-input" name="playlistName" value="My Custom Mix">
+      <div class="stack">
+        <div class="field">
+          <label class="label" for="playlist-name">Playlist Name</label>
+          <input id="playlist-name" type="text" class="input" name="playlistName" value="My Custom Mix">
         </div>
 
-        <div class="ftl-field">
-          <label class="ftl-label" for="track-count">Number of Tracks</label>
-          <input id="track-count" type="range" class="track-slider" name="trackCount" min="10" max="500" step="10" value="50">
+        <div class="field">
+          <label class="label" for="track-count">Number of Tracks</label>
+          <div class="row is-items-center">
+            <input id="track-count" type="range" class="slider" name="trackCount" min="10" max="500" step="10" value="50">
+            <output class="readout readout-sm" for="track-count">50</output>
+          </div>
         </div>
 
-        <div class="ftl-field">
-          <label class="ftl-label" for="sort-by">Sort By</label>
-          <div class="sorting-inputs">
-            <select id="sort-by" class="ftl-select" name="sortBy">
+        <div class="field">
+          <label class="label" for="sort-by">Sort By</label>
+          <div class="row">
+            <select id="sort-by" class="select" name="sortBy">
               <option value="random">Random</option>
               <option value="playCount">Play Count</option>
               <option value="dateAdded">Date Added</option>
               <option value="rating">Rating</option>
               <option value="title">Title</option>
             </select>
-            <select class="ftl-select" name="sortDirection" aria-label="Sort direction">
+            <select class="select" name="sortDirection" aria-label="Sort direction">
               <option value="desc">Descending</option>
               <option value="asc">Ascending</option>
             </select>
           </div>
         </div>
 
-        <details class="filter-section-collapsible">
-          <summary class="section-toggle">Time Filters</summary>
-          <div class="filter-section-content">
-            <div class="ftl-field">
-              <label class="ftl-label" for="played-in-last-days">Played in last (days)</label>
-              <input id="played-in-last-days" type="number" class="form-input" name="playedInLastDays" min="1" placeholder="e.g. 30">
+        <details class="accordion-item">
+          <summary class="accordion-trigger">Time Filters</summary>
+          <div class="accordion-panel stack">
+            <div class="field">
+              <label class="label" for="played-in-last-days">Played in last (days)</label>
+              <input id="played-in-last-days" type="number" class="input" name="playedInLastDays" min="1" placeholder="e.g. 30">
             </div>
-            <div class="ftl-field">
-              <label class="ftl-label" for="not-played-in-last-days">NOT played in last (days)</label>
-              <input id="not-played-in-last-days" type="number" class="form-input" name="notPlayedInLastDays" min="1" placeholder="e.g. 90">
+            <div class="field">
+              <label class="label" for="not-played-in-last-days">NOT played in last (days)</label>
+              <input id="not-played-in-last-days" type="number" class="input" name="notPlayedInLastDays" min="1" placeholder="e.g. 90">
             </div>
-            <div class="ftl-field">
-              <label class="ftl-label" for="added-in-last-days">Added in last (days)</label>
-              <input id="added-in-last-days" type="number" class="form-input" name="addedInLastDays" min="1" placeholder="e.g. 30">
-            </div>
-          </div>
-        </details>
-
-        <details class="filter-section-collapsible">
-          <summary class="section-toggle">Release Date</summary>
-          <div class="filter-section-content">
-            <div class="ftl-field">
-              <label class="ftl-label" for="released-after-year">Release Year Range</label>
-              <div class="year-inputs">
-                <input id="released-after-year" type="number" class="form-input" name="releasedAfterYear" min="1900" max="2100" placeholder="After, e.g. 2010">
-                <input id="released-before-year" type="number" class="form-input" name="releasedBeforeYear" min="1900" max="2100" placeholder="Before, e.g. 2020">
-              </div>
+            <div class="field">
+              <label class="label" for="added-in-last-days">Added in last (days)</label>
+              <input id="added-in-last-days" type="number" class="input" name="addedInLastDays" min="1" placeholder="e.g. 30">
             </div>
           </div>
         </details>
 
-        <details class="filter-section-collapsible">
-          <summary class="section-toggle">Rating &amp; Popularity</summary>
-          <div class="filter-section-content">
-            <div class="ftl-field">
-              <label class="ftl-label" for="min-rating">Rating Range (0-10)</label>
-              <div class="year-inputs">
-                <input id="min-rating" type="number" class="form-input" name="minRating" min="0" max="10" step="0.5" placeholder="Min, e.g. 7.5">
-                <input id="max-rating" type="number" class="form-input" name="maxRating" min="0" max="10" step="0.5" placeholder="Max, e.g. 9.5">
+        <details class="accordion-item">
+          <summary class="accordion-trigger">Release Date</summary>
+          <div class="accordion-panel stack">
+            <div class="field">
+              <label class="label" for="released-after-year">Release Year Range</label>
+              <div class="row">
+                <input id="released-after-year" type="number" class="input" name="releasedAfterYear" min="1900" max="2100" placeholder="After, e.g. 2010">
+                <input id="released-before-year" type="number" class="input" name="releasedBeforeYear" min="1900" max="2100" placeholder="Before, e.g. 2020">
               </div>
             </div>
-            <div class="ftl-field">
-              <label class="ftl-label" for="min-play-count">Play Count Range</label>
-              <div class="year-inputs">
-                <input id="min-play-count" type="number" class="form-input" name="minPlayCount" min="0" placeholder="Min, e.g. 5">
-                <input id="max-play-count" type="number" class="form-input" name="maxPlayCount" min="0" placeholder="Max, e.g. 100">
+          </div>
+        </details>
+
+        <details class="accordion-item">
+          <summary class="accordion-trigger">Rating &amp; Popularity</summary>
+          <div class="accordion-panel stack">
+            <div class="field">
+              <label class="label" for="min-rating">Rating Range (0-10)</label>
+              <div class="row">
+                <input id="min-rating" type="number" class="input" name="minRating" min="0" max="10" step="0.5" placeholder="Min, e.g. 7.5">
+                <input id="max-rating" type="number" class="input" name="maxRating" min="0" max="10" step="0.5" placeholder="Max, e.g. 9.5">
               </div>
             </div>
-            <div class="ftl-field">
-              <label class="checkbox-label">
+            <div class="field">
+              <label class="label" for="min-play-count">Play Count Range</label>
+              <div class="row">
+                <input id="min-play-count" type="number" class="input" name="minPlayCount" min="0" placeholder="Min, e.g. 5">
+                <input id="max-play-count" type="number" class="input" name="maxPlayCount" min="0" placeholder="Max, e.g. 100">
+              </div>
+            </div>
+            <div class="field">
+              <label class="check">
                 <input type="checkbox" name="popularTracksOnly" value="true">
                 <span>Only include popular tracks</span>
               </label>
-              <p class="ftl-field-hint">Uses external popularity data (Last.fm, MusicBrainz) to select only the most popular tracks from each artist.</p>
+              <p class="field-hint">Uses external popularity data (Last.fm, MusicBrainz) to select only the most popular tracks from each artist.</p>
             </div>
-            <div class="ftl-field">
-              <label class="checkbox-label">
+            <div class="field">
+              <label class="check">
                 <input type="checkbox" name="popularArtistsOnly" value="true">
                 <span>Only include popular artists</span>
               </label>
-              <p class="ftl-field-hint">Filters to only include tracks from well-known artists based on Last.fm popularity data.</p>
+              <p class="field-hint">Filters to only include tracks from well-known artists based on Last.fm popularity data.</p>
             </div>
           </div>
         </details>
 
-        <details class="filter-section-collapsible">
-          <summary class="section-toggle">Metadata Filters</summary>
-          <div class="filter-section-content">
-            <div class="ftl-field">
-              <label class="ftl-label" for="genres">Include Genres (comma-separated)</label>
-              <input id="genres" type="text" class="form-input" name="genres" placeholder="e.g., Rock, Pop, Jazz">
+        <details class="accordion-item">
+          <summary class="accordion-trigger">Metadata Filters</summary>
+          <div class="accordion-panel stack">
+            <div class="field">
+              <label class="label" for="genres">Include Genres (comma-separated)</label>
+              <input id="genres" type="text" class="input" name="genres" placeholder="e.g., Rock, Pop, Jazz">
             </div>
-            <div class="ftl-field">
-              <label class="ftl-label" for="exclude-genres">Exclude Genres (comma-separated)</label>
-              <input id="exclude-genres" type="text" class="form-input" name="excludeGenres" placeholder="e.g., Country, Classical">
+            <div class="field">
+              <label class="label" for="exclude-genres">Exclude Genres (comma-separated)</label>
+              <input id="exclude-genres" type="text" class="input" name="excludeGenres" placeholder="e.g., Country, Classical">
             </div>
-            <div class="ftl-field">
-              <label class="ftl-label" for="moods">Include Moods (comma-separated)</label>
-              <input id="moods" type="text" class="form-input" name="moods" placeholder="e.g., Energetic, Chill, Upbeat">
+            <div class="field">
+              <label class="label" for="moods">Include Moods (comma-separated)</label>
+              <input id="moods" type="text" class="input" name="moods" placeholder="e.g., Energetic, Chill, Upbeat">
             </div>
-            <div class="ftl-field">
-              <label class="ftl-label" for="styles">Include Styles (comma-separated)</label>
-              <input id="styles" type="text" class="form-input" name="styles" placeholder="e.g., Indie Rock, Synthpop">
+            <div class="field">
+              <label class="label" for="styles">Include Styles (comma-separated)</label>
+              <input id="styles" type="text" class="input" name="styles" placeholder="e.g., Indie Rock, Synthpop">
             </div>
-            <div class="ftl-field">
-              <label class="ftl-label" for="artist-names">Artist Names (comma-separated)</label>
-              <input id="artist-names" type="text" class="form-input" name="artistNames" placeholder="e.g., Beatles, Pink Floyd">
+            <div class="field">
+              <label class="label" for="artist-names">Artist Names (comma-separated)</label>
+              <input id="artist-names" type="text" class="input" name="artistNames" placeholder="e.g., Beatles, Pink Floyd">
             </div>
           </div>
         </details>
       </div>
 
-      <div class="custom-mix-actions">
-        <button type="submit" class="btn-generate">Generate Mix</button>
-        <button type="button" class="btn-cancel" onclick="closeTopModal()">Cancel</button>
+      <div class="modal-footer">
+        <button type="submit" class="btn btn-primary btn-sm">Generate Mix</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeTopModal()">Cancel</button>
       </div>
     </form>
   </div>

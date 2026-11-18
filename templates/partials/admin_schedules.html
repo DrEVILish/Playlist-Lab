@@ -10,49 +10,39 @@
      framework for; a grouped timeline gets the same "when is this due"
      glanceability with plain server-rendered markup. */}}
 {{define "partials/admin_schedules.html"}}
-<div id="admin-schedules">
-  <h3 class="admin-schedules-subheading">Background jobs</h3>
-  <div class="admin-jobs-list">
+<div id="admin-schedules" class="stack">
+  <h3>Background jobs</h3>
+  <ul class="list">
     {{range .Jobs}}
-    <div class="admin-jobs-row">
-      <span class="ftl-lamp{{if .Enabled}} is-on{{end}}" title="{{if .Enabled}}Enabled{{else}}Disabled{{end}}"></span>
-      <span class="admin-jobs-name">{{.Name}}</span>
-      <code class="admin-jobs-spec mono-data">{{.Spec}}</code>
-      <span class="admin-jobs-next mono-data">{{if .NextRun}}next {{.NextRun}}{{else}}&mdash;{{end}}</span>
-    </div>
+    <li class="list-item row is-items-center">
+      <span class="lamp{{if .Enabled}} is-on{{end}}" title="{{if .Enabled}}Enabled{{else}}Disabled{{end}}"></span>
+      <span>{{.Name}}</span>
+      <code>{{.Spec}}</code>
+      <span class="mono text-muted push">{{if .NextRun}}next {{.NextRun}}{{else}}&mdash;{{end}}</span>
+    </li>
     {{end}}
-  </div>
+  </ul>
 
-  <h3 class="admin-schedules-subheading">All schedules</h3>
+  <h3>All schedules</h3>
   {{if not .Timeline}}
-    <p class="settings-hint">No schedules exist yet.</p>
+    <p class="field-hint">No schedules exist yet.</p>
   {{else}}
-  <div class="admin-timeline">
-    {{range .Timeline}}
-    <section class="admin-timeline-group admin-timeline-group--{{.Key}}">
-      <h4 class="admin-timeline-group-header">
-        <span class="admin-timeline-dot"></span>{{.Label}}
-        <span class="admin-timeline-count">{{len .Rows}}</span>
-      </h4>
-      <div class="admin-timeline-rows">
-        {{range .Rows}}
-        <div class="admin-timeline-row">
-          <div class="admin-timeline-row-main">
-            <span class="admin-timeline-row-title">{{.Username}}</span>
-            <span class="admin-timeline-row-meta">
-              {{.ScheduleType}} &middot; {{.Frequency}}{{if .PlaylistName.Valid}} &middot; {{.PlaylistName.String}}{{end}}
-            </span>
-          </div>
-          <div class="admin-timeline-row-times mono-data">
-            <span title="Last run">{{if not .LastRunTime.IsZero}}{{relativeTime .LastRunTime}}{{else}}never run{{end}}</span>
-            {{if .NextRunLabel}}<span title="Next run">next {{.NextRunLabel}}</span>{{end}}
-          </div>
-        </div>
-        {{end}}
-      </div>
-    </section>
-    {{end}}
-  </div>
+  {{range .Timeline}}
+  <section class="stack stack-sm">
+    <h4 class="row is-items-center is-gap-s">{{.Label}} <span class="badge{{if eq .Key "overdue"}} badge-danger{{else if eq .Key "today"}} badge-warning{{end}}">{{len .Rows}}</span></h4>
+    <ul class="list">
+      {{range .Rows}}
+      <li class="list-item">
+        <span class="list-item-title">{{.Username}}</span>
+        <span class="list-item-meta">
+          <span>{{.ScheduleType}} &middot; {{.Frequency}}{{if .PlaylistName.Valid}} &middot; {{.PlaylistName.String}}{{end}}</span>
+          <span class="mono"><span title="Last run">{{if not .LastRunTime.IsZero}}{{relativeTime .LastRunTime}}{{else}}never run{{end}}</span>{{if .NextRunLabel}} &middot; <span title="Next run">next {{.NextRunLabel}}</span>{{end}}</span>
+        </span>
+      </li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
   {{end}}
 </div>
 {{end}}

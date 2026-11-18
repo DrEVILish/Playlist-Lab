@@ -27,13 +27,12 @@ slugs=$(jq -r '.[].slug' "$theme_dir/themes.json")
 # (or a bundle-variant file an older version of this script fetched) lingers
 # on disk forever, still embedded into the binary via go:embed, even though
 # it's unreachable through themes.json and this app's theme picker.
-find "$theme_dir" -maxdepth 1 -name '*.css' ! -name 'ftl-core.css' -delete
+find "$theme_dir" -maxdepth 1 -name '*.css' -delete
 find "$icon_dir" -maxdepth 1 -name '*.svg' -delete
 
 for slug in $slugs; do
   gh api "repos/$repo/contents/dist/$slug.css" --jq '.content' | base64 -d > "$theme_dir/$slug.css"
 done
-gh api "repos/$repo/contents/dist/ftl-core.css" --jq '.content' | base64 -d > "$theme_dir/ftl-core.css"
 
 # Per-theme icon sprites (CONTRACT.md "Per-theme icon overrides and the
 # generic fallback") - a full generic-icon sprite per theme with any icon

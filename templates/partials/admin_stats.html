@@ -10,63 +10,71 @@
      Built with plain inline SVG instead: a sparkline is a handful of points
      on a <polyline>, no library needed. All the point/axis math lives in
      internal/handlers/admin.go (sparklinePoints/buildScheduleTrendChart) so
-     this template stays markup-only. Styled to the same tokens TanStack
-     Charts would have used (--accent-teal/--error series, --border
-     gridlines, --font-mono labels). Revisit adopting it as its own scoped
-     effort - see docs/DESIGN.md §17. */}}
-<div class="admin-stats-grid">
-  <div class="card admin-stat-card">
-    <h3>Total Users</h3>
-    <p class="admin-stat-value mono-data">{{.Stats.TotalUsers}}</p>
-    <svg class="admin-sparkline" viewBox="0 0 {{.SparklineWidth}} {{.SparklineHeight}}" preserveAspectRatio="none" aria-hidden="true">
-      <polyline points="{{.UserSparkline}}" fill="none" stroke="var(--accent-teal)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+     this template stays markup-only. Colours are ftl-themes' chart palette
+     (--chart-series-1/-2, --chart-grid, --chart-text - CONTRACT.md "Chart
+     palette"), set via style= because SVG presentation attributes can't
+     take var(). */}}
+<div class="grid">
+  <div class="card stack stack-sm">
+    <div class="stat">
+      <span class="stat-value">{{.Stats.TotalUsers}}</span>
+      <span class="stat-label">Total Users</span>
+    </div>
+    <svg width="100%" height="32" viewBox="0 0 {{.SparklineWidth}} {{.SparklineHeight}}" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points="{{.UserSparkline}}" fill="none" style="stroke: var(--chart-series-1)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
     </svg>
-    <span class="admin-stat-caption">new signups &middot; last 14 days</span>
+    <span class="field-hint">new signups &middot; last 14 days</span>
   </div>
 
-  <div class="card admin-stat-card">
-    <h3>Active Users (30d)</h3>
-    <p class="admin-stat-value mono-data">{{.Stats.ActiveUsers}}</p>
-    <svg class="admin-sparkline" viewBox="0 0 {{.SparklineWidth}} {{.SparklineHeight}}" preserveAspectRatio="none" aria-hidden="true">
-      <polyline points="{{.ActiveSparkline}}" fill="none" stroke="var(--accent-teal)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <div class="card stack stack-sm">
+    <div class="stat">
+      <span class="stat-value">{{.Stats.ActiveUsers}}</span>
+      <span class="stat-label">Active Users (30d)</span>
+    </div>
+    <svg width="100%" height="32" viewBox="0 0 {{.SparklineWidth}} {{.SparklineHeight}}" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points="{{.ActiveSparkline}}" fill="none" style="stroke: var(--chart-series-1)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
     </svg>
-    <span class="admin-stat-caption">logins by day &middot; last 14 days</span>
+    <span class="field-hint">logins by day &middot; last 14 days</span>
   </div>
 
-  <div class="card admin-stat-card">
-    <h3 title="Every playlist ever imported/tracked through Playlist Lab, across all users - not just those currently live on Plex">Playlists Tracked (All-Time)</h3>
-    <p class="admin-stat-value mono-data">{{.Stats.TotalPlaylists}}</p>
-    <svg class="admin-sparkline" viewBox="0 0 {{.SparklineWidth}} {{.SparklineHeight}}" preserveAspectRatio="none" aria-hidden="true">
-      <polyline points="{{.PlaylistSparkline}}" fill="none" stroke="var(--accent-teal)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <div class="card stack stack-sm">
+    <div class="stat" title="Every playlist ever imported/tracked through Playlist Lab, across all users - not just those currently live on Plex">
+      <span class="stat-value">{{.Stats.TotalPlaylists}}</span>
+      <span class="stat-label">Playlists Tracked (All-Time)</span>
+    </div>
+    <svg width="100%" height="32" viewBox="0 0 {{.SparklineWidth}} {{.SparklineHeight}}" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points="{{.PlaylistSparkline}}" fill="none" style="stroke: var(--chart-series-1)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
     </svg>
-    <span class="admin-stat-caption">new playlists &middot; last 14 days</span>
+    <span class="field-hint">new playlists &middot; last 14 days</span>
   </div>
 
-  <div class="card admin-stat-card">
-    <h3>Missing Tracks</h3>
-    <p class="admin-stat-value mono-data">{{.Stats.TotalMissing}}</p>
-    <svg class="admin-sparkline" viewBox="0 0 {{.SparklineWidth}} {{.SparklineHeight}}" preserveAspectRatio="none" aria-hidden="true">
-      <polyline points="{{.MissingSparkline}}" fill="none" stroke="var(--accent-teal)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <div class="card stack stack-sm">
+    <div class="stat">
+      <span class="stat-value">{{.Stats.TotalMissing}}</span>
+      <span class="stat-label">Missing Tracks</span>
+    </div>
+    <svg width="100%" height="32" viewBox="0 0 {{.SparklineWidth}} {{.SparklineHeight}}" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points="{{.MissingSparkline}}" fill="none" style="stroke: var(--chart-series-1)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
     </svg>
-    <span class="admin-stat-caption">newly missing &middot; last 14 days</span>
+    <span class="field-hint">newly missing &middot; last 14 days</span>
   </div>
 </div>
 
-<div class="card admin-trend-card">
-  <div class="admin-trend-header">
-    <h3>Sync activity <span class="admin-trend-subtitle">&middot; schedule runs, last 14 days</span></h3>
-    <div class="admin-trend-legend">
-      <span class="admin-trend-legend-item"><span class="admin-trend-swatch admin-trend-swatch--ok"></span>Succeeded</span>
-      <span class="admin-trend-legend-item"><span class="admin-trend-swatch admin-trend-swatch--err"></span>Failed</span>
-    </div>
+<div class="card stack stack-sm">
+  <div class="row is-items-center is-wrap">
+    <h3>Sync activity <span class="text-muted">&middot; schedule runs, last 14 days</span></h3>
+    <span class="cluster cluster-sm push">
+      <span class="row is-gap-2xs is-items-center"><svg width="12" height="12" aria-hidden="true"><rect width="12" height="12" style="fill: var(--chart-series-1)"/></svg>Succeeded</span>
+      <span class="row is-gap-2xs is-items-center"><svg width="12" height="12" aria-hidden="true"><rect width="12" height="12" style="fill: var(--chart-series-2)"/></svg>Failed</span>
+    </span>
   </div>
-  <svg class="admin-trend-chart" viewBox="0 0 {{.TrendChartWidth}} {{.TrendChartHeight}}" preserveAspectRatio="none">
-    <line x1="0" y1="0" x2="{{.TrendChartWidth}}" y2="0" class="admin-trend-gridline"/>
-    <line x1="0" y1="{{.TrendChart.HalfY}}" x2="{{.TrendChartWidth}}" y2="{{.TrendChart.HalfY}}" class="admin-trend-gridline"/>
-    <polyline points="{{.TrendChart.SucceededPoints}}" fill="none" stroke="var(--accent-teal)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-    <polyline points="{{.TrendChart.FailedPoints}}" fill="none" stroke="var(--error)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  <svg width="100%" height="160" viewBox="0 0 {{.TrendChartWidth}} {{.TrendChartHeight}}" preserveAspectRatio="none">
+    <line x1="0" y1="0" x2="{{.TrendChartWidth}}" y2="0" style="stroke: var(--chart-grid)"/>
+    <line x1="0" y1="{{.TrendChart.HalfY}}" x2="{{.TrendChartWidth}}" y2="{{.TrendChart.HalfY}}" style="stroke: var(--chart-grid)"/>
+    <polyline points="{{.TrendChart.SucceededPoints}}" fill="none" style="stroke: var(--chart-series-1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <polyline points="{{.TrendChart.FailedPoints}}" fill="none" style="stroke: var(--chart-series-2)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
     {{range .TrendChart.DayLabels}}
-    <text x="{{.X}}" y="{{$.TrendChart.LabelY}}" text-anchor="{{.Anchor}}" class="admin-trend-axis-label mono-data">{{.Label}}</text>
+    <text x="{{.X}}" y="{{$.TrendChart.LabelY}}" text-anchor="{{.Anchor}}" font-size="10" style="fill: var(--chart-text)">{{.Label}}</text>
     {{end}}
   </svg>
 </div>

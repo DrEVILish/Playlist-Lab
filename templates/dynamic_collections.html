@@ -1,19 +1,18 @@
 {{define "content"}}
-<link rel="stylesheet" href="/static/css/components/DataTable.css">
-<link rel="stylesheet" href="/static/css/pages/CollectionsPage.css">
-<div class="collections page-container">
-  <div class="page-header">
-    <h1 class="page-title">Dynamic Collections</h1>
-    <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm"
-      hx-get="/collections/presets" hx-target="#modal-root" hx-swap="innerHTML">
-      Browse Presets
-    </button>
-    <button type="button" class="ftl-btn ftl-btn-primary ftl-btn-sm"
-      hx-get="/dynamic-collections/new" hx-target="#modal-root" hx-swap="innerHTML">
-      New Set
-    </button>
-  </div>
-  <p class="field-hint">Kometa-style dynamic collections: each set below expands into one real Collection per distinct genre/decade/year/etc. found in the chosen library - see the <a href="/collections">Collections</a> page for the collections it creates.</p>
+<div class="stack">
+  <header class="page-heading">
+    <div class="page-heading-main">
+      <h1>Collections</h1>
+      <p class="text-muted">A dynamic set makes one collection per genre, decade, year or other value found in a library, and keeps them up to date.</p>
+    </div>
+    <div class="page-heading-actions">
+      <button type="button" class="btn btn-secondary btn-sm"
+        hx-get="/collections/presets" hx-target="#modal-root" hx-swap="innerHTML">Browse presets</button>
+      <button type="button" class="btn btn-primary btn-sm"
+        hx-get="/dynamic-collections/new" hx-target="#modal-root" hx-swap="innerHTML">New dynamic set</button>
+    </div>
+  </header>
+  {{template "collectionsHeading" "dynamic"}}
   <div id="dynamic-collections-list" hx-get="/dynamic-collections/list" hx-trigger="load, dynamic-collections-changed from:body" hx-swap="innerHTML"></div>
 </div>
 {{end}}

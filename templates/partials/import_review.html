@@ -5,87 +5,75 @@
      that pattern already exists and works in this app. */}}
 {{define "partials/import_review.html"}}
 {{$sid := .SessionID}}
-<div id="import-review">
-  <h2 class="step-section-title">Review matches</h2>
+<div id="import-review" class="stack">
+  <h2>Review matches</h2>
 
-  <div class="review-summary">
-    <div class="review-summary-item"><span class="review-summary-count">{{.TotalCount}}</span> total</div>
-    <div class="review-summary-item" style="color:var(--success);"><span class="review-summary-count">{{.MatchedCount}}</span> matched</div>
-    <div class="review-summary-item" style="color:var(--warning);"><span class="review-summary-count">{{.UnmatchedCount}}</span> unmatched</div>
-    <div class="review-summary-item" style="color:var(--text-muted);"><span class="review-summary-count">{{.SkippedCount}}</span> skipped</div>
+  <div class="cluster">
+    <div class="stat"><span class="stat-value">{{.TotalCount}}</span><span class="stat-label">total</span></div>
+    <div class="stat"><span class="stat-value">{{.MatchedCount}}</span><span class="stat-label">matched</span></div>
+    <div class="stat"><span class="stat-value">{{.UnmatchedCount}}</span><span class="stat-label">unmatched</span></div>
+    <div class="stat"><span class="stat-value">{{.SkippedCount}}</span><span class="stat-label">skipped</span></div>
   </div>
 
-  <div class="review-track-list">
+  <table class="table">
+    <thead><tr>
+      <th><span class="visually-hidden">Reorder</span></th>
+      <th>Source track</th><th>Plex match</th><th><span class="visually-hidden">Actions</span></th>
+    </tr></thead>
+    <tbody class="review-track-list">
     {{range $i, $t := .Tracks}}
-    {{$status := "unmatched"}}
-    {{if $t.Skipped}}{{$status = "skipped"}}{{else if $t.Matched}}{{$status = "matched"}}{{end}}
-    <div class="review-track-item {{$status}}" data-index="{{$i}}">
-      <div class="track-drag-handle" title="Drag to reorder" aria-hidden="true">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
-      </div>
-      <div class="track-move-buttons">
-        <button type="button" class="track-move-btn" data-dir="up" title="Move up" aria-label="Move &quot;{{$t.Title}}&quot; up" {{if eq $i 0}}disabled{{end}}>&#9650;</button>
-        <button type="button" class="track-move-btn" data-dir="down" title="Move down" aria-label="Move &quot;{{$t.Title}}&quot; down">&#9660;</button>
-      </div>
-      <div class="review-track-source">
-        <div class="review-track-title">{{$t.Title}}</div>
-        <div class="review-track-artist">{{$t.Artist}}</div>
-      </div>
-
-      <div class="review-track-target">
-        {{if $t.Matched}}
-        <div class="review-track-title">{{$t.PlexTitle}}</div>
-        <div class="review-track-artist">{{$t.PlexArtist}}</div>
-        {{else}}
-        <span class="review-track-unmatched-label">Unmatched</span>
-        {{end}}
-      </div>
-
-      <div style="display:flex;flex-direction:column;gap:0.375rem;align-items:flex-end;">
-        <form hx-post="/import/review/{{$sid}}/track/{{$i}}/skip" hx-target="#import-review" hx-swap="outerHTML">
-          <button type="submit" class="ftl-btn ftl-btn-secondary ftl-btn-sm">{{if $t.Skipped}}Unskip{{else}}Skip{{end}}</button>
-        </form>
-        <details class="ci-search">
-          <summary class="ftl-btn ftl-btn-secondary ftl-btn-sm">Search</summary>
-          <form hx-get="/import/review/{{$sid}}/track/{{$i}}/search" hx-target="#import-candidates-{{$i}}" hx-swap="innerHTML">
-            <input class="input" type="text" name="q" placeholder="Search…" value="{{$t.Title}} {{$t.Artist}}">
-            <button type="submit" class="ftl-btn ftl-btn-primary ftl-btn-sm">Go</button>
+    <tr class="review-track-item" data-index="{{$i}}">
+      <td>
+        <span class="row is-gap-none is-items-center">
+          <span class="track-drag-handle text-muted" title="Drag to reorder" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
+          <button type="button" class="btn btn-ghost btn-icon btn-sm track-move-btn" data-dir="up" title="Move up" aria-label="Move &quot;{{$t.Title}}&quot; up" {{if eq $i 0}}disabled{{end}}>&#9650;</button>
+          <button type="button" class="btn btn-ghost btn-icon btn-sm track-move-btn" data-dir="down" title="Move down" aria-label="Move &quot;{{$t.Title}}&quot; down">&#9660;</button>
+        </span>
+      </td>
+      <td>{{$t.Title}}<br><span class="text-muted">{{$t.Artist}}</span></td>
+      <td>
+        {{if $t.Skipped}}<span class="status status-idle">Skipped</span>
+        {{else if $t.Matched}}{{$t.PlexTitle}}<br><span class="text-muted">{{$t.PlexArtist}}</span>
+        {{else}}<span class="status status-warn">Unmatched</span>{{end}}
+      </td>
+      <td>
+        <span class="row is-gap-s is-items-center">
+          <form hx-post="/import/review/{{$sid}}/track/{{$i}}/skip" hx-target="#import-review" hx-swap="outerHTML">
+            <button type="submit" class="btn btn-secondary btn-sm">{{if $t.Skipped}}Unskip{{else}}Skip{{end}}</button>
           </form>
-          <div id="import-candidates-{{$i}}"></div>
-        </details>
-      </div>
-    </div>
+          <details class="anchor">
+            <summary class="btn btn-secondary btn-sm">Search</summary>
+            <div class="popover is-below is-end stack stack-sm">
+              <form class="input-group" hx-get="/import/review/{{$sid}}/track/{{$i}}/search" hx-target="#import-candidates-{{$i}}" hx-swap="innerHTML">
+                <input class="input input-sm" type="text" name="q" aria-label="Search" value="{{$t.Title}} {{$t.Artist}}">
+                <button type="submit" class="btn btn-primary btn-sm">Go</button>
+              </form>
+              <div id="import-candidates-{{$i}}"></div>
+            </div>
+          </details>
+        </span>
+      </td>
+    </tr>
     {{end}}
-  </div>
+    </tbody>
+  </table>
 
-  <form hx-post="/import/confirm/{{$sid}}" hx-target="#notifications" hx-swap="innerHTML" class="import-confirm-form"
+  <form hx-post="/import/confirm/{{$sid}}" hx-target="#notifications" hx-swap="innerHTML" class="stack"
     hx-on::after-request="if(event.detail.successful) closeTopModal()">
-    <div class="form-section">
-      <label class="ftl-label" for="import-confirm-name">Playlist name</label>
-      <input class="form-input" type="text" id="import-confirm-name" name="playlistName" value="{{.PlaylistName}}" required>
+    <div class="field">
+      <label class="label" for="import-confirm-name">Playlist name</label>
+      <input class="input" type="text" id="import-confirm-name" name="playlistName" value="{{.PlaylistName}}" required>
     </div>
-    <div class="form-section">
-      <label><input type="checkbox" name="overwriteExisting" value="true"> Replace an existing playlist with this name</label>
-    </div>
-    <div class="form-section">
-      <label><input type="checkbox" name="keepExistingCover" value="true"> Keep the existing playlist's cover art</label>
-    </div>
-    <div class="form-section" style="display:flex;gap:0.75rem;align-items:center;">
-      <button type="submit" class="ftl-btn ftl-btn-primary">Confirm Import ({{.MatchedCount}} tracks)</button>
+    <label class="check"><input class="checkbox" type="checkbox" name="overwriteExisting" value="true"> Replace an existing playlist with this name</label>
+    <label class="check"><input class="checkbox" type="checkbox" name="keepExistingCover" value="true"> Keep the existing playlist's cover art</label>
+    <div class="cluster">
+      <button type="submit" class="btn btn-primary btn-sm">Confirm Import ({{.MatchedCount}} tracks)</button>
       {{if gt .UnmatchedCount 0}}
-      <a class="ftl-btn ftl-btn-secondary" href="/import/review/{{$sid}}/export">Export unmatched tracks (CSV)</a>
+      <a class="btn btn-secondary btn-sm" href="/import/review/{{$sid}}/export">Export unmatched tracks (CSV)</a>
       {{end}}
     </div>
   </form>
 </div>
-<style>
-  /* Same disclosure-triangle removal cross_import_review.html's own inline
-     style carries for the identical .ci-search pattern - duplicated rather
-     than shared, since it's two rules and this partial doesn't otherwise
-     depend on that one. */
-  .ci-search summary { list-style: none; cursor: pointer; display: inline-block; }
-  .ci-search summary::-webkit-details-marker { display: none; }
-</style>
 <script>
 (function () {
   // Drag-to-reorder + mobile up/down buttons, same wireDragReorder pattern

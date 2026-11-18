@@ -27,12 +27,12 @@ func TestCollectionFormRenders(t *testing.T) {
 		if rec.Code != 200 {
 			t.Fatalf("status %d, body: %s", rec.Code, body)
 		}
-		for _, want := range []string{"New Collection", "Membership", "collection-form-section", "Behavior", "Sort Title"} {
+		for _, want := range []string{"New Collection", "Membership", "field-group", "Behavior", "Sort Title"} {
 			if !strings.Contains(body, want) {
 				t.Errorf("create-mode render missing %q", want)
 			}
 		}
-		if strings.Contains(body, "collection-spec-plate") {
+		if strings.Contains(body, "data-spec-plate") {
 			t.Error("create mode has nothing fixed-at-creation to show yet, spec plate shouldn't render")
 		}
 	})
@@ -54,7 +54,7 @@ func TestCollectionFormRenders(t *testing.T) {
 		// html/template correctly HTML-entity-escapes "+" in an attribute
 		// value (&#43;) - a browser renders that back to a literal "+", so
 		// this checks for the escaped form rather than a raw "+".
-		for _, want := range []string{"Edit Collection", "collection-spec-plate", ">Home<", ">Movies<", "Rules", "&#43;1_Action", "Danger Zone"} {
+		for _, want := range []string{"Edit Collection", "data-spec-plate", ">Home<", ">Movies<", "Rules", "&#43;1_Action", "Danger Zone"} {
 			if !strings.Contains(body, want) {
 				t.Errorf("edit-mode render missing %q", want)
 			}

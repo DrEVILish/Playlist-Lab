@@ -68,7 +68,9 @@ CREATE TABLE IF NOT EXISTS user_settings (
   ai_provider TEXT DEFAULT 'gemini',  -- 'gemini' or 'grok'
   text_scale TEXT DEFAULT 'medium',   -- Settings > Appearance (DESIGN.md §14): 'small'/'medium'/'large'
   editor_columns TEXT,                -- JSON: Editor page column show/hide + order (DESIGN.md §11.2)
-  theme TEXT,                         -- Settings > Appearance: an ftl-themes slug (static/themes/themes.json), '' for this app's own default look
+  theme TEXT,                         -- Settings > Appearance: an ftl-themes slug (static/themes/themes.json), '' for the app's default theme
+  theme_variant TEXT,                 -- the theme's palette variant id (data-variant), '' for its base palette
+  theme_tints TEXT,                   -- JSON {slug: "#rrggbb"}: a user tint colour per theme that declares one
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 

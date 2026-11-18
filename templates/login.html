@@ -1,15 +1,11 @@
 {{define "content"}}
-<link rel="stylesheet" href="/static/css/pages/LoginPage.css">
-<div class="login-page hero-backdrop">
-  <div class="login-card hero-backdrop-card">
-    <div class="login-logo">
-      <h1><span class="logo-playlist">Playlist </span><span class="logo-lab">Lab</span></h1>
-    </div>
-    <p class="login-subtitle">Sign in with your Plex account to continue</p>
-    <button class="login-btn" hx-post="/auth/start" hx-target="#auth-status" hx-swap="innerHTML">
-      Sign in with Plex
-    </button>
+<section class="hero container">
+  <h1>Playlist Lab</h1>
+  {{if .Expired}}<p class="alert alert-warning">Your Plex sign-in has expired, so Playlist Lab can't reach your servers. Sign in again; your playlists, servers and settings are kept.</p>
+  {{else}}<p>Sign in with your Plex account to continue</p>{{end}}
+  <div class="stack">
+    <div><button class="btn btn-primary" hx-post="/auth/start" hx-target="#auth-status" hx-swap="innerHTML">Sign in with Plex</button></div>
     <div id="auth-status"></div>
   </div>
-</div>
+</section>
 {{end}}

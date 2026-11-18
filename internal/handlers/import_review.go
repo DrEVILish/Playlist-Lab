@@ -57,11 +57,11 @@ func RegisterImportReview(r chi.Router, mw *auth.Middleware, h *ImportHandler) {
 func (h *ImportHandler) preview(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
 	_ = r.ParseForm()
-	source := r.FormValue("source")
 	identifier := r.FormValue("identifier")
+	source := h.importSource(r.FormValue("source"), identifier)
 	customName := r.FormValue("playlistName")
 	if source == "" || identifier == "" {
-		http.Error(w, "source and identifier are required", http.StatusBadRequest)
+		http.Error(w, "Paste a playlist link or ID first.", http.StatusBadRequest)
 		return
 	}
 	if _, ok := h.Registry.GetSource(source); !ok {

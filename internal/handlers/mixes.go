@@ -61,7 +61,7 @@ func (h *MixesHandler) page(w http.ResponseWriter, r *http.Request) {
 	// this page throws away.
 	data := map[string]any{"User": user, "HasServer": userServer != nil && userServer.LibraryID.Valid}
 	if IsModalRequest(r) {
-		h.Tmpl.RenderModal(w, r, "mixes", "Generate Mixes", data)
+		h.Tmpl.RenderModal(w, r, "mixes", "Generate a mix", data)
 		return
 	}
 	h.Tmpl.RenderPage(w, r, "mixes", data)

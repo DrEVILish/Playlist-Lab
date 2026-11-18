@@ -1,20 +1,20 @@
 {{define "content"}}
-<link rel="stylesheet" href="/static/css/pages/ImportPage.css">
-<!-- The review-track-list/.review-summary rules the new preview/review flow
-     below uses only exist in CrossImportPage.css today - reused as-is
-     rather than duplicated, since cross-import's review step and this one
-     are the same visual concept. -->
-<link rel="stylesheet" href="/static/css/pages/CrossImportPage.css">
-<div class="import page-container">
+<div class="stack stack-lg">
+  {{if not .InModal}}<header class="page-heading">
+    <div class="page-heading-main">
+      <h1>Import a playlist</h1>
+      <p class="text-muted">Tracks are matched against your Plex library. Anything not found is listed under <a href="/missing">Missing</a>, ready to retry or download.</p>
+    </div>
+  </header>{{end}}
   {{if not .HasServer}}
-  <p class="error-message">Select a Plex server and music library in setup before importing.</p>
+  <p class="alert alert-warning">Pick a Plex server and music library first: <a href="/setup">set up your server</a>.</p>
   {{else}}
 
   {{if not .Sources}}
   <div class="empty-state">
     <div class="empty-state-icon">&#128193;</div>
     <div class="empty-state-title">No import sources available</div>
-    <div class="empty-state-description">No source adapters are registered on this server yet.</div>
+    <div class="empty-state-hint">No source adapters are registered on this server yet.</div>
   </div>
   {{else}}
 
@@ -30,107 +30,70 @@
        actually creates the playlist. Import posts straight to /import
        (import.go's startImport) instead - the older fire-and-forget path,
        skipping the review step for a user who already trusts the match. -->
-  <style>
-    /* :has() is scoped to .import.page-container (not a sibling-of-
-       .source-tabs rule) since .billboard-week-picker/.import-browse-section
-       aren't guaranteed to be later siblings of .source-tabs once the file-
-       import button shares its row - :has() matches any descendant of the
-       page container regardless of nesting depth, so this holds either way. */
-    .import.page-container:has(#source-billboard:checked) .billboard-week-picker { display: block; }
 
-    /* Chart browsing / search-by-name only exist for sources with a
-       public or app-level playlist API to reuse (see charts.go's doc) -
-       Deezer and Spotify. */
-    .import.page-container:has(#source-deezer:checked) .import-browse-section,
-    .import.page-container:has(#source-spotify:checked) .import-browse-section { display: block; }
-    .import.page-container:has(#source-spotify:checked) .spotify-saved-users-section { display: block; }
-  </style>
-
-  <form>
-    <section class="import-form">
-      <div class="form-section">
-        <label class="ftl-label" for="import-identifier">Playlist URL or ID</label>
-        <input class="form-input" type="text" id="import-identifier" name="identifier" placeholder="https://..." required>
-        <p class="ftl-field-hint">Enter the playlist URL from a remote source to import.</p>
-      </div>
-
-      <!-- Preview/Import/Import-from-File all act on (or substitute for)
-           the URL/ID field above, so they stay together in this same
-           section/card. -->
-      <div class="form-section import-form-actions">
-        <button type="submit" class="ftl-btn ftl-btn-secondary" hx-post="/import/preview" hx-target="#modal-root" hx-swap="beforeend">Preview</button>
-        <button type="submit" class="ftl-btn ftl-btn-primary" hx-post="/import" hx-target="#notifications" hx-swap="innerHTML">Import</button>
-        <button type="button" class="ftl-btn ftl-btn-secondary" hx-get="/import/file/form" hx-target="#modal-root" hx-swap="beforeend">Import from File</button>
-      </div>
-    </section>
-
-    <!-- Source picker is its own card, separate from the URL/ID form above:
-         it selects which source's browse section (charts/search/saved
-         users) shows below, not what the pasted URL/ID means to
-         /import/preview (its "source" form value still comes from whichever
-         tab is checked, regardless of where the tabs sit in the DOM - both
-         cards are inside the same enclosing <form>). -->
-    <section class="import-form">
-      <div class="source-tabs-row">
-        <div class="source-tabs">
-          {{range $i, $s := .Sources}}
-          <input type="radio" name="source" id="source-{{$s.ID}}" value="{{$s.ID}}" class="source-tab-input" {{if eq $i 0}}checked{{end}}>
-          <label for="source-{{$s.ID}}" class="source-tab" title="{{$s.Name}}">
-            {{if serviceLogo $s.Icon}}
-            <span class="source-tab-icon-frame"><img class="source-tab-icon" src="{{serviceLogo $s.Icon}}" alt="{{$s.Name}}"></span>
-            {{else}}
-            {{$s.Name}}
-            {{end}}
-          </label>
-          {{end}}
-        </div>
-      </div>
-
-      <!-- Billboard-specific "browse a chart week" picker (user feedback:
-           bring back example/top-chart browsing like older versions had,
-           rather than only a raw URL paste box). Only shown when Billboard
-           is the selected source (:has() rule above). Doesn't touch the
-           form's actual submitted field - the week <select>'s onchange
-           just fills in #import-identifier, so /import/preview needs no
-           changes at all. -->
-      <div class="form-section billboard-week-picker">
-        <label class="ftl-label">Browse a chart week</label>
-        <div class="billboard-week-picker-row">
-          <select id="billboard-year-select" class="ftl-select" hx-get="/import/billboard/weeks" hx-target="#billboard-week-select" hx-swap="outerHTML" hx-trigger="change" hx-include="this" name="year">
-            <option value="">Year...</option>
-            {{range .BillboardYears}}<option value="{{.}}">{{.}}</option>{{end}}
-          </select>
-          <select id="billboard-week-select" class="ftl-select" disabled>
-            <option value="">Select a year first...</option>
-          </select>
-        </div>
-      </div>
-    </section>
+  <!-- Paste a link: the commonest way in. The server works out the source
+       from the link's host (ImportHandler.importSource); the source picked
+       under Browse is only used for a bare ID. Review shows every match
+       before anything is created (import_review.go); "without review"
+       is the older fire-and-forget path for someone who trusts the match. -->
+  <form id="import-form" class="panel stack">
+    <div class="panel-header">Paste a link</div>
+    <div class="field">
+      <label class="label" for="import-identifier">Playlist link or ID</label>
+      <input class="input" type="text" id="import-identifier" name="identifier" placeholder="https://open.spotify.com/playlist/…" required>
+      <p class="field-hint">Links from Spotify, Deezer, Apple Music, YouTube, Billboard, ARIA, ListenBrainz and Last.fm are recognised automatically. A bare ID is read with the source picked under Browse.</p>
+    </div>
+    <div class="cluster">
+      <button type="submit" class="btn btn-primary btn-sm" hx-post="/import/preview" hx-target="#modal-root" hx-swap="beforeend">Review matches</button>
+      <button type="submit" class="btn btn-secondary btn-sm" hx-post="/import" hx-target="#notifications" hx-swap="innerHTML" title="Create the playlist straight away; unmatched tracks go to Missing">Import without review</button>
+      <button type="button" class="btn btn-tertiary push btn-sm" hx-get="/import/file/form" hx-target="#modal-root" hx-swap="beforeend">Import a file (M3U, CSV&hellip;)</button>
+    </div>
   </form>
 
-  <!-- Chart browsing / search-by-name / saved Spotify users, ported from
-       ImportPage.tsx's popular-playlists grid + search box + saved-user
-       list. Deliberately outside the /import/preview <form> above (HTML
-       doesn't allow nested forms, and the search box + saved-user add
-       form each need their own <form>) - the .import-browse-section CSS
-       toggle above uses :has() against the whole page container instead
-       of a sibling-of-.source-tabs rule, so this doesn't need to live
-       inside that form to react to the selected source tab. Each result
-       card (partials/import_playlist_cards.html) posts straight to the
-       same /import/preview endpoint the form above uses. -->
-  <section class="import-form import-browse-section">
-    <div class="form-section" style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;">
-      <div style="flex:1;min-width:200px;">
-        <label class="ftl-label" for="import-search-query">Search by name</label>
-        <div class="billboard-week-picker-row">
-          <input class="form-input" type="text" id="import-search-query" name="q" placeholder="Search playlists...">
-          <button type="button" class="ftl-btn ftl-btn-secondary"
-            hx-get="/import/search" hx-include="[name='source']:checked,#import-search-query" hx-target="#import-charts" hx-swap="innerHTML">Search</button>
-        </div>
+  <section class="panel stack">
+    <div class="panel-header">Browse charts and playlists</div>
+    <!-- Source picker: a .segmented control over a native radio group that
+         belongs to #import-form (form=), so a bare ID is read with it. The
+         script below marks the checked item .is-active and shows the
+         [data-show-for] sections that apply to the chosen source. -->
+    <div class="segmented" role="radiogroup" aria-label="Source">
+      {{range $i, $s := .Sources}}
+      <label class="segmented-item{{if eq $i 0}} is-active{{end}}">
+        <input type="radio" name="source" value="{{$s.ID}}" form="import-form" class="visually-hidden" {{if eq $i 0}}checked{{end}}>
+        {{$s.Name}}
+      </label>
+      {{end}}
+    </div>
+
+    <!-- Billboard "browse a chart week" picker: the week <select> just
+         fills in #import-identifier above. -->
+    <div class="field" data-show-for="billboard">
+      <label class="label" for="billboard-year-select">Chart week</label>
+      <div class="row">
+        <select id="billboard-year-select" class="select is-auto" hx-get="/import/billboard/weeks" hx-target="#billboard-week-select" hx-swap="outerHTML" hx-trigger="change" hx-include="this" name="year" aria-label="Year">
+          <option value="">Year&hellip;</option>
+          {{range .BillboardYears}}<option value="{{.}}">{{.}}</option>{{end}}
+        </select>
+        <select id="billboard-week-select" class="select is-auto" disabled aria-label="Week">
+          <option value="">Pick a year first</option>
+        </select>
       </div>
-      <div style="min-width:160px;">
-        <label class="ftl-label" for="import-country">Country</label>
-        <select class="ftl-select" id="import-country" name="country"
+    </div>
+    <!-- Search, country charts and saved Spotify users (ported from
+         ImportPage.tsx). Each result card (partials/import_playlist_cards.html)
+         posts to the same /import/preview as the link box above. -->
+    <div class="stack" data-show-for="deezer spotify">
+    <div class="row is-wrap is-items-end">
+      <form class="field" hx-get="/import/search" hx-include="[name='source']:checked" hx-target="#import-charts" hx-swap="innerHTML">
+        <label class="label" for="import-search-query">Search by name</label>
+        <div class="input-group">
+          <input class="input" type="search" id="import-search-query" name="q" placeholder="e.g. Indie workout" required>
+          <button type="submit" class="btn btn-secondary btn-sm">Search</button>
+        </div>
+      </form>
+      <div class="field">
+        <label class="label" for="import-country">Country</label>
+        <select class="select" id="import-country" name="country"
           hx-get="/import/charts" hx-include="[name='source']:checked,#import-country" hx-target="#import-charts" hx-swap="innerHTML">
           <option value="global">Global</option>
           {{range .Countries}}<option value="{{.Code}}" {{if eq .Code $.Country}}selected{{end}}>{{.Name}}</option>{{end}}
@@ -138,13 +101,14 @@
       </div>
     </div>
 
-    <div class="form-section spotify-saved-users-section">
-      <label class="ftl-label">Saved Spotify users</label>
+    <div class="field" data-show-for="spotify">
+      <label class="label">Saved Spotify users</label>
       <div id="import-spotify-users" hx-get="/import/spotify-users" hx-trigger="revealed" hx-swap="outerHTML">
-        <p class="settings-hint">Loading...</p>
+        <p class="field-hint">Loading&hellip;</p>
       </div>
     </div>
 
+    </div>
     <div id="import-charts" hx-get="/import/charts" hx-include="[name='source']:checked,#import-country" hx-trigger="load, change from:[name='source']" hx-swap="innerHTML"></div>
   </section>
   {{end}}
@@ -159,14 +123,32 @@
        Plex Home user's playlist into this account. Loaded on reveal, not
        with the page - listing home users is a plex.tv API round trip
        nobody importing from a chart/file/AI prompt needs to pay for. -->
-  <section class="import-form">
-    <h2 class="progress-title">Import from a Plex Home user</h2>
-    <p class="ftl-field-hint">Copy a playlist from another Plex Home user on this server into your own account.</p>
+  <section class="panel stack">
+    <div class="panel-header">From another Plex Home user</div>
+    <p class="field-hint">Copy a playlist from another Plex Home user on this server into your own account.</p>
     <div hx-get="/import/plex-home/users" hx-trigger="revealed" hx-swap="outerHTML">
-      <p class="settings-hint">Loading Plex Home users...</p>
+      <p class="field-hint">Loading Plex Home users...</p>
     </div>
   </section>
 
   {{end}}
 </div>
+<script>
+  // Source picker: highlight the checked .segmented-item and show only the
+  // sections meant for that source.
+  (function () {
+    function sync() {
+      var picked = document.querySelector('[name="source"]:checked');
+      if (!picked) return;
+      document.querySelectorAll('[name="source"]').forEach(function (r) {
+        r.closest('.segmented-item').classList.toggle('is-active', r.checked);
+      });
+      document.querySelectorAll('[data-show-for]').forEach(function (el) {
+        el.hidden = el.dataset.showFor.split(' ').indexOf(picked.value) < 0;
+      });
+    }
+    document.addEventListener('change', function (e) { if (e.target.name === 'source') sync(); });
+    sync();
+  })();
+</script>
 {{end}}

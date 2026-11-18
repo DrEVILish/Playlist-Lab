@@ -12,13 +12,13 @@
      replacing it - closeTopModal() (layout.html) only ever removes the
      topmost layer, so closing this one reveals the Import modal again. */}}
 {{define "partials/import_review_modal.html"}}
-<div class="advanced-mix-overlay">
-  <div class="advanced-mix-modal">
-    <div class="advanced-mix-header">
-      <h2 class="advanced-mix-title">Import</h2>
-      <button type="button" class="advanced-mix-close" onclick="closeTopModal()" aria-label="Close">&times;</button>
+<div class="modal-overlay">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h2>Import</h2>
+      <button type="button" class="btn-close" onclick="closeTopModal()" aria-label="Close"></button>
     </div>
-    <div class="advanced-mix-content">
+    <div class="stack advanced-mix-content">
       {{template "partials/import_preview_progress.html" .}}
     </div>
   </div>

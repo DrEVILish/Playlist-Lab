@@ -8,10 +8,10 @@
 <div id="search-results">
   {{if .Query}}
     {{if not .Results}}
-      <p class="settings-hint">No tracks found for "{{.Query}}".</p>
+      <p class="field-hint">No tracks found for "{{.Query}}".</p>
     {{else}}
       <form hx-post="/playlists/{{.PlexID}}/tracks" hx-target="body" hx-swap="outerHTML">
-        <ul class="track-search-list">
+        <ul class="list">
           {{range .Results}}
           <li>
             <label>
@@ -21,7 +21,7 @@
           </li>
           {{end}}
         </ul>
-        <button type="submit" class="ftl-btn ftl-btn-secondary ftl-btn-sm">Add Checked Tracks</button>
+        <button type="submit" class="btn btn-secondary btn-sm">Add Checked Tracks</button>
       </form>
     {{end}}
   {{end}}

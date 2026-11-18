@@ -29,5 +29,19 @@ if (!window.__dynamicCollectionFormJSBound) {
   });
   document.addEventListener('change', function (e) {
     if (e.target.id === 'dynamic-collection-type') updateDynamicCollectionTitlePreview();
+    if (e.target.name === 'matchScope') updateDynamicCollectionScope(e.target.form);
   });
 }
+
+// Shows only the textarea the chosen "Which values get a collection" option
+// uses (none for "all") - instead of two always-visible textareas that
+// silently ignore each other.
+function updateDynamicCollectionScope(form) {
+  var picked = form && form.querySelector('input[name="matchScope"]:checked');
+  if (!picked) return;
+  var inc = form.querySelector('.dynamic-scope-include');
+  var exc = form.querySelector('.dynamic-scope-exclude');
+  if (inc) inc.style.display = picked.value === 'include' ? '' : 'none';
+  if (exc) exc.style.display = picked.value === 'exclude' ? '' : 'none';
+}
+

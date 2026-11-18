@@ -1,3 +1,3 @@
 {{define "partials/auth_expired.html"}}
-<div class="login-error">Sign-in expired. <button class="login-btn-cancel" hx-post="/auth/start" hx-target="#auth-status" hx-swap="innerHTML">Try again</button></div>
+<div class="alert alert-danger">Sign-in expired. <button class="btn btn-secondary" hx-post="/auth/start" hx-target="#auth-status" hx-swap="innerHTML">Try again</button></div>
 {{end}}

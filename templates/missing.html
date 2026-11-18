@@ -1,34 +1,32 @@
 {{define "content"}}
-<link rel="stylesheet" href="/static/css/components/DataTable.css">
-<link rel="stylesheet" href="/static/css/components/MissingTracksPanel.css">
 <script src="/static/js/data-table.js"></script>
-<div class="missing page-container">
-  <h1 class="page-title">Missing Tracks</h1>
+<div class="stack">
+  <header class="page-heading">
+    <div class="page-heading-main">
+      <h1>Missing tracks</h1>
+      <p class="text-muted">Tracks an import couldn't find in your Plex library. Retry once new music is added, pick the right track yourself, or download it{{if not .DeemixReady}} (set up deemix in <a href="/settings#admin-deemix">Settings</a> to download){{end}}.</p>
+    </div>
+    <!-- Plain buttons, not <form>s: the actions use hx-post/hx-include
+         directly, so .bulk-select-scope below can wrap #missing-list without
+         nesting a <form> inside another. -->
+    <div class="page-heading-actions">
+      <button type="button" class="btn btn-primary btn-sm" hx-post="/missing/retry" hx-target="#retry-status" hx-swap="innerHTML" title="Match every missing track against your library again">Retry all</button>
+      {{if .DeemixReady}}<button type="button" class="btn btn-secondary btn-sm" hx-post="/missing/deemix-all" hx-target="#notifications" hx-swap="innerHTML" hx-confirm="Retry matching, then download every track that's still missing with deemix?">Download all</button>{{end}}
+      <a class="btn btn-tertiary btn-sm" href="/missing/export">Save list as CSV</a>
+    </div>
+  </header>
 
   <div id="retry-status" hx-get="/missing/retry-status" hx-trigger="every 2s" hx-swap="innerHTML"></div>
 
-  <!-- Plain buttons, not <form>s - every action below this point uses
-       hx-post/hx-vals/hx-include directly on the triggering element rather
-       than a real <form> wrapper, because .bulk-select-scope below needs to
-       wrap #missing-list (for the sticky bulk-actions-bar's :has() check,
-       chrome-interactions.css) without illegally nesting a <form> inside
-       another - a real <form> here would make .bulk-select-scope's own
-       wrapper (if it were also a <form>) invalid, so neither wrapper is one;
-       hx-include reaches across to gather the checked checkboxes instead. -->
-  <div class="missing-tracks-toolbar-actions">
-    <button type="button" class="ftl-btn ftl-btn-primary ftl-btn-sm" hx-post="/missing/retry" hx-target="#retry-status" hx-swap="innerHTML">Retry All</button>
-    <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" hx-post="/missing/deemix-all" hx-target="#notifications" hx-swap="innerHTML">Deemix All</button>
-    <a class="ftl-btn ftl-btn-secondary ftl-btn-sm" href="/missing/export" title="Download every missing track as CSV">Export CSV</a>
-  </div>
+  <input type="search" id="missing-search" class="input" placeholder="Filter by track, artist or playlist" aria-label="Filter missing tracks" oninput="filterMissingTracks(this.value)">
 
-  <input type="search" id="missing-search" class="form-input missing-search-input" placeholder="Filter by track title, artist, or playlist..." oninput="filterMissingTracks(this.value)">
-
-  <div class="bulk-select-scope">
+  <div class="stack bulk-select-scope">
     <div id="missing-list" hx-get="/missing/list" hx-trigger="load" hx-swap="innerHTML"></div>
-    <div class="bulk-actions-bar">
-      <span class="bulk-actions-count">Selected</span>
-      <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" hx-post="/missing/retry" hx-include="#missing-list [name='id']:checked" hx-target="#retry-status" hx-swap="innerHTML">Retry Selected</button>
-      <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" style="color:var(--error)" hx-post="/missing/bulk-remove" hx-include="#missing-list [name='id']:checked" hx-target="#missing-list" hx-swap="innerHTML" hx-confirm="Remove the selected missing track(s) from the list?">Remove Selected</button>
+    <!-- Shown while something is checked (data-table.js). -->
+    <div class="toolbar sticky-bottom" data-bulk-bar hidden>
+      <strong data-bulk-count>Selected</strong>
+      <button type="button" class="btn btn-secondary btn-sm" hx-post="/missing/retry" hx-include="#missing-list [name='id']:checked" hx-target="#retry-status" hx-swap="innerHTML">Retry selected</button>
+      <button type="button" class="btn btn-danger btn-sm" hx-post="/missing/bulk-remove" hx-include="#missing-list [name='id']:checked" hx-target="#missing-list" hx-swap="innerHTML" hx-confirm="Stop tracking the selected tracks as missing?">Remove from list</button>
     </div>
   </div>
 </div>
@@ -41,10 +39,10 @@
       var anyVisible = false;
       panel.querySelectorAll('.missing-track-row').forEach(function (row) {
         var match = !query || (row.dataset.search || '').indexOf(query) !== -1;
-        row.classList.toggle('missing-track-hidden', !match);
+        row.style.display = match ? '' : 'none';
         if (match) anyVisible = true;
       });
-      panel.classList.toggle('missing-track-hidden', query && !anyVisible);
+      panel.style.display = query && !anyVisible ? 'none' : '';
       if (query) {
         panel.open = anyVisible;
       } else {

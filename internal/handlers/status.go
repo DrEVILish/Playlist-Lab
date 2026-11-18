@@ -61,7 +61,7 @@ func (h *StatusHandler) page(w http.ResponseWriter, r *http.Request) {
 	data := map[string]any{"User": user}
 	render := func() {
 		if IsModalRequest(r) {
-			h.Tmpl.RenderModal(w, r, "status", "Status", data)
+			h.Tmpl.RenderModal(w, r, "status", "Status and reports", data)
 			return
 		}
 		h.Tmpl.RenderPage(w, r, "status", data)
@@ -95,9 +95,12 @@ func (h *StatusHandler) page(w http.ResponseWriter, r *http.Request) {
 		if p.Smart {
 			smartCount++
 		}
-		label := "Plex"
+		label := "Made in Plex"
 		if s, ok := sourceByPlexID[p.RatingKey]; ok && s != "plex" {
 			label = strings.ToUpper(s[:1]) + s[1:]
+			if l, ok := sourceLabels[s]; ok {
+				label = l
+			}
 		}
 		bySource[label]++
 	}
@@ -105,7 +108,12 @@ func (h *StatusHandler) page(w http.ResponseWriter, r *http.Request) {
 	for label, count := range bySource {
 		sourceList = append(sourceList, sourceCount{label, count})
 	}
-	sort.Slice(sourceList, func(i, j int) bool { return sourceList[i].Count > sourceList[j].Count })
+	sort.Slice(sourceList, func(i, j int) bool {
+		if sourceList[i].Count != sourceList[j].Count {
+			return sourceList[i].Count > sourceList[j].Count
+		}
+		return sourceList[i].Label < sourceList[j].Label // stable across reloads
+	})
 
 	missingTracks, _ := db.GetUserMissingTracks(h.DB, user.ID)
 
@@ -118,7 +126,12 @@ func (h *StatusHandler) page(w http.ResponseWriter, r *http.Request) {
 	for freq, count := range byFreq {
 		freqList = append(freqList, freqCount{freq, count})
 	}
-	sort.Slice(freqList, func(i, j int) bool { return freqList[i].Count > freqList[j].Count })
+	sort.Slice(freqList, func(i, j int) bool {
+		if freqList[i].Count != freqList[j].Count {
+			return freqList[i].Count > freqList[j].Count
+		}
+		return freqList[i].Freq < freqList[j].Freq
+	})
 
 	executions, _ := db.GetUserRecentExecutions(h.DB, user.ID, 100)
 	var succeeded, failed int

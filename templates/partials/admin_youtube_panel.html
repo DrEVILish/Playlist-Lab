@@ -1,25 +1,25 @@
 {{define "partials/admin_youtube_panel.html"}}
 <form hx-post="/admin/youtube/config" hx-target="#settings-panel-admin-youtube" hx-swap="innerHTML">
-  <div class="settings-field-group">
-    <div class="settings-field">
-      <label class="settings-label" for="youtube-client-id">Client ID</label>
-      <input id="youtube-client-id" type="text" name="clientId" class="settings-input" value="{{.YouTubeClientID}}" placeholder="123456789-abc.apps.googleusercontent.com" autocomplete="off">
+  <div class="stack">
+    <div class="field">
+      <label class="label" for="youtube-client-id">Client ID</label>
+      <input id="youtube-client-id" type="text" name="clientId" class="input" value="{{.YouTubeClientID}}" placeholder="123456789-abc.apps.googleusercontent.com" autocomplete="off">
     </div>
-    <div class="settings-field">
-      <label class="settings-label" for="youtube-client-secret">Client Secret</label>
-      <input id="youtube-client-secret" type="password" name="clientSecret" class="settings-input" value="{{.YouTubeClientSecret}}" autocomplete="off">
+    <div class="field">
+      <label class="label" for="youtube-client-secret">Client Secret</label>
+      <input id="youtube-client-secret" type="password" name="clientSecret" class="input" placeholder="{{if .YouTubeClientSecret}}Saved. Paste a new client secret to replace it{{else}}Paste the client secret{{end}}" autocomplete="off">
     </div>
-    <div class="settings-field">
-      <label class="settings-label" for="youtube-redirect-uri">Redirect URI</label>
-      <input id="youtube-redirect-uri" type="text" name="redirectUri" class="settings-input" value="{{.YouTubeRedirectURI}}" placeholder="https://your-domain/cross-import/oauth/youtube/callback">
+    <div class="field">
+      <label class="label" for="youtube-redirect-uri">Redirect URI</label>
+      <input id="youtube-redirect-uri" type="text" name="redirectUri" class="input" value="{{.YouTubeRedirectURI}}" placeholder="https://your-domain/cross-import/oauth/youtube/callback">
     </div>
   </div>
-  {{if .Error}}<div class="settings-alert settings-alert--error">{{.Error}}</div>{{end}}
-  <div class="settings-alert settings-alert--{{if .YouTubeConfigured}}success{{else}}error{{end}}">
+  {{if .Error}}<div class="alert alert-danger">{{.Error}}</div>{{end}}
+  <div class="alert{{if .YouTubeConfigured}} alert-success{{else}} alert-danger{{end}}">
     {{if .YouTubeConfigured}}YouTube OAuth is configured.{{else}}YouTube OAuth is not configured - cross-import to YouTube and YouTube track matching will be unavailable until it is.{{end}}
   </div>
-  <div class="settings-actions">
-    <button type="submit" class="ftl-btn ftl-btn-primary">Save YouTube Config</button>
+  <div class="cluster">
+    <button type="submit" class="btn btn-primary btn-sm">Save YouTube Config</button>
   </div>
 </form>
 {{end}}

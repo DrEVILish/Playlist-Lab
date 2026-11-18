@@ -1,20 +1,19 @@
 {{define "content"}}
-<link rel="stylesheet" href="/static/css/components/DataTable.css">
-<link rel="stylesheet" href="/static/css/components/MissingTracksPanel.css">
-<link rel="stylesheet" href="/static/css/pages/CollectionsPage.css">
 <script src="/static/js/data-table.js"></script>
-<div class="collections page-container">
-  <div class="page-header">
-    <h1 class="page-title">Collections</h1>
-    <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm"
-      hx-get="/collections/presets" hx-target="#modal-root" hx-swap="innerHTML">
-      Browse Presets
-    </button>
-    <button type="button" class="ftl-btn ftl-btn-primary ftl-btn-sm"
-      hx-get="/collections/new" hx-target="#modal-root" hx-swap="innerHTML">
-      New Collection
-    </button>
-  </div>
+<div class="stack">
+  <header class="page-heading">
+    <div class="page-heading-main">
+      <h1>Collections</h1>
+      <p class="text-muted">Plex collections for your movie, TV and music libraries, kept in sync from lists and rules.</p>
+    </div>
+    <div class="page-heading-actions">
+      <button type="button" class="btn btn-secondary btn-sm"
+        hx-get="/collections/presets" hx-target="#modal-root" hx-swap="innerHTML">Browse presets</button>
+      <button type="button" class="btn btn-primary btn-sm"
+        hx-get="/collections/new" hx-target="#modal-root" hx-swap="innerHTML">New collection</button>
+    </div>
+  </header>
+  {{template "collectionsHeading" "static"}}
 
   <!-- collections-changed fires from the schedule modal's create/update/
        delete responses (handlers/schedules.go's closeModalAndNotifyCollections)
@@ -35,14 +34,10 @@
   function toggleCollectionPreview(rowKey) {
     var row = document.getElementById('preview-row-' + rowKey);
     if (!row) return;
-    var opening = !row.classList.contains('is-open');
-    row.classList.toggle('is-open');
-    // Drives the Name cell's chevron (.collection-preview-toggle,
-    // CollectionsPage.css's "tr.is-open .collection-preview-toggle" rule) -
-    // a separate element from preview-row-* above, so it needs its own
-    // toggle rather than inheriting one from a shared ancestor.
+    var opening = row.hidden;
+    row.hidden = !opening;
     var mainRow = document.getElementById('collection-row-' + rowKey);
-    if (mainRow) mainRow.classList.toggle('is-open', opening);
+    if (mainRow) mainRow.setAttribute('aria-expanded', opening);
     var content = document.getElementById('preview-row-' + rowKey + '-content');
     if (opening && content && !content.dataset.loaded) {
       content.dataset.loaded = '1';

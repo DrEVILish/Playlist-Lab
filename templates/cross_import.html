@@ -1,17 +1,13 @@
 {{define "content"}}
-<link rel="stylesheet" href="/static/css/pages/CrossImportPage.css">
-<!-- partials/oauth_services.html (loaded via hx-get below) uses .settings-service-*
-     classes that only live in SettingsPage.css - link it here too so the
-     "connected service" row this page renders isn't unstyled (it's also
-     used directly by the Settings page, which already links its own CSS). -->
-<link rel="stylesheet" href="/static/css/pages/SettingsPage.css">
-<div class="cross-import-page">
-  <div class="cross-import-header">
-    <h1 class="cross-import-title">Export to YouTube</h1>
-    <p class="cross-import-description">Export your Plex playlists to YouTube</p>
-  </div>
+<div class="stack stack-lg">
+  <header class="page-heading">
+    <div class="page-heading-main">
+      <h1>Export to YouTube</h1>
+      <p class="text-muted">Copy a Plex playlist to your YouTube account. Each track is matched on YouTube first, and you check the matches before anything is created.</p>
+    </div>
+  </header>
 
-  <div class="cross-import-flow">
+  <div class="stack">
     <!-- Visible step indicator (DESIGN.md §11.7) - this page has no separate
          steps 3/4 markup of its own (matching happens in
          partials/cross_import_progress.html, review in
@@ -20,44 +16,41 @@
          of this same indicator rather than sharing a Go template define
          across the page/partial template sets, which are parsed separately
          (see LoadTemplates in internal/handlers/templates.go). -->
-    <ol class="ci-step-indicator">
-      <li class="ci-step {{if not .TargetConnected}}ci-step--active{{else}}ci-step--done{{end}}">1. Connect</li>
-      <li class="ci-step {{if .TargetConnected}}ci-step--active{{end}}">2. Choose Playlist</li>
-      <li class="ci-step">3. Match</li>
-      <li class="ci-step">4. Review &amp; Confirm</li>
-    </ol>
-    <div class="step-content" id="cross-import-step">
+    <nav class="breadcrumbs" aria-label="Steps">
+      <span class="breadcrumb-item{{if not .TargetConnected}} is-current{{end}}">1. Connect</span>
+      <span class="breadcrumb-item{{if .TargetConnected}} is-current{{end}}">2. Choose playlist</span>
+      <span class="breadcrumb-item">3. Match</span>
+      <span class="breadcrumb-item">4. Review and create</span>
+    </nav>
+    <div class="stack" id="cross-import-step">
       {{if not .HasServer}}
-      <div class="error-message">Select a Plex server and music library in setup before importing.</div>
+      <div class="alert alert-warning">Pick a Plex server and music library first: <a href="/setup">set up your server</a>.</div>
       {{else if not .TargetConnected}}
-      <div class="youtube-connect-container">
-        <h2 class="step-section-title">Connect to YouTube</h2>
-        <p class="cross-import-description" style="margin-bottom:1.5rem;">
+      <div class="panel stack">
+        <div class="panel-header">Connect to YouTube</div>
+        <p class="text-muted">
           Connect your YouTube account to export Plex playlists to YouTube.
         </p>
-        <p class="cross-import-description" style="margin-bottom:1.5rem;">
+        <p class="text-muted">
           Connecting creates a new YouTube playlist from your selected Plex playlist; matching happens
           automatically and unmatched tracks are skipped. You'll be asked to grant permission to manage
           your YouTube playlists.
         </p>
-        <a class="ftl-btn ftl-btn-primary" href="/cross-import/oauth/youtube">Connect YouTube</a>
+        <div><a class="btn btn-primary btn-sm" href="/cross-import/oauth/youtube">Connect YouTube</a></div>
       </div>
       {{else}}
-      <div id="oauth-services" class="cross-import-connected-service" hx-get="/cross-import/oauth/services" hx-trigger="load" hx-swap="innerHTML"></div>
-      <h2 class="step-section-title">Choose a playlist</h2>
+      <div id="oauth-services" hx-get="/cross-import/oauth/services" hx-trigger="load" hx-swap="innerHTML"></div>
+      <h2>Choose a playlist</h2>
       <div id="cross-import-playlists" hx-get="/cross-import/playlists" hx-trigger="load" hx-swap="innerHTML">
-        <div class="loading-container">
-          <div class="loading-spinner"></div>
-          <span class="loading-text">Loading playlists…</span>
-        </div>
+        <div class="row is-items-center"><span class="spinner"></span><span class="text-muted">Loading playlists…</span></div>
       </div>
       <div id="cross-import-progress"></div>
       {{end}}
     </div>
   </div>
 
-  <section class="cross-import-history-section">
-    <h2 class="step-section-title">Export History</h2>
+  <section class="stack">
+    <h2>Past exports</h2>
     <div id="cross-import-history" hx-get="/cross-import/history" hx-trigger="load" hx-swap="innerHTML"></div>
   </section>
 </div>

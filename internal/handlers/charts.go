@@ -126,7 +126,7 @@ func (h *ChartsHandler) chartsFragment(w http.ResponseWriter, r *http.Request) {
 		h.renderCards(w, source, nil, "Unsupported source.")
 		return
 	}
-	h.renderCards(w, source, popular, "No charts available for this source right now.")
+	h.renderCards(w, source, popular, "This source has no charts to browse. Search by name, or paste a link above.")
 }
 
 // searchFragment backs the "search by name" box, Deezer/Spotify only (see

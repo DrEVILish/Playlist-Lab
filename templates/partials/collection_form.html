@@ -13,7 +13,7 @@
      field with a caption underneath, so it's immediately legible as "this
      can't change here" rather than looking like a broken input. */}}
 {{define "collectionRuleFieldSelect"}}
-<select name="ruleField" class="ftl-select collection-rule-field">
+<select name="ruleField" class="select field">
   <option value="genre" {{if eq . "genre"}}selected{{end}}>Genre</option>
   <option value="mood" {{if eq . "mood"}}selected{{end}}>Mood (music)</option>
   <option value="style" {{if eq . "style"}}selected{{end}}>Style (music)</option>
@@ -28,40 +28,40 @@
 {{end}}
 
 {{define "partials/collection_form.html"}}
-<div class="advanced-mix-overlay">
-  <div class="advanced-mix-modal">
-    <div class="advanced-mix-header">
-      <h2 class="advanced-mix-title">{{if .Collection}}Edit Collection{{else}}New Collection{{end}}</h2>
-      <button type="button" class="advanced-mix-close" onclick="closeTopModal()" aria-label="Close">&times;</button>
+<div class="modal-overlay">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h2>{{if .Collection}}Edit Collection{{else}}New Collection{{end}}</h2>
+      <button type="button" class="btn-close" onclick="closeTopModal()" aria-label="Close"></button>
     </div>
 
     <form {{if .Collection}}hx-put="/collections/{{.Collection.ID}}"{{else}}hx-post="/collections"{{end}}
       hx-target="#collections-list" hx-swap="innerHTML"
       hx-on::after-request="if(event.detail.successful) closeTopModal()">
-      <div class="advanced-mix-content">
+      <div class="stack advanced-mix-content">
 
         {{if .Collection}}
-        <div class="collection-spec-plate">
-          <span class="collection-builder-badge">{{.Collection.ServerName}}</span>
-          <span class="collection-builder-badge">{{.Collection.LibraryDisplay}}</span>
-          <span class="collection-builder-badge collection-builder-badge--{{.Collection.BuilderType}}">{{if eq .Collection.BuilderType "manual"}}Manual{{else if eq .Collection.BuilderType "external_list"}}{{.Collection.ProviderLabel}}{{else}}Smart{{end}}</span>
+        <div class="card" data-spec-plate>
+          <span class="badge">{{.Collection.ServerName}}</span>
+          <span class="badge">{{.Collection.LibraryDisplay}}</span>
+          <span class="badge {{.Collection.BuilderType}}">{{if eq .Collection.BuilderType "manual"}}Manual{{else if eq .Collection.BuilderType "external_list"}}{{.Collection.ProviderLabel}}{{else}}Smart{{end}}</span>
         </div>
         {{end}}
 
-        <div class="ftl-field">
-          <label class="ftl-label" for="collection-name">Name</label>
-          <input id="collection-name" class="form-input" type="text" name="name" maxlength="255" required
+        <div class="field">
+          <label class="label" for="collection-name">Name</label>
+          <input id="collection-name" class="input" type="text" name="name" maxlength="255" required
             value="{{if .Collection}}{{.Collection.Name}}{{else if .Prefill}}{{.Prefill.Name}}{{end}}" autofocus>
         </div>
 
-        <div class="ftl-field">
-          <label class="ftl-label" for="collection-description">Description (optional)</label>
-          <textarea id="collection-description" class="ftl-textarea" name="description" rows="2">{{if .Collection}}{{.Collection.Description.String}}{{end}}</textarea>
+        <div class="field">
+          <label class="label" for="collection-description">Description (optional)</label>
+          <textarea id="collection-description" class="textarea" name="description" rows="2">{{if .Collection}}{{.Collection.Description.String}}{{end}}</textarea>
         </div>
 
         {{if not .Collection}}
-        <div class="ftl-field">
-          <label class="ftl-label" for="collection-library">Library</label>
+        <div class="field">
+          <label class="label" for="collection-library">Library</label>
           <!-- Grouped by server (DESIGN.md §11.11 multi-server support) -
                a user with more than one linked Plex server (e.g. one for
                movies/TV, one for music) picks a library from any of them. -->
@@ -73,7 +73,7 @@
                which a user could have named anything), so there's one less
                thing to pick by hand on the common path. Still a plain
                select the user can freely change either way. -->
-          <select id="collection-library" class="ftl-select" name="library" required>
+          <select id="collection-library" class="select" name="library" required>
             <option value="">Select a library...</option>
             {{range .ServerGroups}}
             <optgroup label="{{.ServerName}}">
@@ -85,61 +85,49 @@
           </select>
         </div>
 
-        <div class="ftl-field">
-          <label class="ftl-label">Membership</label>
+        <div class="field">
+          <label class="label">Membership</label>
           {{$presetIsList := .Prefill}}
-          <div class="update-mode-group">
-            <label class="update-mode-card">
-              <input type="radio" name="builderType" value="smart" {{if not $presetIsList}}checked{{end}}>
-              <span class="update-mode-card-title">Smart</span>
-              <span class="update-mode-card-desc">Membership is a set of rules (genre, year, actor, ...), re-evaluated against your library on every refresh.</span>
-            </label>
-            <label class="update-mode-card">
-              <input type="radio" name="builderType" value="manual">
-              <span class="update-mode-card-title">Manual</span>
-              <span class="update-mode-card-desc">You pick the items directly. Managed after creation from the collection's own row.</span>
-            </label>
-            <label class="update-mode-card">
-              <input type="radio" name="builderType" value="external_list" {{if $presetIsList}}checked{{end}}>
-              <span class="update-mode-card-title">External List/Chart</span>
-              <span class="update-mode-card-desc">Membership comes from a TMDb/IMDb/TVDb/Letterboxd/Trakt list, or a TMDb chart/franchise. Entries not found in this library show up under Missing Films/TV Shows.</span>
-            </label>
-          </div>
+          <fieldset class="radio-group">
+            <label class="check"><input class="radio" type="radio" name="builderType" value="smart" {{if not $presetIsList}}checked{{end}}> <span><strong>Smart</strong> <span class="field-hint">Membership is a set of rules (genre, year, actor, ...), re-evaluated against your library on every refresh.</span></span></label>
+            <label class="check"><input class="radio" type="radio" name="builderType" value="manual"> <span><strong>Manual</strong> <span class="field-hint">You pick the items directly. Managed after creation from the collection's own row.</span></span></label>
+            <label class="check"><input class="radio" type="radio" name="builderType" value="external_list" {{if $presetIsList}}checked{{end}}> <span><strong>External List/Chart</strong> <span class="field-hint">Membership comes from a TMDb/IMDb/TVDb/Letterboxd/Trakt list, or a TMDb chart/franchise. Entries not found in this library show up under Missing Films/TV Shows.</span></span></label>
+          </fieldset>
         </div>
         {{end}}
 
         {{$builderType := "smart"}}{{if .Collection}}{{$builderType = .Collection.BuilderType}}{{else if .Prefill}}{{$builderType = "external_list"}}{{end}}
-        <div class="collection-form-section collection-smart-fields{{if ne $builderType "smart"}} is-hidden{{end}}">
-          <h3 class="collection-form-section-title">Rules</h3>
-          <p class="field-hint field-hint--tight">All of these must match (AND) - one card per condition.</p>
-          <div id="collection-rules" class="collection-rules-list">
+        <div class="field-group collection-smart-fields"{{if ne $builderType "smart"}} style="display:none"{{end}}>
+          <h3 class="field-group-title">Rules</h3>
+          <p class="field-hint">All of these must match (AND) - one card per condition.</p>
+          <div id="collection-rules" class="stack stack-sm">
             {{if .Collection}}
               {{range .Collection.ParsedRules}}
                 {{if ne .Field "unwatched"}}
-                <div class="collection-rule-row card">
+                <div class="row is-items-end card">
                   {{template "collectionRuleFieldSelect" .Field}}
-                  <input type="text" name="ruleValue" class="form-input" value="{{.Value}}" placeholder="value">
-                  <button type="button" class="ftl-btn ftl-btn-icon" data-remove-rule aria-label="Remove rule">&times;</button>
+                  <input type="text" name="ruleValue" class="input" value="{{.Value}}" placeholder="value">
+                  <button type="button" class="btn btn-icon btn-sm" data-remove-rule aria-label="Remove rule">&times;</button>
                 </div>
                 {{end}}
               {{end}}
             {{else}}
-            <div class="collection-rule-row card">
+            <div class="row is-items-end card">
               {{template "collectionRuleFieldSelect" ""}}
-              <input type="text" name="ruleValue" class="form-input" placeholder="value">
-              <button type="button" class="ftl-btn ftl-btn-icon" data-remove-rule aria-label="Remove rule">&times;</button>
+              <input type="text" name="ruleValue" class="input" placeholder="value">
+              <button type="button" class="btn btn-icon btn-sm" data-remove-rule aria-label="Remove rule">&times;</button>
             </div>
             {{end}}
           </div>
-          <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" data-add-rule>Add Rule</button>
+          <button type="button" class="btn btn-secondary btn-sm" data-add-rule>Add Rule</button>
           <template id="collection-rule-row-template">
-            <div class="collection-rule-row card">
+            <div class="row is-items-end card">
               {{template "collectionRuleFieldSelect" ""}}
-              <input type="text" name="ruleValue" class="form-input" placeholder="value">
-              <button type="button" class="ftl-btn ftl-btn-icon" data-remove-rule aria-label="Remove rule">&times;</button>
+              <input type="text" name="ruleValue" class="input" placeholder="value">
+              <button type="button" class="btn btn-icon btn-sm" data-remove-rule aria-label="Remove rule">&times;</button>
             </div>
           </template>
-          <label class="form-check">
+          <label class="check">
             <input type="checkbox" name="unwatchedOnly" {{if .Collection}}{{range .Collection.ParsedRules}}{{if and (eq .Field "unwatched") (eq .Value "true")}}checked{{end}}{{end}}{{end}}>
             Only include unwatched items (movie/show libraries)
           </label>
@@ -152,17 +140,17 @@
         {{else if .Prefill}}
           {{$extProvider = .Prefill.ExternalProvider}}{{$tmdbMode = .Prefill.ExternalMode}}{{$tmdbListID = .Prefill.ExternalListID}}
         {{end}}
-        <div class="collection-form-section collection-tmdb-fields{{if ne $builderType "external_list"}} is-hidden{{end}}">
-          <h3 class="collection-form-section-title">Source</h3>
+        <div class="field-group collection-tmdb-fields"{{if ne $builderType "external_list"}} style="display:none"{{end}}>
+          <h3 class="field-group-title">Source</h3>
           {{if .Collection}}
           <!-- Provider is immutable after creation, same as builderType itself
                - a hidden field carries it forward rather than a select. -->
           <input type="hidden" name="externalProvider" value="{{$extProvider}}">
           <p class="field-hint">{{.Collection.ProviderLabel}}</p>
           {{else}}
-          <div class="ftl-field">
-            <label class="ftl-label" for="collection-external-provider">Source</label>
-            <select id="collection-external-provider" class="ftl-select" name="externalProvider">
+          <div class="field">
+            <label class="label" for="collection-external-provider">Source</label>
+            <select id="collection-external-provider" class="select" name="externalProvider">
               <option value="tmdb" {{if eq $extProvider "tmdb"}}selected{{end}}>TMDb</option>
               <option value="imdb" {{if eq $extProvider "imdb"}}selected{{end}}>IMDb</option>
               <option value="tvdb" {{if eq $extProvider "tvdb"}}selected{{end}}>TVDb</option>
@@ -171,9 +159,9 @@
             </select>
           </div>
           {{end}}
-          <div class="ftl-field collection-tmdb-mode-group{{if not (or (eq $extProvider "tmdb") (eq $extProvider "imdb"))}} is-hidden{{end}}">
-            <label class="ftl-label" for="collection-tmdb-mode">List Type</label>
-            <select id="collection-tmdb-mode" class="ftl-select" name="tmdbMode">
+          <div class="field collection-tmdb-mode-group"{{if not (or (eq $extProvider "tmdb") (eq $extProvider "imdb"))}} style="display:none"{{end}}>
+            <label class="label" for="collection-tmdb-mode">List Type</label>
+            <select id="collection-tmdb-mode" class="select" name="tmdbMode">
               <option value="list" {{if eq $tmdbMode "list"}}selected{{end}}>Public list</option>
               <option value="popular" data-provider="tmdb" {{if eq $tmdbMode "popular"}}selected{{end}}>Popular</option>
               <option value="top_rated" data-provider="tmdb" {{if eq $tmdbMode "top_rated"}}selected{{end}}>Top Rated</option>
@@ -183,29 +171,29 @@
               <option value="top250" data-provider="imdb" {{if eq $tmdbMode "top250"}}selected{{end}}>Top 250</option>
             </select>
           </div>
-          <div class="ftl-field collection-tmdb-list-id{{if not (or (eq $tmdbMode "list") (eq $tmdbMode "collection"))}} is-hidden{{end}}">
-            <label class="ftl-label" for="collection-tmdb-list-id">{{if eq $tmdbMode "collection"}}Collection ID or URL{{else}}List ID or URL{{end}}</label>
-            <input id="collection-tmdb-list-id" type="text" class="form-input" name="tmdbListId" value="{{$tmdbListID}}" placeholder="e.g. themoviedb.org/list/12345-my-list, or a Trakt/franchise URL">
+          <div class="field collection-tmdb-list-id"{{if not (or (eq $tmdbMode "list") (eq $tmdbMode "collection"))}} style="display:none"{{end}}>
+            <label class="label" for="collection-tmdb-list-id">{{if eq $tmdbMode "collection"}}Collection ID or URL{{else}}List ID or URL{{end}}</label>
+            <input id="collection-tmdb-list-id" type="text" class="input" name="tmdbListId" value="{{$tmdbListID}}" placeholder="e.g. themoviedb.org/list/12345-my-list, or a Trakt/franchise URL">
           </div>
-          <div class="ftl-field">
-            <label class="ftl-label" for="collection-tmdb-limit">Max items</label>
-            <input id="collection-tmdb-limit" type="number" class="form-input" name="tmdbLimit" min="1" max="200" value="{{$tmdbLimit}}">
+          <div class="field">
+            <label class="label" for="collection-tmdb-limit">Max items</label>
+            <input id="collection-tmdb-limit" type="number" class="input" name="tmdbLimit" min="1" max="200" value="{{$tmdbLimit}}">
           </div>
         </div>
 
         {{if and .Collection (eq .Collection.BuilderType "manual")}}
-        <div class="collection-form-section">
-          <h3 class="collection-form-section-title">Items</h3>
-          <div class="ftl-field">
-            <input type="text" class="form-input" placeholder="Search this library..."
+        <div class="field-group">
+          <h3 class="field-group-title">Items</h3>
+          <div class="field">
+            <input type="text" class="input" placeholder="Search this library..."
               hx-get="/collections/{{.Collection.ID}}/search" hx-trigger="input changed delay:400ms, search"
               hx-target="#collection-search-results" hx-swap="innerHTML">
             <div id="collection-search-results"></div>
-            <ul id="collection-manual-items" class="collection-manual-items-list">
+            <ul id="collection-manual-items" class="list">
               {{range .ManualItems}}
               <li>
                 <span>{{.Title}}{{if .Artist}} — {{.Artist}}{{end}}</span>
-                <button type="button" class="ftl-btn ftl-btn-icon" title="Remove" aria-label="Remove {{.Title}}"
+                <button type="button" class="btn btn-icon btn-sm" title="Remove" aria-label="Remove {{.Title}}"
                   hx-delete="/collections/{{$.Collection.ID}}/manual-items/{{.RatingKey}}" hx-target="#collection-manual-items" hx-swap="outerHTML">&times;</button>
               </li>
               {{end}}
@@ -214,38 +202,30 @@
         </div>
         {{end}}
 
-        <div class="collection-form-section">
-          <h3 class="collection-form-section-title">Behavior</h3>
-          <div class="ftl-field">
-            <label class="ftl-label" for="collection-sort-title">Sort Title (optional)</label>
-            <input id="collection-sort-title" class="form-input" type="text" name="sortTitle" maxlength="255"
+        <div class="field-group">
+          <h3 class="field-group-title">Behavior</h3>
+          <div class="field">
+            <label class="label" for="collection-sort-title">Sort Title (optional)</label>
+            <input id="collection-sort-title" class="input" type="text" name="sortTitle" maxlength="255"
               value="{{if .Collection}}{{.Collection.SortTitle.String}}{{end}}" placeholder="e.g. +1_Trending">
             <p class="field-hint">Plex sorts collections by this instead of the name when set - Kometa's own convention is a numeric prefix like "+1_" to force order.</p>
           </div>
 
-          <div class="ftl-field">
-            <label class="ftl-label">Sync Mode</label>
+          <div class="field">
+            <label class="label">Sync Mode</label>
             {{$syncMode := "sync"}}{{if .Collection}}{{$syncMode = .Collection.SyncMode}}{{end}}
-            <div class="update-mode-group">
-              <label class="update-mode-card">
-                <input type="radio" name="syncMode" value="sync" {{if eq $syncMode "sync"}}checked{{end}}>
-                <span class="update-mode-card-title">Sync</span>
-                <span class="update-mode-card-desc">Items that no longer match are removed from the Plex collection.</span>
-              </label>
-              <label class="update-mode-card">
-                <input type="radio" name="syncMode" value="add_only" {{if eq $syncMode "add_only"}}checked{{end}}>
-                <span class="update-mode-card-title">Add only</span>
-                <span class="update-mode-card-desc">New matches are added; nothing already there is ever removed.</span>
-              </label>
-            </div>
+            <fieldset class="radio-group">
+              <label class="check"><input class="radio" type="radio" name="syncMode" value="sync" {{if eq $syncMode "sync"}}checked{{end}}> <span><strong>Sync</strong> <span class="field-hint">Items that no longer match are removed from the Plex collection.</span></span></label>
+              <label class="check"><input class="radio" type="radio" name="syncMode" value="add_only" {{if eq $syncMode "add_only"}}checked{{end}}> <span><strong>Add only</strong> <span class="field-hint">New matches are added; nothing already there is ever removed.</span></span></label>
+            </fieldset>
           </div>
 
           {{if and .Collection .Collection.PlexCollectionID.Valid}}
-          <div class="ftl-field">
-            <label class="ftl-label" for="collection-poster-url">Poster</label>
-            <div class="update-mode-group collection-poster-row">
-              <input id="collection-poster-url" type="text" class="form-input" name="imageUrl" placeholder="Image URL">
-              <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm"
+          <div class="field">
+            <label class="label" for="collection-poster-url">Poster</label>
+            <div class="grid">
+              <input id="collection-poster-url" type="text" class="input" name="imageUrl" placeholder="Image URL">
+              <button type="button" class="btn btn-secondary btn-sm"
                 hx-post="/collections/{{.Collection.ID}}/poster" hx-include="#collection-poster-url"
                 hx-target="#collection-poster-status" hx-swap="innerHTML">Set Poster</button>
             </div>
@@ -255,23 +235,23 @@
         </div>
 
         {{if .Collection}}
-        <div class="collection-form-section">
-          <h3 class="collection-form-section-title">Danger Zone</h3>
-          <label class="form-check">
+        <div class="field-group">
+          <h3 class="field-group-title">Danger Zone</h3>
+          <label class="check">
             <input type="checkbox" form="collection-delete-form" name="deleteInPlex" value="true">
             Also delete the collection from Plex itself
           </label>
           <form id="collection-delete-form" hx-delete="/collections/{{.Collection.ID}}" hx-target="#collections-list" hx-swap="innerHTML"
             hx-confirm="Delete this collection?" hx-on::after-request="if(event.detail.successful) closeTopModal()">
-            <button type="submit" class="ftl-btn ftl-btn-secondary ftl-btn-sm text-error">Delete Collection</button>
+            <button type="submit" class="btn btn-secondary btn-sm status status-error">Delete Collection</button>
           </form>
         </div>
         {{end}}
       </div>
 
-      <div class="advanced-mix-actions">
-        <button type="button" class="ftl-btn ftl-btn-secondary" onclick="closeTopModal()">Cancel</button>
-        <button type="submit" class="ftl-btn ftl-btn-primary">{{if .Collection}}Save Changes{{else}}Create Collection{{end}}</button>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeTopModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm">{{if .Collection}}Save Changes{{else}}Create Collection{{end}}</button>
       </div>
     </form>
   </div>

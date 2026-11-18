@@ -8,10 +8,10 @@
 {{define "partials/settings_servers.html"}}
 <div id="settings-panel-servers">
   {{if not .Servers}}
-    <p class="settings-hint">No Plex server linked yet.</p>
+    <p class="field-hint">No Plex server linked yet.</p>
   {{else}}
-  <div class="data-table-container">
-  <table class="data-table">
+  <div>
+  <table class="table">
     <thead>
       <tr>
         <th>Server</th>
@@ -26,20 +26,20 @@
       {{range .Servers}}
       <tr>
         <td>{{.ServerName}}</td>
-        <td class="mono-data">{{.ServerURL}}</td>
-        <td>{{if .IsOwner}}<span class="ftl-badge ftl-badge-accent">Owned</span>{{else}}<span class="ftl-badge">Shared</span>{{end}}</td>
+        <td class="mono">{{.ServerURL}}</td>
+        <td>{{if .IsOwner}}<span class="badge badge-accent">Owned</span>{{else}}<span class="badge">Shared</span>{{end}}</td>
         <td>{{if .LibraryName.Valid}}{{.LibraryName.String}}{{else}}—{{end}}</td>
         <td>
-          {{if .IsDefault}}<span class="ftl-badge ftl-badge-accent">Default</span>
-          {{else}}<button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" hx-post="/settings/servers/{{.ID}}/default" hx-target="#settings-panel-servers" hx-swap="outerHTML">Make default</button>{{end}}
+          {{if .IsDefault}}<span class="badge badge-accent">Default</span>
+          {{else}}<button type="button" class="btn btn-secondary btn-sm" hx-post="/settings/servers/{{.ID}}/default" hx-target="#settings-panel-servers" hx-swap="outerHTML">Make default</button>{{end}}
         </td>
         <td class="col-actions">
-          <div class="row-actions">
-            <button type="button" class="ftl-btn ftl-btn-icon" title="Refresh connection" aria-label="Refresh connection for {{.ServerName}}"
+          <div class="cluster cluster-sm">
+            <button type="button" class="btn btn-icon btn-sm" title="Refresh connection" aria-label="Refresh connection for {{.ServerName}}"
               hx-post="/settings/servers/{{.ID}}/refresh" hx-target="#settings-panel-servers" hx-swap="outerHTML">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
             </button>
-            <button type="button" class="ftl-btn ftl-btn-icon icon-btn-danger" title="Remove this server" aria-label="Remove {{.ServerName}}"
+            <button type="button" class="btn btn-icon btn-sm" title="Remove this server" aria-label="Remove {{.ServerName}}"
               hx-delete="/settings/servers/{{.ID}}" hx-target="#settings-panel-servers" hx-swap="outerHTML"
               hx-confirm="{{if or .CollectionCount .ScheduleCount}}Remove {{.ServerName}}? {{.CollectionCount}} collection(s) and {{.ScheduleCount}} schedule(s) that use it will stop being tracked here (the collections themselves are not deleted from Plex).{{else}}Remove {{.ServerName}}?{{end}}">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -52,8 +52,8 @@
   </table>
   </div>
   {{end}}
-  <div class="settings-actions" style="margin-top:0.75rem;">
-    <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" hx-get="/settings/servers/new" hx-target="#modal-root" hx-swap="innerHTML">Add another server</button>
+  <div class="cluster">
+    <button type="button" class="btn btn-secondary btn-sm" hx-get="/settings/servers/new" hx-target="#modal-root" hx-swap="innerHTML">Add another server</button>
   </div>
 </div>
 {{end}}

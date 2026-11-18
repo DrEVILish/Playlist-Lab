@@ -771,6 +771,11 @@ func (s *Service) LastArlCheck() *ArlCheckResult {
 // CheckArlAndNotifyAdmins checks the ARL and, when it fails, tells every
 // admin - the ARL is server-wide config rather than any one user's.
 func (s *Service) CheckArlAndNotifyAdmins() {
+	// Never set up is not a failure: an instance that doesn't use deemix
+	// shouldn't get a "login failed" notice on every start.
+	if s.ARL() == "" {
+		return
+	}
 	result := s.CheckArl()
 	if result.OK {
 		return
@@ -783,6 +788,6 @@ func (s *Service) CheckArlAndNotifyAdmins() {
 	}
 	for _, adminID := range adminIDs {
 		s.notifications.Add(adminID, notifications.TypeDeemix, "Deemix login failed",
-			result.Error+" - update DEEMIX_ARL.", notifications.StatusError, nil)
+			result.Error+". Update the ARL in Settings > Deemix.", notifications.StatusError, nil)
 	}
 }

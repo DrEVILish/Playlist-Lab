@@ -6,13 +6,13 @@
      actual import. Reuses the .advanced-mix-* modal chrome every other
      modal in the app already uses. */}}
 {{define "partials/import_file_modal.html"}}
-<div class="advanced-mix-overlay">
-  <div class="advanced-mix-modal">
-    <div class="advanced-mix-header">
-      <h2 class="advanced-mix-title">Import from File</h2>
-      <button type="button" class="advanced-mix-close" onclick="closeTopModal()" aria-label="Close">&times;</button>
+<div class="modal-overlay">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h2>Import from File</h2>
+      <button type="button" class="btn-close" onclick="closeTopModal()" aria-label="Close"></button>
     </div>
-    <div class="advanced-mix-content">
+    <div class="stack advanced-mix-content">
       <div id="import-file-body">
         {{template "partials/import_file_picker.html"}}
       </div>
@@ -26,18 +26,15 @@
      offer this same control again, rather than making the user close and
      reopen the modal to try a different file. */}}
 {{define "partials/import_file_picker.html"}}
-<div class="form-section">
-  <label class="ftl-label" for="import-file-input">Playlist file (M3U, M3U8, PLS, XSPF, CSV, or TXT - max 100KB)</label>
-  <label class="ftl-btn ftl-btn-secondary file-input-label">
-    Choose File
-    <input class="file-input" type="file" id="import-file-input" name="file" accept=".m3u,.m3u8,.pls,.xspf,.csv,.txt"
-      hx-post="/import/file/preview" hx-target="#import-file-body" hx-swap="innerHTML"
-      hx-trigger="change" hx-encoding="multipart/form-data">
-  </label>
+<div class="field">
+  <label class="label" for="import-file-input">Playlist file (M3U, M3U8, PLS, XSPF, CSV, or TXT - max 100KB)</label>
+  <input class="input" type="file" id="import-file-input" name="file" accept=".m3u,.m3u8,.pls,.xspf,.csv,.txt"
+    hx-post="/import/file/preview" hx-target="#import-file-body" hx-swap="innerHTML"
+    hx-trigger="change" hx-encoding="multipart/form-data">
 </div>
 {{end}}
 
 {{define "partials/import_file_error.html"}}
-<p class="error-message">{{.Error}}</p>
+<p class="alert alert-danger">{{.Error}}</p>
 {{template "partials/import_file_picker.html"}}
 {{end}}

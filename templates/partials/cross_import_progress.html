@@ -4,12 +4,12 @@
      template, so they can share one Go template define. Invoked as
      {{template "partials/ci_step_indicator" 3}}. */}}
 {{define "partials/ci_step_indicator"}}
-<ol class="ci-step-indicator">
-  <li class="ci-step ci-step--done">1. Connect</li>
-  <li class="ci-step ci-step--done">2. Choose Playlist</li>
-  <li class="ci-step {{if eq . 3}}ci-step--active{{else}}ci-step--done{{end}}">3. Match</li>
-  <li class="ci-step {{if eq . 4}}ci-step--active{{end}}">4. Review &amp; Confirm</li>
-</ol>
+<nav class="breadcrumbs" aria-label="Steps">
+  <span class="breadcrumb-item">1. Connect</span>
+  <span class="breadcrumb-item">2. Choose playlist</span>
+  <span class="breadcrumb-item{{if eq . 3}} is-current{{end}}">3. Match</span>
+  <span class="breadcrumb-item{{if eq . 4}} is-current{{end}}">4. Review and create</span>
+</nav>
 {{end}}
 
 {{define "partials/cross_import_progress.html"}}
@@ -20,25 +20,25 @@
      {{end}}>
   {{template "partials/ci_step_indicator" 3}}
   {{if eq $p.Phase "error"}}
-  <div class="error-message">Matching failed: {{$p.Message}}</div>
+  <div class="alert alert-danger">Matching failed: {{$p.Message}}</div>
   {{else}}
-  <div class="progress-container">
-    <div class="progress-phase">
+  <div class="stack">
+    <div>
       {{if eq $p.Phase "fetching"}}Fetching playlist…
       {{else}}Matching tracks{{if $p.PlaylistName}} for "{{$p.PlaylistName}}"{{end}}…{{end}}
     </div>
-    <div class="ftl-progress" style="margin:1rem 0">
+    <div class="progress">
       {{if gt $p.Total 0}}
-      <div class="ftl-progress-bar" style="width: {{percent $p.Current $p.Total}}%"></div>
+      <div class="progress-bar" style="width: {{percent $p.Current $p.Total}}%"></div>
       {{else}}
-      <div class="ftl-progress-bar" style="width: 30%"></div>
+      <div class="progress-bar" style="width: 30%"></div>
       {{end}}
     </div>
     {{if gt $p.Total 0}}
-    <div class="progress-count">{{$p.Current}} / {{$p.Total}} tracks</div>
+    <div class="text-muted">{{$p.Current}} / {{$p.Total}} tracks</div>
     {{end}}
-    <form hx-post="/cross-import/match/{{.SessionID}}/cancel" hx-target="#cross-import-match-status" hx-swap="outerHTML" style="margin-top:1rem;">
-      <button type="submit" class="ftl-btn ftl-btn-secondary">Cancel</button>
+    <form hx-post="/cross-import/match/{{.SessionID}}/cancel" hx-target="#cross-import-match-status" hx-swap="outerHTML">
+      <button type="submit" class="btn btn-secondary btn-sm">Cancel</button>
     </form>
   </div>
   {{end}}

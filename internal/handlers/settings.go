@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -107,6 +108,8 @@ func (h *SettingsHandler) page(w http.ResponseWriter, r *http.Request) {
 	userServer, _ := db.GetUserMusicServer(h.DB, user.ID)
 	textScale, _ := db.GetTextScale(h.DB, user.ID)
 	theme, _ := db.GetTheme(h.DB, user.ID)
+	themeVariant, _ := db.GetThemeVariant(h.DB, user.ID)
+	themeTints, _ := db.GetThemeTints(h.DB, user.ID)
 
 	h.Tmpl.RenderPage(w, r, "settings", map[string]any{
 		"User":      user,
@@ -117,16 +120,20 @@ func (h *SettingsHandler) page(w http.ResponseWriter, r *http.Request) {
 		"HasServer": userServer != nil && userServer.LibraryID.Valid,
 		// "small"/"medium"/"large", for the radio group below - deliberately
 		// not named "TextScale": pageData (templates.go) already reserves
-		// that key for the numeric --text-scale CSS multiplier <html> uses,
+		// that key for the numeric root font-size multiplier <html> uses,
 		// and only fills it in when the caller hasn't set it, so reusing the
-		// name here would silently break every page's --text-scale value.
+		// name here would silently break every page's text size.
 		"TextScaleChoice": textScale,
 		// Same reserved-key reasoning as TextScaleChoice above - pageData
 		// reserves "Theme" for the data-theme attribute value every page's
 		// <html> needs, so the radio group's own current value gets its own
 		// key here instead.
-		"ThemeChoice": theme,
-		"Themes":      ftlThemes,
+		"ThemeChoice":       theme,
+		"Themes":            ftlThemes,
+		"VariantChoice":     themeVariant,
+		"Tints":             themeTints,
+		"DefaultTheme":      defaultTheme,
+		"DefaultThemeLabel": themeLabel(defaultTheme),
 		// Server Info (§11.4) - user feedback: the old "Version: (not set
 		// by this build)" placeholder read as an unfinished feature since
 		// this deploy has no ldflags/git-describe wiring to fill it in.
@@ -274,12 +281,37 @@ func (h *SettingsHandler) saveAppearance(w http.ResponseWriter, r *http.Request)
 		}
 		err = db.SaveTextScale(h.DB, user.ID, scale)
 	}
+	// "theme" is a slug, or "slug/variant" for one of its palette variants
+	// (the picker lists each theme's variants beneath it). Picking a variant
+	// of a theme that has a tint clears that theme's custom tint, so the
+	// preset actually shows (CONTRACT.md "Theme tint", rule 3).
 	if r.Form.Has("theme") {
-		theme := r.FormValue("theme")
+		theme, variant, _ := strings.Cut(r.FormValue("theme"), "/")
 		if !isValidTheme(theme) {
-			theme = ""
+			theme, variant = "", ""
+		}
+		if !isValidVariant(theme, variant) {
+			variant = ""
 		}
 		err = db.SaveTheme(h.DB, user.ID, theme)
+		if err == nil {
+			err = db.SaveThemeVariant(h.DB, user.ID, variant)
+		}
+		if t := findTheme(theme); err == nil && variant != "" && t != nil && t.Tint != nil {
+			err = db.SaveThemeTint(h.DB, user.ID, theme, "")
+		}
+	}
+	// "tint" is the current theme's custom colour (CONTRACT.md "Theme
+	// tint": persisted per theme slug). Ignored for a theme without one.
+	if r.Form.Has("tint") {
+		theme, _ := db.GetTheme(h.DB, user.ID)
+		if theme == "" {
+			theme = defaultTheme
+		}
+		tint := r.FormValue("tint")
+		if t := findTheme(theme); t != nil && t.Tint != nil && hexColor.MatchString(tint) {
+			err = db.SaveThemeTint(h.DB, user.ID, theme, tint)
+		}
 	}
 	h.notifySettingsSave(user.ID, "Save appearance settings", err)
 	h.renderFieldStatus(w, err)

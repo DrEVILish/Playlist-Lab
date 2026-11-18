@@ -129,7 +129,20 @@ func groupMissingTracks(dbConn *sql.DB, tracks []db.MissingTrack) []missingGroup
 // against GET /missing/list, matching cross_import.html's pattern.
 func (h *MissingHandler) page(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
-	h.Tmpl.RenderPage(w, r, "missing", map[string]any{"User": user})
+	h.Tmpl.RenderPage(w, r, "missing", map[string]any{"User": user, "DeemixReady": h.deemixReady()})
+}
+
+// deemixReady / lidarrReady: download actions are only offered once the
+// service is set up (Settings > Deemix / Lidarr), rather than failing on
+// click.
+func (h *MissingHandler) deemixReady() bool { return h.Deemix != nil && h.Deemix.ARL() != "" }
+
+func (h *MissingHandler) lidarrReady() bool {
+	if h.Lidarr == nil {
+		return false
+	}
+	c := h.Lidarr.GetConfig()
+	return c.URL != "" && c.APIKey != ""
 }
 
 // list renders GET /missing/list: every missing track grouped by playlist,
@@ -847,7 +860,10 @@ func (h *MissingHandler) renderGroups(w http.ResponseWriter, userID, playlistID 
 		}
 		tracks = filtered
 	}
-	h.Tmpl.RenderPartial(w, "partials/missing_list.html", map[string]any{"Groups": groupMissingTracks(h.DB, tracks), "TotalCount": len(tracks), "Scope": playlistID})
+	h.Tmpl.RenderPartial(w, "partials/missing_list.html", map[string]any{
+		"Groups": groupMissingTracks(h.DB, tracks), "TotalCount": len(tracks), "Scope": playlistID,
+		"DeemixReady": h.deemixReady(), "LidarrReady": h.lidarrReady(),
+	})
 }
 
 // scopeParam reads the listScope query param that the Playlists table's

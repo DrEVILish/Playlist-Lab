@@ -4,7 +4,7 @@
      actual source of truth) with the chosen week's chart URL, so nothing
      else about the import form/backend needs to know this picker exists. */}}
 {{define "partials/billboard_weeks.html"}}
-<select id="billboard-week-select" class="ftl-select" onchange="document.getElementById('import-identifier').value=this.value">
+<select id="billboard-week-select" class="select" onchange="document.getElementById('import-identifier').value=this.value">
   {{if not .Weeks}}
   <option value="">No charts found for this year</option>
   {{else}}

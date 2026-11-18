@@ -13,5 +13,5 @@ import "embed"
 // contract's "Serving the assets" section) must stay siblings under
 // /static/ for those relative font URLs to resolve.
 //
-//go:embed css js service-logos themes assets *.svg *.ico *.png *.json
+//go:embed js service-logos themes assets *.svg *.ico *.png *.json
 var FS embed.FS

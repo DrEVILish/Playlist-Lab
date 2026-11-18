@@ -4,13 +4,13 @@
 {{define "partials/plex_home_users.html"}}
 <div id="plex-home-users">
   {{if .Error}}
-    <p class="error-message">{{.Error}}</p>
+    <p class="alert alert-warning">{{.Error}}</p>
   {{else if not .Users}}
-    <p class="settings-hint">No other Plex Home users found on this server.</p>
+    <p class="field-hint">No other Plex Home users found on this server.</p>
   {{else}}
-    <div class="plex-home-user-list">
+    <div class="list">
       {{range .Users}}
-      <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm"
+      <button type="button" class="btn btn-secondary btn-sm"
         hx-get="/import/plex-home/users/{{.ID}}/playlists" hx-target="#plex-home-playlists" hx-swap="innerHTML">
         {{.Title}}
       </button>

@@ -1,5 +1,15 @@
 # Playlist Lab — Design System
 
+> **Superseded for styling (2026-10):** the app no longer ships any CSS of
+> its own. Every page is styled by one
+> [ftl-themes](https://github.com/DrEVILish/ftl-themes) bundle (default
+> `blue-future`, user-selectable in Settings > Appearance), using that
+> library's component classes and app shell - see its `CONTRACT.md`. The
+> colour, token and component-styling sections below describe the old
+> `static/css/` and are kept only as product/UX history; the behavioural
+> and UX decisions (§6 onwards) still apply. Gaps found in ftl-themes are
+> tracked in `FTL_ISSUES.md` at the repo root.
+
 **Style direction:** SciFi Futuristic. The interface should read as an advanced
 spacecraft computer, AI operating system, or high-end industrial control
 system — not a cyberpunk website. Precise, uncluttered, dark. Glow is a

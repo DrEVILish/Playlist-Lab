@@ -53,7 +53,7 @@ func (h *BackupHandler) page(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if IsModalRequest(r) {
-		h.Tmpl.RenderModal(w, r, "backup_restore", "Backup / Restore", data)
+		h.Tmpl.RenderModal(w, r, "backup_restore", "Backup and restore", data)
 		return
 	}
 	h.Tmpl.RenderPage(w, r, "backup_restore", data)

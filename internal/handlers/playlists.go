@@ -92,7 +92,7 @@ type playlistRow struct {
 	TrackCount     int
 	Duration       int64
 	DBID           int64 // 0 if this playlist was never imported/tracked through Playlist Lab
-	CreatedAt      int64 // unix seconds; zero if DBID is 0
+	CreatedAt      int64 // unix seconds: the import date, else Plex's addedAt
 	MissingCount   int
 	ScheduleID     int64  // 0 if no refresh schedule exists for this playlist
 	Frequency      string // "daily"/"weekly"/"fortnightly"/"monthly"; empty if no schedule
@@ -118,6 +118,10 @@ func (h *PlaylistsHandler) index(w http.ResponseWriter, r *http.Request) {
 	}
 
 	loaded, err := h.loadPlaylistRows(user, client, r.URL.Query())
+	if isPlexAuthError(err) {
+		redirectToReauth(w, r)
+		return
+	}
 	if err != nil {
 		slog.Error("failed to fetch playlists from Plex", "error", err)
 		h.Tmpl.RenderPage(w, r, "home", map[string]any{"User": user, "PlexError": true})
@@ -204,12 +208,17 @@ func (h *PlaylistsHandler) loadPlaylistRows(user *db.User, client *plex.Client, 
 			PlexID: p.RatingKey, Name: cleanPlaylistName(p.Title),
 			Source: "plex", TrackCount: p.LeafCount, Duration: p.Duration,
 			CoverURL: ImageProxyURL(p.Composite),
+			// Plex's own added date, so playlists made outside Playlist Lab
+			// still sort and filter by date; an imported one's DB date wins.
+			CreatedAt: p.AddedAt,
 		}
 		if t, ok := trackedByPlexID[p.RatingKey]; ok {
 			row.Source = t.Source
 			row.SourceURL = t.SourceURL.String
 			row.DBID = t.ID
-			row.CreatedAt = t.CreatedAt
+			if t.CreatedAt != 0 {
+				row.CreatedAt = t.CreatedAt
+			}
 			row.MissingCount = missingCountByPlaylistID[t.ID]
 			if s, ok := scheduleByPlaylistID[t.ID]; ok {
 				row.ScheduleID = s.ID
@@ -399,6 +408,21 @@ func (q queryState) With(key, val string) string {
 }
 
 // SortHref is sortHref's old toggle-direction logic, now filter-preserving.
+// Encode is the current query string, for links that keep every filter.
+func (q queryState) Encode() string { return url.Values(q).Encode() }
+
+// Without drops several filter keys at once (the "All" quick filter).
+func (q queryState) Without(keys ...string) string {
+	v := url.Values{}
+	for k, vals := range q {
+		v[k] = append([]string(nil), vals...)
+	}
+	for _, k := range keys {
+		v.Del(k)
+	}
+	return "/?" + v.Encode()
+}
+
 func (q queryState) SortHref(key string) string {
 	dir := "asc"
 	if url.Values(q).Get("sort") == key && url.Values(q).Get("dir") == "asc" {
@@ -985,11 +1009,11 @@ func (h *PlaylistsHandler) merge(w http.ResponseWriter, r *http.Request) {
 	sourceIDs := r.Form["id"]
 	targetName := strings.TrimSpace(r.FormValue("targetName"))
 	if len(sourceIDs) < 2 {
-		http.Error(w, "select at least 2 playlists to merge", http.StatusBadRequest)
+		http.Error(w, "Select at least two playlists to merge.", http.StatusBadRequest)
 		return
 	}
 	if targetName == "" {
-		http.Error(w, "targetName is required", http.StatusBadRequest)
+		http.Error(w, "Give the merged playlist a name.", http.StatusBadRequest)
 		return
 	}
 	client, userServer, err := h.client(user)

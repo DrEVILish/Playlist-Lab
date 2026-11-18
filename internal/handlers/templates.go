@@ -44,6 +44,14 @@ var serviceLogos = map[string]string{
 	"youtube": "youtube", "youtube-music": "youtube",
 }
 
+var sourceLabels = map[string]string{
+	"amazon": "Amazon Music", "apple": "Apple Music", "aria": "ARIA Charts",
+	"billboard": "Billboard", "deezer": "Deezer", "lastfm": "Last.fm",
+	"listenbrainz": "ListenBrainz", "plex": "Plex", "qobuz": "Qobuz",
+	"spotify": "Spotify", "tidal": "Tidal", "youtube": "YouTube",
+	"youtube-music": "YouTube Music", "ai": "AI", "file": "File",
+}
+
 // facetExampleWords backs the "facetExample" template func above - one
 // illustrative value per Dynamic Collection facet type (handlers/
 // dynamic_collections.go's facetTypeLabels), kept as its own map rather
@@ -105,9 +113,9 @@ var tmplFuncs = template.FuncMap{
 	},
 	// lampState maps a "success"/"failed"/"running"/"" status string (the
 	// shape playlists.go/collections.go's LastRunStatus and admin
-	// enabled/disabled flags already use) onto ftl-core.css's .ftl-lamp
-	// modifier class - "" (never run) deliberately maps to "", since a bare
-	// .ftl-lamp with no is-* class is already the lamp's off/unlit state.
+	// enabled/disabled flags already use) onto ftl-themes' .lamp modifier
+	// class - "" (never run) deliberately maps to "", since a bare .lamp
+	// with no is-* class is already the lamp's off/unlit state.
 	"lampState": func(status string) string {
 		switch status {
 		case "success":
@@ -158,6 +166,18 @@ var tmplFuncs = template.FuncMap{
 			return "/static/service-logos/" + file + ".svg"
 		}
 		return ""
+	},
+	// sourceLabel is a playlist source id as people say it ("apple" ->
+	// "Apple Music"): text stays readable in every theme, where brand
+	// wordmarks drawn for light or dark backgrounds don't.
+	"sourceLabel": func(id string) string {
+		if l, ok := sourceLabels[id]; ok {
+			return l
+		}
+		if id == "" {
+			return ""
+		}
+		return strings.ToUpper(id[:1]) + id[1:]
 	},
 	// initials backs that same fallback badge - first two letters of the
 	// service name, upper-cased, matching ServiceIcon.tsx's FallbackIcon.
@@ -247,28 +267,18 @@ var tmplFuncs = template.FuncMap{
 			return fmt.Sprintf("%d years ago", years)
 		}
 	},
-	// sortArrow shows the active sort column's direction, mirroring
-	// SortableHeader's ▲/▼ in PlaylistsPage.tsx.
-	"sortArrow": func(key, curSort, curDir string) string {
+	// ariaSort is a sortable <th>'s aria-sort value: "ascending"/
+	// "descending" on the active sort column, "none" (sortable, not sorted)
+	// elsewhere. ftl-themes draws the arrow and the clickable look from the
+	// attribute (CONTRACT.md "Tables"), and it's what a screen reader reads.
+	"ariaSort": func(key, curSort, curDir string) string {
 		if curSort != key {
-			return ""
+			return "none"
 		}
 		if curDir == "desc" {
-			return "▼"
+			return "descending"
 		}
-		return "▲"
-	},
-	// toggleDir backs the mobile playlists sortbar's standalone direction
-	// button (PlaylistsPage.tsx's setSortDir toggle) - unlike sortArrow/
-	// SortHref, it flips the direction regardless of which column is
-	// active, since the mobile sort key (a <select>) and direction (this
-	// button) are independent controls, not one combined toggle-on-click
-	// per column like the desktop table's headers.
-	"toggleDir": func(curDir string) string {
-		if curDir == "desc" {
-			return "asc"
-		}
-		return "desc"
+		return "ascending"
 	},
 	"joinFloats": func(items []float64) string {
 		parts := make([]string, len(items))
@@ -356,8 +366,8 @@ var pageTitles = map[string]string{
 	"home":                "Playlists",
 	"import":              "Import a Playlist",
 	"missing":             "Missing Tracks",
-	"mixes":               "Generate Mixes",
-	"mix_templates":       "Mix Templates",
+	"mixes":               "Mixes",
+	"mix_templates":       "Saved Mixes",
 	"settings":            "Settings",
 	"setup":               "Plex Server",
 	"status":              "Status & Reports",
@@ -396,7 +406,9 @@ func (t *Templates) RenderModal(w http.ResponseWriter, r *http.Request, name, ti
 		return
 	}
 	var buf strings.Builder
-	if err := tmpl.ExecuteTemplate(&buf, "content", t.pageData(r, data)); err != nil {
+	m := t.pageData(r, data)
+	m["InModal"] = true // the modal header carries the title; pages skip their own
+	if err := tmpl.ExecuteTemplate(&buf, "content", m); err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -452,37 +464,98 @@ func (t *Templates) pageData(r *http.Request, data any) map[string]any {
 			}
 		}
 	}
-	// Theme: an ftl-themes slug for <html data-theme="...">, or "" (this
-	// app's own default look, no theme file loaded). Server-rendered like
-	// TextScale above, for the same reason - set before first paint, no
-	// flash of the wrong theme while a client-side script reads a saved
-	// preference.
+	// Theme: the ftl-themes slug for <html data-theme="..."> and the one
+	// bundle layout.html links. The app has no CSS of its own, so a user
+	// who never picked one ("" in user_settings) gets defaultTheme rather
+	// than no theme. Server-rendered like TextScale above, for the same
+	// reason - set before first paint, no flash of the wrong theme.
 	if _, exists := m["Theme"]; !exists {
-		m["Theme"] = ""
+		m["Theme"] = defaultTheme
 		if t.DB != nil {
 			if user := auth.CurrentUser(r); user != nil {
-				if theme, err := db.GetTheme(t.DB, user.ID); err == nil {
+				// findTheme: a slug upstream has since removed would link a
+				// stylesheet that no longer exists - an unstyled page.
+				if theme, err := db.GetTheme(t.DB, user.ID); err == nil && findTheme(theme) != nil {
 					m["Theme"] = theme
+				}
+			}
+		}
+	}
+	// The theme's palette variant (<html data-variant>) and, for a theme
+	// that declares a tint, the user's saved colour for it (rendered as the
+	// tint token inline on <html>, CONTRACT.md "Theme tint"). Both are
+	// dropped when they don't belong to the theme being rendered.
+	if _, exists := m["ThemeVariant"]; !exists {
+		m["ThemeVariant"] = ""
+		m["ThemeTint"] = nil
+		if user := auth.CurrentUser(r); user != nil && t.DB != nil {
+			slug, _ := m["Theme"].(string)
+			if v, err := db.GetThemeVariant(t.DB, user.ID); err == nil && isValidVariant(slug, v) {
+				m["ThemeVariant"] = v
+			}
+			if th := findTheme(slug); th != nil && th.Tint != nil {
+				if tints, err := db.GetThemeTints(t.DB, user.ID); err == nil && hexColor.MatchString(tints[slug]) && cssToken.MatchString(th.Tint.Token) {
+					// html/template won't interpolate a custom-property
+					// *name* into a style attribute, so the declaration is
+					// built here - safe: both parts are regex-validated.
+					m["ThemeTint"] = template.CSS("; " + th.Tint.Token + ": " + tints[slug])
+				}
+			}
+		}
+	}
+	m["ThemeVersion"] = themeVersion
+	m["Path"] = r.URL.Path
+	m["Section"] = navSection(r.URL.Path) // marks the current .nav-item in layout.html
+	// IsPlexOwner gates Collections; the status footer names the server
+	// and library every music feature works against.
+	if t.DB != nil {
+		if user := auth.CurrentUser(r); user != nil {
+			if servers, err := db.GetUserServers(t.DB, user.ID); err == nil {
+				owner := false
+				for _, s := range servers {
+					owner = owner || s.IsOwner
+					if s.IsDefault || len(servers) == 1 {
+						m["DefaultServer"] = s
+					}
+				}
+				if _, exists := m["IsPlexOwner"]; !exists {
+					m["IsPlexOwner"] = owner
 				}
 			}
 		}
 	}
 	if _, exists := m["IsPlexOwner"]; !exists {
 		m["IsPlexOwner"] = false
-		if t.DB != nil {
-			if user := auth.CurrentUser(r); user != nil {
-				if servers, err := db.GetUserServers(t.DB, user.ID); err == nil {
-					for _, s := range servers {
-						if s.IsOwner {
-							m["IsPlexOwner"] = true
-							break
-						}
-					}
-				}
-			}
+	}
+	// The nav's Missing tracks count, so unresolved tracks are visible
+	// from every page rather than only on the Playlists stats row.
+	if _, exists := m["NavMissingCount"]; !exists && t.DB != nil {
+		if user := auth.CurrentUser(r); user != nil {
+			m["NavMissingCount"], _ = db.CountUserMissingTracks(t.DB, user.ID)
 		}
 	}
 	return m
+}
+
+// navSection maps a request path to the main-nav entry it belongs under,
+// so sub-pages (an editor, Mix templates, Dynamic collections) keep their
+// section highlighted.
+func navSection(path string) string {
+	switch {
+	case path == "/" || strings.HasPrefix(path, "/playlists"):
+		return "playlists"
+	case strings.HasPrefix(path, "/missing"):
+		return "missing"
+	case strings.HasPrefix(path, "/import"):
+		return "import"
+	case strings.HasPrefix(path, "/mix"):
+		return "mixes"
+	case strings.HasPrefix(path, "/collections"), strings.HasPrefix(path, "/dynamic-collections"):
+		return "collections"
+	case strings.HasPrefix(path, "/cross-import"):
+		return "export"
+	}
+	return ""
 }
 
 func (t *Templates) RenderPartial(w http.ResponseWriter, name string, data any) {

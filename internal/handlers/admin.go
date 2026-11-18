@@ -412,10 +412,21 @@ func (h *AdminHandler) renderTMDbPanelWithNotice(w http.ResponseWriter, r *http.
 // own auth-check endpoint (tmdb.Client.ValidateKey), so an admin finds out
 // right away if a key is stale/mistyped instead of only discovering it
 // later when a scheduled collection refresh silently fails.
+// submittedSecret reads a secret field. Secrets are never sent back to the
+// browser (DESIGN.md §11.4: masked, no reveal), so a blank field means
+// "keep the saved one"; the panel's Remove button (clear=1) clears it.
+func submittedSecret(r *http.Request, field, saved string) string {
+	if v := strings.TrimSpace(r.FormValue(field)); v != "" || r.FormValue("clear") == "1" {
+		return v
+	}
+	return saved
+}
+
 func (h *AdminHandler) saveTMDbConfig(w http.ResponseWriter, r *http.Request) {
 	admin := auth.CurrentUser(r)
 	_ = r.ParseForm()
-	apiKey := strings.TrimSpace(r.FormValue("apiKey"))
+	saved, _, _ := db.GetAdminConfig(h.DB, configKeyTMDbAPIKey)
+	apiKey := submittedSecret(r, "apiKey", saved)
 	if err := db.SetAdminConfig(h.DB, configKeyTMDbAPIKey, apiKey); err != nil {
 		slog.Error("failed to save TMDb config", "error", err, "adminId", admin.ID)
 		h.Notifications.Add(admin.ID, notifications.TypeAction, "Save TMDb API key", err.Error(), notifications.StatusError, nil)
@@ -451,7 +462,8 @@ func (h *AdminHandler) renderTVDbPanel(w http.ResponseWriter, r *http.Request, e
 func (h *AdminHandler) saveTVDbConfig(w http.ResponseWriter, r *http.Request) {
 	admin := auth.CurrentUser(r)
 	_ = r.ParseForm()
-	apiKey := strings.TrimSpace(r.FormValue("apiKey"))
+	saved, _, _ := db.GetAdminConfig(h.DB, configKeyTVDbAPIKey)
+	apiKey := submittedSecret(r, "apiKey", saved)
 	if err := db.SetAdminConfig(h.DB, configKeyTVDbAPIKey, apiKey); err != nil {
 		slog.Error("failed to save TVDb config", "error", err, "adminId", admin.ID)
 		h.Notifications.Add(admin.ID, notifications.TypeAction, "Save TVDb API key", err.Error(), notifications.StatusError, nil)
@@ -485,7 +497,8 @@ func (h *AdminHandler) renderTraktPanelWithNotice(w http.ResponseWriter, r *http
 func (h *AdminHandler) saveTraktConfig(w http.ResponseWriter, r *http.Request) {
 	admin := auth.CurrentUser(r)
 	_ = r.ParseForm()
-	apiKey := strings.TrimSpace(r.FormValue("apiKey"))
+	saved, _, _ := db.GetAdminConfig(h.DB, configKeyTraktAPIKey)
+	apiKey := submittedSecret(r, "apiKey", saved)
 	if err := db.SetAdminConfig(h.DB, configKeyTraktAPIKey, apiKey); err != nil {
 		slog.Error("failed to save Trakt config", "error", err, "adminId", admin.ID)
 		h.Notifications.Add(admin.ID, notifications.TypeAction, "Save Trakt Client ID", err.Error(), notifications.StatusError, nil)
@@ -775,7 +788,7 @@ func (h *AdminHandler) deemixAll(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) saveDeemixArl(w http.ResponseWriter, r *http.Request) {
 	admin := auth.CurrentUser(r)
 	_ = r.ParseForm()
-	arl := strings.TrimSpace(r.FormValue("arl"))
+	arl := submittedSecret(r, "arl", h.Deemix.ARL())
 	if err := db.SetAdminConfig(h.DB, configKeyDeemixArl, arl); err != nil {
 		slog.Error("failed to save deemix ARL", "error", err, "adminId", admin.ID)
 		h.Notifications.Add(admin.ID, notifications.TypeAction, "Save Deezer ARL", err.Error(), notifications.StatusError, nil)
@@ -938,7 +951,7 @@ func (h *AdminHandler) saveLidarrConfig(w http.ResponseWriter, r *http.Request) 
 	admin := auth.CurrentUser(r)
 	_ = r.ParseForm()
 	lidarrURL := strings.TrimSuffix(strings.TrimSpace(r.FormValue("url")), "/")
-	apiKey := strings.TrimSpace(r.FormValue("apiKey"))
+	apiKey := submittedSecret(r, "apiKey", h.Lidarr.GetConfig().APIKey)
 	if err := db.SetAdminConfig(h.DB, configKeyLidarrURL, lidarrURL); err != nil {
 		slog.Error("failed to save Lidarr config", "error", err, "adminId", admin.ID)
 		h.Notifications.Add(admin.ID, notifications.TypeAction, "Save Lidarr config", err.Error(), notifications.StatusError, nil)
@@ -966,7 +979,7 @@ func (h *AdminHandler) saveYouTubeConfig(w http.ResponseWriter, r *http.Request)
 	admin := auth.CurrentUser(r)
 	_ = r.ParseForm()
 	clientID := strings.TrimSpace(r.FormValue("clientId"))
-	clientSecret := strings.TrimSpace(r.FormValue("clientSecret"))
+	clientSecret := submittedSecret(r, "clientSecret", h.YouTube.OAuthConfig().ClientSecret)
 	redirectURI := strings.TrimSpace(r.FormValue("redirectUri"))
 	if clientID == "" || clientSecret == "" || redirectURI == "" {
 		h.renderYouTubePanel(w, r, "Missing required fields: Client ID, Client Secret, Redirect URI")

@@ -1,18 +1,19 @@
 {{define "partials/admin_lidarr_panel.html"}}
 <form hx-post="/admin/lidarr/config" hx-target="#settings-panel-admin-lidarr" hx-swap="innerHTML">
-  <div class="settings-field-group">
-    <div class="settings-field">
-      <label class="settings-label" for="lidarr-url">Lidarr URL</label>
-      <input id="lidarr-url" type="text" name="url" class="settings-input" value="{{.LidarrURL}}" placeholder="http://127.0.0.1:8686" autocomplete="off">
+  <div class="stack">
+    <div class="field">
+      <label class="label" for="lidarr-url">Lidarr URL</label>
+      <input id="lidarr-url" type="text" name="url" class="input" value="{{.LidarrURL}}" placeholder="http://127.0.0.1:8686" autocomplete="off">
     </div>
-    <div class="settings-field">
-      <label class="settings-label" for="lidarr-api-key">API Key</label>
-      <input id="lidarr-api-key" type="password" name="apiKey" class="settings-input" value="{{.LidarrAPIKey}}" placeholder="Settings > General > Security in Lidarr" autocomplete="off">
+    <div class="field">
+      <label class="label" for="lidarr-api-key">API Key</label>
+      <input id="lidarr-api-key" type="password" name="apiKey" class="input" placeholder="{{if .LidarrAPIKey}}Saved. Paste a new API key to replace it{{else}}Settings > General > Security in Lidarr{{end}}" autocomplete="off">
     </div>
   </div>
-  {{if .Error}}<div class="settings-alert settings-alert--error">{{.Error}}</div>{{end}}
-  <div class="settings-actions">
-    <button type="submit" class="ftl-btn ftl-btn-primary">Save Lidarr Config</button>
+  {{if .Error}}<div class="alert alert-danger">{{.Error}}</div>{{end}}
+  <div class="cluster">
+    <button type="submit" class="btn btn-primary btn-sm">Save Lidarr Config</button>
+    {{if .LidarrAPIKey}}<button type="button" class="btn btn-tertiary btn-sm" hx-post="/admin/lidarr/config" hx-vals='{"clear":"1"}' hx-target="#settings-panel-admin-lidarr" hx-swap="innerHTML" hx-confirm="Remove the saved API key?">Remove API key</button>{{end}}
   </div>
 </form>
 {{end}}

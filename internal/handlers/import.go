@@ -38,6 +38,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -91,6 +92,37 @@ const maxImportFileSize = 10 << 20
 // service as youtube to a user picking a source, so only one tab is shown,
 // same "registered but not surfaced" treatment apple/tidal/amazon/qobuz get
 // above.
+// sourceHosts maps a pasted link's host to the source that reads it, so a
+// Deezer link imports from Deezer whichever source tab happens to be
+// selected. Suffix match: "www.deezer.com" and "deezer.com" both hit.
+var sourceHosts = []struct{ host, source string }{
+	{"open.spotify.com", "spotify"}, {"spotify.com", "spotify"},
+	{"deezer.com", "deezer"}, {"deezer.page.link", "deezer"},
+	{"music.apple.com", "apple"},
+	{"music.youtube.com", "youtube"}, {"youtube.com", "youtube"}, {"youtu.be", "youtube"},
+	{"billboard.com", "billboard"}, {"aria.com.au", "aria"},
+	{"listenbrainz.org", "listenbrainz"}, {"last.fm", "lastfm"},
+	{"tidal.com", "tidal"}, {"qobuz.com", "qobuz"}, {"music.amazon.com", "amazon"},
+}
+
+// importSource is the source to read identifier with: the one its link
+// points at when it is a link to a known service, else the picked one.
+func (h *ImportHandler) importSource(picked, identifier string) string {
+	u, err := url.Parse(strings.TrimSpace(identifier))
+	if err != nil || u.Host == "" {
+		return picked
+	}
+	host := strings.ToLower(u.Hostname())
+	for _, sh := range sourceHosts {
+		if host == sh.host || strings.HasSuffix(host, "."+sh.host) {
+			if _, ok := h.Registry.GetSource(sh.source); ok {
+				return sh.source
+			}
+		}
+	}
+	return picked
+}
+
 var importSources = []string{
 	"spotify", "deezer", "youtube", "billboard", "aria", "listenbrainz", "lastfm",
 }
@@ -120,7 +152,7 @@ func (h *ImportHandler) page(w http.ResponseWriter, r *http.Request) {
 		"Countries":      countries, "Country": country,
 	}
 	if IsModalRequest(r) {
-		h.Tmpl.RenderModal(w, r, "import", "Import", data)
+		h.Tmpl.RenderModal(w, r, "import", "Import a playlist", data)
 		return
 	}
 	h.Tmpl.RenderPage(w, r, "import", data)
@@ -136,11 +168,11 @@ func (h *ImportHandler) startImport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
 	}
-	source := r.FormValue("source")
 	identifier := r.FormValue("identifier")
+	source := h.importSource(r.FormValue("source"), identifier)
 	customName := r.FormValue("playlistName")
 	if source == "" || identifier == "" {
-		http.Error(w, "source and identifier are required", http.StatusBadRequest)
+		http.Error(w, "Paste a playlist link or ID first.", http.StatusBadRequest)
 		return
 	}
 	if _, ok := h.Registry.GetSource(source); !ok {

@@ -1,9 +1,9 @@
 {{define "partials/missing_list.html"}}
 {{if not .Groups}}
-<p>No missing tracks. Everything matched.</p>
+<div class="empty-state"><span class="empty-state-title">Nothing missing.</span><span class="empty-state-text">Every imported track was found in your Plex library.</span></div>
 {{else}}
-{{if not .Scope}}<p>{{.TotalCount}} missing track(s).</p>{{end}}
-{{$scope := .Scope}}
+{{if not .Scope}}<p class="text-muted">{{.TotalCount}} missing across {{len .Groups}} playlist{{if ne (len .Groups) 1}}s{{end}}.</p>{{end}}
+{{$scope := .Scope}}{{$deemix := .DeemixReady}}{{$lidarr := .LidarrReady}}
 {{range .Groups}}
 {{$defaultOpen := le (len .Tracks) 10}}
 <!-- Scoped to one playlist (embedded inline under a Playlists-table row,
@@ -15,68 +15,55 @@
      standalone /missing page, listing every playlist) keeps the
      collapsible summary heading, which is what makes a multi-playlist list
      scannable there. -->
-{{if $scope}}<div class="missing-tracks-panel missing-tracks-panel--scoped">
-{{else}}<details class="missing-tracks-panel" data-default-open="{{$defaultOpen}}"{{if $defaultOpen}} open{{end}}>
-  <summary class="missing-tracks-summary"><h2>{{.PlaylistName}} <span class="missing-count-badge">({{len .Tracks}} missing)</span></h2></summary>
+{{if $scope}}<div class="missing-tracks-panel stack stack-sm">
+{{else}}<details class="missing-tracks-panel accordion-item" data-default-open="{{$defaultOpen}}"{{if $defaultOpen}} open{{end}}>
+  <summary class="accordion-trigger">{{.PlaylistName}} <span class="badge badge-warning">{{len .Tracks}} missing</span></summary>
+  <div class="accordion-panel stack stack-sm">
 {{end}}
-  <div class="missing-tracks-toolbar">
-    <!-- Plain buttons (hx-vals/hx-include instead of a wrapping <form>) -
-         see missing.html's comment on why no <form> nests inside
-         .bulk-select-scope's table below. -->
-    <div class="missing-tracks-toolbar-actions">
-      <button type="button" class="ftl-btn ftl-btn-primary ftl-btn-sm" hx-post="/missing/retry" hx-vals='{"playlistId": "{{.PlaylistID}}"}' hx-target="#retry-status" hx-swap="innerHTML">Retry playlist</button>
-      <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" hx-delete="/missing/playlist/{{.PlaylistID}}{{if $scope}}?listScope={{$scope}}{{end}}" hx-target="{{if $scope}}closest .missing-tracks-scope{{else}}#missing-list{{end}}" hx-swap="innerHTML" hx-confirm="Clear all missing tracks for this playlist?">Clear</button>
-    </div>
+  <div class="cluster">
+    <!-- Plain buttons (hx-vals/hx-include, no wrapping <form>) - see
+         missing.html. -->
+      <button type="button" class="btn btn-secondary btn-sm" hx-post="/missing/retry" hx-vals='{"playlistId": "{{.PlaylistID}}"}' hx-target="#retry-status" hx-swap="innerHTML">Retry this playlist</button>
+      <button type="button" class="btn btn-tertiary btn-sm" hx-delete="/missing/playlist/{{.PlaylistID}}{{if $scope}}?listScope={{$scope}}{{end}}" hx-target="{{if $scope}}closest .missing-tracks-scope{{else}}#missing-list{{end}}" hx-swap="innerHTML" hx-confirm="Stop tracking every missing track in this playlist?">Clear list</button>
   </div>
 
   {{$playlistName := .PlaylistName}}
-  {{if $scope}}<div class="bulk-select-scope">{{end}}
-  <div class="missing-table-container data-table-container">
-  <table class="missing-table data-table">
+  {{if $scope}}<div class="stack bulk-select-scope">{{end}}
+  <div class="table-wrap">
+  <table class="table">
     <thead>
       <tr>
-        <th class="col-select"><input type="checkbox" class="select-all-in-table" aria-label="Select all missing tracks in {{$playlistName}}"></th>
+        <th class="col-select"><input type="checkbox" class="checkbox select-all-in-table" aria-label="Select all missing tracks in {{$playlistName}}"></th>
         <th>Track</th>
         <th>Artist</th>
         <th>Album</th>
-        <th class="col-actions">Actions</th>
+        <th class="col-actions"><span class="visually-hidden">Actions</span></th>
       </tr>
     </thead>
     <tbody>
       {{range .Tracks}}
       <tr class="missing-track-row" id="missing-track-{{.ID}}" data-row-menu data-search="{{lower .Title}} {{lower .Artist}} {{lower $playlistName}}">
-        <td class="col-select"><input type="checkbox" name="id" value="{{.ID}}" class="row-select" aria-label="Select {{.Title}}"></td>
-        <td class="missing-track-title">{{.Title}}</td>
-        <td class="missing-track-artist">{{.Artist}}</td>
-        <td class="missing-track-album">{{if .Album.Valid}}{{.Album.String}}{{else}}—{{end}}</td>
+        <td class="col-select"><input type="checkbox" name="id" value="{{.ID}}" class="checkbox row-select" aria-label="Select {{.Title}}"></td>
+        <td>{{.Title}}</td>
+        <td>{{.Artist}}</td>
+        <td>{{if .Album.Valid}}{{.Album.String}}{{else}}—{{end}}</td>
         <td class="col-actions">
-          <div class="row-actions">
-            <button type="button" class="ftl-btn ftl-btn-icon" title="Retry matching this track against Plex" aria-label="Retry matching {{.Title}}" hx-post="/missing/retry" hx-vals='{"trackId": "{{.ID}}"}' hx-target="#retry-status" hx-swap="innerHTML">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          <!-- The two actions that resolve a track sit in the row; the rest
+               are in its menu (a popover, so no scroller clips it). -->
+          <span class="row is-gap-2xs is-items-center">
+            <button type="button" class="btn btn-ghost btn-sm" title="Search your Plex library for the right track" hx-get="/missing/{{.ID}}/match{{if $scope}}?listScope={{$scope}}{{end}}" hx-target="#modal-root" hx-swap="innerHTML">Match&hellip;</button>
+            {{if $deemix}}<button type="button" class="btn btn-ghost btn-sm" title="Find this track on Deezer and download it with deemix" hx-post="/missing/{{.ID}}/deemix-download" hx-target="#notifications" hx-swap="innerHTML">Download</button>{{end}}
+            <button type="button" class="btn btn-ghost btn-icon btn-sm" data-row-menu-trigger popovertarget="missing-menu-{{$scope}}-{{.ID}}" title="More actions" aria-label="More actions for {{.Title}}">
+              <svg class="icon" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
             </button>
-            <!-- Replaces a raw "type a Plex ratingKey" text field (meaningless
-                 to a user) with a proper search modal - see missing_match.go
-                 and partials/missing_match.html. Opens through the same
-                 #modal-root every other modal in this app uses. -->
-            <button type="button" class="ftl-btn ftl-btn-icon" title="Search Plex for the right match" aria-label="Find a Plex match for {{.Title}}" hx-get="/missing/{{.ID}}/match{{if $scope}}?listScope={{$scope}}{{end}}" hx-target="#modal-root" hx-swap="innerHTML">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            </button>
-            <button type="button" class="ftl-btn ftl-btn-icon" title="Search deemix for this track" aria-label="Search deemix for {{.Title}}" hx-post="/missing/{{.ID}}/deemix-download" hx-target="#notifications" hx-swap="innerHTML">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            </button>
-            <button type="button" class="ftl-btn ftl-btn-icon" title="Search Lidarr for this track's artist/album" aria-label="Search Lidarr for {{.Title}}" hx-post="/missing/{{.ID}}/lidarr-download" hx-target="#notifications" hx-swap="innerHTML">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49"/><path d="M7.76 16.24a6 6 0 0 1 0-8.49"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 1 0 14.14"/></svg>
-            </button>
-            <button type="button" class="ftl-btn ftl-btn-icon" title="Replace with a sonically similar track already in your library" aria-label="Replace {{.Title}} with a similar track" hx-post="/missing/{{.ID}}/replace-similar{{if $scope}}?listScope={{$scope}}{{end}}" hx-target="{{if $scope}}closest .missing-tracks-scope{{else}}#missing-list{{end}}" hx-swap="innerHTML">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-            </button>
-            <button type="button" class="ftl-btn ftl-btn-icon icon-btn-danger" title="Remove this track from the missing list" aria-label="Remove {{.Title}} from the missing list" hx-delete="/missing/{{.ID}}{{if $scope}}?listScope={{$scope}}{{end}}" hx-target="{{if $scope}}closest .missing-tracks-scope{{else}}#missing-list{{end}}" hx-swap="innerHTML" hx-confirm="Remove this track from the missing list?">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            </button>
-          </div>
-          <button type="button" class="ftl-btn ftl-btn-icon row-menu-toggle" title="More actions" aria-label="More actions for {{.Title}}" onclick="this.closest('tr').classList.toggle('row-menu-open')">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
-          </button>
+            <div class="context-menu" popover id="missing-menu-{{$scope}}-{{.ID}}" role="menu">
+              <button type="button" class="context-menu-item" role="menuitem" hx-post="/missing/retry" hx-vals='{"trackId": "{{.ID}}"}' hx-target="#retry-status" hx-swap="innerHTML">Retry matching</button>
+              <button type="button" class="context-menu-item" role="menuitem" title="Use a sonically similar track already in your library" hx-post="/missing/{{.ID}}/replace-similar{{if $scope}}?listScope={{$scope}}{{end}}" hx-target="{{if $scope}}closest .missing-tracks-scope{{else}}#missing-list{{end}}" hx-swap="innerHTML">Use a similar track</button>
+              {{if $lidarr}}<button type="button" class="context-menu-item" role="menuitem" title="Ask Lidarr to search for this track's album" hx-post="/missing/{{.ID}}/lidarr-download" hx-target="#notifications" hx-swap="innerHTML">Search with Lidarr</button>{{end}}
+              <div class="context-menu-divider"></div>
+              <button type="button" class="context-menu-item is-danger" role="menuitem" hx-delete="/missing/{{.ID}}{{if $scope}}?listScope={{$scope}}{{end}}" hx-target="{{if $scope}}closest .missing-tracks-scope{{else}}#missing-list{{end}}" hx-swap="innerHTML" hx-confirm="Stop tracking this track as missing?">Remove from list</button>
+            </div>
+          </span>
         </td>
       </tr>
       {{end}}
@@ -84,13 +71,13 @@
   </table>
   </div>
   {{if $scope}}
-  <div class="bulk-actions-bar">
-    <span class="bulk-actions-count">Selected</span>
-    <button type="button" class="ftl-btn ftl-btn-secondary ftl-btn-sm" style="color:var(--error)" hx-post="/missing/bulk-remove?listScope={{$scope}}" hx-include="closest .bulk-select-scope" hx-target="closest .missing-tracks-scope" hx-swap="innerHTML" hx-confirm="Remove the selected missing track(s) from the list?">Remove Selected</button>
+  <div class="toolbar sticky-bottom" data-bulk-bar hidden>
+    <strong data-bulk-count>Selected</strong>
+    <button type="button" class="btn btn-danger btn-sm" hx-post="/missing/bulk-remove?listScope={{$scope}}" hx-include="closest .bulk-select-scope" hx-target="closest .missing-tracks-scope" hx-swap="innerHTML" hx-confirm="Stop tracking the selected tracks as missing?">Remove from list</button>
   </div>
   </div>
   {{end}}
-{{if $scope}}</div>{{else}}</details>{{end}}
+{{if $scope}}</div>{{else}}</div></details>{{end}}
 {{end}}
 {{end}}
 {{end}}

@@ -3,9 +3,9 @@
      one row (POST .../select) instead of adding a track to a playlist. */}}
 {{define "partials/import_review_candidates.html"}}
 {{if not .Results}}
-  {{if .Query}}<p class="settings-hint">No matches.</p>{{end}}
+  {{if .Query}}<p class="field-hint">No matches.</p>{{end}}
 {{else}}
-  <ul class="track-search-list">
+  <ul class="list">
     {{range .Results}}
     <li>
       <form hx-post="/import/review/{{$.SessionID}}/track/{{$.Index}}/select" hx-target="#import-review" hx-swap="outerHTML">
@@ -13,7 +13,7 @@
         <input type="hidden" name="title" value="{{.Title}}">
         <input type="hidden" name="artist" value="{{.Artist}}">
         <input type="hidden" name="album" value="{{.Album}}">
-        <button type="submit" class="ftl-btn ftl-btn-secondary ftl-btn-sm">{{.Title}} &mdash; {{.Artist}}{{if .Album}} ({{.Album}}){{end}}</button>
+        <button type="submit" class="btn btn-secondary btn-sm">{{.Title}} &mdash; {{.Artist}}{{if .Album}} ({{.Album}}){{end}}</button>
       </form>
     </li>
     {{end}}

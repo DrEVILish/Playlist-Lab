@@ -7,16 +7,16 @@
 <div id="collection-search-results">
   {{if .Query}}
     {{if not .Results}}
-    <p class="settings-hint">No matches for "{{.Query}}".</p>
+    <p class="field-hint">No matches for "{{.Query}}".</p>
     {{else}}
-    <ul class="track-search-list">
+    <ul class="list">
       {{range .Results}}
       <li>
-        <button type="button" class="track-search-result"
+        <button type="button" class="list-item"
           hx-post="/collections/{{$.CollectionID}}/manual-items" hx-vals='{"ratingKey": "{{.RatingKey}}"}'
           hx-target="#collection-manual-items" hx-swap="outerHTML">
-          <span class="track-search-result-title">{{.Title}}</span>
-          {{if .Artist}}<span class="track-search-result-meta">{{.Artist}}{{if .Album}} — {{.Album}}{{end}}</span>{{end}}
+          <span class="list-item-title">{{.Title}}</span>
+          {{if .Artist}}<span class="list-item-meta">{{.Artist}}{{if .Album}} — {{.Album}}{{end}}</span>{{end}}
         </button>
       </li>
       {{end}}

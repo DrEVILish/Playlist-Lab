@@ -42,6 +42,13 @@ func GetMissingTrackCount(sqlDB *sql.DB) (int, error) {
 	return count, err
 }
 
+// CountUserMissingTracks is one user's unresolved-track total (the nav badge).
+func CountUserMissingTracks(sqlDB *sql.DB, userID int64) (int, error) {
+	var count int
+	err := sqlDB.QueryRow("SELECT COUNT(*) FROM missing_tracks WHERE user_id = ?", userID).Scan(&count)
+	return count, err
+}
+
 func GetUserMissingTracks(sqlDB *sql.DB, userID int64) ([]MissingTrack, error) {
 	rows, err := sqlDB.Query(
 		`SELECT id, user_id, playlist_id, title, artist, album, position, after_track_key, added_at, source

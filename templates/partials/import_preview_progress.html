@@ -9,26 +9,26 @@
      #cross-import-match-status for. */}}
 {{define "partials/import_preview_progress.html"}}
 {{$p := .Progress}}
-<div id="import-review"
+<div id="import-review" data-import-progress
      {{if or (eq $p.Phase "scraping") (eq $p.Phase "matching")}}
      hx-get="/import/preview/{{.SessionID}}/status" hx-trigger="every 1s" hx-swap="outerHTML"
      {{end}}>
   {{if eq $p.Phase "error"}}
-  <div class="error-message">Import failed: {{$p.Message}}</div>
+  <div class="alert alert-danger">Import failed: {{$p.Message}}</div>
   {{else}}
-  <div class="import-progress">
-    <div class="progress-title">
+  <div class="stack">
+    <div>
       {{if eq $p.Phase "scraping"}}Fetching playlist…{{else}}Matching tracks against your library…{{end}}
     </div>
-    <div class="ftl-progress" style="margin-bottom:1rem">
+    <div class="progress">
       {{if gt $p.Total 0}}
-      <div class="ftl-progress-bar" style="width: {{percent $p.Current $p.Total}}%"></div>
+      <div class="progress-bar" style="width: {{percent $p.Current $p.Total}}%"></div>
       {{else}}
-      <div class="ftl-progress-bar" style="width: 30%"></div>
+      <div class="progress-bar" style="width: 30%"></div>
       {{end}}
     </div>
     {{if gt $p.Total 0}}
-    <div class="progress-text">{{$p.Current}} / {{$p.Total}} tracks</div>
+    <div class="text-muted">{{$p.Current}} / {{$p.Total}} tracks</div>
     {{end}}
   </div>
   {{end}}

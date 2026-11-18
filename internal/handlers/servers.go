@@ -94,9 +94,13 @@ func (h *ServersHandler) setupPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	servers, err := h.Plex.GetServers(user.PlexToken)
+	if isPlexAuthError(err) {
+		redirectToReauth(w, r)
+		return
+	}
 	if err != nil {
 		slog.Error("failed to get Plex servers", "error", err)
-		http.Error(w, "Failed to fetch your Plex servers", http.StatusBadGateway)
+		http.Error(w, "Couldn't reach plex.tv to list your servers. Try again in a moment.", http.StatusBadGateway)
 		return
 	}
 	type option struct{ Value, Name string }
@@ -214,9 +218,13 @@ func (h *ServersHandler) serversPanel(w http.ResponseWriter, r *http.Request) {
 func (h *ServersHandler) newServerForm(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
 	servers, err := h.Plex.GetServers(user.PlexToken)
+	if isPlexAuthError(err) {
+		redirectToReauth(w, r)
+		return
+	}
 	if err != nil {
 		slog.Error("failed to get Plex servers", "error", err)
-		http.Error(w, "Failed to fetch your Plex servers", http.StatusBadGateway)
+		http.Error(w, "Couldn't reach plex.tv to list your servers. Try again in a moment.", http.StatusBadGateway)
 		return
 	}
 	type option struct{ Value, Name string }
@@ -313,6 +321,10 @@ func (h *ServersHandler) refreshServerConnection(w http.ResponseWriter, r *http.
 		return
 	}
 	servers, err := h.Plex.GetServers(user.PlexToken)
+	if isPlexAuthError(err) {
+		redirectToReauth(w, r)
+		return
+	}
 	if err != nil {
 		slog.Error("failed to refresh server connection: could not reach Plex", "error", err, "serverId", id)
 		h.Notifications.Add(user.ID, notifications.TypeAction, "Refresh server connection", "Failed to reach Plex", notifications.StatusError, nil)

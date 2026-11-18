@@ -117,7 +117,7 @@ func waitForReviewBody(t *testing.T, fetch func() string) string {
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		body := fetch()
-		if !strings.Contains(body, "progress-title") {
+		if !strings.Contains(body, "data-import-progress") {
 			return body
 		}
 		time.Sleep(5 * time.Millisecond)

@@ -1,214 +1,155 @@
 {{define "content"}}
-<link rel="stylesheet" href="/static/css/pages/AdminPage.css">
-<link rel="stylesheet" href="/static/css/pages/SettingsPage.css">
-<div class="page-container settings-page">
-  <div class="page-header">
-    <h1 class="page-title">Settings</h1>
-  </div>
+<div class="stack">
+  <h1>Settings</h1>
 
-  <!-- Sidebar sub-nav (DESIGN.md §11.4/§3): same single radio group and
-       .admin-tabbar/.admin-tab-input classes as before (kept so
-       layout.html's hash-deep-linking script, which selects
-       ".admin-tabbar"/".admin-tab-input" by class, keeps working
-       unmodified) - only the chrome around it changes, from a horizontal
-       top tab strip to a vertical sidebar list, via SettingsPage.css's
-       scoped ".settings-page .admin-tabbar" overrides. Content/logic below
-       (which section shows for which checked radio) is untouched. -->
-  <div class="settings-layout">
-  <div class="admin-tabbar">
-    <!-- Was a plain <a href="/setup"> (a link straight to the one-time
-         onboarding wizard) - now a real tab like every other section, since
-         /setup no longer serves as ongoing server management (DESIGN.md
-         §11.11 multi-server support: it redirects to /settings once a user
-         has linked any server, so this page owns adding/removing/changing
-         the default from here on). -->
-    <input type="radio" name="settingstab" id="settings-tab-servers" class="admin-tab-input">
-    <label for="settings-tab-servers" class="admin-tab">Plex Servers</label>
-    <input type="radio" name="settingstab" id="settings-tab-matching" class="admin-tab-input" checked>
-    <label for="settings-tab-matching" class="admin-tab">Matching</label>
-    <input type="radio" name="settingstab" id="settings-tab-mixes" class="admin-tab-input">
-    <label for="settings-tab-mixes" class="admin-tab">Mixes</label>
-    <input type="radio" name="settingstab" id="settings-tab-ai" class="admin-tab-input">
-    <label for="settings-tab-ai" class="admin-tab">AI Features</label>
-    <input type="radio" name="settingstab" id="settings-tab-services" class="admin-tab-input">
-    <label for="settings-tab-services" class="admin-tab">Connected Services</label>
-    {{if .HasServer}}
-    <input type="radio" name="settingstab" id="settings-tab-scan" class="admin-tab-input">
-    <label for="settings-tab-scan" class="admin-tab">Library Scan</label>
-    {{end}}
-    <input type="radio" name="settingstab" id="settings-tab-appearance" class="admin-tab-input">
-    <label for="settings-tab-appearance" class="admin-tab">Appearance</label>
-    <input type="radio" name="settingstab" id="settings-tab-sessions" class="admin-tab-input">
-    <label for="settings-tab-sessions" class="admin-tab">Sessions</label>
-    <input type="radio" name="settingstab" id="settings-tab-info" class="admin-tab-input">
-    <label for="settings-tab-info" class="admin-tab">Server Info</label>
+  <!-- Vertical tab rail + one panel per section. Switching is layout.html's
+       generic [data-tabs] script, which also keeps the slug in the URL hash
+       (#matching, #admin-users, ...) so a tab can be bookmarked. -->
+  <div class="columns" style="--columns: 14rem minmax(0, 1fr)">
+    <div class="tabs" aria-orientation="vertical" role="tablist" data-tabs="hash">
+      <button type="button" class="tab" role="tab" data-tab="servers">Plex Servers</button>
+      <button type="button" class="tab is-active" role="tab" data-tab="matching">Matching</button>
+      <button type="button" class="tab" role="tab" data-tab="mixes">Mixes</button>
+      <button type="button" class="tab" role="tab" data-tab="ai">AI Features</button>
+      <button type="button" class="tab" role="tab" data-tab="services">Connected Services</button>
+      {{if .HasServer}}
+      <button type="button" class="tab" role="tab" data-tab="scan">Library Scan</button>
+      {{end}}
+      <button type="button" class="tab" role="tab" data-tab="appearance">Appearance</button>
+      <button type="button" class="tab" role="tab" data-tab="sessions">Sessions</button>
+      <button type="button" class="tab" role="tab" data-tab="info">Server Info</button>
+      {{if .IsAdmin}}
+      <span class="field-group-title">Administration</span>
+      <button type="button" class="tab" role="tab" data-tab="admin-stats">Statistics</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-users">Users</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-missing">Missing Tracks</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-jobs">Schedules</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-deemix">Deemix</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-lidarr">Lidarr</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-youtube">YouTube</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-tmdb">TMDb</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-tvdb">TVDb</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-trakt">Trakt</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-logs">Logs</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-proxy">Reverse Proxy</button>
+      {{end}}
+    </div>
 
-    {{if .IsAdmin}}
-    <span class="admin-tabbar-divider" aria-hidden="true"></span>
-    <span class="admin-tabbar-group-label">Administration</span>
-    <input type="radio" name="settingstab" id="settings-tab-admin-stats" class="admin-tab-input">
-    <label for="settings-tab-admin-stats" class="admin-tab admin-tab--admin">Statistics</label>
-    <input type="radio" name="settingstab" id="settings-tab-admin-users" class="admin-tab-input">
-    <label for="settings-tab-admin-users" class="admin-tab admin-tab--admin">Users</label>
-    <input type="radio" name="settingstab" id="settings-tab-admin-missing" class="admin-tab-input">
-    <label for="settings-tab-admin-missing" class="admin-tab admin-tab--admin">Missing Tracks</label>
-    <input type="radio" name="settingstab" id="settings-tab-admin-jobs" class="admin-tab-input">
-    <label for="settings-tab-admin-jobs" class="admin-tab admin-tab--admin">Schedules</label>
-    <input type="radio" name="settingstab" id="settings-tab-admin-deemix" class="admin-tab-input">
-    <label for="settings-tab-admin-deemix" class="admin-tab admin-tab--admin">Deemix</label>
-    <input type="radio" name="settingstab" id="settings-tab-admin-lidarr" class="admin-tab-input">
-    <label for="settings-tab-admin-lidarr" class="admin-tab admin-tab--admin">Lidarr</label>
-    <input type="radio" name="settingstab" id="settings-tab-admin-youtube" class="admin-tab-input">
-    <label for="settings-tab-admin-youtube" class="admin-tab admin-tab--admin">YouTube</label>
-    <input type="radio" name="settingstab" id="settings-tab-admin-tmdb" class="admin-tab-input">
-    <label for="settings-tab-admin-tmdb" class="admin-tab admin-tab--admin">TMDb</label>
-    <input type="radio" name="settingstab" id="settings-tab-admin-tvdb" class="admin-tab-input">
-    <label for="settings-tab-admin-tvdb" class="admin-tab admin-tab--admin">TVDb</label>
-    <input type="radio" name="settingstab" id="settings-tab-admin-trakt" class="admin-tab-input">
-    <label for="settings-tab-admin-trakt" class="admin-tab admin-tab--admin">Trakt</label>
-    <input type="radio" name="settingstab" id="settings-tab-admin-logs" class="admin-tab-input">
-    <label for="settings-tab-admin-logs" class="admin-tab admin-tab--admin">Logs</label>
-    <input type="radio" name="settingstab" id="settings-tab-admin-proxy" class="admin-tab-input">
-    <label for="settings-tab-admin-proxy" class="admin-tab admin-tab--admin">Reverse Proxy</label>
-    {{end}}
-  </div>
+    <div>
 
-    <div class="settings-content">
-
-      <section id="servers" class="settings-section">
-        <div class="settings-section-header">
-          <h2>Plex Servers</h2>
-          <p>Every Plex Media Server linked to your account (DESIGN.md §11.11). Playlists/Mixes/Import use your default automatically; Collections can target any of them.</p>
-        </div>
-        <div id="settings-panel-servers" hx-get="/settings/servers" hx-trigger="revealed, change from:#settings-tab-servers" hx-swap="outerHTML"></div>
+      <section class="panel stack" data-tab-panel="servers" hidden>
+        <div class="panel-header">Plex Servers</div>
+        <p class="text-muted">Every Plex Media Server linked to your account (DESIGN.md §11.11). Playlists/Mixes/Import use your default automatically; Collections can target any of them.</p>
+        <div id="settings-panel-servers" hx-get="/settings/servers" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="outerHTML"></div>
       </section>
 
-      <section id="matching" class="settings-section">
-        <div class="settings-section-header">
-          <h2>Matching</h2>
-          <p>Control how Playlist Lab matches tracks when importing from external sources. Changes save automatically.</p>
-        </div>
-        <form>
-          <div class="settings-field-group">
-            <div class="settings-field">
-              <label class="settings-label" for="min-match-score">Minimum match score
-                <span class="settings-value-badge" id="match-score-badge">{{.Matching.MinMatchScore}}</span>
-                <span id="min-match-score-status" class="settings-save-status" aria-live="polite"></span>
-              </label>
-              <input id="min-match-score" type="range" name="minMatchScore" min="0" max="1" step="0.05" value="{{.Matching.MinMatchScore}}" class="settings-range"
+      <section class="panel stack" data-tab-panel="matching">
+        <div class="panel-header">Matching</div>
+        <p class="text-muted">Control how Playlist Lab matches tracks when importing from external sources. Changes save automatically.</p>
+        <form class="stack">
+          <div class="field">
+            <label class="label" for="min-match-score">Minimum match score <span id="min-match-score-status" aria-live="polite"></span></label>
+            <div class="value-row">
+              <span class="field-hint">Loose</span>
+              <input id="min-match-score" type="range" name="minMatchScore" min="0" max="1" step="0.05" value="{{.Matching.MinMatchScore}}" class="slider"
                 oninput="document.getElementById('match-score-badge').textContent = this.value"
                 hx-post="/settings/matching" hx-trigger="change" hx-include="closest form" hx-target="#min-match-score-status" hx-indicator="#min-match-score-status" hx-swap="innerHTML">
-              <div class="settings-range-labels"><span>Loose</span><span>Strict</span></div>
-            </div>
-            <div class="settings-field">
-              <label class="settings-label">Title normalisation</label>
-              <div class="settings-toggles">
-                <label class="settings-toggle"><input type="checkbox" name="stripParentheses" {{if .Matching.StripParentheses}}checked{{end}}
-                  hx-post="/settings/matching" hx-trigger="change" hx-include="closest form" hx-target="#strip-parens-status" hx-indicator="#strip-parens-status" hx-swap="innerHTML"><span>Strip parentheses from titles</span><span id="strip-parens-status" class="settings-save-status" aria-live="polite"></span></label>
-                <label class="settings-toggle"><input type="checkbox" name="stripBrackets" {{if .Matching.StripBrackets}}checked{{end}}
-                  hx-post="/settings/matching" hx-trigger="change" hx-include="closest form" hx-target="#strip-brackets-status" hx-indicator="#strip-brackets-status" hx-swap="innerHTML"><span>Strip brackets from titles</span><span id="strip-brackets-status" class="settings-save-status" aria-live="polite"></span></label>
-                <label class="settings-toggle"><input type="checkbox" name="useFirstArtistOnly" {{if .Matching.UseFirstArtistOnly}}checked{{end}}
-                  hx-post="/settings/matching" hx-trigger="change" hx-include="closest form" hx-target="#first-artist-status" hx-indicator="#first-artist-status" hx-swap="innerHTML"><span>Use first artist only</span><span id="first-artist-status" class="settings-save-status" aria-live="polite"></span></label>
-                <label class="settings-toggle"><input type="checkbox" name="ignoreFeaturedArtists" {{if .Matching.IgnoreFeaturedArtists}}checked{{end}}
-                  hx-post="/settings/matching" hx-trigger="change" hx-include="closest form" hx-target="#ignore-featured-status" hx-indicator="#ignore-featured-status" hx-swap="innerHTML"><span>Ignore featured artists</span><span id="ignore-featured-status" class="settings-save-status" aria-live="polite"></span></label>
-              </div>
+              <span class="field-hint">Strict <output class="readout readout-sm" id="match-score-badge" for="min-match-score">{{.Matching.MinMatchScore}}</output></span>
             </div>
           </div>
-          <div class="settings-actions">
-            <!-- Destructive (discards the user's customised matching config)
-                 so it confirms through the shared modal pattern rather than
-                 firing on a single click (DESIGN.md §8.11/§11.4). -->
-            <button type="button" class="ftl-btn ftl-btn-secondary" onclick="document.getElementById('confirm-reset-matching').checked=true">Reset to defaults</button>
+          <div class="field-group">
+            <div class="field-group-title">Title normalisation</div>
+            <div class="field-row">
+              <label class="label" for="strip-parens">Strip parentheses from titles</label>
+              <span id="strip-parens-status" aria-live="polite"></span>
+              <label class="switch"><input id="strip-parens" type="checkbox" name="stripParentheses" {{if .Matching.StripParentheses}}checked{{end}}
+                hx-post="/settings/matching" hx-trigger="change" hx-include="closest form" hx-target="#strip-parens-status" hx-indicator="#strip-parens-status" hx-swap="innerHTML"><span class="switch-track"><span class="switch-thumb"></span></span></label>
+            </div>
+            <div class="field-row">
+              <label class="label" for="strip-brackets">Strip brackets from titles</label>
+              <span id="strip-brackets-status" aria-live="polite"></span>
+              <label class="switch"><input id="strip-brackets" type="checkbox" name="stripBrackets" {{if .Matching.StripBrackets}}checked{{end}}
+                hx-post="/settings/matching" hx-trigger="change" hx-include="closest form" hx-target="#strip-brackets-status" hx-indicator="#strip-brackets-status" hx-swap="innerHTML"><span class="switch-track"><span class="switch-thumb"></span></span></label>
+            </div>
+            <div class="field-row">
+              <label class="label" for="first-artist">Use first artist only</label>
+              <span id="first-artist-status" aria-live="polite"></span>
+              <label class="switch"><input id="first-artist" type="checkbox" name="useFirstArtistOnly" {{if .Matching.UseFirstArtistOnly}}checked{{end}}
+                hx-post="/settings/matching" hx-trigger="change" hx-include="closest form" hx-target="#first-artist-status" hx-indicator="#first-artist-status" hx-swap="innerHTML"><span class="switch-track"><span class="switch-thumb"></span></span></label>
+            </div>
+            <div class="field-row">
+              <label class="label" for="ignore-featured">Ignore featured artists</label>
+              <span id="ignore-featured-status" aria-live="polite"></span>
+              <label class="switch"><input id="ignore-featured" type="checkbox" name="ignoreFeaturedArtists" {{if .Matching.IgnoreFeaturedArtists}}checked{{end}}
+                hx-post="/settings/matching" hx-trigger="change" hx-include="closest form" hx-target="#ignore-featured-status" hx-indicator="#ignore-featured-status" hx-swap="innerHTML"><span class="switch-track"><span class="switch-thumb"></span></span></label>
+            </div>
+          </div>
+          <div class="cluster">
+            <!-- Destructive, so it confirms first (hx-confirm -> the shared
+                 themed confirm dialog, DESIGN.md §8.11/§11.4). -->
+            <button type="button" class="btn btn-secondary btn-sm" hx-post="/settings/matching/reset" hx-target="#matching-result" hx-swap="innerHTML" hx-confirm="Reset matching settings? This discards your customised matching configuration and restores the defaults. This cannot be undone.">Reset to defaults</button>
           </div>
         </form>
 
-        <input type="checkbox" id="confirm-reset-matching" class="delete-dialog-checkbox settings-confirm-toggle">
-        <div class="modal-overlay settings-confirm-overlay" onclick="if(event.target===this) document.getElementById('confirm-reset-matching').checked=false">
-          <div class="modal-content">
-            <h3>Reset matching settings?</h3>
-            <p>This discards your customised matching configuration and restores the defaults. This cannot be undone.</p>
-            <div class="settings-actions">
-              <button type="button" class="ftl-btn ftl-btn-secondary" onclick="document.getElementById('confirm-reset-matching').checked=false">Cancel</button>
-              <button type="button" class="ftl-btn ftl-btn-primary" hx-post="/settings/matching/reset" hx-target="#matching-result" hx-swap="innerHTML"
-                onclick="document.getElementById('confirm-reset-matching').checked=false">Reset to defaults</button>
-            </div>
-          </div>
-        </div>
         <div id="matching-result"></div>
       </section>
 
-      <section id="mixes" class="settings-section settings-section--wide">
-        <div class="settings-section-header">
-          <h2>Mixes</h2>
-          <p>Tune how each mix type is generated. Changes save automatically.</p>
-        </div>
+      <section class="panel stack" data-tab-panel="mixes" hidden>
+        <div class="panel-header">Mixes</div>
+        <p class="text-muted">Tune how each mix type is generated. Changes save automatically.</p>
         <form>
-          <div class="settings-mix-grid">
-            <div class="settings-mix-card">
+          <div class="grid">
+            <div class="card stack stack-sm">
               <h3>Weekly Mix</h3>
-              <div class="settings-slider-row"><label for="weekly-top-artists">Top artists <span id="weekly-top-artists-status" class="settings-save-status" aria-live="polite"></span></label><input id="weekly-top-artists" class="settings-input" type="number" name="weeklyTopArtists" min="5" max="20" value="{{.Mixes.WeeklyMix.TopArtists}}"
+              <div class="field-row"><label class="label" for="weekly-top-artists">Top artists</label><span id="weekly-top-artists-status" aria-live="polite"></span><input id="weekly-top-artists" class="input is-auto" type="number" name="weeklyTopArtists" min="5" max="20" value="{{.Mixes.WeeklyMix.TopArtists}}"
                 hx-post="/settings/mixes" hx-trigger="change" hx-include="closest form" hx-target="#weekly-top-artists-status" hx-indicator="#weekly-top-artists-status" hx-swap="innerHTML"></div>
-              <div class="settings-slider-row"><label for="weekly-tracks-per-artist">Tracks per artist <span id="weekly-tracks-per-artist-status" class="settings-save-status" aria-live="polite"></span></label><input id="weekly-tracks-per-artist" class="settings-input" type="number" name="weeklyTracksPerArtist" min="1" max="10" value="{{.Mixes.WeeklyMix.TracksPerArtist}}"
+              <div class="field-row"><label class="label" for="weekly-tracks-per-artist">Tracks per artist</label><span id="weekly-tracks-per-artist-status" aria-live="polite"></span><input id="weekly-tracks-per-artist" class="input is-auto" type="number" name="weeklyTracksPerArtist" min="1" max="10" value="{{.Mixes.WeeklyMix.TracksPerArtist}}"
                 hx-post="/settings/mixes" hx-trigger="change" hx-include="closest form" hx-target="#weekly-tracks-per-artist-status" hx-indicator="#weekly-tracks-per-artist-status" hx-swap="innerHTML"></div>
             </div>
-            <div class="settings-mix-card">
+            <div class="card stack stack-sm">
               <h3>Daily Mix</h3>
-              <div class="settings-slider-row"><label for="daily-recent-tracks">Recent tracks <span id="daily-recent-tracks-status" class="settings-save-status" aria-live="polite"></span></label><input id="daily-recent-tracks" class="settings-input" type="number" name="dailyRecentTracks" min="5" max="20" value="{{.Mixes.DailyMix.RecentTracks}}"
+              <div class="field-row"><label class="label" for="daily-recent-tracks">Recent tracks</label><span id="daily-recent-tracks-status" aria-live="polite"></span><input id="daily-recent-tracks" class="input is-auto" type="number" name="dailyRecentTracks" min="5" max="20" value="{{.Mixes.DailyMix.RecentTracks}}"
                 hx-post="/settings/mixes" hx-trigger="change" hx-include="closest form" hx-target="#daily-recent-tracks-status" hx-indicator="#daily-recent-tracks-status" hx-swap="innerHTML"></div>
-              <div class="settings-slider-row"><label for="daily-related-tracks">Related tracks <span id="daily-related-tracks-status" class="settings-save-status" aria-live="polite"></span></label><input id="daily-related-tracks" class="settings-input" type="number" name="dailyRelatedTracks" min="5" max="20" value="{{.Mixes.DailyMix.RelatedTracks}}"
+              <div class="field-row"><label class="label" for="daily-related-tracks">Related tracks</label><span id="daily-related-tracks-status" aria-live="polite"></span><input id="daily-related-tracks" class="input is-auto" type="number" name="dailyRelatedTracks" min="5" max="20" value="{{.Mixes.DailyMix.RelatedTracks}}"
                 hx-post="/settings/mixes" hx-trigger="change" hx-include="closest form" hx-target="#daily-related-tracks-status" hx-indicator="#daily-related-tracks-status" hx-swap="innerHTML"></div>
-              <div class="settings-slider-row"><label for="daily-rediscovery-tracks">Rediscovery tracks <span id="daily-rediscovery-tracks-status" class="settings-save-status" aria-live="polite"></span></label><input id="daily-rediscovery-tracks" class="settings-input" type="number" name="dailyRediscoveryTracks" min="0" max="15" value="{{.Mixes.DailyMix.RediscoveryTracks}}"
+              <div class="field-row"><label class="label" for="daily-rediscovery-tracks">Rediscovery tracks</label><span id="daily-rediscovery-tracks-status" aria-live="polite"></span><input id="daily-rediscovery-tracks" class="input is-auto" type="number" name="dailyRediscoveryTracks" min="0" max="15" value="{{.Mixes.DailyMix.RediscoveryTracks}}"
                 hx-post="/settings/mixes" hx-trigger="change" hx-include="closest form" hx-target="#daily-rediscovery-tracks-status" hx-indicator="#daily-rediscovery-tracks-status" hx-swap="innerHTML"></div>
-              <div class="settings-slider-row"><label for="daily-rediscovery-days">Rediscovery days <span id="daily-rediscovery-days-status" class="settings-save-status" aria-live="polite"></span></label><input id="daily-rediscovery-days" class="settings-input" type="number" name="dailyRediscoveryDays" min="30" max="365" value="{{.Mixes.DailyMix.RediscoveryDays}}"
+              <div class="field-row"><label class="label" for="daily-rediscovery-days">Rediscovery days</label><span id="daily-rediscovery-days-status" aria-live="polite"></span><input id="daily-rediscovery-days" class="input is-auto" type="number" name="dailyRediscoveryDays" min="30" max="365" value="{{.Mixes.DailyMix.RediscoveryDays}}"
                 hx-post="/settings/mixes" hx-trigger="change" hx-include="closest form" hx-target="#daily-rediscovery-days-status" hx-indicator="#daily-rediscovery-days-status" hx-swap="innerHTML"></div>
             </div>
-            <div class="settings-mix-card">
+            <div class="card stack stack-sm">
               <h3>Time Capsule</h3>
-              <div class="settings-slider-row"><label for="time-capsule-track-count">Track count <span id="time-capsule-track-count-status" class="settings-save-status" aria-live="polite"></span></label><input id="time-capsule-track-count" class="settings-input" type="number" name="timeCapsuleTrackCount" min="25" max="100" step="5" value="{{.Mixes.TimeCapsule.TrackCount}}"
+              <div class="field-row"><label class="label" for="time-capsule-track-count">Track count</label><span id="time-capsule-track-count-status" aria-live="polite"></span><input id="time-capsule-track-count" class="input is-auto" type="number" name="timeCapsuleTrackCount" min="25" max="100" step="5" value="{{.Mixes.TimeCapsule.TrackCount}}"
                 hx-post="/settings/mixes" hx-trigger="change" hx-include="closest form" hx-target="#time-capsule-track-count-status" hx-indicator="#time-capsule-track-count-status" hx-swap="innerHTML"></div>
-              <div class="settings-slider-row"><label for="time-capsule-days-ago">Days ago <span id="time-capsule-days-ago-status" class="settings-save-status" aria-live="polite"></span></label><input id="time-capsule-days-ago" class="settings-input" type="number" name="timeCapsuleDaysAgo" min="180" max="730" step="30" value="{{.Mixes.TimeCapsule.DaysAgo}}"
+              <div class="field-row"><label class="label" for="time-capsule-days-ago">Days ago</label><span id="time-capsule-days-ago-status" aria-live="polite"></span><input id="time-capsule-days-ago" class="input is-auto" type="number" name="timeCapsuleDaysAgo" min="180" max="730" step="30" value="{{.Mixes.TimeCapsule.DaysAgo}}"
                 hx-post="/settings/mixes" hx-trigger="change" hx-include="closest form" hx-target="#time-capsule-days-ago-status" hx-indicator="#time-capsule-days-ago-status" hx-swap="innerHTML"></div>
-              <div class="settings-slider-row"><label for="time-capsule-max-per-artist">Max per artist <span id="time-capsule-max-per-artist-status" class="settings-save-status" aria-live="polite"></span></label><input id="time-capsule-max-per-artist" class="settings-input" type="number" name="timeCapsuleMaxPerArtist" min="1" max="10" value="{{.Mixes.TimeCapsule.MaxPerArtist}}"
+              <div class="field-row"><label class="label" for="time-capsule-max-per-artist">Max per artist</label><span id="time-capsule-max-per-artist-status" aria-live="polite"></span><input id="time-capsule-max-per-artist" class="input is-auto" type="number" name="timeCapsuleMaxPerArtist" min="1" max="10" value="{{.Mixes.TimeCapsule.MaxPerArtist}}"
                 hx-post="/settings/mixes" hx-trigger="change" hx-include="closest form" hx-target="#time-capsule-max-per-artist-status" hx-indicator="#time-capsule-max-per-artist-status" hx-swap="innerHTML"></div>
             </div>
-            <div class="settings-mix-card">
+            <div class="card stack stack-sm">
               <h3>New Music</h3>
-              <div class="settings-slider-row"><label for="new-music-album-count">Album count <span id="new-music-album-count-status" class="settings-save-status" aria-live="polite"></span></label><input id="new-music-album-count" class="settings-input" type="number" name="newMusicAlbumCount" min="5" max="20" value="{{.Mixes.NewMusic.AlbumCount}}"
+              <div class="field-row"><label class="label" for="new-music-album-count">Album count</label><span id="new-music-album-count-status" aria-live="polite"></span><input id="new-music-album-count" class="input is-auto" type="number" name="newMusicAlbumCount" min="5" max="20" value="{{.Mixes.NewMusic.AlbumCount}}"
                 hx-post="/settings/mixes" hx-trigger="change" hx-include="closest form" hx-target="#new-music-album-count-status" hx-indicator="#new-music-album-count-status" hx-swap="innerHTML"></div>
-              <div class="settings-slider-row"><label for="new-music-tracks-per-album">Tracks per album <span id="new-music-tracks-per-album-status" class="settings-save-status" aria-live="polite"></span></label><input id="new-music-tracks-per-album" class="settings-input" type="number" name="newMusicTracksPerAlbum" min="1" max="10" value="{{.Mixes.NewMusic.TracksPerAlbum}}"
+              <div class="field-row"><label class="label" for="new-music-tracks-per-album">Tracks per album</label><span id="new-music-tracks-per-album-status" aria-live="polite"></span><input id="new-music-tracks-per-album" class="input is-auto" type="number" name="newMusicTracksPerAlbum" min="1" max="10" value="{{.Mixes.NewMusic.TracksPerAlbum}}"
                 hx-post="/settings/mixes" hx-trigger="change" hx-include="closest form" hx-target="#new-music-tracks-per-album-status" hx-indicator="#new-music-tracks-per-album-status" hx-swap="innerHTML"></div>
             </div>
           </div>
-          <div class="settings-actions">
-            <button type="button" class="ftl-btn ftl-btn-secondary" onclick="document.getElementById('confirm-reset-mixes').checked=true">Reset to defaults</button>
+          <div class="cluster">
+            <button type="button" class="btn btn-secondary btn-sm" hx-post="/settings/mixes/reset" hx-target="#mixes-result" hx-swap="innerHTML" hx-confirm="Reset mix defaults? This discards your customised mix-generation defaults and restores the originals. This cannot be undone.">Reset to defaults</button>
           </div>
         </form>
 
-        <input type="checkbox" id="confirm-reset-mixes" class="delete-dialog-checkbox settings-confirm-toggle">
-        <div class="modal-overlay settings-confirm-overlay" onclick="if(event.target===this) document.getElementById('confirm-reset-mixes').checked=false">
-          <div class="modal-content">
-            <h3>Reset mix defaults?</h3>
-            <p>This discards your customised mix-generation defaults and restores the originals. This cannot be undone.</p>
-            <div class="settings-actions">
-              <button type="button" class="ftl-btn ftl-btn-secondary" onclick="document.getElementById('confirm-reset-mixes').checked=false">Cancel</button>
-              <button type="button" class="ftl-btn ftl-btn-primary" hx-post="/settings/mixes/reset" hx-target="#mixes-result" hx-swap="innerHTML"
-                onclick="document.getElementById('confirm-reset-mixes').checked=false">Reset to defaults</button>
-            </div>
-          </div>
-        </div>
         <div id="mixes-result"></div>
       </section>
 
-      <section id="ai" class="settings-section">
-        <div class="settings-section-header">
-          <h2>AI Features</h2>
-          <p>Playlist Lab can use Google Gemini or xAI Grok to power AI-assisted playlist imports. Changes save automatically.</p>
-        </div>
-        <form>
-          <div class="settings-field-group">
-            <div class="settings-field">
-              <label class="settings-label" for="ai-provider">Provider <span id="ai-provider-status" class="settings-save-status" aria-live="polite"></span></label>
-              <select id="ai-provider" name="aiProvider" class="ftl-select"
+      <section class="panel stack" data-tab-panel="ai" hidden>
+        <div class="panel-header">AI Features</div>
+        <p class="text-muted">Playlist Lab can use Google Gemini or xAI Grok to power AI-assisted playlist imports. Changes save automatically.</p>
+        <form class="stack">
+          <div class="stack">
+            <div class="field">
+              <label class="label" for="ai-provider">Provider <span id="ai-provider-status" aria-live="polite"></span></label>
+              <select id="ai-provider" name="aiProvider" class="select"
                 hx-post="/settings/ai" hx-trigger="change" hx-include="closest form" hx-target="#ai-provider-status" hx-indicator="#ai-provider-status" hx-swap="innerHTML">
                 <option value="gemini" {{if eq .AI.Provider "gemini"}}selected{{end}}>Gemini</option>
                 <option value="grok" {{if eq .AI.Provider "grok"}}selected{{end}}>Grok</option>
@@ -226,52 +167,48 @@
                  out-of-band swap of this same input) - the value stays
                  masked either way so there's no exposure, just a small
                  polish gap until reload. -->
-            <div class="settings-field">
-              <label class="settings-label" for="gemini-api-key">Gemini API Key <span id="gemini-key-status" class="settings-save-status" aria-live="polite"></span></label>
-              <input id="gemini-api-key" type="password" class="settings-input" name="geminiApiKey" placeholder="{{if .AI.GeminiAPIKey}}Key saved - leave blank to keep{{else}}Enter your Gemini API key{{end}}"
+            <div class="field">
+              <label class="label" for="gemini-api-key">Gemini API Key <span id="gemini-key-status" aria-live="polite"></span></label>
+              <input id="gemini-api-key" type="password" class="input" name="geminiApiKey" placeholder="{{if .AI.GeminiAPIKey}}Key saved - leave blank to keep{{else}}Enter your Gemini API key{{end}}"
                 hx-post="/settings/ai" hx-trigger="change" hx-include="closest form" hx-target="#gemini-key-status" hx-indicator="#gemini-key-status" hx-swap="innerHTML">
             </div>
-            <div class="settings-field">
-              <label class="settings-label" for="grok-api-key">Grok API Key <span id="grok-key-status" class="settings-save-status" aria-live="polite"></span></label>
-              <input id="grok-api-key" type="password" class="settings-input" name="grokApiKey" placeholder="{{if .AI.GrokAPIKey}}Key saved - leave blank to keep{{else}}Enter your Grok API key{{end}}"
+            <div class="field">
+              <label class="label" for="grok-api-key">Grok API Key <span id="grok-key-status" aria-live="polite"></span></label>
+              <input id="grok-api-key" type="password" class="input" name="grokApiKey" placeholder="{{if .AI.GrokAPIKey}}Key saved - leave blank to keep{{else}}Enter your Grok API key{{end}}"
                 hx-post="/settings/ai" hx-trigger="change" hx-include="closest form" hx-target="#grok-key-status" hx-indicator="#grok-key-status" hx-swap="innerHTML">
             </div>
           </div>
-          <div class="settings-actions">
-            <button type="button" hx-post="/settings/ai/test" hx-include="closest form" hx-target="#ai-result" hx-swap="innerHTML" class="ftl-btn ftl-btn-secondary">Test Connection</button>
+          <div class="cluster">
+            <button type="button" hx-post="/settings/ai/test" hx-include="closest form" hx-target="#ai-result" hx-swap="innerHTML" class="btn btn-secondary btn-sm">Test Connection</button>
           </div>
         </form>
         <div id="ai-result"></div>
       </section>
 
-      <section id="connected-services" class="settings-section">
-        <div class="settings-section-header">
-          <h2>Connected Services</h2>
-          <p>Manage OAuth connections for external streaming services. Connect services here to use them in Cross Import without re-authenticating.</p>
-        </div>
+      <section class="panel stack" data-tab-panel="services" hidden>
+        <div class="panel-header">Connected Services</div>
+        <p class="text-muted">Manage OAuth connections for external streaming services. Connect services here to use them in Cross Import without re-authenticating.</p>
         <div id="oauth-services" hx-get="/cross-import/oauth/services" hx-trigger="load" hx-swap="innerHTML">
-          <p class="settings-loading">Loading services...</p>
+          <p class="text-muted">Loading services...</p>
         </div>
       </section>
 
       {{if .HasServer}}
-      <section id="library-scan" class="settings-section">
-        <div class="settings-section-header">
-          <h2>Library Scan</h2>
-          <p>Trigger Plex to scan for new or changed files in your library.</p>
-        </div>
-        <div class="settings-scan">
+      <section class="panel stack" data-tab-panel="scan" hidden>
+        <div class="panel-header">Library Scan</div>
+        <p class="text-muted">Trigger Plex to scan for new or changed files in your library.</p>
+        <div class="stack">
           <form hx-post="/settings/scan-library" hx-target="#library-scan-result" hx-swap="innerHTML">
-            <button type="submit" class="ftl-btn ftl-btn-primary">Scan Entire Library</button>
+            <button type="submit" class="btn btn-primary btn-sm">Scan Entire Library</button>
           </form>
-          <div class="settings-scan-folder">
-            <label class="settings-label">Scan a specific folder</label>
-            <div id="library-folders" hx-get="/settings/library-folders" hx-trigger="revealed, change from:#settings-tab-scan" hx-swap="innerHTML">
-              <p class="settings-loading">Loading folders...</p>
+          <div class="field">
+            <label class="label">Scan a specific folder</label>
+            <div id="library-folders" hx-get="/settings/library-folders" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="innerHTML">
+              <p class="text-muted">Loading folders...</p>
             </div>
-            <form hx-post="/settings/scan-library" hx-target="#library-scan-result" hx-swap="innerHTML" class="settings-input-group">
-              <input type="text" name="path" class="settings-input settings-input--mono" placeholder="/music/Artist or C:\Music\Artist">
-              <button type="submit" class="ftl-btn ftl-btn-secondary">Scan Folder</button>
+            <form hx-post="/settings/scan-library" hx-target="#library-scan-result" hx-swap="innerHTML" class="input-group">
+              <input type="text" name="path" class="input mono" placeholder="/music/Artist or C:\Music\Artist">
+              <button type="submit" class="btn btn-secondary btn-sm">Scan Folder</button>
             </form>
           </div>
         </div>
@@ -279,210 +216,206 @@
       </section>
       {{end}}
 
-      <section id="appearance" class="settings-section">
-        <div class="settings-section-header">
-          <h2>Appearance</h2>
-          <p>Personalise text size and theme across the app (DESIGN.md §2/§14).</p>
-        </div>
-        <form class="settings-field" onchange="document.documentElement.style.setProperty('--text-scale', {small:'0.9',medium:'1',large:'1.15'}[event.target.value] || '1')">
-          <label class="settings-label">Text size</label>
-          <div class="settings-textsize-group" role="radiogroup" aria-label="Text size">
-            <label class="settings-textsize-option"><input type="radio" name="textScale" value="small" {{if eq .TextScaleChoice "small"}}checked{{end}}
+      <section class="panel stack" data-tab-panel="appearance" hidden>
+        <div class="panel-header">Appearance</div>
+        <p class="text-muted">Personalise text size and theme across the app (DESIGN.md §2/§14).</p>
+        <!-- Text size is the root font-size (layout.html); applied live here,
+             persisted by the hx-post underneath. -->
+        <form class="field" onchange="document.documentElement.style.fontSize = ({small:0.9,medium:1,large:1.15}[event.target.value] || 1) * 100 + '%'">
+          <fieldset class="radio-group is-inline">
+            <legend class="label">Text size</legend>
+            <label class="check"><input class="radio" type="radio" name="textScale" value="small" {{if eq .TextScaleChoice "small"}}checked{{end}}
               hx-post="/settings/appearance" hx-trigger="change" hx-include="closest form" hx-target="#text-scale-status" hx-indicator="#text-scale-status" hx-swap="innerHTML">Small</label>
-            <label class="settings-textsize-option"><input type="radio" name="textScale" value="medium" {{if or (eq .TextScaleChoice "medium") (not .TextScaleChoice)}}checked{{end}}
+            <label class="check"><input class="radio" type="radio" name="textScale" value="medium" {{if or (eq .TextScaleChoice "medium") (not .TextScaleChoice)}}checked{{end}}
               hx-post="/settings/appearance" hx-trigger="change" hx-include="closest form" hx-target="#text-scale-status" hx-indicator="#text-scale-status" hx-swap="innerHTML">Medium</label>
-            <label class="settings-textsize-option"><input type="radio" name="textScale" value="large" {{if eq .TextScaleChoice "large"}}checked{{end}}
+            <label class="check"><input class="radio" type="radio" name="textScale" value="large" {{if eq .TextScaleChoice "large"}}checked{{end}}
               hx-post="/settings/appearance" hx-trigger="change" hx-include="closest form" hx-target="#text-scale-status" hx-indicator="#text-scale-status" hx-swap="innerHTML">Large</label>
-            <span id="text-scale-status" class="settings-save-status" aria-live="polite"></span>
-          </div>
-          <p class="settings-hint">Applied instantly, and remembered on this account across every device.</p>
+            <span id="text-scale-status" aria-live="polite"></span>
+          </fieldset>
+          <p class="field-hint">Applied instantly, and remembered on this account across every device.</p>
         </form>
 
-        <!-- ftl-themes picker (github.com/DrEVILish/ftl-themes) - swaps
-             #theme-stylesheet's href and <html>'s data-theme attribute
-             instantly on change (same "apply now, persist via the normal
-             hx-post autosave underneath" split as the text-size radios
-             above), rather than waiting on the server round-trip so the
-             preview is immediate. setThemeLink handles the case where no
-             theme was active on page load (no #theme-stylesheet <link> to
-             reuse yet) by creating one. -->
-        <form class="settings-field" onchange="setTheme(event.target.value)">
-          <label class="settings-label" for="theme-select">Theme</label>
-          <div class="settings-textsize-group">
-            <select id="theme-select" name="theme" class="ftl-select" style="width:auto"
-              hx-post="/settings/appearance" hx-trigger="change" hx-include="closest form" hx-target="#theme-status" hx-indicator="#theme-status" hx-swap="innerHTML">
-              <option value="" {{if not .ThemeChoice}}selected{{end}}>Default</option>
-              {{range .Themes}}
-              <option value="{{.Slug}}" title="{{.Description}}" {{if eq $.ThemeChoice .Slug}}selected{{end}}>{{.Label}}</option>
-              {{end}}
-            </select>
-            <span id="theme-status" class="settings-save-status" aria-live="polite"></span>
-          </div>
-          <p class="settings-hint">Restyles the whole app - from <a href="https://github.com/DrEVILish/ftl-themes" target="_blank" rel="noopener">ftl-themes</a>, applied instantly and remembered on this account across every device.</p>
+        <!-- ftl-themes picker (CONTRACT.md "Loading a theme", "Palette
+             variants", "Theme tint"): each theme's variants are listed beneath
+             it (value "slug/variant"). Changing it swaps #theme-stylesheet,
+             data-theme and data-variant together for an instant preview, and
+             the hx-post underneath persists it. "Default" stores "" and
+             renders the app's default theme. Each option carries its tint
+             token/default/label and this user's saved colour for that theme,
+             so the tint field below can follow the choice without a reload. -->
+        <form class="field">
+          <label class="label" for="theme-select">Theme <span id="theme-status" aria-live="polite"></span></label>
+          <select id="theme-select" name="theme" class="select is-auto"
+            onchange="applyThemeChoice(this.selectedOptions[0])"
+            hx-post="/settings/appearance" hx-trigger="change" hx-include="closest form" hx-target="#theme-status" hx-indicator="#theme-status" hx-swap="innerHTML">
+            <option value="" data-slug="{{.DefaultTheme}}" {{if not .ThemeChoice}}selected{{end}}>Default ({{.DefaultThemeLabel}})</option>
+            {{range .Themes}}
+            {{$t := .}}
+            <option value="{{.Slug}}" data-slug="{{.Slug}}" title="{{.Description}}"{{with .Tint}} data-tint-token="{{.Token}}" data-tint-default="{{.Default}}" data-tint-label="{{.Label}}"{{end}}{{with index $.Tints .Slug}} data-tint="{{.}}"{{end}} {{if and (eq $.ThemeChoice .Slug) (not $.VariantChoice)}}selected{{end}}>{{.Label}}</option>
+            {{range .Variants}}
+            <option value="{{$t.Slug}}/{{.ID}}" data-slug="{{$t.Slug}}" data-variant="{{.ID}}"{{with $t.Tint}} data-tint-token="{{.Token}}" data-tint-default="{{.Default}}" data-tint-label="{{.Label}}"{{end}} {{if and (eq $.ThemeChoice $t.Slug) (eq $.VariantChoice .ID)}}selected{{end}}>&nbsp;&nbsp;&nbsp;{{$t.Label}}: {{.Label}}</option>
+            {{end}}
+            {{end}}
+          </select>
+          <p class="field-hint">Restyles the whole app - from <a href="https://github.com/DrEVILish/ftl-themes" target="_blank" rel="noopener">ftl-themes</a>, applied instantly and remembered on this account across every device.</p>
+        </form>
+
+        <!-- Theme tint: only for a theme whose manifest entry has "tint". The
+             colour is saved per theme; dragging previews it live (the one
+             optional script the contract allows). -->
+        <form class="field" id="theme-tint-field" style="display:none">
+          <label class="label" for="theme-tint"><span id="theme-tint-label">Colour</span> <span id="theme-tint-status" aria-live="polite"></span></label>
+          <input type="color" id="theme-tint" name="tint" class="input is-auto" value="#000000"
+            oninput="document.documentElement.style.setProperty(this.dataset.token, this.value)"
+            hx-post="/settings/appearance" hx-trigger="change" hx-include="closest form" hx-target="#theme-tint-status" hx-indicator="#theme-tint-status" hx-swap="innerHTML">
+          <p class="field-hint">Picking a named preset above resets this to the preset's colour.</p>
         </form>
         <script>
-          function setTheme(slug) {
-            document.documentElement.toggleAttribute('data-theme', !!slug);
-            if (slug) document.documentElement.setAttribute('data-theme', slug);
-            var link = document.getElementById('theme-stylesheet');
-            if (slug) {
-              if (!link) {
-                link = document.createElement('link');
-                link.id = 'theme-stylesheet';
-                link.rel = 'stylesheet';
-                document.head.appendChild(link);
-              }
-              link.href = '/static/themes/' + slug + '.css';
-            } else if (link) {
-              link.remove();
-            }
+          function applyThemeChoice(opt) {
+            var html = document.documentElement;
+            var slug = opt.dataset.slug, variant = opt.dataset.variant || '';
+            html.setAttribute('data-theme', slug);
+            if (variant) html.setAttribute('data-variant', variant); else html.removeAttribute('data-variant');
+            document.getElementById('theme-stylesheet').href = '/static/themes/' + slug + '.css?v={{.ThemeVersion}}';
+            // Drop any previous theme's tint token, then apply this theme's
+            // saved colour - unless a preset variant was picked, which clears
+            // the custom colour (the server does the same on save).
+            var field = document.getElementById('theme-tint-field');
+            var input = document.getElementById('theme-tint');
+            if (input.dataset.token) html.style.removeProperty(input.dataset.token);
+            if (!opt.dataset.tintToken) { field.style.display = 'none'; input.dataset.token = ''; return; }
+            var custom = variant ? '' : (opt.dataset.tint || '');
+            if (variant) opt.parentElement.querySelectorAll('option[data-slug="' + slug + '"]').forEach(function (o) { delete o.dataset.tint; });
+            input.dataset.token = opt.dataset.tintToken;
+            input.value = custom || opt.dataset.tintDefault;
+            if (custom) html.style.setProperty(input.dataset.token, custom);
+            document.getElementById('theme-tint-label').textContent = opt.dataset.tintLabel;
+            field.style.display = '';
           }
+          // Remember a just-saved custom colour on the theme's options, so
+          // switching away and back in this page restores it.
+          document.getElementById('theme-tint').addEventListener('change', function () {
+            var sel = document.getElementById('theme-select');
+            var slug = sel.selectedOptions[0].dataset.slug;
+            sel.querySelectorAll('option[data-slug="' + slug + '"]:not([data-variant])').forEach(function (o) { o.dataset.tint = this.value; }, this);
+          });
+          applyThemeChoice(document.getElementById('theme-select').selectedOptions[0]);
         </script>
       </section>
 
-      <section id="sessions" class="settings-section">
-        <div class="settings-section-header">
-          <h2>Sessions</h2>
-          <p>Devices currently signed in to your account (DESIGN.md §11.4). Revoking one signs it out immediately.</p>
-        </div>
-        <div id="settings-panel-sessions" hx-get="/settings/sessions" hx-trigger="revealed, change from:#settings-tab-sessions" hx-swap="outerHTML"></div>
+      <section class="panel stack" data-tab-panel="sessions" hidden>
+        <div class="panel-header">Sessions</div>
+        <p class="text-muted">Devices currently signed in to your account (DESIGN.md §11.4). Revoking one signs it out immediately.</p>
+        <div id="settings-panel-sessions" hx-get="/settings/sessions" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="outerHTML"></div>
       </section>
 
-      <section id="server-info" class="settings-section">
-        <div class="settings-section-header">
-          <h2>Server Info</h2>
-          <p>Version information.</p>
-        </div>
-        <div class="settings-subsection">
+      <section class="panel stack" data-tab-panel="info" hidden>
+        <div class="panel-header">Server Info</div>
+        <p class="text-muted">Version information.</p>
+        <div class="stack stack-sm">
           <h3>About</h3>
-          <p class="settings-hint">Playlist Lab (Go rewrite)</p>
-          <p class="settings-hint"><a href="https://github.com/drevilish/playlist-lab/commits/main" target="_blank" rel="noopener">View changelog / commit history</a></p>
+          <p class="field-hint">Playlist Lab (Go rewrite)</p>
+          <p class="field-hint"><a href="https://github.com/drevilish/playlist-lab/commits/main" target="_blank" rel="noopener">View changelog / commit history</a></p>
         </div>
-        <div class="settings-subsection">
+        <div class="stack stack-sm">
           <h3>Server</h3>
           <!-- Real, always-populated values rather than a build-time
-               version string this deploy has no ldflags/git-describe
-               wiring for (see prior TODO here, removed - the placeholder
-               read as an unfinished feature, DESIGN.md §11.4). Reuses
-               AdminPage.css's .admin-log-attrs dt/dd grid, already loaded
-               via the Administration tabs on this same page. -->
-          <dl class="admin-log-attrs" style="max-width:360px">
-            <dt>Go runtime</dt><dd class="mono-data">{{.GoVersion}}</dd>
-            <dt>Uptime</dt><dd class="mono-data">{{.Uptime}}</dd>
+               version string this deploy has no ldflags wiring for. -->
+          <dl>
+            <dt>Go runtime</dt><dd class="mono">{{.GoVersion}}</dd>
+            <dt>Uptime</dt><dd class="mono">{{.Uptime}}</dd>
             {{if .Server}}<dt>Plex server</dt><dd>{{.Server.ServerName}}</dd>{{end}}
           </dl>
         </div>
       </section>
 
       {{if .IsAdmin}}
-      <section id="admin-stats" class="settings-section settings-section--wide">
-        <div class="settings-section-header">
-          <h2>Statistics</h2>
-          <p>Usage across every user of this Playlist Lab instance.</p>
-        </div>
-        <div id="settings-panel-admin-stats" hx-get="/admin/stats" hx-trigger="revealed, change from:#settings-tab-admin-stats" hx-swap="innerHTML">
-          <p class="admin-deferred-note">Loading statistics...</p>
+      <section class="panel stack" data-tab-panel="admin-stats" hidden>
+        <div class="panel-header">Statistics</div>
+        <p class="text-muted">Usage across every user of this Playlist Lab instance.</p>
+        <div id="settings-panel-admin-stats" hx-get="/admin/stats" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="innerHTML">
+          <p class="text-muted">Loading statistics...</p>
         </div>
       </section>
 
-      <section id="admin-users" class="settings-section settings-section--wide">
-        <div class="settings-section-header">
-          <h2>User Management</h2>
-          <p>Plex Home members are auto-approved. Other users need manual approval.</p>
-        </div>
-        <div id="settings-panel-admin-users" hx-get="/admin/users-list" hx-trigger="revealed, change from:#settings-tab-admin-users" hx-swap="innerHTML">
-          <p class="admin-deferred-note">Loading users...</p>
+      <section class="panel stack" data-tab-panel="admin-users" hidden>
+        <div class="panel-header">User Management</div>
+        <p class="text-muted">Plex Home members are auto-approved. Other users need manual approval.</p>
+        <div id="settings-panel-admin-users" hx-get="/admin/users-list" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="innerHTML">
+          <p class="text-muted">Loading users...</p>
         </div>
       </section>
 
-      <section id="admin-missing" class="settings-section settings-section--wide">
-        <div class="settings-section-header">
-          <h2>Most Common Missing Tracks</h2>
-          <p>Tracks that multiple users are missing from their libraries.</p>
-        </div>
-        <div id="settings-panel-admin-missing" hx-get="/admin/missing-list" hx-trigger="revealed, change from:#settings-tab-admin-missing" hx-swap="innerHTML">
-          <p class="admin-deferred-note">Loading missing tracks...</p>
+      <section class="panel stack" data-tab-panel="admin-missing" hidden>
+        <div class="panel-header">Most Common Missing Tracks</div>
+        <p class="text-muted">Tracks that multiple users are missing from their libraries.</p>
+        <div id="settings-panel-admin-missing" hx-get="/admin/missing-list" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="innerHTML">
+          <p class="text-muted">Loading missing tracks...</p>
         </div>
       </section>
 
-      <section id="admin-jobs" class="settings-section settings-section--wide">
-        <div class="settings-section-header">
-          <h2>Schedules</h2>
-        </div>
-        <div id="admin-schedules" hx-get="/admin/schedules" hx-trigger="revealed, change from:#settings-tab-admin-jobs" hx-swap="outerHTML">
-          <p class="admin-deferred-note">Loading schedules...</p>
+      <section class="panel stack" data-tab-panel="admin-jobs" hidden>
+        <div class="panel-header">Schedules</div>
+        <div id="admin-schedules" hx-get="/admin/schedules" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="outerHTML">
+          <p class="text-muted">Loading schedules...</p>
         </div>
       </section>
 
-      <section id="admin-deemix" class="settings-section settings-section--wide">
-        <div class="settings-section-header">
-          <h2>Deemix</h2>
-          <p>The Deezer ARL token the local deemix-server logs in with to queue downloads for missing tracks. Get it from a browser logged into deezer.com: DevTools &rarr; Application/Storage &rarr; Cookies &rarr; <code>arl</code>.</p>
-        </div>
-        <div id="settings-panel-admin-deemix" hx-get="/admin/deemix" hx-trigger="revealed, change from:#settings-tab-admin-deemix" hx-swap="innerHTML">
-          <p class="admin-deferred-note">Loading...</p>
+      <section class="panel stack" data-tab-panel="admin-deemix" hidden>
+        <div class="panel-header">Deemix</div>
+        <p class="text-muted">The Deezer ARL token the local deemix-server logs in with to queue downloads for missing tracks. Get it from a browser logged into deezer.com: DevTools &rarr; Application/Storage &rarr; Cookies &rarr; <code>arl</code>.</p>
+        <div id="settings-panel-admin-deemix" hx-get="/admin/deemix" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="innerHTML">
+          <p class="text-muted">Loading...</p>
         </div>
       </section>
 
-      <section id="admin-lidarr" class="settings-section">
-        <div class="settings-section-header">
-          <h2>Lidarr</h2>
-          <p>A second missing-track acquisition path alongside Deemix. Finds (or adds and monitors) a track's artist in Lidarr and triggers a search across Lidarr's own configured indexers - Lidarr's indexers and download client still need to be set up in Lidarr itself.</p>
-        </div>
-        <div id="settings-panel-admin-lidarr" hx-get="/admin/lidarr" hx-trigger="revealed, change from:#settings-tab-admin-lidarr" hx-swap="innerHTML">
-          <p class="admin-deferred-note">Loading...</p>
+      <section class="panel stack" data-tab-panel="admin-lidarr" hidden>
+        <div class="panel-header">Lidarr</div>
+        <p class="text-muted">A second missing-track acquisition path alongside Deemix. Finds (or adds and monitors) a track's artist in Lidarr and triggers a search across Lidarr's own configured indexers - Lidarr's indexers and download client still need to be set up in Lidarr itself.</p>
+        <div id="settings-panel-admin-lidarr" hx-get="/admin/lidarr" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="innerHTML">
+          <p class="text-muted">Loading...</p>
         </div>
       </section>
 
-      <section id="admin-youtube" class="settings-section">
-        <div class="settings-section-header">
-          <h2>YouTube</h2>
-          <p>Google OAuth credentials used for the "YouTube" cross-import target (playlists created on a user's YouTube account) and for matching against YouTube-hosted tracks. Create an OAuth client under APIs &amp; Services &rarr; Credentials in <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a>, enabling the YouTube Data API v3, and add the redirect URI below to it as an authorized redirect URI.</p>
-        </div>
-        <div id="settings-panel-admin-youtube" hx-get="/admin/youtube" hx-trigger="revealed, change from:#settings-tab-admin-youtube" hx-swap="innerHTML">
-          <p class="admin-deferred-note">Loading...</p>
+      <section class="panel stack" data-tab-panel="admin-youtube" hidden>
+        <div class="panel-header">YouTube</div>
+        <p class="text-muted">Google OAuth credentials used for the "YouTube" cross-import target (playlists created on a user's YouTube account) and for matching against YouTube-hosted tracks. Create an OAuth client under APIs &amp; Services &rarr; Credentials in <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a>, enabling the YouTube Data API v3, and add the redirect URI below to it as an authorized redirect URI.</p>
+        <div id="settings-panel-admin-youtube" hx-get="/admin/youtube" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="innerHTML">
+          <p class="text-muted">Loading...</p>
         </div>
       </section>
 
-      <section id="admin-tmdb" class="settings-section">
-        <div class="settings-section-header">
-          <h2>TMDb</h2>
-          <p>Powers Collections' external list/chart builder (DESIGN.md §11.11) - pulls a public TMDb list's items, or a Popular/Top Rated chart, and matches them into a Plex collection. Get a free API key from <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">themoviedb.org/settings/api</a>.</p>
-        </div>
-        <div id="settings-panel-admin-tmdb" hx-get="/admin/tmdb" hx-trigger="revealed, change from:#settings-tab-admin-tmdb" hx-swap="innerHTML">
-          <p class="admin-deferred-note">Loading...</p>
+      <section class="panel stack" data-tab-panel="admin-tmdb" hidden>
+        <div class="panel-header">TMDb</div>
+        <p class="text-muted">Powers Collections' external list/chart builder (DESIGN.md §11.11) - pulls a public TMDb list's items, or a Popular/Top Rated chart, and matches them into a Plex collection. Get a free API key from <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">themoviedb.org/settings/api</a>.</p>
+        <div id="settings-panel-admin-tmdb" hx-get="/admin/tmdb" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="innerHTML">
+          <p class="text-muted">Loading...</p>
         </div>
       </section>
 
-      <section id="admin-tvdb" class="settings-section">
-        <div class="settings-section-header">
-          <h2>TVDb</h2>
-          <p>Powers Collections' external list/chart builder (DESIGN.md §11.11) for TheTVDB-sourced lists - mostly useful for TV show libraries. Get a free API key from <a href="https://www.thetvdb.com/api-information" target="_blank" rel="noopener">thetvdb.com/api-information</a>.</p>
-        </div>
-        <div id="settings-panel-admin-tvdb" hx-get="/admin/tvdb" hx-trigger="revealed, change from:#settings-tab-admin-tvdb" hx-swap="innerHTML">
-          <p class="admin-deferred-note">Loading...</p>
+      <section class="panel stack" data-tab-panel="admin-tvdb" hidden>
+        <div class="panel-header">TVDb</div>
+        <p class="text-muted">Powers Collections' external list/chart builder (DESIGN.md §11.11) for TheTVDB-sourced lists - mostly useful for TV show libraries. Get a free API key from <a href="https://www.thetvdb.com/api-information" target="_blank" rel="noopener">thetvdb.com/api-information</a>.</p>
+        <div id="settings-panel-admin-tvdb" hx-get="/admin/tvdb" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="innerHTML">
+          <p class="text-muted">Loading...</p>
         </div>
       </section>
 
-      <section id="admin-trakt" class="settings-section">
-        <div class="settings-section-header">
-          <h2>Trakt</h2>
-          <p>Powers Collections' external list/chart builder (DESIGN.md §11.11) for Trakt-sourced public lists - the single richest source of ready-made collection ideas in Kometa's own community configs (awards-by-year, curated genre/franchise lists, ...). Register a free API app at <a href="https://trakt.tv/oauth/applications" target="_blank" rel="noopener">trakt.tv/oauth/applications</a> and paste its Client ID below - no OAuth login needed, just the id, since a public list needs no user authorization to read.</p>
-        </div>
-        <div id="settings-panel-admin-trakt" hx-get="/admin/trakt" hx-trigger="revealed, change from:#settings-tab-admin-trakt" hx-swap="innerHTML">
-          <p class="admin-deferred-note">Loading...</p>
+      <section class="panel stack" data-tab-panel="admin-trakt" hidden>
+        <div class="panel-header">Trakt</div>
+        <p class="text-muted">Powers Collections' external list/chart builder (DESIGN.md §11.11) for Trakt-sourced public lists - the single richest source of ready-made collection ideas in Kometa's own community configs (awards-by-year, curated genre/franchise lists, ...). Register a free API app at <a href="https://trakt.tv/oauth/applications" target="_blank" rel="noopener">trakt.tv/oauth/applications</a> and paste its Client ID below - no OAuth login needed, just the id, since a public list needs no user authorization to read.</p>
+        <div id="settings-panel-admin-trakt" hx-get="/admin/trakt" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="innerHTML">
+          <p class="text-muted">Loading...</p>
         </div>
       </section>
 
-      <section id="admin-logs" class="settings-section settings-section--wide">
-        <div class="settings-section-header">
-          <h2>Logs</h2>
-        </div>
+      <section class="panel stack" data-tab-panel="admin-logs" hidden>
+        <div class="panel-header">Logs</div>
         <!-- Loaded on first reveal rather than with the page: reading and
              parsing up to 1000 log lines is real work, and Logs is not the
              tab anyone lands on first. -->
-        <div id="settings-panel-admin-logs" hx-get="/admin/logs" hx-trigger="revealed, change from:#settings-tab-admin-logs" hx-swap="outerHTML">
-          <p class="admin-deferred-note">Loading logs...</p>
+        <div id="settings-panel-admin-logs" hx-get="/admin/logs" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="outerHTML">
+          <p class="text-muted">Loading logs...</p>
         </div>
       </section>
 
@@ -490,20 +423,18 @@
            (user feedback: this is server-deployment config - editing a
            .env file and restarting the systemd service - not something a
            regular, non-admin user can act on or has a reason to see). -->
-      <section id="admin-proxy" class="settings-section">
-        <div class="settings-section-header">
-          <h2>Reverse Proxy</h2>
-          <p>Configuration for running Playlist Lab behind a reverse proxy.</p>
-        </div>
-        <div class="settings-subsection">
-          <p class="settings-hint">If you're running Playlist Lab behind a reverse proxy (Nginx, Apache, Caddy, etc.):</p>
-          <ol class="settings-hint settings-hint-list">
+      <section class="panel stack" data-tab-panel="admin-proxy" hidden>
+        <div class="panel-header">Reverse Proxy</div>
+        <p class="text-muted">Configuration for running Playlist Lab behind a reverse proxy.</p>
+        <div class="stack stack-sm">
+          <p class="field-hint">If you're running Playlist Lab behind a reverse proxy (Nginx, Apache, Caddy, etc.):</p>
+          <ol class="field-hint">
             <li>Set <code>TRUST_PROXY=true</code> in your <code>.env</code> file</li>
             <li>Configure your reverse proxy to forward the <code>Host</code> and <code>X-Forwarded-Proto</code> headers</li>
             <li>Update OAuth app redirect URIs to match your public URL</li>
             <li>Restart the server</li>
           </ol>
-          <p class="settings-hint">Login and OAuth callback URLs are built from the request itself (scheme + host), not a fixed configured domain - so this works automatically for whatever hostname a visitor actually used, including a LAN IP alongside a public domain.</p>
+          <p class="field-hint">Login and OAuth callback URLs are built from the request itself (scheme + host), not a fixed configured domain - so this works automatically for whatever hostname a visitor actually used, including a LAN IP alongside a public domain.</p>
         </div>
       </section>
       {{end}}

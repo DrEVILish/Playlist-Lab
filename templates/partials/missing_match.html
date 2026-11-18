@@ -6,18 +6,18 @@
      third modal stylesheet. Rendered via GET /missing/{id}/match into
      #modal-root. */}}
 {{define "partials/missing_match.html"}}
-<div class="advanced-mix-overlay">
-  <div class="advanced-mix-modal">
-    <div class="advanced-mix-header">
-      <h2 class="advanced-mix-title">Find a match for "{{.Title}}"</h2>
-      <button type="button" class="advanced-mix-close" onclick="closeTopModal()" aria-label="Close">&times;</button>
+<div class="modal-overlay">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h2>Find a match for "{{.Title}}"</h2>
+      <button type="button" class="btn-close" onclick="closeTopModal()" aria-label="Close"></button>
     </div>
-    <div class="advanced-mix-content">
-      <p class="settings-hint" style="margin-bottom:0.75rem">{{.Artist}} &mdash; searching your Plex library. Click a result to use it.</p>
-      <input type="search" class="form-input" value="{{.Query}}" placeholder="Search your library..." autofocus
+    <div class="stack advanced-mix-content">
+      <p class="field-hint">{{.Artist}} &mdash; searching your Plex library. Click a result to use it.</p>
+      <input type="search" class="input" value="{{.Query}}" placeholder="Search your library..." autofocus
         hx-get="/missing/{{.TrackID}}/match-search{{if .ListScope}}?listScope={{.ListScope}}{{end}}" hx-trigger="input changed delay:400ms, search"
         hx-target="#match-results" hx-swap="innerHTML" name="q">
-      <div id="match-results" style="margin-top:0.75rem">
+      <div id="match-results">
         {{template "matchResults" .}}
       </div>
     </div>

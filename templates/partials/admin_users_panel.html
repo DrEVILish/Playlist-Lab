@@ -1,7 +1,7 @@
 {{/* Users tab body, split into its own lazy-loaded (hx-trigger="revealed")
      fragment for the same reason as admin_missing.html: rendering the full
      list at initial paint made .admin-tabbar itself render blank in
-     headless Chromium on a :has()-plus-large-sibling-subtree match. Every
+     headless Chromium. Every
      user-management action below re-renders just this fragment
      (hx-target="#settings-panel-admin-users") rather than the whole
      settings page.
@@ -13,15 +13,16 @@
      and swap just this fragment; see AdminHandler.renderUsersPanel for the
      filtering itself. */}}
 {{define "partials/admin_users_panel.html"}}
-{{if .Error}}<div class="settings-alert settings-alert--error">{{.Error}}</div>{{end}}
+<div class="stack">
+{{if .Error}}<div class="alert alert-danger">{{.Error}}</div>{{end}}
 
-<div class="admin-users-toolbar">
-  <input type="search" name="q" placeholder="Search username&hellip;" value="{{.FilterQ}}"
-    class="admin-users-search"
+<div class="toolbar is-plain admin-users-toolbar">
+  <input type="search" name="q" placeholder="Search username&hellip;" value="{{.FilterQ}}" aria-label="Search username"
+    class="input input-sm is-auto"
     hx-get="/admin/users-list" hx-target="#settings-panel-admin-users" hx-swap="innerHTML"
     hx-trigger="keyup changed delay:300ms, search" hx-include="closest .admin-users-toolbar">
 
-  <select name="status" class="admin-users-filter"
+  <select name="status" class="select input-sm is-auto" aria-label="Status"
     hx-get="/admin/users-list" hx-target="#settings-panel-admin-users" hx-swap="innerHTML"
     hx-trigger="change" hx-include="closest .admin-users-toolbar">
     <option value="" {{if eq .FilterStatus ""}}selected{{end}}>All statuses</option>
@@ -29,7 +30,7 @@
     <option value="disabled" {{if eq .FilterStatus "disabled"}}selected{{end}}>Disabled</option>
   </select>
 
-  <select name="role" class="admin-users-filter"
+  <select name="role" class="select input-sm is-auto" aria-label="Role"
     hx-get="/admin/users-list" hx-target="#settings-panel-admin-users" hx-swap="innerHTML"
     hx-trigger="change" hx-include="closest .admin-users-toolbar">
     <option value="" {{if eq .FilterRole ""}}selected{{end}}>All roles</option>
@@ -37,49 +38,46 @@
     <option value="member" {{if eq .FilterRole "member"}}selected{{end}}>Member</option>
   </select>
 
-  <span class="admin-users-count">{{len .Users}} of {{.TotalUsers}}</span>
+  <span class="text-muted push">{{len .Users}} of {{.TotalUsers}}</span>
 </div>
 
 {{if not .Users}}
-<p class="settings-hint">No users match this filter.</p>
+<p class="field-hint">No users match this filter.</p>
 {{else}}
-<div class="admin-cards admin-users-cards">
+<div class="grid">
   {{range .Users}}
-  <div class="admin-card admin-user-card">
-    <div class="admin-card-row">
-      {{if .PlexThumb.Valid}}
-      <img class="admin-user-avatar" src="{{.PlexThumb.String}}" alt="" width="36" height="36">
-      {{else}}
-      <span class="admin-user-avatar admin-user-avatar--fallback">{{initials .PlexUsername}}</span>
-      {{end}}
-      <div class="admin-card-title">
-        <span class="admin-card-name">{{.PlexUsername}}</span>
-        <span class="admin-card-summary">
-          <span class="ftl-lamp{{if .IsEnabled}} is-on{{end}}"></span>
-          {{if .IsEnabled}}Enabled{{else}}Disabled{{end}}
-          {{if .IsAdmin}}<span class="ftl-badge ftl-badge-accent">Admin</span>{{end}}
-          {{if .HasServer}}<span class="ftl-badge ftl-badge-success">Server configured</span>{{end}}
+  <div class="card stack stack-sm">
+    <div class="row is-items-center">
+      {{if .PlexThumb.String}}<img class="avatar" src="{{.PlexThumb.String}}" alt="">
+      {{else}}<span class="avatar">{{initials .PlexUsername}}</span>{{end}}
+      <div class="stack stack-sm">
+        <strong>{{.PlexUsername}}</strong>
+        <span class="cluster cluster-sm">
+          <span class="status{{if .IsEnabled}} status-ok{{else}} status-idle{{end}}">{{if .IsEnabled}}Enabled{{else}}Disabled{{end}}</span>
+          {{if .IsAdmin}}<span class="badge badge-accent">Admin</span>{{end}}
+          {{if .HasServer}}<span class="badge badge-success">Server configured</span>{{end}}
         </span>
       </div>
     </div>
-    <p class="admin-card-meta">
-      {{if ge .LastLogin 946684800000}}last login <span class="mono-data">{{dateFromUnixMilli .LastLogin}}</span>{{else}}never logged in{{end}}
+    <p class="field-hint">
+      {{if ge .LastLogin 946684800000}}last login <span class="mono">{{dateFromUnixMilli .LastLogin}}</span>{{else}}never logged in{{end}}
     </p>
-    <div class="admin-card-actions">
+    <div class="cluster cluster-sm">
       {{if .IsEnabled}}
-      <button class="ftl-btn ftl-btn-secondary ftl-btn-sm" hx-post="/admin/users/{{.ID}}/disable" hx-target="#settings-panel-admin-users" hx-swap="innerHTML">Disable</button>
+      <button class="btn btn-secondary btn-sm" hx-post="/admin/users/{{.ID}}/disable" hx-target="#settings-panel-admin-users" hx-swap="innerHTML">Disable</button>
       {{else}}
-      <button class="ftl-btn ftl-btn-secondary ftl-btn-sm" hx-post="/admin/users/{{.ID}}/enable" hx-target="#settings-panel-admin-users" hx-swap="innerHTML">Enable</button>
+      <button class="btn btn-secondary btn-sm" hx-post="/admin/users/{{.ID}}/enable" hx-target="#settings-panel-admin-users" hx-swap="innerHTML">Enable</button>
       {{end}}
       {{if .IsAdmin}}
-      <button class="ftl-btn ftl-btn-secondary ftl-btn-sm" hx-post="/admin/users/{{.ID}}/demote" hx-target="#settings-panel-admin-users" hx-swap="innerHTML">Revoke Admin</button>
+      <button class="btn btn-secondary btn-sm" hx-post="/admin/users/{{.ID}}/demote" hx-target="#settings-panel-admin-users" hx-swap="innerHTML">Revoke Admin</button>
       {{else}}
-      <button class="ftl-btn ftl-btn-secondary ftl-btn-sm" hx-post="/admin/users/{{.ID}}/promote" hx-target="#settings-panel-admin-users" hx-swap="innerHTML">Make Admin</button>
+      <button class="btn btn-secondary btn-sm" hx-post="/admin/users/{{.ID}}/promote" hx-target="#settings-panel-admin-users" hx-swap="innerHTML">Make Admin</button>
       {{end}}
-      <button class="ftl-btn ftl-btn-secondary ftl-btn-sm admin-users-delete" hx-post="/admin/users/{{.ID}}/delete" hx-target="#settings-panel-admin-users" hx-swap="innerHTML" hx-confirm="Delete this user and all their data? This can't be undone.">Delete</button>
+      <button class="btn btn-danger btn-sm" hx-post="/admin/users/{{.ID}}/delete" hx-target="#settings-panel-admin-users" hx-swap="innerHTML" hx-confirm="Delete this user and all their data? This can't be undone.">Delete</button>
     </div>
   </div>
   {{end}}
 </div>
 {{end}}
+</div>
 {{end}}

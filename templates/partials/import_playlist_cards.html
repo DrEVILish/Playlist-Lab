@@ -5,24 +5,24 @@
      with no client-side JS needed to "fill in and submit" anything. */}}
 {{define "partials/import_playlist_cards.html"}}
 {{if not .Playlists}}
-<p class="settings-hint">{{.EmptyMessage}}</p>
+<p class="field-hint">{{.EmptyMessage}}</p>
 {{else}}
-<div class="import-card-grid">
+<div class="grid">
   {{$source := .Source}}
   {{range .Playlists}}
-  <form class="import-card" hx-post="/import/preview" hx-target="#modal-root" hx-swap="beforeend">
+  <form class="card stack stack-sm" hx-post="/import/preview" hx-target="#modal-root" hx-swap="beforeend">
     <input type="hidden" name="source" value="{{$source}}">
     <input type="hidden" name="identifier" value="{{.URL}}">
     {{if .Image}}
-    <img class="import-card-image" src="{{.Image}}" alt="" loading="lazy">
+    <img src="{{.Image}}" alt="" loading="lazy">
     {{else}}
-    <div class="import-card-image import-card-image-fallback"></div>
+    <div class="avatar avatar-lg"></div>
     {{end}}
-    <div class="import-card-body">
-      <div class="import-card-name">{{.Name}}</div>
-      {{if .Description}}<div class="import-card-desc">{{.Description}}</div>{{end}}
+    <div class="stack stack-sm">
+      <div class="list-item-title">{{.Name}}</div>
+      {{if .Description}}<div class="text-muted">{{.Description}}</div>{{end}}
     </div>
-    <button type="submit" class="ftl-btn ftl-btn-secondary ftl-btn-sm">Import</button>
+    <button type="submit" class="btn btn-secondary btn-sm">Import</button>
   </form>
   {{end}}
 </div>

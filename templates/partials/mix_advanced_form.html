@@ -11,50 +11,56 @@
      backend has no mix-scheduling feature (only mix_templates, a separate
      saved-preset feature owned by another page). */}}
 {{define "partials/mix_advanced_form.html"}}
-<div class="advanced-mix-overlay">
-  <div class="advanced-mix-modal">
-    <div class="advanced-mix-header">
-      <h2 class="advanced-mix-title">{{.Title}}</h2>
-      <button type="button" class="advanced-mix-close" onclick="closeTopModal()" aria-label="Close">&times;</button>
+<div class="modal-overlay">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h2>{{.Title}}</h2>
+      <button type="button" class="btn-close" onclick="closeTopModal()" aria-label="Close"></button>
     </div>
 
     <form hx-post="/mixes/generate" hx-target="#notifications" hx-swap="innerHTML" hx-on::after:request="closeTopModal()">
       <input type="hidden" name="mixType" value="{{.MixType}}">
-      <div class="advanced-mix-content">
-        <div class="ftl-field">
-          <label class="ftl-label" for="playlist-name">Playlist Name</label>
-          <input id="playlist-name" type="text" class="form-input" name="playlistName" value="{{.DefaultName}}">
+      <div class="stack advanced-mix-content">
+        <div class="field">
+          <label class="label" for="playlist-name">Playlist Name</label>
+          <input id="playlist-name" type="text" class="input" name="playlistName" value="{{.DefaultName}}">
         </div>
 
-        <div class="ftl-field">
-          <label class="ftl-label" for="track-count">Number of Tracks</label>
-          <input id="track-count" type="range" class="track-slider" name="trackCount" min="10" max="200" step="10" value="50">
+        <div class="field">
+          <label class="label" for="track-count">Number of Tracks</label>
+          <div class="row is-items-center">
+            <input id="track-count" type="range" class="slider" name="trackCount" min="10" max="200" step="10" value="50">
+            <output class="readout readout-sm" for="track-count">50</output>
+          </div>
         </div>
 
         {{if eq .MixType "artist-discovery"}}
-        <div class="ftl-field">
-          <label class="ftl-label" for="seed-artist-name">Artist Name</label>
-          <input id="seed-artist-name" type="text" class="form-input" name="seedArtistName" placeholder="e.g. Radiohead" required>
-          <p class="ftl-field-hint">Matched against your library by name</p>
+        <div class="field">
+          <label class="label" for="seed-artist-name">Artist Name</label>
+          <input id="seed-artist-name" type="text" class="input" name="seedArtistName" placeholder="e.g. Radiohead" required>
+          <p class="field-hint">Matched against your library by name</p>
         </div>
-        <div class="ftl-field">
-          <label class="ftl-label" for="tracks-per-artist">Tracks Per Artist</label>
-          <input id="tracks-per-artist" type="range" class="track-slider" name="tracksPerArtist" min="1" max="10" value="3">
+        <div class="field">
+          <label class="label" for="tracks-per-artist">Tracks Per Artist</label>
+          <div class="row is-items-center">
+            <input id="tracks-per-artist" type="range" class="slider" name="tracksPerArtist" min="1" max="10" value="3">
+            <output class="readout readout-sm" for="tracks-per-artist">3</output>
+          </div>
         </div>
         {{end}}
 
         {{if eq .MixType "mood"}}
-        <div class="ftl-field">
-          <label class="ftl-label">Select Moods</label>
-          <div class="tag-grid">
+        <div class="field">
+          <label class="label">Select Moods</label>
+          <div class="cluster cluster-sm">
             {{range .Moods}}
-            <label class="tag-button"><input type="checkbox" name="moods" value="{{.}}" style="display:none">{{.}}</label>
+            <label class="toggle-btn"><input type="checkbox" name="moods" value="{{.}}">{{.}}</label>
             {{end}}
           </div>
-          <p class="ftl-field-hint">Click to select one or more moods</p>
+          <p class="field-hint">Click to select one or more moods</p>
         </div>
-        <div class="ftl-field">
-          <label class="checkbox-label">
+        <div class="field">
+          <label class="check">
             <input type="checkbox" name="useSonicAnalysis" value="true">
             <span>Use Sonic Analysis (more accurate mood matching)</span>
           </label>
@@ -62,67 +68,76 @@
         {{end}}
 
         {{if eq .MixType "era"}}
-        <div class="ftl-field">
-          <label class="ftl-label">Year Range</label>
-          <div class="year-range-inputs">
+        <div class="field">
+          <label class="label">Year Range</label>
+          <div class="row">
             <div>
-              <label class="form-label-small" for="start-year">Start Year</label>
-              <input id="start-year" type="number" class="form-input" name="startYear" min="1900" max="2100" value="1970">
+              <label class="label" for="start-year">Start Year</label>
+              <input id="start-year" type="number" class="input" name="startYear" min="1900" max="2100" value="1970">
             </div>
             <div>
-              <label class="form-label-small" for="end-year">End Year</label>
-              <input id="end-year" type="number" class="form-input" name="endYear" min="1900" max="2100" value="1979">
+              <label class="label" for="end-year">End Year</label>
+              <input id="end-year" type="number" class="input" name="endYear" min="1900" max="2100" value="1979">
             </div>
           </div>
         </div>
         {{end}}
 
         {{if eq .MixType "genre-evolution"}}
-        <div class="ftl-field">
-          <label class="ftl-label" for="genre">Select Genre</label>
-          <select id="genre" class="ftl-select" name="genre" required>
+        <div class="field">
+          <label class="label" for="genre">Select Genre</label>
+          <select id="genre" class="select" name="genre" required>
             <option value="">Choose a genre...</option>
             {{range .Genres}}<option value="{{.}}">{{.}}</option>{{end}}
           </select>
         </div>
-        <div class="ftl-field">
-          <label class="ftl-label" for="tracks-per-decade">Tracks Per Decade</label>
-          <input id="tracks-per-decade" type="range" class="track-slider" name="tracksPerDecade" min="1" max="15" value="5">
+        <div class="field">
+          <label class="label" for="tracks-per-decade">Tracks Per Decade</label>
+          <div class="row is-items-center">
+            <input id="tracks-per-decade" type="range" class="slider" name="tracksPerDecade" min="1" max="15" value="5">
+            <output class="readout readout-sm" for="tracks-per-decade">5</output>
+          </div>
         </div>
         {{end}}
 
         {{if eq .MixType "artist-journey"}}
-        <div class="ftl-field">
-          <label class="ftl-label" for="artist-name">Artist Name</label>
-          <input id="artist-name" type="text" class="form-input" name="artistName" placeholder="e.g. Radiohead" required>
-          <p class="ftl-field-hint">Matched against your library by name</p>
+        <div class="field">
+          <label class="label" for="artist-name">Artist Name</label>
+          <input id="artist-name" type="text" class="input" name="artistName" placeholder="e.g. Radiohead" required>
+          <p class="field-hint">Matched against your library by name</p>
         </div>
-        <div class="ftl-field">
-          <label class="ftl-label" for="tracks-per-album">Tracks Per Album</label>
-          <input id="tracks-per-album" type="range" class="track-slider" name="tracksPerAlbum" min="1" max="10" value="3">
+        <div class="field">
+          <label class="label" for="tracks-per-album">Tracks Per Album</label>
+          <div class="row is-items-center">
+            <input id="tracks-per-album" type="range" class="slider" name="tracksPerAlbum" min="1" max="10" value="3">
+            <output class="readout readout-sm" for="tracks-per-album">3</output>
+          </div>
         </div>
         {{end}}
 
         {{if eq .MixType "genre-blend"}}
-        <div class="ftl-field">
-          <label class="ftl-label">Select Genres (minimum 2)</label>
-          <div class="tag-grid">
+        <div class="field">
+          <label class="label">Select Genres (minimum 2)</label>
+          <div class="cluster cluster-sm">
             {{range .Genres}}
-            <label class="tag-button"><input type="checkbox" name="genres" value="{{.}}" style="display:none">{{.}}</label>
+            <label class="toggle-btn"><input type="checkbox" name="genres" value="{{.}}">{{.}}</label>
             {{end}}
           </div>
         </div>
-        <div class="ftl-field">
-          <label class="ftl-label" for="min-genres">Minimum Genres Per Track</label>
-          <input id="min-genres" type="range" class="track-slider" name="minGenres" min="2" max="5" value="2">
-          <p class="ftl-field-hint">Tracks must have at least this many of the selected genres</p>
+        <div class="field">
+          <label class="label" for="min-genres">Minimum Genres Per Track</label>
+          <div class="row is-items-center">
+            <input id="min-genres" type="range" class="slider" name="minGenres" min="2" max="5" value="2">
+            <output class="readout readout-sm" for="min-genres">2</output>
+          </div>
+          <p class="field-hint">Tracks must have at least this many of the selected genres</p>
         </div>
         {{end}}
       </div>
 
-      <div class="advanced-mix-actions">
-        <button type="submit" class="btn-generate">Generate Mix</button>
-        <button type="button" class="btn-cancel" onclick="closeTopModal()">Cancel</button>
+      <div class="modal-footer">
+        <button type="submit" class="btn btn-primary btn-sm">Generate Mix</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeTopModal()">Cancel</button>
       </div>
     </form>
   </div>

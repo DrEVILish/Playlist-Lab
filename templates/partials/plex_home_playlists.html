@@ -6,19 +6,19 @@
      empty). */}}
 {{define "partials/plex_home_playlists.html"}}
 {{if .UsedAdminToken}}
-<p class="settings-hint">Could not access this user's own Plex token - showing every playlist on the server instead.</p>
+<p class="field-hint">Could not access this user's own Plex token - showing every playlist on the server instead.</p>
 {{end}}
 {{if not .Playlists}}
-  <p class="settings-hint">This user has no playlists.</p>
+  <p class="field-hint">This user has no playlists.</p>
 {{else}}
-  <div class="plex-home-playlist-list">
+  <div class="list">
     {{range .Playlists}}
-    <div class="card plex-home-playlist-row">
+    <div class="card list-item row is-items-center">
       <div>
-        <div class="plex-home-playlist-name">{{.Name}}</div>
-        <div class="settings-hint">{{.TrackCount}} tracks</div>
+        <div>{{.Name}}</div>
+        <div class="field-hint">{{.TrackCount}} tracks</div>
       </div>
-      <button type="button" class="ftl-btn ftl-btn-primary ftl-btn-sm"
+      <button type="button" class="btn btn-primary btn-sm"
         hx-post="/import/plex-home/playlists/{{.ID}}/copy"
         hx-vals='{"sourceHomeUserId": "{{.SourceHomeUser}}", "newName": "{{.Name}}"}'
         hx-target="#notifications" hx-swap="innerHTML">

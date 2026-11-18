@@ -1,52 +1,51 @@
 {{define "content"}}
-<link rel="stylesheet" href="/static/css/pages/PlaylistsPage.css">
-<div class="page-container status-page">
-  <h1 class="page-title">Status &amp; Reports</h1>
+<div class="stack">
+  {{if not .InModal}}<h1>Status and reports</h1>{{end}}
 
   {{if .PlexError}}
-  <p class="page-description">Could not reach your Plex server.</p>
+  <div class="alert alert-danger">Could not reach your Plex server.</div>
   {{else}}
-  <div class="playlists-stats">
-    <div class="playlists-stat">
-      <span class="playlists-stat-value mono-data">{{.TotalPlaylists}}</span>
-      <span class="playlists-stat-label">Playlists</span>
+  <div class="cluster cluster-lg">
+    <div class="stat">
+      <span class="stat-value">{{.TotalPlaylists}}</span>
+      <span class="stat-label">Playlists</span>
     </div>
-    <div class="playlists-stat">
-      <span class="playlists-stat-value mono-data">{{.TotalTracks}}</span>
-      <span class="playlists-stat-label">Total Tracks</span>
+    <div class="stat">
+      <span class="stat-value">{{.TotalTracks}}</span>
+      <span class="stat-label">Total Tracks</span>
     </div>
-    <div class="playlists-stat">
-      <span class="playlists-stat-value mono-data">{{.TotalDuration}}</span>
-      <span class="playlists-stat-label">Total Duration</span>
+    <div class="stat">
+      <span class="stat-value">{{.TotalDuration}}</span>
+      <span class="stat-label">Total Duration</span>
     </div>
-    <div class="playlists-stat {{if gt .MissingCount 0}}warn{{end}}">
-      <span class="playlists-stat-value mono-data">{{.MissingCount}}</span>
-      <span class="playlists-stat-label">Missing Tracks</span>
+    <div class="stat">
+      <span class="stat-value">{{.MissingCount}}</span>
+      <span class="stat-label{{if gt .MissingCount 0}} status status-warn{{end}}">Missing Tracks</span>
     </div>
   </div>
 
-  <section class="card">
-    <h3>Playlists by Source</h3>
-    {{range .BySource}}<div class="status-row"><span>{{.Label}}</span><span class="mono-data">{{.Count}}</span></div>{{end}}
+  <section class="panel">
+    <div class="panel-header">Playlists by Source</div>
+    <ul class="divide-y">
+    {{range .BySource}}<li class="row is-justify-between"><span>{{.Label}}</span><span class="mono">{{.Count}}</span></li>{{end}}
+    </ul>
   </section>
 
-  <section class="card">
-    <h3>Schedules</h3>
-    <div class="status-row"><span>Total scheduled</span><span class="mono-data">{{.TotalSchedules}}</span></div>
-    {{range .ByFrequency}}<div class="status-row"><span style="text-transform:capitalize">{{.Freq}}</span><span class="mono-data">{{.Count}}</span></div>{{end}}
-    <div class="status-row"><span>Last 100 runs</span><span><span class="mono-data">{{.Succeeded}} succeeded, {{.Failed}} failed</span> &middot; <a href="/settings">View logs</a></span></div>
+  <section class="panel">
+    <div class="panel-header">Schedules</div>
+    <ul class="divide-y">
+    <li class="row is-justify-between"><span>Total scheduled</span><span class="mono">{{.TotalSchedules}}</span></li>
+    {{range .ByFrequency}}<li class="row is-justify-between"><span>{{.Freq}}</span><span class="mono">{{.Count}}</span></li>{{end}}
+    <li class="row is-justify-between"><span>Last 100 runs</span><span><span class="mono">{{.Succeeded}} succeeded, {{.Failed}} failed</span> &middot; <a href="/settings#admin-logs">View logs</a></span></li>
+    </ul>
   </section>
 
-  <section class="card">
-    <h3>Smart Playlists</h3>
-    <div class="status-row"><span>Plex smart playlists</span><span class="mono-data">{{.SmartCount}} of {{.TotalPlaylists}}</span></div>
+  <section class="panel">
+    <div class="panel-header">Smart Playlists</div>
+    <ul class="divide-y">
+    <li class="row is-justify-between"><span>Plex smart playlists</span><span class="mono">{{.SmartCount}} of {{.TotalPlaylists}}</span></li>
+    </ul>
   </section>
   {{end}}
 </div>
-<style>
-.status-row { display: flex; justify-content: space-between; padding: 0.375rem 0; border-bottom: 1px solid var(--border); }
-.status-row:last-child { border-bottom: none; }
-.status-page section.card { margin-top: 1.5rem; }
-.status-page section.card h3 { margin: 0 0 0.5rem; }
-</style>
 {{end}}

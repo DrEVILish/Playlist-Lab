@@ -146,6 +146,11 @@ func main() {
 		w.Header().Set("Cache-Control", "no-cache")
 		staticHandler.ServeHTTP(w, req)
 	}))
+	// Browsers ask for /favicon.ico on pages with no <link rel="icon">
+	// (a plain-text error, a download).
+	r.Get("/favicon.ico", func(w http.ResponseWriter, req *http.Request) {
+		http.Redirect(w, req, "/static/favicon.ico", http.StatusMovedPermanently)
+	})
 
 	handlers.RegisterAuth(r, &handlers.AuthHandler{
 		DB: sqlDB, Plex: plexClient, Auth: mw, Store: store,

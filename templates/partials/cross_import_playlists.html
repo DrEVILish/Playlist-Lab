@@ -2,23 +2,23 @@
 {{if not .Playlists}}
 <div class="empty-state">
   <div class="empty-state-title">No playlists found</div>
-  <div class="empty-state-description">No playlists found on your Plex server.</div>
+  <div class="empty-state-hint">No playlists found on your Plex server.</div>
 </div>
 {{else}}
-<div class="playlist-list">
+<div class="list">
   {{range $i, $p := .Playlists}}
-  <form class="playlist-list-item" hx-post="/cross-import/match" hx-target="#cross-import-progress" hx-swap="innerHTML">
+  <form class="list-item row is-items-center" hx-post="/cross-import/match" hx-target="#cross-import-progress" hx-swap="innerHTML">
     <input type="hidden" name="playlistId" value="{{$p.ID}}">
     {{if $p.CoverURL}}
-    <img src="{{$p.CoverURL}}" alt="{{$p.Name}}" style="width:40px;height:40px;border-radius:4px;object-fit:cover;flex-shrink:0;">
+    <img src="{{$p.CoverURL}}" alt="{{$p.Name}}">
     {{else}}
-    <div class="playlist-list-item-index">{{add $i 1}}</div>
+    <div class="mono">{{add $i 1}}</div>
     {{end}}
-    <div class="playlist-list-item-info">
-      <div class="playlist-list-item-name">{{$p.Name}}</div>
-      <div class="playlist-list-item-meta">{{$p.TrackCount}} tracks</div>
+    <div class="stack stack-sm">
+      <div class="list-item-title">{{$p.Name}}</div>
+      <div class="list-item-meta">{{$p.TrackCount}} tracks</div>
     </div>
-    <button type="submit" class="ftl-btn ftl-btn-primary ftl-btn-sm">Import to YouTube</button>
+    <button type="submit" class="btn btn-primary btn-sm">Import to YouTube</button>
   </form>
   {{end}}
 </div>

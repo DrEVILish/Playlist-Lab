@@ -1,15 +1,16 @@
 {{define "partials/admin_tmdb_panel.html"}}
 <form hx-post="/admin/tmdb/config" hx-target="#settings-panel-admin-tmdb" hx-swap="innerHTML">
-  <div class="settings-field-group">
-    <div class="settings-field">
-      <label class="settings-label" for="tmdb-api-key">API Key</label>
-      <input id="tmdb-api-key" type="password" name="apiKey" class="settings-input" value="{{.APIKey}}" placeholder="Settings > API in your TMDb account" autocomplete="off">
+  <div class="stack">
+    <div class="field">
+      <label class="label" for="tmdb-api-key">API Key</label>
+      <input id="tmdb-api-key" type="password" name="apiKey" class="input" placeholder="{{if .APIKey}}Saved. Paste a new API key to replace it{{else}}Settings > API in your TMDb account{{end}}" autocomplete="off">
     </div>
   </div>
-  {{if .Notice}}<div class="settings-alert settings-alert--success">{{.Notice}}</div>{{end}}
-  {{if .Error}}<div class="settings-alert settings-alert--error">{{.Error}}</div>{{end}}
-  <div class="settings-actions">
-    <button type="submit" class="ftl-btn ftl-btn-primary">Save TMDb Config</button>
+  {{if .Notice}}<div class="alert alert-success">{{.Notice}}</div>{{end}}
+  {{if .Error}}<div class="alert alert-danger">{{.Error}}</div>{{end}}
+  <div class="cluster">
+    <button type="submit" class="btn btn-primary btn-sm">Save TMDb Config</button>
+    {{if .APIKey}}<button type="button" class="btn btn-tertiary btn-sm" hx-post="/admin/tmdb/config" hx-vals='{"clear":"1"}' hx-target="#settings-panel-admin-tmdb" hx-swap="innerHTML" hx-confirm="Remove the saved API key?">Remove API key</button>{{end}}
   </div>
 </form>
 {{end}}

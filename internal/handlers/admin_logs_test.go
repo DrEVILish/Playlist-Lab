@@ -299,8 +299,8 @@ func TestAdminLogsStream_PushesNewEntriesFilteredByLevel(t *testing.T) {
 		if !strings.Contains(fragment, "sync completed") {
 			t.Fatalf("streamed fragment = %q, want it to contain the logged message", fragment)
 		}
-		if !strings.Contains(fragment, "admin-log-level-info") {
-			t.Fatalf("streamed fragment = %q, want the info level class", fragment)
+		if !strings.Contains(fragment, `data-level="info"`) {
+			t.Fatalf("streamed fragment = %q, want the info level attribute", fragment)
 		}
 		if strings.Contains(fragment, "should not stream") {
 			t.Fatalf("streamed fragment = %q, the sub-info debug line should have been filtered out", fragment)

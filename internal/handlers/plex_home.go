@@ -48,7 +48,7 @@ func (h *ImportHandler) plexHomeUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	users, err := h.PlexAuth.GetHomeUsersDetailed(dbUser.PlexToken)
 	if err != nil {
-		h.Tmpl.RenderPartial(w, "partials/plex_home_users.html", map[string]any{"Error": "Failed to fetch Plex Home users."})
+		h.Tmpl.RenderPartial(w, "partials/plex_home_users.html", map[string]any{"Error": "Couldn't list Plex Home users. This needs a Plex Home on plex.tv; try again later if you have one."})
 		return
 	}
 	h.Tmpl.RenderPartial(w, "partials/plex_home_users.html", map[string]any{"Users": users})

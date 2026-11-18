@@ -16,7 +16,7 @@ function syncTMDbModeVisibility() {
   var modeSelect = document.getElementById('collection-tmdb-mode');
   var hasModes = provider === 'tmdb' || provider === 'imdb';
   var modeGroup = document.querySelector('.collection-tmdb-mode-group');
-  if (modeGroup) modeGroup.classList.toggle('is-hidden', !hasModes);
+  if (modeGroup) modeGroup.style.display = (!hasModes) ? 'none' : '';
 
   if (modeSelect) {
     // Hide every mode option that belongs to a different provider (an
@@ -36,7 +36,7 @@ function syncTMDbModeVisibility() {
   var listIdField = document.querySelector('.collection-tmdb-list-id');
   var mode = modeSelect ? modeSelect.value : 'list';
   if (listIdField) {
-    listIdField.classList.toggle('is-hidden', mode !== 'list' && mode !== 'collection');
+    listIdField.style.display = (mode !== 'list' && mode !== 'collection') ? 'none' : '';
     var label = listIdField.querySelector('label');
     if (label) label.textContent = mode === 'collection' ? 'Collection ID or URL' : 'List ID or URL';
   }
@@ -69,10 +69,10 @@ if (!window.__collectionFormJSBound) {
   document.addEventListener('change', function (e) {
     if (e.target.name === 'builderType') {
       document.querySelectorAll('.collection-smart-fields').forEach(function (el) {
-        el.classList.toggle('is-hidden', e.target.value !== 'smart');
+        el.style.display = (e.target.value !== 'smart') ? 'none' : '';
       });
       document.querySelectorAll('.collection-tmdb-fields').forEach(function (el) {
-        el.classList.toggle('is-hidden', e.target.value !== 'external_list');
+        el.style.display = (e.target.value !== 'external_list') ? 'none' : '';
       });
     }
     if (e.target.id === 'collection-external-provider' || e.target.id === 'collection-tmdb-mode') {
