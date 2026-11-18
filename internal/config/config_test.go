@@ -58,6 +58,11 @@ func TestGetBool_GarbageValueFallsBackToDefault(t *testing.T) {
 // a wrong answer either bricks a correctly-configured deploy or lets an
 // unconfigured one serve with a key published in this repo.
 func TestUsingDefaultSessionSecret(t *testing.T) {
+	for _, value := range []string{"", "   ", "change-this-to-a-random-string-in-production"} {
+		if !(Config{SessionSecret: value}).UsingDefaultSessionSecret() {
+			t.Errorf("production guard accepted empty or sample key %q", value)
+		}
+	}
 	if got := (Config{SessionSecret: defaultSessionSecret}).UsingDefaultSessionSecret(); !got {
 		t.Errorf("with the fallback value: got %v, want true", got)
 	}

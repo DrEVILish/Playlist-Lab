@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -183,4 +184,83 @@ func TestDiffCollectionMembership(t *testing.T) {
 			t.Fatalf("toAdd = %v, toRemove = %v, want both empty", toAdd, toRemove)
 		}
 	})
+}
+
+func TestDailyScheduleKeepsConfiguredTime(t *testing.T) {
+	scheduledAt := time.Date(2026, 11, 18, 9, 0, 0, 0, time.UTC)
+	s := db.Schedule{
+		Frequency: "daily",
+		StartDate: "2026-11-18",
+		Config:    sql.NullString{String: `{"run_time":"09:00"}`, Valid: true},
+		LastRun:   sql.NullInt64{Int64: scheduledAt.Add(15 * time.Second).Unix(), Valid: true},
+	}
+	nextDay := scheduledAt.AddDate(0, 0, 1)
+	if got, ok := NextRun(s, nextDay); !ok || !got.Equal(nextDay) || !IsDue(s, nextDay) {
+		t.Fatalf("expected due at %v, got next run %v", nextDay, got)
+	}
+}
+
+func TestReplacePlaylistKeepsOriginalOnFailedAdd(t *testing.T) {
+	var deleted atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			w.Write([]byte(`{"MediaContainer":{"Metadata":[{"ratingKey":"original","playlistItemID":7}]}}`))
+		case http.MethodPut:
+			http.Error(w, "Plex temporarily unavailable", http.StatusBadGateway)
+		case http.MethodDelete:
+			deleted.Store(true)
+		}
+	}))
+	defer srv.Close()
+	client := plex.NewClient(srv.URL, "token", "client-id", "Playlist Lab")
+	err := replacePlaylistTracks(client, "playlist", []string{plex.BuildTrackURI("server", "replacement")})
+	if err == nil || deleted.Load() {
+		t.Fatalf("failed add should preserve original tracks, deletion=%v, err=%v", deleted.Load(), err)
+	}
+}
+
+func TestReplacePlaylistRejectsNoTracksWithoutMutation(t *testing.T) {
+	var touched atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		touched.Store(true)
+		w.Write([]byte(`{"MediaContainer":{"Metadata":[{"ratingKey":"original","playlistItemID":7}]}}`))
+	}))
+	defer srv.Close()
+	client := plex.NewClient(srv.URL, "token", "client-id", "Playlist Lab")
+	err := replacePlaylistTracks(client, "playlist", nil)
+	if err == nil || touched.Load() {
+		t.Fatalf("empty replacement should be rejected, Plex called=%v, err=%v", touched.Load(), err)
+	}
+}
+
+func TestScheduledPlaylistKeepsOriginalServerAfterDefaultChanges(t *testing.T) {
+	sqlDB, err := db.Open(t.TempDir() + "/test.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sqlDB.Close()
+	user, err := db.CreateUser(sqlDB, "test-user", "Listener", "fake-token", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := db.AddUserServer(sqlDB, user.ID, "First", "server-a", "http://example.invalid", "1", "Music", "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := db.AddUserServer(sqlDB, user.ID, "Other", "server-b", "http://example.invalid", "2", "Music", "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	playlist, err := db.CreatePlaylistRowForServer(sqlDB, user.ID, first.ServerClientID, "42", "First", "spotify", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetDefaultServer(sqlDB, user.ID, other.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, err := playlistServer(Deps{DB: sqlDB}, user, playlist)
+	if err != nil || got == nil || got.ID != first.ID {
+		t.Fatalf("want original server %d, got %v, %v", first.ID, got, err)
+	}
 }

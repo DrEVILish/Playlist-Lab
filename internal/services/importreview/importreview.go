@@ -66,6 +66,23 @@ type Session struct {
 	coverURL     string
 	tracks       []Track
 	progress     Progress
+	confirming   bool
+}
+
+func (s *Session) BeginConfirm() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.confirming {
+		return false
+	}
+	s.confirming = true
+	return true
+}
+
+func (s *Session) EndConfirm() {
+	s.mu.Lock()
+	s.confirming = false
+	s.mu.Unlock()
 }
 
 // PlaylistName and CoverURL are read a lot (templates, confirmImport) - kept
@@ -204,6 +221,8 @@ func FromMatchedTracks(matched, unmatched []matching.MatchedTrack) []Track {
 // same lost-on-restart tradeoff as crossimport.Store and the notification
 // store: these are minutes-long interactive flows, not data anyone expects
 // to survive a restart.
+const SessionLifetime = time.Hour
+
 type Store struct {
 	mu       sync.Mutex
 	sessions map[string]*Session
@@ -232,6 +251,8 @@ func (s *Store) NewBare(source, sourceIdentifier string, userID int64) *Session 
 	s.mu.Lock()
 	s.sessions[sess.ID] = sess
 	s.mu.Unlock()
+	id := sess.ID
+	time.AfterFunc(SessionLifetime, func() { s.Delete(id) })
 	return sess
 }
 

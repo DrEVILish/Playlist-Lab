@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -135,7 +136,8 @@ func TestPlexHomeCopyPlaylist_CreatesPlaylistFromSourceTracks(t *testing.T) {
 	restore := auth.SetPlexAPIBaseForTest(plexTv.URL, plexTv.URL+"/")
 	defer restore()
 
-	var createdTitle string
+	const image = "\x89PNG\r\n\x1a\ncover-image"
+	var createdTitle, coverSourceToken, coverBytes string
 	plexServer := newFakePlexServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -148,6 +150,13 @@ func TestPlexHomeCopyPlaylist_CreatesPlaylistFromSourceTracks(t *testing.T) {
 		case r.URL.Path == "/playlists" && r.Method == http.MethodPost:
 			createdTitle = r.URL.Query().Get("title")
 			w.Write([]byte(`{"MediaContainer":{"Metadata":[{"ratingKey":"new-1","title":"` + createdTitle + `"}]}}`))
+		case r.URL.Path == "/library/metadata/pl-1/composite/1":
+			coverSourceToken = r.Header.Get("X-Plex-Token")
+			w.Header().Set("Content-Type", "image/png")
+			w.Write([]byte(image))
+		case r.URL.Path == "/library/metadata/new-1/posters" && r.Method == http.MethodPost:
+			body, _ := io.ReadAll(r.Body)
+			coverBytes = string(body)
 		default:
 			w.WriteHeader(http.StatusOK)
 		}
@@ -168,6 +177,9 @@ func TestPlexHomeCopyPlaylist_CreatesPlaylistFromSourceTracks(t *testing.T) {
 	}
 	if createdTitle != "Kid's Mix" {
 		t.Errorf("created playlist title = %q, want the source playlist's own name as the default", createdTitle)
+	}
+	if coverBytes != image || coverSourceToken != "home-user-token" {
+		t.Fatal("expected the managed user's artwork to be fetched with its token and copied")
 	}
 	list := store.List(user.ID)
 	if len(list) != 1 || list[0].Status != notifications.StatusSuccess {

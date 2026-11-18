@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 
 	"github.com/go-chi/chi/v5"
 
@@ -186,11 +185,7 @@ func (h *ImportHandler) plexHomeCopyPlaylist(w http.ResponseWriter, r *http.Requ
 	}
 
 	if sourceComposite != "" {
-		// The download request authenticates via the token embedded in the
-		// URL itself (UploadPlaylistPoster attaches no header of its own),
-		// same as plex-home.ts's own `${serverUrl}${composite}?X-Plex-Token=...`.
-		coverURL := userServer.ServerURL + sourceComposite + "?X-Plex-Token=" + url.QueryEscape(sourceToken)
-		if err := targetClient.UploadPlaylistPoster(newPlaylist.RatingKey, coverURL); err != nil {
+		if err := sourceClient.CopyPlaylistPosterTo(targetClient, newPlaylist.RatingKey, sourceComposite); err != nil {
 			// Non-fatal, matching plex-home.ts's own try/catch around cover
 			// copying: the playlist itself already exists with its tracks.
 			slog.Warn("plex-home copy: failed to copy cover art", "error", err, "playlistId", playlistID)

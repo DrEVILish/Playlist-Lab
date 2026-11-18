@@ -13,18 +13,16 @@
 {{else}}
   <div class="plex-home-playlist-list">
     {{range .Playlists}}
-    <div class="card plex-home-playlist-row">
+    <form class="card plex-home-playlist-row"
+      hx-post="/import/plex-home/playlists/{{.ID}}/copy"
+      hx-target="#notifications" hx-swap="innerHTML">
       <div>
         <div class="plex-home-playlist-name">{{.Name}}</div>
         <div class="settings-hint">{{.TrackCount}} tracks</div>
       </div>
-      <button type="button" class="btn btn-primary btn-small"
-        hx-post="/import/plex-home/playlists/{{.ID}}/copy"
-        hx-vals='{"sourceHomeUserId": "{{.SourceHomeUser}}", "newName": "{{.Name}}"}'
-        hx-target="#notifications" hx-swap="innerHTML">
-        Import
-      </button>
-    </div>
+      <input type="hidden" name="sourceHomeUserId" value="{{.SourceHomeUser}}">
+      <button type="submit" class="btn btn-primary btn-small">Import</button>
+    </form>
     {{end}}
   </div>
 {{end}}

@@ -39,7 +39,7 @@
           <select id="setup-server" name="server" class="settings-select" hx-get="/setup/libraries" hx-target="#libraries" hx-trigger="change">
             <option value="">Select a server...</option>
             {{range .Servers}}
-            <option value="{{.Value}}">{{.Name}}</option>
+            <option value="{{.ClientIdentifier}}">{{.Name}}</option>
             {{end}}
           </select>
         </div>

@@ -1,6 +1,8 @@
 package actionqueue
 
 import (
+	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -77,3 +79,31 @@ var errFailed = &testError{"handler failed"}
 type testError struct{ msg string }
 
 func (e *testError) Error() string { return e.msg }
+
+func TestWaitDrainsQueuedWork(t *testing.T) {
+	q := New(notifications.NewStore())
+	release := make(chan struct{})
+	done := make(chan struct{})
+	q.Enqueue(1, "job", notifications.TypeAction, func(string) error {
+		<-release
+		close(done)
+		return nil
+	})
+
+	expired, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := q.Wait(expired); !errors.Is(err, context.Canceled) {
+		t.Errorf("waiting for an active job with an expired context = %v", err)
+	}
+	close(release)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := q.Wait(ctx); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	default:
+		t.Fatal("Wait returned before the job completed")
+	}
+}

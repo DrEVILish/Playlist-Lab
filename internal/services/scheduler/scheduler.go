@@ -19,9 +19,12 @@ package scheduler
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/drevilish/playlist-lab/internal/adapters"
@@ -50,68 +53,70 @@ const (
 	traktAdminConfigKey = "trakt_api_key"
 )
 
-// frequencySeconds ports getDueSchedules()'s switch on schedule.frequency.
-var frequencySeconds = map[string]int64{
-	"daily":       86400,
-	"weekly":      604800,
-	"fortnightly": 1209600,
-	"monthly":     2592000,
-}
-
-// IsDue ports database.ts's getDueSchedules() per-schedule predicate as a
-// pure function of (schedule, now) so it's unit-testable without a DB - see
-// scheduler_test.go for the run_time/frequency edge cases.
 func IsDue(s db.Schedule, now time.Time) bool {
-	cfg := s.ParsedConfig()
-	nowUnix := now.Unix()
-
-	atOrPastRunTime := func() bool {
-		if cfg.RunTime == "" {
-			return true
-		}
-		var hour, minute int
-		if _, err := fmt.Sscanf(cfg.RunTime, "%d:%d", &hour, &minute); err != nil {
-			return true
-		}
-		scheduled := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, now.Location())
-		return !now.Before(scheduled)
-	}
-
-	if !s.LastRun.Valid {
-		startDate, err := time.ParseInLocation("2006-01-02", s.StartDate, now.Location())
-		if err != nil || now.Before(startDate) {
-			return false
-		}
-		return atOrPastRunTime()
-	}
-
-	need, ok := frequencySeconds[s.Frequency]
-	if !ok {
-		return false
-	}
-	if nowUnix-s.LastRun.Int64 < need {
-		return false
-	}
-	return atOrPastRunTime()
+	next, ok := NextRun(s, now)
+	return ok && !now.Before(next)
 }
 
-// NextRun ports getNextRunDate/getNextRunTimestamp (scheduleTime.ts) to Go:
-// the next instant a schedule is expected to fire, for display only (IsDue
-// above is what actually gates execution). Returns false if it can't be
-// determined (bad start_date, unknown frequency).
+// NextRun anchors daily, weekly and monthly recurrence to the configured wall clock.
 func NextRun(s db.Schedule, now time.Time) (time.Time, bool) {
-	if !s.LastRun.Valid {
-		startDate, err := time.ParseInLocation("2006-01-02", s.StartDate, now.Location())
-		if err != nil {
-			return time.Time{}, false
-		}
-		return startDate, true
+	start, startErr := time.ParseInLocation("2006-01-02", s.StartDate, now.Location())
+	clock, _ := time.Parse("15:04", s.ParsedConfig().RunTime)
+	withClock := func(day time.Time) time.Time {
+		return time.Date(day.Year(), day.Month(), day.Day(), clock.Hour(), clock.Minute(), 0, 0, now.Location())
 	}
-	days, ok := frequencySeconds[s.Frequency]
-	if !ok {
+	today := withClock(now)
+
+	last := s.LastAttempt
+	if !last.Valid {
+		last = s.LastRun
+	}
+	var days, months int
+	switch s.Frequency {
+	case "daily":
+		days = 1
+	case "weekly":
+		days = 7
+	case "fortnightly":
+		days = 14
+	case "monthly":
+		months = 1
+	default:
 		return time.Time{}, false
 	}
-	return time.Unix(s.LastRun.Int64, 0).Add(time.Duration(days) * time.Second), true
+	if !last.Valid {
+		if startErr != nil {
+			return time.Time{}, false
+		}
+		next := withClock(start)
+		if next.Before(today) && now.Before(today) {
+			next = today
+		}
+		return next, true
+	}
+
+	lastAt := time.Unix(last.Int64, 0).In(now.Location())
+	// A manual run before the scheduled hour leaves that day's slot available.
+	if lastAt.Before(withClock(lastAt)) {
+		lastAt = lastAt.AddDate(0, 0, -1)
+	}
+	next := withClock(lastAt.AddDate(0, 0, days))
+	if months > 0 {
+		month := time.Date(lastAt.Year(), lastAt.Month()+time.Month(months), 1, 0, 0, 0, 0, now.Location())
+		monthEnd := month.AddDate(0, 1, -1)
+		day := lastAt.Day()
+		if startErr == nil {
+			day = start.Day()
+		}
+		next = withClock(month.AddDate(0, 0, min(day, monthEnd.Day())-1))
+	}
+	if startErr == nil && next.Before(withClock(start)) {
+		next = withClock(start)
+	}
+	if next.Before(today) && now.Before(today) {
+		next = today
+	}
+	return next, true
 }
 
 // Deps bundles what RunDue/RunSingle need to reach Plex and the rest of the
@@ -139,12 +144,13 @@ func RunDue(d Deps) {
 		if !IsDue(s, now) {
 			continue
 		}
-		if err := Run(d, s); err != nil {
+		if ran, err := run(d, s, true); err != nil {
 			slog.Error("schedule checker: schedule failed", "scheduleId", s.ID, "error", err)
 			failed++
 			continue
+		} else if ran {
+			executed++
 		}
-		executed++
 	}
 	if executed+failed > 0 {
 		slog.Info("schedule checker job completed", "executed", executed, "failed", failed)
@@ -153,26 +159,132 @@ func RunDue(d Deps) {
 	}
 }
 
-// Run executes one schedule regardless of whether it's currently due -
-// shared by the cron batch (RunDue, after an IsDue check) and manual
-// "Run Now"/"Run All" triggers (handlers/schedules.go), which skip the
-// due-check entirely.
+var (
+	runningTasks       sync.Map
+	ErrScheduleRunning = errors.New("refresh already in progress")
+)
+
+type taskKey struct {
+	db   *sql.DB
+	kind string
+	id   int64
+}
+
 func Run(d Deps, s db.Schedule) error {
-	switch s.ScheduleType {
-	case "playlist_refresh":
-		return executePlaylistRefresh(d, s)
-	case "mix_generation":
-		return executeMixGeneration(d, s)
-	case "collection_refresh":
-		return executeCollectionRefresh(d, s)
-	default:
-		return fmt.Errorf("unknown schedule type: %s", s.ScheduleType)
+	_, err := run(d, s, false)
+	return err
+}
+
+func run(d Deps, s db.Schedule, dueOnly bool) (bool, error) {
+	key := taskKey{d.DB, "schedule", s.ID}
+	if s.PlaylistID.Valid {
+		key = taskKey{d.DB, "playlist", s.PlaylistID.Int64}
 	}
+	if _, running := runningTasks.LoadOrStore(key, struct{}{}); running {
+		if dueOnly {
+			return false, nil
+		}
+		return false, ErrScheduleRunning
+	}
+	defer runningTasks.Delete(key)
+
+	current, err := db.GetScheduleByID(d.DB, s.ID)
+	if err != nil {
+		return false, err
+	}
+	if current == nil || current.UserID != s.UserID {
+		return false, db.ErrScheduleTargetNotFound
+	}
+	now := time.Now()
+	if dueOnly && !IsDue(*current, now) {
+		return false, nil
+	}
+	claimed, err := db.ClaimScheduleAttempt(d.DB, *current, now)
+	if err != nil {
+		return false, err
+	}
+	if !claimed {
+		if dueOnly {
+			return false, nil
+		}
+		return false, ErrScheduleRunning
+	}
+
+	switch current.ScheduleType {
+	case "playlist_refresh":
+		err = executePlaylistRefresh(d, *current)
+	case "mix_generation":
+		err = executeMixGeneration(d, *current)
+	case "collection_refresh":
+		err = executeCollectionRefresh(d, *current)
+	default:
+		err = fmt.Errorf("unknown schedule type: %s", current.ScheduleType)
+	}
+	if err != nil {
+		return true, err
+	}
+	return true, db.UpdateScheduleLastRun(d.DB, current.ID)
 }
 
 func buildClient(d Deps, user *db.User, server *db.UserServer) *plex.Client {
 	token := plex.ResolveToken(user.PlexToken, server.AccessToken.String)
 	return plex.NewClient(server.ServerURL, token, d.ClientID, "Playlist Lab")
+}
+
+func playlistServer(d Deps, user *db.User, playlist *db.Playlist) (*db.UserServer, error) {
+	if playlist == nil {
+		server, err := db.GetUserMusicServer(d.DB, user.ID)
+		if err == nil && server == nil {
+			err = errors.New("no Plex music server configured")
+		}
+		return server, err
+	}
+	if playlist.UserID != user.ID {
+		return nil, db.ErrScheduleTargetNotFound
+	}
+	servers, err := db.GetUserServers(d.DB, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	var legacyServer *db.UserServer
+	for _, server := range servers {
+		if !server.LibraryID.Valid {
+			continue
+		}
+		if playlist.ServerClientID.Valid {
+			if server.ServerClientID == playlist.ServerClientID.String {
+				return &server, nil
+			}
+			continue
+		}
+		if legacyServer != nil && server.ServerClientID != legacyServer.ServerClientID {
+			return nil, errors.New("legacy playlist server is ambiguous; import the playlist again to bind it")
+		}
+		legacyServer = &server
+	}
+	if legacyServer == nil {
+		return nil, errors.New("the playlist's Plex music server is no longer configured")
+	}
+	if !isPendingID(playlist.PlexPlaylistID) {
+		list, err := buildClient(d, user, legacyServer).GetPlaylists()
+		if err != nil {
+			return nil, err
+		}
+		found := false
+		for _, p := range list {
+			if p.RatingKey == playlist.PlexPlaylistID && p.Title == playlist.Name && p.PlaylistType == "audio" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, errors.New("legacy playlist could not be verified on the selected Plex server")
+		}
+	}
+	if err := db.BindPlaylistServer(d.DB, playlist.ID, legacyServer.ServerClientID); err != nil {
+		return nil, err
+	}
+	return legacyServer, nil
 }
 
 // executePlaylistRefresh ports executePlaylistRefreshSchedules' per-schedule
@@ -188,16 +300,17 @@ func executePlaylistRefresh(d Deps, s db.Schedule) error {
 	if err != nil || user == nil {
 		return fmt.Errorf("user not found for schedule %d", s.ID)
 	}
-	server, err := db.GetUserMusicServer(d.DB, s.UserID)
-	if err != nil || server == nil {
-		return fmt.Errorf("no Plex server configured for schedule %d", s.ID)
-	}
 	playlist, err := db.GetPlaylistByID(d.DB, s.PlaylistID.Int64)
-	if err != nil || playlist == nil {
-		return fmt.Errorf("playlist not found for schedule %d", s.ID)
+	if err != nil {
+		return err
 	}
-
-	executionID, _ := db.CreateScheduleExecution(d.DB, s.ID, s.UserID, playlist.Name)
+	if playlist == nil || playlist.UserID != user.ID {
+		return db.ErrScheduleTargetNotFound
+	}
+	executionID, err := db.CreateScheduleExecution(d.DB, s.ID, s.UserID, playlist.Name)
+	if err != nil {
+		return err
+	}
 	fail := func(err error) error {
 		if executionID != 0 {
 			_ = db.CompleteScheduleExecution(d.DB, executionID, "failed", 0, 0, err.Error())
@@ -205,21 +318,29 @@ func executePlaylistRefresh(d Deps, s db.Schedule) error {
 		return err
 	}
 
+	server, err := playlistServer(d, user, playlist)
+	if err != nil {
+		return fail(err)
+	}
+	if playlist.Source == "plex" {
+		sourceServer, err := db.GetUserMusicServer(d.DB, user.ID)
+		if err != nil {
+			return fail(err)
+		}
+		if sourceServer == nil || sourceServer.ServerClientID != server.ServerClientID {
+			return fail(errors.New("select the original music server to refresh this Plex import"))
+		}
+	}
 	client := buildClient(d, user, server)
 	sourceIdentifier := playlist.SourceURL.String
 	if sourceIdentifier == "" {
 		sourceIdentifier = playlist.PlexPlaylistID
 	}
+	accumulate := s.ParsedConfig().UpdateMode == "accumulate"
 	result, err := importsvc.ImportPlaylist(context.Background(), d.Registry, d.DB, client, playlist.Source, sourceIdentifier,
-		importsvc.Options{UserID: s.UserID, LibraryID: server.LibraryID.String}, nil, nil)
+		importsvc.Options{UserID: s.UserID, LibraryID: server.LibraryID.String, StrictSearch: !accumulate}, nil, nil)
 	if err != nil {
 		return fail(err)
-	}
-
-	cfg := s.ParsedConfig()
-	updateMode := cfg.UpdateMode
-	if updateMode != "accumulate" {
-		updateMode = "replace"
 	}
 
 	matched := matching.DedupeByPlexRatingKey(result.Matched)
@@ -232,11 +353,14 @@ func executePlaylistRefresh(d Deps, s db.Schedule) error {
 
 	targetPlaylistID, err := resolveTargetPlaylistID(client, playlist.PlexPlaylistID, playlist.Name)
 	if err != nil {
-		slog.Warn("schedule refresh: failed to resolve target playlist, will create new", "scheduleId", s.ID, "error", err)
+		return fail(err)
+	}
+	if len(trackURIs) == 0 && (targetPlaylistID == "" || !accumulate) {
+		return fail(errors.New("no replacement tracks matched"))
 	}
 
 	var newRatingKey string
-	if targetPlaylistID != "" && updateMode == "accumulate" {
+	if targetPlaylistID != "" && accumulate {
 		if err := accumulateIntoPlaylist(client, targetPlaylistID, matched, server.ServerClientID); err != nil {
 			return fail(err)
 		}
@@ -262,26 +386,22 @@ func executePlaylistRefresh(d Deps, s db.Schedule) error {
 	}
 
 	if newRatingKey != playlist.PlexPlaylistID {
-		_ = db.UpdatePlaylistPlexID(d.DB, playlist.ID, newRatingKey)
+		err = db.UpdatePlaylistPlexID(d.DB, playlist.ID, newRatingKey)
 	} else {
-		_ = db.TouchPlaylist(d.DB, playlist.ID)
+		err = db.TouchPlaylist(d.DB, playlist.ID)
+	}
+	if err != nil {
+		return fail(err)
 	}
 
-	if len(result.Unmatched) > 0 {
-		rows := make([]db.NewMissingTrack, len(result.Unmatched))
-		for i, t := range result.Unmatched {
-			rows[i] = db.NewMissingTrack{Title: t.Title, Artist: t.Artist, Album: t.Album, Position: i, Source: "Scheduled refresh"}
-		}
-		if err := db.AddMissingTracks(d.DB, s.UserID, playlist.ID, rows); err != nil {
-			slog.Warn("schedule refresh: failed to save missing tracks", "scheduleId", s.ID, "error", err)
-		}
+	rows := make([]db.NewMissingTrack, len(result.Unmatched))
+	for i, t := range result.Unmatched {
+		rows[i] = db.NewMissingTrack{Title: t.Title, Artist: t.Artist, Album: t.Album, Position: i, Source: "Scheduled refresh"}
 	}
-
-	_ = db.UpdateScheduleLastRun(d.DB, s.ID)
-	if executionID != 0 {
-		_ = db.CompleteScheduleExecution(d.DB, executionID, "success", result.MatchedCount, len(result.Unmatched), "")
+	if err := db.AddMissingTracks(d.DB, s.UserID, playlist.ID, rows); err != nil {
+		return fail(err)
 	}
-	return nil
+	return db.CompleteScheduleExecution(d.DB, executionID, "success", result.MatchedCount, len(result.Unmatched), "")
 }
 
 // resolveTargetPlaylistID ports resolveTargetPlaylistId: a refresh/mix-
@@ -308,28 +428,88 @@ func isPendingID(id string) bool {
 	return len(id) >= 8 && id[:8] == "pending-"
 }
 
-// replacePlaylistTracks clears a Plex playlist's current items and refills
-// it with trackURIs, in order - same ratingKey throughout.
+// Add and verify new tracks before deleting any old items.
 func replacePlaylistTracks(client *plex.Client, playlistID string, trackURIs []string) error {
+	if len(trackURIs) == 0 {
+		return errors.New("no replacement tracks matched")
+	}
 	existing, err := client.GetPlaylistTracks(playlistID)
 	if err != nil {
 		return err
 	}
-	itemIDs := make([]string, 0, len(existing))
-	for _, t := range existing {
-		if t.PlaylistItemID != 0 {
-			itemIDs = append(itemIDs, fmt.Sprintf("%d", t.PlaylistItemID))
+	present := make(map[string]bool, len(existing))
+	for _, track := range existing {
+		present[track.RatingKey] = true
+	}
+	wanted := make(map[string]bool, len(trackURIs))
+	keys := make([]string, 0, len(trackURIs))
+	var additions []string
+	for _, uri := range trackURIs {
+		_, key, ok := strings.Cut(uri, "/library/metadata/")
+		if !ok || key == "" {
+			return fmt.Errorf("invalid track URI %q", uri)
+		}
+		if wanted[key] {
+			continue
+		}
+		wanted[key] = true
+		keys = append(keys, key)
+		if !present[key] {
+			additions = append(additions, uri)
 		}
 	}
-	if len(itemIDs) > 0 {
-		if err := client.RemoveMultipleFromPlaylist(playlistID, itemIDs); err != nil {
+	if len(additions) > 0 {
+		if err := client.AddToPlaylist(playlistID, additions); err != nil {
+			return err
+		}
+		existing, err = client.GetPlaylistTracks(playlistID)
+		if err != nil {
 			return err
 		}
 	}
-	if len(trackURIs) > 0 {
-		return client.AddToPlaylist(playlistID, trackURIs)
+	return reconcilePlaylistOrder(client, playlistID, existing, keys, wanted)
+}
+
+func reconcilePlaylistOrder(client *plex.Client, playlistID string, existing []plex.Track, keys []string, wanted map[string]bool) error {
+	itemIDs := make(map[string]string, len(keys))
+	var stale []string
+	for _, track := range existing {
+		if track.PlaylistItemID == 0 {
+			return errors.New("Plex omitted a playlist item ID")
+		}
+		id := strconv.Itoa(track.PlaylistItemID)
+		if !wanted[track.RatingKey] || itemIDs[track.RatingKey] != "" {
+			stale = append(stale, id)
+			continue
+		}
+		itemIDs[track.RatingKey] = id
 	}
-	return nil
+	if len(itemIDs) != len(keys) {
+		return errors.New("Plex did not return all replacement tracks")
+	}
+
+	// Move only the desired prefix; obsolete items finish at the end.
+	order := make([]string, 0, len(existing))
+	for _, track := range existing {
+		order = append(order, strconv.Itoa(track.PlaylistItemID))
+	}
+	previous := "0"
+	for i, key := range keys {
+		id := itemIDs[key]
+		if order[i] != id {
+			j := i
+			for order[j] != id {
+				j++
+			}
+			if err := client.MovePlaylistItem(playlistID, id, previous); err != nil {
+				return err
+			}
+			copy(order[i+1:j+1], order[i:j])
+			order[i] = id
+		}
+		previous = id
+	}
+	return client.RemoveMultipleFromPlaylist(playlistID, stale)
 }
 
 // accumulateIntoPlaylist adds only the tracks not already present, leaving
@@ -363,9 +543,15 @@ func executeMixGeneration(d Deps, s db.Schedule) error {
 	if err != nil || user == nil {
 		return fmt.Errorf("user not found for schedule %d", s.ID)
 	}
-	server, err := db.GetUserMusicServer(d.DB, s.UserID)
-	if err != nil || server == nil || !server.LibraryID.Valid {
-		return fmt.Errorf("no Plex library selected for schedule %d", s.ID)
+	var linkedPlaylist *db.Playlist
+	if s.PlaylistID.Valid {
+		linkedPlaylist, err = db.GetPlaylistByID(d.DB, s.PlaylistID.Int64)
+		if err != nil {
+			return err
+		}
+		if linkedPlaylist == nil || linkedPlaylist.UserID != user.ID {
+			return db.ErrScheduleTargetNotFound
+		}
 	}
 
 	cfg := s.ParsedConfig()
@@ -377,7 +563,10 @@ func executeMixGeneration(d Deps, s db.Schedule) error {
 		playlistName = cfg.MixType + " Mix"
 	}
 
-	executionID, _ := db.CreateScheduleExecution(d.DB, s.ID, s.UserID, playlistName)
+	executionID, err := db.CreateScheduleExecution(d.DB, s.ID, s.UserID, playlistName)
+	if err != nil {
+		return err
+	}
 	fail := func(err error) error {
 		if executionID != 0 {
 			_ = db.CompleteScheduleExecution(d.DB, executionID, "failed", 0, 0, err.Error())
@@ -385,6 +574,10 @@ func executeMixGeneration(d Deps, s db.Schedule) error {
 		return err
 	}
 
+	server, err := playlistServer(d, user, linkedPlaylist)
+	if err != nil {
+		return fail(err)
+	}
 	token := plex.ResolveToken(user.PlexToken, server.AccessToken.String)
 	serverURL, libraryID := server.ServerURL, server.LibraryID.String
 
@@ -402,17 +595,13 @@ func executeMixGeneration(d Deps, s db.Schedule) error {
 		trackURIs[i] = client.BuildTrackURI(key, server.ServerClientID)
 	}
 
-	var linkedPlaylist *db.Playlist
-	if s.PlaylistID.Valid {
-		linkedPlaylist, _ = db.GetPlaylistByID(d.DB, s.PlaylistID.Int64)
-	}
 	trackedPlexID := ""
 	if linkedPlaylist != nil {
 		trackedPlexID = linkedPlaylist.PlexPlaylistID
 	}
 	targetPlaylistID, err := resolveTargetPlaylistID(client, trackedPlexID, playlistName)
 	if err != nil {
-		slog.Warn("schedule mix: failed to resolve target playlist, will create new", "scheduleId", s.ID, "error", err)
+		return fail(err)
 	}
 
 	var ratingKey string
@@ -432,20 +621,21 @@ func executeMixGeneration(d Deps, s db.Schedule) error {
 
 	if linkedPlaylist != nil {
 		if ratingKey != linkedPlaylist.PlexPlaylistID {
-			_ = db.UpdatePlaylistPlexID(d.DB, linkedPlaylist.ID, ratingKey)
+			if err := db.UpdatePlaylistPlexID(d.DB, linkedPlaylist.ID, ratingKey); err != nil {
+				return fail(err)
+			}
 		}
 	} else {
-		row, err := db.CreatePlaylistRow(d.DB, s.UserID, ratingKey, playlistName, "mix", "")
-		if err == nil {
-			_ = db.LinkSchedulePlaylist(d.DB, s.ID, row.ID)
+		row, err := db.CreatePlaylistRowForServer(d.DB, s.UserID, server.ServerClientID, ratingKey, playlistName, "mix", "")
+		if err != nil {
+			return fail(err)
+		}
+		if err := db.LinkSchedulePlaylist(d.DB, s.ID, row.ID); err != nil {
+			return fail(err)
 		}
 	}
 
-	_ = db.UpdateScheduleLastRun(d.DB, s.ID)
-	if executionID != 0 {
-		_ = db.CompleteScheduleExecution(d.DB, executionID, "success", result.TrackCount, 0, "")
-	}
-	return nil
+	return db.CompleteScheduleExecution(d.DB, executionID, "success", result.TrackCount, 0, "")
 }
 
 // executeCollectionRefresh is the schedule-driven wrapper around
@@ -456,8 +646,8 @@ func executeCollectionRefresh(d Deps, s db.Schedule) error {
 		return fmt.Errorf("schedule %d has no linked collection", s.ID)
 	}
 	coll, err := db.GetCollectionByID(d.DB, s.CollectionID.Int64)
-	if err != nil || coll == nil {
-		return fmt.Errorf("collection not found for schedule %d", s.ID)
+	if err != nil || coll == nil || coll.UserID != s.UserID {
+		return db.ErrScheduleTargetNotFound
 	}
 	user, err := db.GetUserByID(d.DB, s.UserID)
 	if err != nil || user == nil {
@@ -467,11 +657,14 @@ func executeCollectionRefresh(d Deps, s db.Schedule) error {
 	// the user's single default (db.GetUserServer) - it may target any of a
 	// user's connected libraries, not just their default music one.
 	server, err := db.GetUserServerByID(d.DB, coll.ServerID)
-	if err != nil || server == nil {
-		return fmt.Errorf("server not found for collection %d", coll.ID)
+	if err != nil || server == nil || server.UserID != s.UserID || !server.IsOwner {
+		return fmt.Errorf("owned server not found for collection %d", coll.ID)
 	}
 
-	executionID, _ := db.CreateScheduleExecution(d.DB, s.ID, s.UserID, coll.Name)
+	executionID, err := db.CreateScheduleExecution(d.DB, s.ID, s.UserID, coll.Name)
+	if err != nil {
+		return err
+	}
 	added, removed, err := RefreshCollection(d.DB, buildClient(d, user, server), coll, server)
 	if err != nil {
 		if executionID != 0 {
@@ -479,11 +672,7 @@ func executeCollectionRefresh(d Deps, s db.Schedule) error {
 		}
 		return err
 	}
-	_ = db.UpdateScheduleLastRun(d.DB, s.ID)
-	if executionID != 0 {
-		_ = db.CompleteScheduleExecution(d.DB, executionID, "success", added, removed, "")
-	}
-	return nil
+	return db.CompleteScheduleExecution(d.DB, executionID, "success", added, removed, "")
 }
 
 // RefreshCollection evaluates a collection's definition (DESIGN.md §11.11),
@@ -495,6 +684,12 @@ func executeCollectionRefresh(d Deps, s db.Schedule) error {
 // that bookkeeping entirely). Persists the collection's plex_collection_id/
 // updated_at itself either way. Returns (added, removed) item counts.
 func RefreshCollection(sqlDB *sql.DB, client *plex.Client, coll *db.Collection, server *db.UserServer) (added, removed int, err error) {
+	key := taskKey{sqlDB, "collection", coll.ID}
+	if _, running := runningTasks.LoadOrStore(key, struct{}{}); running {
+		return 0, 0, ErrScheduleRunning
+	}
+	defer runningTasks.Delete(key)
+
 	targetKeys, err := resolveCollectionTargets(sqlDB, client, coll)
 	if err != nil {
 		return 0, 0, err
@@ -540,11 +735,11 @@ func RefreshCollection(sqlDB *sql.DB, client *plex.Client, coll *db.Collection, 
 	}
 
 	if plexCollectionID != coll.PlexCollectionID.String {
-		_ = db.UpdateCollectionPlexID(sqlDB, coll.ID, plexCollectionID)
+		err = db.UpdateCollectionPlexID(sqlDB, coll.ID, plexCollectionID)
 	} else {
-		_ = db.TouchCollection(sqlDB, coll.ID)
+		err = db.TouchCollection(sqlDB, coll.ID)
 	}
-	return added, removed, nil
+	return added, removed, err
 }
 
 // itemTypeForLibraryType maps a Plex library section type to the numeric

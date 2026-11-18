@@ -56,12 +56,19 @@ func DeleteCrossImportJob(sqlDB *sql.DB, jobID int64) error {
 }
 
 func CompleteCrossImportJob(sqlDB *sql.DB, jobID, userID int64, targetPlaylistName string, matched, unmatched, skipped, total int, unmatchedTracksJSON string) error {
+	status := "complete"
+	if matched+unmatched+skipped < total {
+		status = "partial"
+		if matched == 0 {
+			status = "failed"
+		}
+	}
 	_, err := sqlDB.Exec(
 		`UPDATE cross_import_jobs SET
-		   status = 'complete', target_playlist_name = ?, matched_count = ?, unmatched_count = ?,
+		   status = ?, target_playlist_name = ?, matched_count = ?, unmatched_count = ?,
 		   skipped_count = ?, total_count = ?, unmatched_tracks = ?, completed_at = ?
 		 WHERE id = ? AND user_id = ?`,
-		targetPlaylistName, matched, unmatched, skipped, total, unmatchedTracksJSON, time.Now().UnixMilli(), jobID, userID,
+		status, targetPlaylistName, matched, unmatched, skipped, total, unmatchedTracksJSON, time.Now().UnixMilli(), jobID, userID,
 	)
 	return err
 }

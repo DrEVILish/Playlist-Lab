@@ -104,6 +104,9 @@ func (h *CrossImportHandler) playlists(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	for i := range playlists {
+		playlists[i].CoverURL = ImageProxyURL(playlists[i].CoverURL)
+	}
 	h.Tmpl.RenderPartial(w, "partials/cross_import_playlists.html", map[string]any{"Playlists": playlists})
 }
 
@@ -136,7 +139,7 @@ func (h *CrossImportHandler) startMatch(w http.ResponseWriter, r *http.Request) 
 	}
 
 	sessionID := uuid.NewString()
-	sess := h.Sessions.New(sessionID, jobID, defaultTargetID, adapters.TargetConfig{})
+	sess := h.Sessions.New(sessionID, jobID, user.ID, defaultTargetID, adapters.TargetConfig{})
 	sess.SetProgress(crossimport.Progress{Phase: crossimport.PhaseFetching})
 
 	// The background job outlives this request (the handler returns well
@@ -209,7 +212,7 @@ func (h *CrossImportHandler) runMatch(ctx context.Context, userID, jobID int64, 
 
 func (h *CrossImportHandler) matchStatus(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionId")
-	sess, ok := h.Sessions.Get(sessionID)
+	sess, ok := h.Sessions.Get(sessionID, auth.CurrentUser(r).ID)
 	if !ok {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
@@ -226,7 +229,7 @@ func (h *CrossImportHandler) matchStatus(w http.ResponseWriter, r *http.Request)
 
 func (h *CrossImportHandler) cancelMatch(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionId")
-	if sess, ok := h.Sessions.Get(sessionID); ok {
+	if sess, ok := h.Sessions.Get(sessionID, auth.CurrentUser(r).ID); ok {
 		sess.Cancel()
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -238,7 +241,7 @@ func (h *CrossImportHandler) trackIndex(r *http.Request) (int, error) {
 
 func (h *CrossImportHandler) toggleSkip(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionId")
-	sess, ok := h.Sessions.Get(sessionID)
+	sess, ok := h.Sessions.Get(sessionID, auth.CurrentUser(r).ID)
 	if !ok {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
@@ -278,7 +281,7 @@ func (h *CrossImportHandler) renderReview(w http.ResponseWriter, sessionID strin
 // track the automatic match got wrong, mirroring POST /api/cross-import/search.
 func (h *CrossImportHandler) searchCandidates(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionId")
-	sess, ok := h.Sessions.Get(sessionID)
+	sess, ok := h.Sessions.Get(sessionID, auth.CurrentUser(r).ID)
 	if !ok {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
@@ -311,7 +314,7 @@ func (h *CrossImportHandler) searchCandidates(w http.ResponseWriter, r *http.Req
 
 func (h *CrossImportHandler) selectCandidate(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionId")
-	sess, ok := h.Sessions.Get(sessionID)
+	sess, ok := h.Sessions.Get(sessionID, auth.CurrentUser(r).ID)
 	if !ok {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
@@ -344,7 +347,7 @@ func (h *CrossImportHandler) selectCandidate(w http.ResponseWriter, r *http.Requ
 func (h *CrossImportHandler) execute(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
 	sessionID := chi.URLParam(r, "sessionId")
-	sess, ok := h.Sessions.Get(sessionID)
+	sess, ok := h.Sessions.Get(sessionID, auth.CurrentUser(r).ID)
 	if !ok {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
@@ -363,7 +366,7 @@ func (h *CrossImportHandler) execute(w http.ResponseWriter, r *http.Request) {
 	jobID := sess.JobID
 
 	h.Queue.Enqueue(user.ID, "Import: "+playlistName, notifications.TypeImport, func(notificationID string) error {
-		_, name, _, err := target.CreatePlaylist(context.Background(), playlistName, results, sess.TargetConfig, user.ID)
+		_, name, added, err := target.CreatePlaylist(context.Background(), playlistName, results, sess.TargetConfig, user.ID)
 		if err != nil {
 			_ = db.UpdateCrossImportJobStatus(h.DB, jobID, "failed")
 			return err
@@ -385,12 +388,16 @@ func (h *CrossImportHandler) execute(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		unmatchedJSON, _ := json.Marshal(unmatchedTracks)
-		if err := db.CompleteCrossImportJob(h.DB, jobID, user.ID, name, matched, unmatched, skipped, len(results), string(unmatchedJSON)); err != nil {
+		if err := db.CompleteCrossImportJob(h.DB, jobID, user.ID, name, added, unmatched, skipped, len(results), string(unmatchedJSON)); err != nil {
 			return err
 		}
 
 		status := notifications.StatusSuccess
-		detail := fmt.Sprintf("Imported %d tracks", matched)
+		detail := fmt.Sprintf("Imported %d tracks", added)
+		if added < matched {
+			status = notifications.StatusError
+			detail = fmt.Sprintf("Imported %d of %d matched tracks. The target did not add the rest.", added, matched)
+		}
 		pct := 100
 		h.Notifications.Update(user.ID, notificationID, notifications.Patch{Status: &status, Detail: &detail, Progress: &pct})
 		h.Sessions.Delete(sessionID)
@@ -446,13 +453,7 @@ func (h *CrossImportHandler) oauthStart(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	sid := auth.SessionID(r)
-	data, err := h.Store.Get(sid)
-	if err != nil {
-		http.Error(w, "session not found", http.StatusUnauthorized)
-		return
-	}
-	data.OAuthState = nonce
-	if err := h.Store.Save(sid, data); err != nil {
+	if err := h.Store.SetOAuthState(sid, user.ID, service+":"+nonce); err != nil {
 		http.Error(w, "failed to start OAuth flow", http.StatusInternalServerError)
 		return
 	}
@@ -494,13 +495,10 @@ func (h *CrossImportHandler) oauthCallback(w http.ResponseWriter, r *http.Reques
 	// than trusting the code.
 	state := r.URL.Query().Get("state")
 	sid := auth.SessionID(r)
-	data, err := h.Store.Get(sid)
-	if err != nil || data.OAuthState == "" || state == "" || data.OAuthState != state {
+	if state == "" || h.Store.ConsumeOAuthState(sid, user.ID, service+":"+state) != nil {
 		http.Error(w, "invalid or expired OAuth state", http.StatusBadRequest)
 		return
 	}
-	data.OAuthState = ""
-	_ = h.Store.Save(sid, data)
 
 	redirectURI := fmt.Sprintf("%s://%s/cross-import/oauth/%s/callback", schemeOf(r), r.Host, service)
 	if err := oauth.HandleOAuthCallback(r.Context(), code, user.ID, redirectURI); err != nil {

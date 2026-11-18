@@ -174,12 +174,10 @@ func CascadeCountsForServer(sqlDB *sql.DB, serverID int64) (collections, schedul
 	return collections, schedules, nil
 }
 
-// UpdateServerURL refreshes a linked server's stored connection URL - the
-// Settings "refresh connection" action (DESIGN.md §11.11), for when network
-// topology changes which of a server's connections (local/remote/relay)
-// is best after it was originally linked.
-func UpdateServerURL(sqlDB *sql.DB, id int64, url string) error {
-	_, err := sqlDB.Exec("UPDATE user_servers SET server_url = ? WHERE id = ?", url, id)
+// UpdateServerConnection keeps the Plex discovery address and credentials together.
+func UpdateServerConnection(sqlDB *sql.DB, id, userID int64, url, token string, owned bool) error {
+	_, err := sqlDB.Exec("UPDATE user_servers SET server_url = ?, access_token = ?, is_owner = ? WHERE id = ? AND user_id = ?",
+		url, nullIfEmpty(token), owned, id, userID)
 	return err
 }
 

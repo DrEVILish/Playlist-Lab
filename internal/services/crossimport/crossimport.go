@@ -47,6 +47,7 @@ type Progress struct {
 type Session struct {
 	mu sync.Mutex
 
+	UserID       int64
 	JobID        int64
 	TargetID     string
 	TargetConfig adapters.TargetConfig
@@ -133,19 +134,22 @@ func NewStore() *Store {
 	return &Store{sessions: map[string]*Session{}}
 }
 
-func (s *Store) New(sessionID string, jobID int64, targetID string, cfg adapters.TargetConfig) *Session {
-	sess := &Session{JobID: jobID, TargetID: targetID, TargetConfig: cfg}
+func (s *Store) New(sessionID string, jobID, userID int64, targetID string, cfg adapters.TargetConfig) *Session {
+	sess := &Session{UserID: userID, JobID: jobID, TargetID: targetID, TargetConfig: cfg}
 	s.mu.Lock()
 	s.sessions[sessionID] = sess
 	s.mu.Unlock()
 	return sess
 }
 
-func (s *Store) Get(sessionID string) (*Session, bool) {
+func (s *Store) Get(sessionID string, userID int64) (*Session, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	sess, ok := s.sessions[sessionID]
-	return sess, ok
+	if !ok || sess.UserID != userID {
+		return nil, false
+	}
+	return sess, true
 }
 
 func (s *Store) Delete(sessionID string) {

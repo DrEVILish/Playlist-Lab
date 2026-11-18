@@ -21,7 +21,7 @@
           <select id="add-server-select" class="form-select" name="server" hx-get="/setup/libraries" hx-target="#add-server-libraries" hx-trigger="change" required>
             <option value="">Select a server...</option>
             {{range .Servers}}
-            <option value="{{.Value}}">{{.Name}}</option>
+            <option value="{{.ClientIdentifier}}">{{.Name}}</option>
             {{end}}
           </select>
         </div>

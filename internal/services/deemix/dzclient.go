@@ -22,6 +22,8 @@ import (
 // behave differently (or reject requests outright) for unrecognized UAs.
 const dzUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36"
 
+var metadataClient = &http.Client{Timeout: 10 * time.Second}
+
 var (
 	errNotLoggedIn  = errors.New("not logged in to deezer")
 	errWrongLicense = errors.New("this deezer account's plan can't stream at the requested quality")
@@ -32,11 +34,9 @@ var (
 // dzUser is the subset of deezer.getUserData's response this client needs -
 // mirrors deezer-js's Deezer.current_user.
 type dzUser struct {
-	id                string
 	licenseToken      string
 	canStreamHQ       bool
 	canStreamLossless bool
-	country           string
 }
 
 // gwError is a GW API error response (result_json.error), preserved so
@@ -58,7 +58,6 @@ func (e *gwError) isInvalidToken() bool {
 // existing one-shared-session model.
 type dzClient struct {
 	http *http.Client
-	jar  *cookiejar.Jar
 	arl  string
 
 	// gwLightURL overrides gw-light.php's real URL - test seam only, left
@@ -68,12 +67,10 @@ type dzClient struct {
 	mu       sync.Mutex
 	apiToken string // gw "checkForm" CSRF token
 	user     dzUser
-	loggedIn bool
 }
 
 func newDZClient(arl string) *dzClient {
-	jar, _ := cookiejar.New(nil)
-	c := &dzClient{http: &http.Client{Timeout: 30 * time.Second, Jar: jar}, jar: jar}
+	c := &dzClient{}
 	c.setARL(arl)
 	return c
 }
@@ -86,10 +83,12 @@ func newDZClient(arl string) *dzClient {
 // Cookie header a request already carries, rather than replacing it) as
 // long as every request actually goes through this client.
 func (c *dzClient) setARL(arl string) {
+	jar, _ := cookiejar.New(nil)
 	c.mu.Lock()
+	c.http = &http.Client{Timeout: 30 * time.Second, Jar: jar}
 	c.arl = arl
 	c.apiToken = ""
-	c.loggedIn = false
+	c.user = dzUser{}
 	c.mu.Unlock()
 }
 
@@ -122,7 +121,6 @@ func (c *dzClient) login() error {
 				MobileHQ       bool   `json:"mobile_hq"`
 				WebLossless    bool   `json:"web_lossless"`
 				MobileLossless bool   `json:"mobile_lossless"`
-				LicenseCountry string `json:"license_country"`
 			} `json:"OPTIONS"`
 		} `json:"USER"`
 	}
@@ -134,16 +132,16 @@ func (c *dzClient) login() error {
 	}
 
 	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.arl != arl {
+		return fmt.Errorf("Deezer credential changed during login, please retry")
+	}
 	c.apiToken = data.CheckForm
 	c.user = dzUser{
-		id:                data.USER.USER_ID.String(),
 		licenseToken:      data.USER.OPTIONS.LicenseToken,
 		canStreamHQ:       data.USER.OPTIONS.WebHQ || data.USER.OPTIONS.MobileHQ,
 		canStreamLossless: data.USER.OPTIONS.WebLossless || data.USER.OPTIONS.MobileLossless,
-		country:           data.USER.OPTIONS.LicenseCountry,
 	}
-	c.loggedIn = true
-	c.mu.Unlock()
 	return nil
 }
 
@@ -203,12 +201,12 @@ func (c *dzClient) rawGWCall(method string, args map[string]any, token string) (
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", dzUserAgent)
-	req.Header.Set("Cookie", "arl="+c.currentARL())
-	// c.http's cookiejar appends whatever session cookie (sid) Deezer's
-	// server set back on login's response on top of the arl cookie above -
-	// see setARL's doc comment.
+	c.mu.Lock()
+	arl, client := c.arl, c.http
+	c.mu.Unlock()
+	req.Header.Set("Cookie", "arl="+arl)
 
-	resp, err := c.http.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -328,7 +326,7 @@ type publicAlbumInfo struct {
 
 func fetchPublicAlbumInfo(albID string) publicAlbumInfo {
 	var info publicAlbumInfo
-	resp, err := http.Get("https://api.deezer.com/album/" + albID)
+	resp, err := metadataClient.Get("https://api.deezer.com/album/" + albID)
 	if err != nil {
 		return info
 	}
@@ -373,7 +371,7 @@ func (c *dzClient) getLyrics(sngID string) (*gwLyrics, error) {
 // Many tracks report 0 (undetected); callers should treat that as "no BPM"
 // rather than a real value.
 func fetchBPM(sngID string) int {
-	resp, err := http.Get("https://api.deezer.com/track/" + sngID)
+	resp, err := metadataClient.Get("https://api.deezer.com/track/" + sngID)
 	if err != nil {
 		return 0
 	}
@@ -419,7 +417,7 @@ func (c *dzClient) getAlbumTracks(albID string) ([]gwTrack, error) {
 // index.js's get_tracks_url.
 func (c *dzClient) getTrackURL(trackToken, format string) (string, error) {
 	c.mu.Lock()
-	user := c.user
+	user, client := c.user, c.http
 	c.mu.Unlock()
 	if user.licenseToken == "" {
 		return "", errNotLoggedIn
@@ -447,7 +445,7 @@ func (c *dzClient) getTrackURL(trackToken, format string) (string, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", dzUserAgent)
 
-	resp, err := c.http.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}

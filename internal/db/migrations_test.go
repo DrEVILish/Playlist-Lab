@@ -61,3 +61,35 @@ func TestHasColumn(t *testing.T) {
 		t.Fatal("expected users.no_such_column to not exist")
 	}
 }
+
+func TestOpenReadsSchedulesCreatedBeforeTimestampMigration(t *testing.T) {
+	path := t.TempDir() + "/legacy.db"
+	oldDB, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, err := CreateUser(oldDB, "test-plex-user", "Test", "test-token", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := oldDB.Exec("ALTER TABLE schedules DROP COLUMN created_at"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := oldDB.Exec("INSERT INTO schedules (user_id,schedule_type,frequency,start_date) VALUES (?,'mix_generation','daily','2026-01-01')", user.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := oldDB.Close(); err != nil {
+		t.Fatal(err)
+	}
+	migratedDB, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer migratedDB.Close()
+	if rows, err := GetDueSchedules(migratedDB); err != nil || len(rows) != 1 {
+		t.Fatalf("due schedules = %v, %v", rows, err)
+	}
+	if rows, err := GetAllSchedules(migratedDB); err != nil || len(rows) != 1 {
+		t.Fatalf("admin schedules = %v, %v", rows, err)
+	}
+}

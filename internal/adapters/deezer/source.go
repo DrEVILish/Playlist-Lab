@@ -23,7 +23,7 @@ func NewSource() *Source {
 }
 
 func (s *Source) Meta() adapters.ServiceMeta {
-	return adapters.ServiceMeta{ID: serviceName, Name: "Deezer", Icon: "deezer"}
+	return adapters.ServiceMeta{ID: "deezer", Name: "Deezer", Icon: "deezer"}
 }
 
 var deezerPlaylistIDPattern = regexp.MustCompile(`playlist/(\d+)`)

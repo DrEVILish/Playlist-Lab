@@ -176,3 +176,27 @@ func TestRenamePlaylistRow(t *testing.T) {
 		t.Errorf("updated_at = %d, want it bumped to at least %d", got.UpdatedAt, before)
 	}
 }
+
+func TestPlaylistLookupUsesPlexServerIdentity(t *testing.T) {
+	sqlDB := newTestDB(t)
+	user, err := CreateUser(sqlDB, "playlist-user", "Listener", "fake-token", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := CreatePlaylistRowForServer(sqlDB, user.ID, "server-a", "42", "First", "spotify", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := CreatePlaylistRowForServer(sqlDB, user.ID, "server-b", "42", "Other", "spotify", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := GetPlaylistByPlexIDForServer(sqlDB, user.ID, "server-b", "42")
+	if err != nil || got == nil || got.ID != other.ID {
+		t.Fatalf("got %v, %v; Plex server B should resolve playlist %d", got, err, other.ID)
+	}
+	visible, err := GetUserPlaylistsForServer(sqlDB, user.ID, "server-a")
+	if err != nil || len(visible) != 1 || visible[0].ID != first.ID {
+		t.Fatalf("got %v, %v; Plex server A should list only playlist %d", visible, err, first.ID)
+	}
+}

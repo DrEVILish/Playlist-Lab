@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
   created_at INTEGER NOT NULL,
   last_login INTEGER NOT NULL,
   is_enabled INTEGER DEFAULT 1,  -- Whether user is allowed to access the app
+  access_managed INTEGER NOT NULL DEFAULT 0,  -- Admin set the account's access explicitly
   gemini_api_key TEXT,
   grok_api_key TEXT,
   ai_provider TEXT DEFAULT 'gemini',
@@ -77,6 +78,7 @@ CREATE TABLE IF NOT EXISTS playlists (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
   plex_playlist_id TEXT NOT NULL,
+  server_client_id TEXT,
   name TEXT NOT NULL,
   source TEXT NOT NULL,  -- 'spotify', 'deezer', 'apple', 'tidal', etc.
   source_url TEXT,
@@ -183,6 +185,7 @@ CREATE TABLE IF NOT EXISTS schedules (
   frequency TEXT NOT NULL,      -- 'daily', 'weekly', 'fortnightly', 'monthly'
   start_date TEXT NOT NULL,
   last_run INTEGER,
+  last_attempt INTEGER,
   config TEXT,  -- JSON: additional configuration (mix types, etc.)
   created_at INTEGER,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,

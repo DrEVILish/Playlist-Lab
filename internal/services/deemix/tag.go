@@ -22,25 +22,26 @@ import (
 // the tagger doesn't care whether its caller got this from a track or an
 // album track-list entry.
 type trackMeta struct {
-	Title       string
-	Artists     []string // Artists[0] is the main/credited artist
-	Album       string
-	AlbumArtist string
-	TrackNumber int
-	TrackTotal  int
-	DiscNumber  int
-	DiscTotal   int
-	Year        string
-	Date        string // full YYYY-MM-DD release date, for Settings.DateFormat
-	Genre       string
-	ISRC        string
-	Barcode     string
-	Label       string
-	Copyright   string
-	BPM         int
-	ReplayGain  string // e.g. "-12.4 dB"
-	Rating      byte   // 0-255, POPM/rating scale
-	Composer    string
+	Title         string
+	Artists       []string // Artists[0] is the main/credited artist
+	Album         string
+	AlbumArtist   string
+	TrackNumber   int
+	TrackTotal    int
+	DiscNumber    int
+	DiscTotal     int
+	Year          string
+	Date          string // ISO release date for MP3 date fields
+	FormattedDate string // configured date format for the FLAC tag
+	Genre         string
+	ISRC          string
+	Barcode       string
+	Label         string
+	Copyright     string
+	BPM           int
+	ReplayGain    string // e.g. "-12.4 dB"
+	Rating        byte   // 0-255, POPM/rating scale
+	Composer      string
 	// InvolvedPeople is role -> names, for the IPLS/TIPL frame - only the
 	// roles tagger.js itself recognizes (author, engineer, mixer, producer,
 	// writer, musicpublisher).
@@ -51,7 +52,6 @@ type trackMeta struct {
 	SourceID       string
 	Cover          []byte // already-downloaded, already-format-converted embedded cover art, or nil
 	CoverMIME      string // "image/jpeg" or "image/png" - matches Cover's actual encoding, see artwork.go's processCoverImage
-	ArtistCover    []byte // already-downloaded artist image (JPEG), or nil - file-saving only, never embedded
 }
 
 // coverMIME defaults to JPEG when unset (callers that never went through
@@ -348,7 +348,7 @@ func tagFLACFile(path string, meta trackMeta, tags TagSettings) error {
 	// not suggested as a standard tag - being YEAR already contained in
 	// DATE will only use DATE instead").
 	if tags.Date && meta.Date != "" {
-		add("DATE", formatDate(meta.Date, "Y-M-D"))
+		add("DATE", meta.FormattedDate)
 	} else if tags.Year {
 		add("DATE", meta.Year)
 	}

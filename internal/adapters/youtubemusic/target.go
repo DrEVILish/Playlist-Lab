@@ -104,11 +104,11 @@ func (t *Target) FetchTracks(ctx context.Context, playlistURLOrID string, userID
 	// browse response for a playlist page carries (verified against a real
 	// response) - simpler and more reliable than digging through whichever
 	// header renderer shape a given playlist page happens to use.
-	name, _ := digString(data, "microformat", "microformatDataRenderer", "title")
+	name, _ := shared.DigString(data, "microformat", "microformatDataRenderer", "title")
 	if name == "" {
 		name = "YouTube Music Playlist"
 	}
-	cover, _ := digString(data, "microformat", "microformatDataRenderer", "thumbnail", "thumbnails", 0, "url")
+	cover, _ := shared.DigString(data, "microformat", "microformatDataRenderer", "thumbnail", "thumbnails", 0, "url")
 	playlist := adapters.PlaylistInfo{ID: serviceName + "-" + playlistID, Name: name, TrackCount: len(tracks), CoverURL: cover}
 	return playlist, tracks, nil
 }
@@ -195,7 +195,7 @@ type ytmTrack struct {
 // youtube-target.ts's extractTrack(), tolerating any missing field the way
 // its try/catch-and-return-null did.
 func extractTracks(data map[string]any) []ytmTrack {
-	items := digArray(data,
+	items := shared.DigArray(data,
 		"contents", "tabbedSearchResultsRenderer", "tabs", 0, "tabRenderer", "content",
 		"sectionListRenderer", "contents", 0, "musicShelfRenderer", "contents")
 	return extractTrackItems(items)
@@ -213,7 +213,7 @@ func extractTracks(data map[string]any) []ytmTrack {
 // ponytail: single-page fetch, add continuation-token paging if a playlist
 // over ~100 tracks needs to import completely.
 func extractPlaylistTracks(data map[string]any) []ytmTrack {
-	items := digArray(data,
+	items := shared.DigArray(data,
 		"contents", "twoColumnBrowseResultsRenderer", "secondaryContents",
 		"sectionListRenderer", "contents", 0, "musicPlaylistShelfRenderer", "contents")
 	return extractTrackItems(items)
@@ -226,21 +226,21 @@ func extractPlaylistTracks(data map[string]any) []ytmTrack {
 func extractTrackItems(items []any) []ytmTrack {
 	var tracks []ytmTrack
 	for _, item := range items {
-		renderer, _ := digMap(item, "musicResponsiveListItemRenderer")
+		renderer, _ := shared.DigMap(item, "musicResponsiveListItemRenderer")
 		if renderer == nil {
 			continue
 		}
-		videoID, _ := digString(renderer, "playlistItemData", "videoId")
+		videoID, _ := shared.DigString(renderer, "playlistItemData", "videoId")
 		if videoID == "" {
-			videoID, _ = digString(renderer, "overlay", "musicItemThumbnailOverlayRenderer", "content",
+			videoID, _ = shared.DigString(renderer, "overlay", "musicItemThumbnailOverlayRenderer", "content",
 				"musicPlayButtonRenderer", "playNavigationEndpoint", "watchEndpoint", "videoId")
 		}
 		if videoID == "" {
 			continue
 		}
-		cols := digArray(renderer, "flexColumns")
-		title, _ := digStringFrom(cols, 0, "musicResponsiveListItemFlexColumnRenderer", "text", "runs", 0, "text")
-		artist, _ := digStringFrom(cols, 1, "musicResponsiveListItemFlexColumnRenderer", "text", "runs", 0, "text")
+		cols := shared.DigArray(renderer, "flexColumns")
+		title, _ := shared.DigStringFrom(cols, 0, "musicResponsiveListItemFlexColumnRenderer", "text", "runs", 0, "text")
+		artist, _ := shared.DigStringFrom(cols, 1, "musicResponsiveListItemFlexColumnRenderer", "text", "runs", 0, "text")
 		tracks = append(tracks, ytmTrack{VideoID: videoID, Title: title, Artist: artist})
 	}
 	return tracks
@@ -376,72 +376,4 @@ func (t *Target) HasValidConnection(ctx context.Context, userID int64) (bool, er
 
 func (t *Target) RevokeConnection(ctx context.Context, userID int64) error {
 	return db.DeleteOAuthConnection(t.DB, userID, serviceName)
-}
-
-// --- tiny untyped-JSON navigation helpers, since YouTube's internal API
-// response has no stable schema worth defining structs for ---
-
-func digMap(v any, path ...any) (map[string]any, bool) {
-	cur := v
-	for _, p := range path {
-		cur = index(cur, p)
-		if cur == nil {
-			return nil, false
-		}
-	}
-	m, ok := cur.(map[string]any)
-	return m, ok
-}
-
-func digArray(v any, path ...any) []any {
-	cur := v
-	for _, p := range path {
-		cur = index(cur, p)
-		if cur == nil {
-			return nil
-		}
-	}
-	arr, _ := cur.([]any)
-	return arr
-}
-
-func digString(v any, path ...any) (string, bool) {
-	cur := v
-	for _, p := range path {
-		cur = index(cur, p)
-		if cur == nil {
-			return "", false
-		}
-	}
-	s, ok := cur.(string)
-	return s, ok
-}
-
-func digStringFrom(arr []any, idx int, path ...any) (string, bool) {
-	if idx < 0 || idx >= len(arr) {
-		return "", false
-	}
-	return digString(arr[idx], path...)
-}
-
-func index(v any, key any) any {
-	if v == nil {
-		return nil
-	}
-	switch k := key.(type) {
-	case string:
-		m, ok := v.(map[string]any)
-		if !ok {
-			return nil
-		}
-		return m[k]
-	case int:
-		arr, ok := v.([]any)
-		if !ok || k < 0 || k >= len(arr) {
-			return nil
-		}
-		return arr[k]
-	default:
-		return nil
-	}
 }

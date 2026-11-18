@@ -28,7 +28,6 @@ type LibraryFilterOptions struct {
 	Unwatched      bool
 	Moods          []string // music only
 	Styles         []string // music only
-	Limit          int
 }
 
 // SearchLibraryItems is GetTracksWithAdvancedFilters generalized across
@@ -73,17 +72,7 @@ func (c *Client) SearchLibraryItems(libraryID string, itemType int, opts Library
 	if len(filters) > 0 {
 		path += "&" + strings.Join(filters, "&")
 	}
-	limit := opts.Limit
-	if limit <= 0 {
-		limit = 1000
-	}
-	path += "&X-Plex-Container-Size=" + strconv.Itoa(limit)
-
-	mc, err := c.get(path)
-	if err != nil {
-		return nil, err
-	}
-	items, err := decodeTracks(mc.MediaContainer.Metadata)
+	items, err := c.getTrackPages(path)
 	if err != nil {
 		return nil, err
 	}

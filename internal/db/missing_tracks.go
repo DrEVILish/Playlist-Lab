@@ -61,14 +61,8 @@ func GetUserMissingTracks(sqlDB *sql.DB, userID int64) ([]MissingTrack, error) {
 	return out, rows.Err()
 }
 
-// AddMissingTracks replaces one playlist's missing-track rows with a fresh
-// batch. Both callers (a scheduled refresh, a first import) pass the
-// complete current unmatched set for that playlist run, not an incremental
-// delta - inserting on top of whatever the previous run left behind (the
-// original Node port's behavior) duplicated every still-missing track once
-// per run instead of just updating its added_at, which is what actually
-// surfaced as literal duplicate rows in the missing-tracks list once it
-// became directly visible in the Playlists table's inline expando.
+// AddMissingTracks synchronizes one playlist's complete unmatched set.
+// Downloads in progress refer to existing missing-track IDs.
 func AddMissingTracks(sqlDB *sql.DB, userID, playlistID int64, tracks []NewMissingTrack) error {
 	tracks = dedupeMissingTracks(tracks)
 
@@ -78,24 +72,49 @@ func AddMissingTracks(sqlDB *sql.DB, userID, playlistID int64, tracks []NewMissi
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.Exec(`DELETE FROM missing_tracks WHERE playlist_id = ?`, playlistID); err != nil {
-		return err
-	}
-	if len(tracks) == 0 {
-		return tx.Commit()
-	}
-
-	now := time.Now().Unix()
-	stmt, err := tx.Prepare(
-		`INSERT INTO missing_tracks (user_id, playlist_id, title, artist, album, position, after_track_key, added_at, source)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	existing, err := tx.Query(`SELECT id, title, artist FROM missing_tracks WHERE playlist_id = ? AND user_id = ? ORDER BY id`, playlistID, userID)
 	if err != nil {
 		return err
 	}
-	defer stmt.Close()
+	defer existing.Close()
+	ids := make(map[string]int64)
+	var stale []int64
+	for existing.Next() {
+		var id int64
+		var title, artist string
+		if err := existing.Scan(&id, &title, &artist); err != nil {
+			return err
+		}
+		key := missingTrackKey(title, artist)
+		if _, found := ids[key]; found {
+			stale = append(stale, id)
+		} else {
+			ids[key] = id
+		}
+	}
+	if err := existing.Err(); err != nil {
+		return err
+	}
 
+	now := time.Now().Unix()
 	for _, t := range tracks {
-		if _, err := stmt.Exec(userID, playlistID, t.Title, t.Artist, nullIfEmpty(t.Album), t.Position, nullIfEmpty(t.AfterTrackKey), now, t.Source); err != nil {
+		key := missingTrackKey(t.Title, t.Artist)
+		if _, err := tx.Exec(
+			`INSERT INTO missing_tracks (id, user_id, playlist_id, title, artist, album, position, after_track_key, added_at, source)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 ON CONFLICT(id) DO UPDATE SET title = excluded.title, artist = excluded.artist,
+			 album = excluded.album, position = excluded.position, after_track_key = excluded.after_track_key, source = excluded.source`,
+			nullIfZero(ids[key]), userID, playlistID, t.Title, t.Artist, nullIfEmpty(t.Album), t.Position, nullIfEmpty(t.AfterTrackKey), now, t.Source,
+		); err != nil {
+			return err
+		}
+		delete(ids, key)
+	}
+	for _, id := range ids {
+		stale = append(stale, id)
+	}
+	for _, id := range stale {
+		if _, err := tx.Exec("DELETE FROM missing_tracks WHERE id = ?", id); err != nil {
 			return err
 		}
 	}
@@ -113,7 +132,7 @@ func dedupeMissingTracks(tracks []NewMissingTrack) []NewMissingTrack {
 	seen := make(map[string]bool, len(tracks))
 	out := make([]NewMissingTrack, 0, len(tracks))
 	for _, t := range tracks {
-		key := strings.ToLower(strings.TrimSpace(t.Title)) + "\x00" + strings.ToLower(strings.TrimSpace(t.Artist))
+		key := missingTrackKey(t.Title, t.Artist)
 		if seen[key] {
 			continue
 		}
@@ -121,6 +140,10 @@ func dedupeMissingTracks(tracks []NewMissingTrack) []NewMissingTrack {
 		out = append(out, t)
 	}
 	return out
+}
+
+func missingTrackKey(title, artist string) string {
+	return strings.ToLower(strings.TrimSpace(title)) + "\x00" + strings.ToLower(strings.TrimSpace(artist))
 }
 
 // MissingTrackStat mirrors database.ts's getMissingTrackStats() row: one

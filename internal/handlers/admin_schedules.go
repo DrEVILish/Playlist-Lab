@@ -14,6 +14,7 @@ import (
 
 	"github.com/drevilish/playlist-lab/internal/auth"
 	"github.com/drevilish/playlist-lab/internal/db"
+	"github.com/drevilish/playlist-lab/internal/services/scheduler"
 )
 
 type AdminSchedulesHandler struct {
@@ -108,29 +109,6 @@ type scheduleTimelineGroup struct {
 	Rows  []scheduleRow
 }
 
-// nextScheduleRun projects a schedule's next run from its last run plus its
-// own stated frequency - both already-stored fields, not a new tracked
-// value. This app's four frequencies are fixed-interval, so this is plain
-// date arithmetic; it isn't a general cron parser like nextRun() above
-// (background jobs use real cron specs, user schedules don't).
-func nextScheduleRun(lastRun time.Time, frequency string) time.Time {
-	if lastRun.IsZero() {
-		return time.Time{}
-	}
-	switch frequency {
-	case "daily":
-		return lastRun.AddDate(0, 0, 1)
-	case "weekly":
-		return lastRun.AddDate(0, 0, 7)
-	case "fortnightly":
-		return lastRun.AddDate(0, 0, 14)
-	case "monthly":
-		return lastRun.AddDate(0, 1, 0)
-	default:
-		return time.Time{}
-	}
-}
-
 // buildScheduleTimeline groups every schedule into the timeline buckets the
 // Schedules tab renders, ordered soonest-due bucket first and by next run
 // within a bucket. Schedules that have never run, or whose frequency this
@@ -153,7 +131,7 @@ func buildScheduleTimeline(rows []db.AdminSchedule) []scheduleTimelineGroup {
 		if s.LastRun.Valid {
 			row.LastRunTime = time.Unix(s.LastRun.Int64, 0)
 		}
-		row.NextRunTime = nextScheduleRun(row.LastRunTime, s.Frequency)
+		row.NextRunTime, _ = scheduler.NextRun(s.Schedule, now)
 		if !row.NextRunTime.IsZero() {
 			row.NextRunLabel = row.NextRunTime.Format("2006-01-02 15:04")
 		}

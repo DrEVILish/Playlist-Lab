@@ -113,12 +113,14 @@ func (h *BackupHandler) export(w http.ResponseWriter, r *http.Request) {
 	for _, id := range ids {
 		p, ok := byID[id]
 		if !ok {
-			continue
+			http.Error(w, "A selected playlist is no longer available", http.StatusNotFound)
+			return
 		}
 		tracks, err := client.GetPlaylistTracks(id)
 		if err != nil {
 			slog.Warn("[Backup] failed to load playlist tracks", "playlistId", id, "error", err)
-			continue
+			http.Error(w, "Could not read all selected playlists from Plex", http.StatusBadGateway)
+			return
 		}
 		bp := backupPlaylist{Title: p.Title, BackupDate: now}
 		for _, t := range tracks {
@@ -151,16 +153,20 @@ func (h *BackupHandler) restore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseMultipartForm(maxImportFileSize); err != nil {
+	if err := parseLimitedMultipart(w, r, maxImportFileSize); err != nil {
 		http.Error(w, "invalid or too-large file upload (10MB limit)", http.StatusBadRequest)
 		return
 	}
-	file, _, err := r.FormFile("file")
+	file, header, err := r.FormFile("file")
 	if err != nil {
 		http.Error(w, "no backup file uploaded", http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
+	if header.Size > maxImportFileSize {
+		http.Error(w, "backup exceeds 10MB", http.StatusRequestEntityTooLarge)
+		return
+	}
 
 	var data backupFile
 	if err := json.NewDecoder(file).Decode(&data); err != nil || data.Version != 1 {

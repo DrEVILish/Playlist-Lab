@@ -8,6 +8,7 @@ package db
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"time"
 )
 
@@ -23,6 +24,7 @@ type Schedule struct {
 	Frequency    string // "daily", "weekly", "fortnightly", "monthly"
 	StartDate    string // "YYYY-MM-DD"
 	LastRun      sql.NullInt64
+	LastAttempt  sql.NullInt64
 	Config       sql.NullString
 	CreatedAt    int64
 }
@@ -59,11 +61,11 @@ type ScheduleExecution struct {
 	PlaylistName    sql.NullString
 }
 
-const scheduleCols = "id, user_id, playlist_id, collection_id, schedule_type, frequency, start_date, last_run, config, created_at"
+const scheduleCols = "id, user_id, playlist_id, collection_id, schedule_type, frequency, start_date, last_run, last_attempt, config, COALESCE(created_at, 0)"
 
 func scanSchedule(row interface{ Scan(...any) error }) (*Schedule, error) {
 	var s Schedule
-	err := row.Scan(&s.ID, &s.UserID, &s.PlaylistID, &s.CollectionID, &s.ScheduleType, &s.Frequency, &s.StartDate, &s.LastRun, &s.Config, &s.CreatedAt)
+	err := row.Scan(scheduleFields(&s)...)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -72,6 +74,12 @@ func scanSchedule(row interface{ Scan(...any) error }) (*Schedule, error) {
 	}
 	return &s, nil
 }
+
+func scheduleFields(s *Schedule) []any {
+	return []any{&s.ID, &s.UserID, &s.PlaylistID, &s.CollectionID, &s.ScheduleType, &s.Frequency, &s.StartDate, &s.LastRun, &s.LastAttempt, &s.Config, &s.CreatedAt}
+}
+
+var ErrScheduleTargetNotFound = errors.New("schedule target not found")
 
 // CreateSchedule inserts a schedule row. playlistID/collectionID of 0 store
 // NULL - unlike the TS version, this Go port only supports schedules linked
@@ -83,11 +91,19 @@ func CreateSchedule(sqlDB *sql.DB, userID, playlistID, collectionID int64, sched
 	now := time.Now().Unix()
 	res, err := sqlDB.Exec(
 		`INSERT INTO schedules (user_id, playlist_id, collection_id, schedule_type, frequency, start_date, config, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		 SELECT ?, ?, ?, ?, ?, ?, ?, ?
+		 WHERE (? = 0 OR EXISTS (SELECT 1 FROM playlists WHERE id = ? AND user_id = ?))
+		   AND (? = 0 OR EXISTS (SELECT 1 FROM collections WHERE id = ? AND user_id = ?))`,
 		userID, nullIfZero(playlistID), nullIfZero(collectionID), scheduleType, frequency, startDate, nullIfEmpty(configJSON), now,
+		playlistID, playlistID, userID, collectionID, collectionID, userID,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return nil, err
+	} else if n == 0 {
+		return nil, ErrScheduleTargetNotFound
 	}
 	id, err := res.LastInsertId()
 	if err != nil {
@@ -104,13 +120,13 @@ func GetScheduleByID(sqlDB *sql.DB, id int64) (*Schedule, error) {
 // playlist - what the ScheduleModal.tsx port needs to decide between
 // "Create Schedule" and "Manage Schedule" for a given playlist row.
 func GetScheduleByPlaylistID(sqlDB *sql.DB, playlistID int64) (*Schedule, error) {
-	return scanSchedule(sqlDB.QueryRow("SELECT "+scheduleCols+" FROM schedules WHERE playlist_id = ? LIMIT 1", playlistID))
+	return scanSchedule(sqlDB.QueryRow("SELECT "+scheduleCols+" FROM schedules WHERE playlist_id = ? AND user_id = (SELECT user_id FROM playlists WHERE id = ?) LIMIT 1", playlistID, playlistID))
 }
 
 // GetScheduleByCollectionID is GetScheduleByPlaylistID's Collections
 // sibling (DESIGN.md §11.11).
 func GetScheduleByCollectionID(sqlDB *sql.DB, collectionID int64) (*Schedule, error) {
-	return scanSchedule(sqlDB.QueryRow("SELECT "+scheduleCols+" FROM schedules WHERE collection_id = ? LIMIT 1", collectionID))
+	return scanSchedule(sqlDB.QueryRow("SELECT "+scheduleCols+" FROM schedules WHERE collection_id = ? AND user_id = (SELECT user_id FROM collections WHERE id = ?) LIMIT 1", collectionID, collectionID))
 }
 
 func GetUserSchedules(sqlDB *sql.DB, userID int64) ([]Schedule, error) {
@@ -146,10 +162,10 @@ type AdminSchedule struct {
 func GetAllSchedules(sqlDB *sql.DB) ([]AdminSchedule, error) {
 	rows, err := sqlDB.Query(`
 		SELECT s.id, s.user_id, s.playlist_id, s.collection_id, s.schedule_type, s.frequency,
-		       s.start_date, s.last_run, s.config, s.created_at, u.plex_username, p.name
+		       s.start_date, s.last_run, s.last_attempt, s.config, COALESCE(s.created_at, 0), u.plex_username, p.name
 		FROM schedules s
 		JOIN users u ON u.id = s.user_id
-		LEFT JOIN playlists p ON p.id = s.playlist_id
+		LEFT JOIN playlists p ON p.id = s.playlist_id AND p.user_id = s.user_id
 		ORDER BY s.created_at DESC`)
 	if err != nil {
 		return nil, err
@@ -158,7 +174,7 @@ func GetAllSchedules(sqlDB *sql.DB) ([]AdminSchedule, error) {
 	var out []AdminSchedule
 	for rows.Next() {
 		var a AdminSchedule
-		if err := rows.Scan(&a.ID, &a.UserID, &a.PlaylistID, &a.CollectionID, &a.ScheduleType, &a.Frequency, &a.StartDate, &a.LastRun, &a.Config, &a.CreatedAt, &a.Username, &a.PlaylistName); err != nil {
+		if err := rows.Scan(append(scheduleFields(&a.Schedule), &a.Username, &a.PlaylistName)...); err != nil {
 			return nil, err
 		}
 		out = append(out, a)
@@ -173,7 +189,7 @@ func GetAllSchedules(sqlDB *sql.DB) ([]AdminSchedule, error) {
 func GetDueSchedules(sqlDB *sql.DB) ([]Schedule, error) {
 	rows, err := sqlDB.Query(`
 		SELECT schedules.id, schedules.user_id, schedules.playlist_id, schedules.collection_id, schedules.schedule_type,
-		       schedules.frequency, schedules.start_date, schedules.last_run, schedules.config, schedules.created_at
+		       schedules.frequency, schedules.start_date, schedules.last_run, schedules.last_attempt, schedules.config, COALESCE(schedules.created_at, 0)
 		FROM schedules
 		JOIN users ON users.id = schedules.user_id
 		WHERE users.is_enabled = 1
@@ -233,6 +249,18 @@ func UpdateSchedule(sqlDB *sql.DB, id int64, u ScheduleUpdate) error {
 func UpdateScheduleLastRun(sqlDB *sql.DB, id int64) error {
 	_, err := sqlDB.Exec("UPDATE schedules SET last_run = ? WHERE id = ?", time.Now().Unix(), id)
 	return err
+}
+
+func ClaimScheduleAttempt(sqlDB *sql.DB, schedule Schedule, at time.Time) (bool, error) {
+	res, err := sqlDB.Exec(`UPDATE schedules SET last_attempt = ?
+		WHERE id = ? AND user_id = ? AND last_attempt IS ?
+		AND EXISTS (SELECT 1 FROM users WHERE id = schedules.user_id AND is_enabled = 1)`,
+		at.Unix(), schedule.ID, schedule.UserID, schedule.LastAttempt)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
 }
 
 // LinkSchedulePlaylist points a schedule at the playlist row its first run

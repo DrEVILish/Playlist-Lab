@@ -6,6 +6,7 @@
 package jobs
 
 import (
+	"context"
 	"log/slog"
 	"sync"
 	"time"
@@ -82,10 +83,9 @@ func (s *Scheduler) Start() {
 	s.cron.Start()
 }
 
-func (s *Scheduler) Stop() {
+func (s *Scheduler) Stop() context.Context {
 	s.mu.Lock()
 	s.isShuttingDown = true
 	s.mu.Unlock()
-	<-s.cron.Stop().Done() // waits for any in-flight run to finish
-	slog.Info("all jobs stopped")
+	return s.cron.Stop()
 }

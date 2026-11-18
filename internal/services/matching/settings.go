@@ -24,6 +24,7 @@ type Settings struct {
 	FeaturedArtistPatterns []string `json:"featuredArtistPatterns"`
 	PreferNonCompilation   bool     `json:"preferNonCompilation"`
 	VariousArtistsNames    []string `json:"variousArtistsNames"`
+	StrictSearch           bool     `json:"-"`
 }
 
 // SettingsFromJSON parses a user_settings.matching_settings JSON blob (as

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/drevilish/playlist-lab/internal/services/plex"
@@ -84,5 +85,33 @@ func TestMatchPlaylist_GoldenCase(t *testing.T) {
 	}
 	if !matched[1].Matched || matched[1].PlexRatingKey != "102" {
 		t.Errorf("track 2 = %+v, want a match on ratingKey 102 (the studio version, not the 103 live decoy)", matched[1])
+	}
+}
+
+func TestStrictMatchingRejectsPartialLookupFailure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch strings.ToLower(r.URL.Query().Get("artist.title")) {
+		case "working artist":
+			writeMetadata(w, []fakeTrack{{RatingKey: "artist-1", Title: "Working Artist"}})
+		case "unavailable artist":
+			http.Error(w, "temporary failure", http.StatusServiceUnavailable)
+		default:
+			if r.URL.Path == "/library/metadata/artist-1/allLeaves" {
+				writeMetadata(w, []fakeTrack{{RatingKey: "one", Title: "Working Track", GrandparentTitle: "Working Artist"}})
+				return
+			}
+			writeMetadata(w, nil)
+		}
+	}))
+	defer srv.Close()
+	client := plex.NewClient(srv.URL, "token", "client-id", "Playlist Lab")
+	settings := DefaultSettings()
+	settings.StrictSearch = true
+	tracks := []Track{
+		{Title: "Working Track", Artist: "Working Artist"},
+		{Title: "Unavailable Track", Artist: "Unavailable Artist"},
+	}
+	if got, err := MatchPlaylist(tracks, client, "1", settings, nil, nil, nil); err == nil || !strings.Contains(err.Error(), "Unavailable Track") {
+		t.Fatalf("want failure of the second lookup, got %v, %v", got, err)
 	}
 }

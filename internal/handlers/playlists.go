@@ -117,7 +117,7 @@ func (h *PlaylistsHandler) index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	loaded, err := h.loadPlaylistRows(user, client, r.URL.Query())
+	loaded, err := h.loadPlaylistRows(user, client, userServer.ServerClientID, r.URL.Query())
 	if err != nil {
 		slog.Error("failed to fetch playlists from Plex", "error", err)
 		h.Tmpl.RenderPage(w, r, "home", map[string]any{"User": user, "PlexError": true})
@@ -147,13 +147,13 @@ type loadedPlaylistRows struct {
 	Query                                        url.Values
 }
 
-func (h *PlaylistsHandler) loadPlaylistRows(user *db.User, client *plex.Client, q url.Values) (loadedPlaylistRows, error) {
+func (h *PlaylistsHandler) loadPlaylistRows(user *db.User, client *plex.Client, serverClientID string, q url.Values) (loadedPlaylistRows, error) {
 	plexPlaylists, err := client.GetPlaylists()
 	if err != nil {
 		return loadedPlaylistRows{}, err
 	}
 
-	tracked, err := db.GetUserPlaylists(h.DB, user.ID)
+	tracked, err := db.GetUserPlaylistsForServer(h.DB, user.ID, serverClientID)
 	if err != nil {
 		slog.Error("failed to load tracked playlists", "error", err)
 	}
@@ -279,7 +279,7 @@ func (h *PlaylistsHandler) exportCSV(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no server selected", http.StatusBadRequest)
 		return
 	}
-	loaded, err := h.loadPlaylistRows(user, client, r.URL.Query())
+	loaded, err := h.loadPlaylistRows(user, client, userServer.ServerClientID, r.URL.Query())
 	if err != nil {
 		http.Error(w, "Failed to load playlists", http.StatusBadGateway)
 		return
@@ -715,7 +715,7 @@ func (h *PlaylistsHandler) editor(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var dbID int64
-	if tracked, err := db.GetPlaylistByPlexID(h.DB, user.ID, plexID); err == nil && tracked != nil {
+	if tracked, err := db.GetPlaylistByPlexIDForServer(h.DB, user.ID, userServer.ServerClientID, plexID); err == nil && tracked != nil {
 		dbID = tracked.ID
 		header.Source = tracked.Source
 		// The playlist's own row in Playlist Lab's DB (when it has one) is
@@ -848,7 +848,7 @@ func (h *PlaylistsHandler) removeTrack(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to remove track", http.StatusBadGateway)
 		return
 	}
-	if tracked, _ := db.GetPlaylistByPlexID(h.DB, user.ID, plexID); tracked != nil {
+	if tracked, _ := db.GetPlaylistByPlexIDForServer(h.DB, user.ID, userServer.ServerClientID, plexID); tracked != nil {
 		_ = db.TouchPlaylist(h.DB, tracked.ID)
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -921,7 +921,7 @@ func (h *PlaylistsHandler) deletePlaylist(w http.ResponseWriter, r *http.Request
 		http.Error(w, "no server selected", http.StatusBadRequest)
 		return
 	}
-	if err := deleteOnePlaylist(h.DB, client, user.ID, plexID); err != nil {
+	if err := deleteOnePlaylist(h.DB, client, user.ID, userServer.ServerClientID, plexID); err != nil {
 		slog.Error("failed to delete playlist in Plex", "error", err)
 		h.Notifications.Add(user.ID, notifications.TypeAction, "Delete playlist", err.Error(), notifications.StatusError, nil)
 		http.Error(w, "Failed to delete playlist", http.StatusBadGateway)
@@ -935,11 +935,11 @@ func (h *PlaylistsHandler) deletePlaylist(w http.ResponseWriter, r *http.Request
 // deleteOnePlaylist is deletePlaylist's Plex-call-plus-DB-cleanup, factored
 // out so bulkDelete (delete Selected on the Playlists page) can run it per
 // id without duplicating the logic.
-func deleteOnePlaylist(sqlDB *sql.DB, client *plex.Client, userID int64, plexID string) error {
+func deleteOnePlaylist(sqlDB *sql.DB, client *plex.Client, userID int64, serverClientID, plexID string) error {
 	if err := client.DeletePlaylist(plexID); err != nil {
 		return err
 	}
-	if tracked, _ := db.GetPlaylistByPlexID(sqlDB, userID, plexID); tracked != nil {
+	if tracked, _ := db.GetPlaylistByPlexIDForServer(sqlDB, userID, serverClientID, plexID); tracked != nil {
 		_ = db.DeletePlaylistRow(sqlDB, tracked.ID)
 	}
 	return nil
@@ -959,7 +959,7 @@ func (h *PlaylistsHandler) bulkDelete(w http.ResponseWriter, r *http.Request) {
 	ids := r.Form["id"]
 	failed := 0
 	for _, id := range ids {
-		if err := deleteOnePlaylist(h.DB, client, user.ID, id); err != nil {
+		if err := deleteOnePlaylist(h.DB, client, user.ID, userServer.ServerClientID, id); err != nil {
 			slog.Error("bulk delete: failed to delete playlist", "plexId", id, "error", err)
 			failed++
 		}
@@ -1028,7 +1028,9 @@ func (h *PlaylistsHandler) merge(w http.ResponseWriter, r *http.Request) {
 		if _, err := client.CreatePlaylist(targetName, libraryURI, trackURIs); err != nil {
 			return err
 		}
+		status, progress := notifications.StatusSuccess, 100
 		h.Notifications.Update(user.ID, notificationID, notifications.Patch{
+			Status: &status, Progress: &progress,
 			Detail: strPtr(fmt.Sprintf("Merged %d tracks into %q", len(merged), targetName)),
 		})
 		return nil
@@ -1065,8 +1067,8 @@ func applyTrackOrder(client *plex.Client, plexID string, ordered []plex.Track) e
 // { updated_at: Date.now() })` - a no-op if this playlist was never
 // imported/tracked through Playlist Lab (an untracked Plex playlist has
 // nothing to bump).
-func touchTrackedPlaylist(sqlDB *sql.DB, userID int64, plexID string) {
-	tracked, err := db.GetPlaylistByPlexID(sqlDB, userID, plexID)
+func touchTrackedPlaylist(sqlDB *sql.DB, userID int64, serverClientID, plexID string) {
+	tracked, err := db.GetPlaylistByPlexIDForServer(sqlDB, userID, serverClientID, plexID)
 	if err != nil || tracked == nil {
 		return
 	}
@@ -1097,7 +1099,7 @@ func (h *PlaylistsHandler) shuffle(w http.ResponseWriter, r *http.Request) {
 		if err := applyTrackOrder(client, plexID, shuffled); err != nil {
 			return err
 		}
-		touchTrackedPlaylist(h.DB, user.ID, plexID)
+		touchTrackedPlaylist(h.DB, user.ID, userServer.ServerClientID, plexID)
 		status := notifications.StatusSuccess
 		detail := fmt.Sprintf("Shuffled %d tracks", len(shuffled))
 		h.Notifications.Update(user.ID, notificationID, notifications.Patch{Status: &status, Detail: &detail})
@@ -1198,7 +1200,7 @@ func (h *PlaylistsHandler) sortTracks(w http.ResponseWriter, r *http.Request) {
 		if err := applyTrackOrder(client, plexID, sorted); err != nil {
 			return err
 		}
-		touchTrackedPlaylist(h.DB, user.ID, plexID)
+		touchTrackedPlaylist(h.DB, user.ID, userServer.ServerClientID, plexID)
 		status := notifications.StatusSuccess
 		detail := fmt.Sprintf("Sorted %d tracks by %s", len(sorted), by)
 		h.Notifications.Update(user.ID, notificationID, notifications.Patch{Status: &status, Detail: &detail})
@@ -1253,7 +1255,7 @@ func (h *PlaylistsHandler) dedupe(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 		}
-		touchTrackedPlaylist(h.DB, user.ID, plexID)
+		touchTrackedPlaylist(h.DB, user.ID, userServer.ServerClientID, plexID)
 		status := notifications.StatusSuccess
 		detail := fmt.Sprintf("Removed %d duplicate(s)", len(duplicateItemIDs))
 		h.Notifications.Update(user.ID, notificationID, notifications.Patch{Status: &status, Detail: &detail})
@@ -1357,7 +1359,7 @@ func (h *PlaylistsHandler) rename(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to rename playlist", http.StatusBadGateway)
 		return
 	}
-	if tracked, err := db.GetPlaylistByPlexID(h.DB, user.ID, plexID); err == nil && tracked != nil {
+	if tracked, err := db.GetPlaylistByPlexIDForServer(h.DB, user.ID, userServer.ServerClientID, plexID); err == nil && tracked != nil {
 		if err := db.RenamePlaylistRow(h.DB, tracked.ID, name); err != nil {
 			slog.Warn("rename: failed to update tracked playlist row", "error", err)
 		}
@@ -1380,7 +1382,7 @@ func (h *PlaylistsHandler) uploadCover(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
 	plexID := chi.URLParam(r, "plexId")
 
-	if err := r.ParseMultipartForm(maxCoverUploadSize); err != nil {
+	if err := parseLimitedMultipart(w, r, maxCoverUploadSize); err != nil {
 		http.Error(w, "cover image too large (max 5MB)", http.StatusRequestEntityTooLarge)
 		return
 	}
@@ -1493,7 +1495,7 @@ func (h *PlaylistsHandler) addTracks(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to add tracks", http.StatusBadGateway)
 		return
 	}
-	touchTrackedPlaylist(h.DB, user.ID, plexID)
+	touchTrackedPlaylist(h.DB, user.ID, userServer.ServerClientID, plexID)
 	h.Notifications.Add(user.ID, notifications.TypeAction, "Add tracks", fmt.Sprintf("Added %d track(s)", len(trackIDs)), notifications.StatusSuccess, nil)
 	w.Header().Set("HX-Redirect", "/playlists/"+plexID)
 	w.WriteHeader(http.StatusOK)
@@ -1593,13 +1595,13 @@ func (h *PlaylistsHandler) share(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to create playlist for target user", http.StatusBadGateway)
 		return
 	}
-	if _, err := db.CreatePlaylistRow(h.DB, targetUserID, newPlaylist.RatingKey, name, "shared", ""); err != nil {
+	if _, err := db.CreatePlaylistRowForServer(h.DB, targetUserID, targetServer.ServerClientID, newPlaylist.RatingKey, name, "shared", ""); err != nil {
 		slog.Warn("share: failed to track new playlist row", "error", err)
 	}
 
-	sourceRow, err := db.GetPlaylistByPlexID(h.DB, user.ID, plexID)
+	sourceRow, err := db.GetPlaylistByPlexIDForServer(h.DB, user.ID, userServer.ServerClientID, plexID)
 	if err != nil || sourceRow == nil {
-		sourceRow, err = db.CreatePlaylistRow(h.DB, user.ID, plexID, name, "plex", "")
+		sourceRow, err = db.CreatePlaylistRowForServer(h.DB, user.ID, userServer.ServerClientID, plexID, name, "plex", "")
 		if err != nil {
 			slog.Error("share: failed to record source playlist row", "error", err)
 			h.Notifications.Add(user.ID, notifications.TypeAction, "Share playlist", "Shared, but failed to record the share", notifications.StatusError, nil)

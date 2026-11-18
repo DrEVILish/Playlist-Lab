@@ -8,12 +8,13 @@ package plex
 
 import (
 	"bytes"
-	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -256,8 +257,8 @@ type Client struct {
 // for browsers that could reach the Plex server themselves; it is gone
 // rather than deprecated so nothing reintroduces it.
 func (c *Client) FetchMedia(path string) (io.ReadCloser, string, error) {
-	if path == "" {
-		return nil, "", fmt.Errorf("empty media path")
+	if !IsImagePath(path) {
+		return nil, "", fmt.Errorf("invalid Plex image path")
 	}
 	req, err := http.NewRequest(http.MethodGet, c.ServerURL+path, nil)
 	if err != nil {
@@ -287,18 +288,18 @@ const (
 
 func NewClient(serverURL, token, clientID, product string) *Client {
 	serverURL = strings.TrimSuffix(serverURL, "/")
-	transport := http.DefaultTransport
-	if strings.HasPrefix(serverURL, "https://") {
-		// Relaxed TLS for direct-IP/self-signed Plex connections, matching
-		// the Node client's httpsAgent({ rejectUnauthorized: false }).
-		transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} //nolint:gosec
-	}
 	return &Client{
-		ServerURL:         serverURL,
-		Token:             token,
-		ClientID:          clientID,
-		Product:           product,
-		http:              &http.Client{Timeout: 60 * time.Second, Transport: transport},
+		ServerURL: serverURL,
+		Token:     token,
+		ClientID:  clientID,
+		Product:   product,
+		http: &http.Client{Timeout: 60 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			origin := via[0].URL
+			if len(via) >= 10 || req.URL.Scheme != origin.Scheme || !strings.EqualFold(req.URL.Host, origin.Host) {
+				return fmt.Errorf("Plex redirect leaves the configured server or exceeds the redirect limit")
+			}
+			return nil
+		}},
 		searchCache:       map[string]cacheEntry[[]Track]{},
 		artistLookupCache: map[string]cacheEntry[[]Track]{},
 		artistTracksCache: map[string]cacheEntry[[]Track]{},
@@ -335,6 +336,12 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
+type readStatusError int
+
+func (err readStatusError) Error() string {
+	return fmt.Sprintf("Plex request failed: status %d", int(err))
+}
+
 func (c *Client) get(path string) (*mediaContainer, error) {
 	req, err := http.NewRequest(http.MethodGet, c.ServerURL+path, nil)
 	if err != nil {
@@ -349,7 +356,7 @@ func (c *Client) get(path string) (*mediaContainer, error) {
 		return nil, fmt.Errorf("not found")
 	}
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("Plex request failed: status %d", resp.StatusCode)
+		return nil, readStatusError(resp.StatusCode)
 	}
 	var mc mediaContainer
 	if err := json.NewDecoder(resp.Body).Decode(&mc); err != nil {
@@ -377,7 +384,7 @@ func (c *Client) getWithHeaders(path string, headers map[string]string) (*mediaC
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("Plex request failed: status %d", resp.StatusCode)
+		return nil, readStatusError(resp.StatusCode)
 	}
 	var mc mediaContainer
 	if err := json.NewDecoder(resp.Body).Decode(&mc); err != nil {
@@ -460,6 +467,9 @@ func (c *Client) CreatePlaylist(name, libraryURI string, trackURIs []string) (*P
 	}
 	if len(trackURIs) > 0 {
 		if err := c.AddToPlaylist(playlists[0].RatingKey, trackURIs); err != nil {
+			if cleanupErr := c.DeletePlaylist(playlists[0].RatingKey); cleanupErr != nil {
+				return nil, errors.Join(err, fmt.Errorf("could not remove incomplete playlist: %w", cleanupErr))
+			}
 			return nil, err
 		}
 	}
@@ -467,19 +477,31 @@ func (c *Client) CreatePlaylist(name, libraryURI string, trackURIs []string) (*P
 }
 
 func (c *Client) GetPlaylistTracks(playlistID string) ([]Track, error) {
-	mc, err := c.get("/playlists/" + url.PathEscape(playlistID) + "/items")
-	if err != nil {
-		return nil, err
-	}
-	tracks := make([]Track, 0, len(mc.MediaContainer.Metadata))
-	for _, raw := range mc.MediaContainer.Metadata {
-		var t Track
-		if err := json.Unmarshal(raw, &t); err != nil {
+	return c.getTrackPages("/playlists/" + url.PathEscape(playlistID) + "/items")
+}
+
+func (c *Client) getTrackPages(path string) ([]Track, error) {
+	var tracks []Track
+	for {
+		mc, err := c.getWithHeaders(path, map[string]string{
+			"X-Plex-Container-Start": strconv.Itoa(len(tracks)),
+			"X-Plex-Container-Size":  "1000",
+		})
+		if err != nil {
 			return nil, err
 		}
-		tracks = append(tracks, t)
+		page, err := decodeTracks(mc.MediaContainer.Metadata)
+		if err != nil {
+			return nil, err
+		}
+		tracks = append(tracks, page...)
+		if len(tracks) >= mc.MediaContainer.TotalSize {
+			return tracks, nil
+		}
+		if len(page) == 0 {
+			return nil, fmt.Errorf("Plex returned an incomplete list")
+		}
 	}
-	return tracks, nil
 }
 
 func (c *Client) RenamePlaylist(playlistID, title string) error {
@@ -571,34 +593,6 @@ func (c *Client) MovePlaylistItem(playlistID, playlistItemID, afterItemID string
 func (c *Client) DeletePlaylist(playlistID string) error {
 	_, _, err := c.mutate(http.MethodDelete, "/playlists/"+url.PathEscape(playlistID))
 	return err
-}
-
-// UploadPlaylistPoster downloads imageURL and uploads it as a playlist's
-// poster, ports plex.ts's uploadPlaylistPoster. Non-fatal by convention -
-// callers log and continue on error, the playlist still works without one.
-func (c *Client) UploadPlaylistPoster(playlistID, imageURL string) error {
-	imgReq, err := http.NewRequest(http.MethodGet, imageURL, nil)
-	if err != nil {
-		return err
-	}
-	imgReq.Header.Set("User-Agent", "Playlist Lab/1.0")
-	imgResp, err := c.http.Do(imgReq)
-	if err != nil {
-		return err
-	}
-	defer imgResp.Body.Close()
-	if imgResp.StatusCode >= 400 {
-		return fmt.Errorf("failed to download poster image: status %d", imgResp.StatusCode)
-	}
-	body, err := io.ReadAll(imgResp.Body)
-	if err != nil {
-		return err
-	}
-	contentType := imgResp.Header.Get("Content-Type")
-	if contentType == "" {
-		contentType = "image/jpeg"
-	}
-	return c.UploadPlaylistPosterBytes(playlistID, body, contentType)
 }
 
 // UploadPlaylistPosterBytes is UploadPlaylistPoster's shared upload half,

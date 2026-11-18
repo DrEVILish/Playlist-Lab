@@ -109,8 +109,7 @@ const scrapeJS = `(() => {
 
 func (s *Source) FetchTracks(ctx context.Context, playlistURLOrID string, userID int64) (adapters.PlaylistInfo, []adapters.TrackInfo, error) {
 	var raw string
-	err := browser.Scrape(ctx, "ARIA Browser", 30*time.Second,
-		chromedp.Navigate(playlistURLOrID),
+	err := browser.Scrape(ctx, "ARIA Browser", 30*time.Second, playlistURLOrID, []string{"aria.com.au", "ariacharts.com.au"},
 		chromedp.Sleep(5*time.Second),
 		chromedp.Evaluate(scrapeJS, &raw),
 	)

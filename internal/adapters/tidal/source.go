@@ -19,7 +19,7 @@ type Source struct{}
 func NewSource() *Source { return &Source{} }
 
 func (s *Source) Meta() adapters.ServiceMeta {
-	return adapters.ServiceMeta{ID: serviceName, Name: "Tidal", Icon: "tidal"}
+	return adapters.ServiceMeta{ID: "tidal", Name: "Tidal", Icon: "tidal"}
 }
 
 var tidalPlaylistIDPattern = regexp.MustCompile(`playlist/([a-f0-9-]+)`)
@@ -79,8 +79,7 @@ const tidalScrapeJS = `(() => {
 
 func (s *Source) FetchTracks(ctx context.Context, playlistURLOrID string, userID int64) (adapters.PlaylistInfo, []adapters.TrackInfo, error) {
 	var raw string
-	err := browser.Scrape(ctx, "Tidal Browser", browser.DefaultTimeout,
-		chromedp.Navigate(playlistURLOrID),
+	err := browser.Scrape(ctx, "Tidal Browser", browser.DefaultTimeout, playlistURLOrID, []string{"tidal.com", "tidalhifi.com"},
 		chromedp.WaitVisible(`body`, chromedp.ByQuery),
 		chromedp.Evaluate(tidalScrapeJS, &raw),
 	)

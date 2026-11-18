@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/drevilish/playlist-lab/internal/db"
 	"github.com/drevilish/playlist-lab/internal/session"
@@ -81,6 +82,10 @@ func (m *Middleware) currentSessionData(r *http.Request) *session.Data {
 // bypass gated on DEV_NO_AUTH + non-production).
 func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if CurrentUser(r) != nil {
+			next.ServeHTTP(w, r)
+			return
+		}
 		data := m.currentSessionData(r)
 
 		if (data == nil || data.UserID == 0) && m.DevAuto && m.DevMode {
@@ -103,8 +108,7 @@ func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		isAdmin, _ := db.IsAdmin(m.DB, user.ID)
-		if !isAdmin && !user.IsEnabled {
+		if !m.canAccess(user) {
 			slog.Warn("rejected disabled user", "userId", user.ID)
 			writeJSONError(w, http.StatusForbidden, "USER_DISABLED", "Your account has been disabled. Contact the server admin.")
 			return
@@ -113,6 +117,14 @@ func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), userContextKey, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func (m *Middleware) canAccess(user *db.User) bool {
+	if user.IsEnabled {
+		return true
+	}
+	isAdmin, _ := db.IsAdmin(m.DB, user.ID)
+	return isAdmin
 }
 
 // RequireAdmin must run after RequireAuth.
@@ -164,12 +176,16 @@ func (m *Middleware) RequirePlexOwner(next http.Handler) http.Handler {
 // rejecting the request otherwise.
 func (m *Middleware) OptionalAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/static/") {
+			next.ServeHTTP(w, r)
+			return
+		}
 		data := m.currentSessionData(r)
 		if data == nil || data.UserID == 0 {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if user, err := db.GetUserByID(m.DB, data.UserID); err == nil {
+		if user, err := db.GetUserByID(m.DB, data.UserID); err == nil && m.canAccess(user) {
 			ctx := context.WithValue(r.Context(), userContextKey, user)
 			r = r.WithContext(ctx)
 		}

@@ -19,7 +19,7 @@ type Source struct{}
 func NewSource() *Source { return &Source{} }
 
 func (s *Source) Meta() adapters.ServiceMeta {
-	return adapters.ServiceMeta{ID: serviceName, Name: "Qobuz", Icon: "qobuz"}
+	return adapters.ServiceMeta{ID: "qobuz", Name: "Qobuz", Icon: "qobuz"}
 }
 
 var qobuzPlaylistIDPattern = regexp.MustCompile(`playlist/([0-9]+)`)
@@ -57,8 +57,7 @@ const qobuzScrapeJS = `(() => {
 
 func (s *Source) FetchTracks(ctx context.Context, playlistURLOrID string, userID int64) (adapters.PlaylistInfo, []adapters.TrackInfo, error) {
 	var raw string
-	err := browser.Scrape(ctx, "Qobuz Browser", browser.DefaultTimeout,
-		chromedp.Navigate(playlistURLOrID),
+	err := browser.Scrape(ctx, "Qobuz Browser", browser.DefaultTimeout, playlistURLOrID, []string{"qobuz.com", "qobuz-cdn.com"},
 		chromedp.WaitVisible(`body`, chromedp.ByQuery),
 		chromedp.Evaluate(qobuzScrapeJS, &raw),
 	)

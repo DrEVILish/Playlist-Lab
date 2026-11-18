@@ -58,8 +58,8 @@ func TestImageProxy_RelaysBytesWithoutLeakingToken(t *testing.T) {
 	if got := rec.Header().Get("Content-Type"); got != "image/png" {
 		t.Errorf("Content-Type = %q, want image/png forwarded from upstream", got)
 	}
-	if got := rec.Header().Get("Cache-Control"); !strings.Contains(got, "max-age=86400") {
-		t.Errorf("Cache-Control = %q, want the 24h cache proxy.ts set", got)
+	if got := rec.Header().Get("Cache-Control"); got != "private, no-store" {
+		t.Errorf("Cache-Control = %q, want private, no-store", got)
 	}
 	if gotPath != "/library/metadata/42/composite/1" {
 		t.Errorf("upstream path = %q, want the requested composite path", gotPath)
@@ -87,7 +87,7 @@ func TestImageProxy_UpstreamFailureServesPlaceholder(t *testing.T) {
 		http.NotFound(w, r)
 	})
 
-	rec := authedRequest(t, sqlDB, router, user, http.MethodGet, "/proxy/image?path=%2Fmissing%2Fthumb", "", "")
+	rec := authedRequest(t, sqlDB, router, user, http.MethodGet, "/proxy/image?path=%2Flibrary%2Fmetadata%2F42%2Fthumb", "", "")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 with a placeholder rather than an error page", rec.Code)
@@ -97,6 +97,18 @@ func TestImageProxy_UpstreamFailureServesPlaceholder(t *testing.T) {
 	}
 	if rec.Body.Len() == 0 {
 		t.Error("empty body, want the 1x1 transparent pixel")
+	}
+}
+
+func TestImageProxy_UnexpectedResponseServesPlaceholder(t *testing.T) {
+	sqlDB, user, router := proxyTestFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write([]byte("The thumbnail is not ready."))
+	})
+
+	rec := authedRequest(t, sqlDB, router, user, http.MethodGet, "/proxy/image?path=%2Flibrary%2Fmetadata%2F42%2Fthumb", "", "")
+	if rec.Code != http.StatusOK || rec.Body.String() != string(transparentPixel) {
+		t.Fatalf("wanted the placeholder instead of the response labeled as an image, got %d", rec.Code)
 	}
 }
 

@@ -115,11 +115,15 @@ func (c Config) IsProduction() bool {
 	return c.NodeEnv == "production"
 }
 
-// UsingDefaultSessionSecret reports whether SESSION_SECRET was left unset,
-// meaning session cookies and the AES key that encrypts stored OAuth
-// tokens/API keys are protected by a value published in this repo's source.
+// UsingDefaultSessionSecret rejects the built-in key and the key shown in
+// older copies of .env.example.
 func (c Config) UsingDefaultSessionSecret() bool {
-	return c.SessionSecret == defaultSessionSecret
+	switch strings.TrimSpace(c.SessionSecret) {
+	case "", defaultSessionSecret, "change-this-to-a-random-string-in-production":
+		return true
+	default:
+		return false
+	}
 }
 
 func getEnv(key, fallback string) string {

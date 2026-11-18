@@ -9,6 +9,7 @@
 package deemix
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -19,7 +20,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/drevilish/playlist-lab/internal/db"
+	"github.com/drevilish/playlist-lab/internal/services/limiter"
 	"github.com/drevilish/playlist-lab/internal/services/matching"
 	"github.com/drevilish/playlist-lab/internal/services/notifications"
 	"github.com/drevilish/playlist-lab/internal/services/plex"
@@ -100,14 +104,13 @@ const (
 	reconcileMaxAttempts   = 10
 	reconcileMaxConcurrent = 3 // ponytail: fixed global cap, make it per-server if one user's big batch starts starving another's.
 	resumeMaxAge           = 24 * time.Hour
-	scanDedupeWindow       = 60 * time.Second
+	scanDebounce           = 3 * time.Second
 )
 
 // Service holds the shared Deezer client/queue state and the DB +
 // notification store every download needs to report and resume progress.
 // One instance is shared app-wide (see cmd/server/main.go).
 type Service struct {
-	cfg           Config
 	db            *sql.DB
 	notifications *notifications.Store
 	dz            *dzClient
@@ -115,15 +118,15 @@ type Service struct {
 	settingsMu sync.RWMutex
 	settings   Settings
 
-	queueMu sync.Mutex
-	queue   map[string]QueueItem
+	queueMu         sync.Mutex
+	queue           map[string]QueueItem
+	activeDownloads map[string]string
+	downloadsIdle   chan struct{}
 
-	reconcileMu      sync.Mutex
-	reconcileActive  int
-	reconcileWaiting []chan struct{}
+	reconcileSlots limiter.Semaphore
 
-	scanMu     sync.Mutex
-	lastScanAt map[string]time.Time
+	scanMu       sync.Mutex
+	pendingScans map[[2]string]bool
 
 	lastArlMu    sync.Mutex
 	lastArlCheck *ArlCheckResult
@@ -141,24 +144,30 @@ func New(cfg Config, sqlDB *sql.DB, notifStore *notifications.Store) *Service {
 		settings = LoadSettings(sqlDB)
 	}
 	return &Service{
-		cfg: cfg, db: sqlDB, notifications: notifStore,
-		dz:         newDZClient(cfg.ARL),
-		settings:   settings,
-		queue:      map[string]QueueItem{},
-		lastScanAt: map[string]time.Time{},
+		db: sqlDB, notifications: notifStore,
+		dz:              newDZClient(cfg.ARL),
+		settings:        settings,
+		queue:           map[string]QueueItem{},
+		activeDownloads: map[string]string{},
+		reconcileSlots:  limiter.New(reconcileMaxConcurrent),
+		pendingScans:    map[[2]string]bool{},
 	}
-}
-
-// ResetSession forces the next QueueDownload call to log in again.
-func (s *Service) ResetSession() {
-	s.dz.setARL(s.dz.currentARL())
 }
 
 // SetARL updates the Deezer ARL this app logs in with (admin settings page)
 // and drops the cached session so the next download uses it.
-func (s *Service) SetARL(arl string) {
-	s.cfg.ARL = arl
+func (s *Service) SetARL(arl string, result *ArlCheckResult) {
 	s.dz.setARL(arl)
+	s.lastArlMu.Lock()
+	s.lastArlCheck = result
+	s.lastArlMu.Unlock()
+}
+
+// ValidateARL checks a proposed credential with a separate session.
+func (s *Service) ValidateARL(arl string) ArlCheckResult {
+	candidate := newDZClient(arl)
+	candidate.gwLightURL = s.dz.gwLightURL
+	return checkARL(candidate)
 }
 
 // ARL returns the currently configured Deezer ARL, for prefilling the admin
@@ -188,10 +197,6 @@ func (s *Service) ReloadSettings() {
 	s.settingsMu.Lock()
 	s.settings = settings
 	s.settingsMu.Unlock()
-}
-
-func (s *Service) login() error {
-	return s.dz.login()
 }
 
 // SearchTrack searches Deezer's public track-search API for "term" - the
@@ -351,8 +356,64 @@ func parseTrackOrAlbumURL(u string) (typ, id string, ok bool) {
 // per-track progress reporting.
 func (s *Service) setQueueItem(uuid string, item QueueItem) {
 	s.queueMu.Lock()
+	previous := s.queue[uuid]
 	s.queue[uuid] = item
+	if previous.active() && !item.active() {
+		key, _, _ := strings.Cut(uuid, "/")
+		if s.activeDownloads[key] == uuid {
+			delete(s.activeDownloads, key)
+			if len(s.activeDownloads) == 0 && s.downloadsIdle != nil {
+				close(s.downloadsIdle)
+				s.downloadsIdle = nil
+			}
+		}
+		time.AfterFunc(pollMax, func() {
+			s.queueMu.Lock()
+			delete(s.queue, uuid)
+			s.queueMu.Unlock()
+		})
+	}
 	s.queueMu.Unlock()
+}
+
+func (item QueueItem) active() bool {
+	return item.Status == "inQueue" || item.Status == "downloading"
+}
+
+// queueTrack looks up active work and, if provided, atomically reserves a replacement.
+func (s *Service) queueTrack(key string, candidate *QueueItem) QueuedTrack {
+	s.queueMu.Lock()
+	defer s.queueMu.Unlock()
+	if id, ok := s.activeDownloads[key]; ok {
+		item := s.queue[id]
+		return QueuedTrack{UUID: id, Title: item.Title, Artist: item.Artist, AlreadyQueued: true}
+	}
+	if candidate == nil {
+		return QueuedTrack{}
+	}
+	id := key + "/" + uuid.NewString()
+	if s.downloadsIdle == nil {
+		s.downloadsIdle = make(chan struct{})
+	}
+	s.activeDownloads[key] = id
+	s.queue[id] = *candidate
+	return QueuedTrack{UUID: id, Title: candidate.Title, Artist: candidate.Artist}
+}
+
+// WaitDownloads gives active download workers time to publish their files.
+func (s *Service) WaitDownloads(ctx context.Context) error {
+	s.queueMu.Lock()
+	idle := s.downloadsIdle
+	s.queueMu.Unlock()
+	if idle == nil {
+		return nil
+	}
+	select {
+	case <-idle:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // GetQueueItem reads one item's live status/progress out of the in-memory
@@ -382,16 +443,11 @@ func (s *Service) QueueDownload(trackURL, fallbackURL string) (QueuedTrack, erro
 	if !ok {
 		return QueuedTrack{}, fmt.Errorf("not a deezer track or album URL: %s", trackURL)
 	}
-	if err := s.login(); err != nil {
-		return QueuedTrack{}, err
-	}
-
 	bitrate := s.Settings().MaxBitrate
-	uuid := fmt.Sprintf("%s_%s_%s", typ, id, bitrate)
+	key := fmt.Sprintf("%s_%s_%s", typ, id, bitrate)
 
-	if existing, _ := s.GetQueueItem(uuid); existing != nil {
-		slog.Info("[Deemix] Already in queue, reporting its existing state", "uuid", uuid, "status", existing.Status)
-		return QueuedTrack{UUID: uuid, Title: existing.Title, Artist: existing.Artist, AlreadyQueued: true}, nil
+	if queued := s.queueTrack(key, nil); queued.AlreadyQueued {
+		return queued, nil
 	}
 
 	switch typ {
@@ -403,9 +459,11 @@ func (s *Service) QueueDownload(trackURL, fallbackURL string) (QueuedTrack, erro
 			}
 			return QueuedTrack{}, fmt.Errorf("deemix could not resolve %s: %w", trackURL, err)
 		}
-		s.setQueueItem(uuid, QueueItem{Status: "inQueue", Title: track.SNG_TITLE, Artist: track.ART_NAME, Size: 1})
-		go s.runTrackDownload(uuid, *track, bitrate)
-		return QueuedTrack{UUID: uuid, Title: track.SNG_TITLE, Artist: track.ART_NAME}, nil
+		queued := s.queueTrack(key, &QueueItem{Status: "inQueue", Title: track.SNG_TITLE, Artist: track.ART_NAME, Size: 1})
+		if !queued.AlreadyQueued {
+			go s.runTrackDownload(queued.UUID, *track, bitrate)
+		}
+		return queued, nil
 
 	case "album":
 		tracks, err := s.dz.getAlbumTracks(id)
@@ -420,17 +478,19 @@ func (s *Service) QueueDownload(trackURL, fallbackURL string) (QueuedTrack, erro
 			return QueuedTrack{}, fmt.Errorf("deemix could not resolve %s: %w", trackURL, err)
 		}
 		title, artist := tracks[0].ALB_TITLE, tracks[0].ART_NAME
-		s.setQueueItem(uuid, QueueItem{Status: "inQueue", Title: title, Artist: artist, Size: len(tracks)})
-		go s.runAlbumDownload(uuid, tracks, bitrate)
-		return QueuedTrack{UUID: uuid, Title: title, Artist: artist}, nil
+		queued := s.queueTrack(key, &QueueItem{Status: "inQueue", Title: title, Artist: artist, Size: len(tracks)})
+		if !queued.AlreadyQueued {
+			go s.runAlbumDownload(queued.UUID, tracks, bitrate)
+		}
+		return queued, nil
 	}
 
 	return QueuedTrack{}, fmt.Errorf("unsupported deezer URL: %s", trackURL)
 }
 
 // StartDownload is the one entry point for tracking a queued download:
-// opens the notification the header shows, records the download so it
-// survives a restart (see ResumeDownloads), and starts the progress poller.
+// opens a notification, records the work for startup interruption reporting,
+// and starts the progress poller.
 func (s *Service) StartDownload(req DownloadRequest) {
 	notification := s.notifications.Add(req.UserID, notifications.TypeDeemix, req.Title, req.Detail, notifications.StatusInProgress, nil)
 	var missingTrackID *int64
@@ -447,48 +507,20 @@ func (s *Service) StartDownload(req DownloadRequest) {
 	})
 }
 
-// ResumeDownloads restarts the progress poller for every download still
-// recorded as in flight - called once at startup so a restart doesn't
-// abandon files deemix is (or was) still happily downloading.
+// ResumeDownloads reports interrupted downloads at startup. The native
+// worker runs inside this process, so users must retry interrupted work.
 func (s *Service) ResumeDownloads() {
 	rows, err := db.GetActiveDeemixDownloads(s.db, resumeMaxAge)
 	if err != nil {
 		slog.Error("[Deemix] Failed to read in-flight downloads to resume", "error", err)
 		return
 	}
-	if len(rows) == 0 {
-		return
-	}
 	for _, row := range rows {
-		detail := row.Detail.String
-		notification := s.notifications.Add(row.UserID, notifications.TypeDeemix, row.Title, detail, notifications.StatusInProgress, nil)
-		var reconcile *ReconcileContext
-		if row.MissingTrackID.Valid {
-			reconcile = s.rebuildReconcileContext(row.UserID, row.MissingTrackID.Int64)
+		if err := db.DeleteDeemixDownload(s.db, row.ID); err != nil {
+			slog.Error("[Deemix] Failed to clear interrupted download", "error", err, "id", row.ID)
+			continue
 		}
-		go s.trackDownload(trackOptions{
-			userID: row.UserID, notificationID: notification.ID, uuid: row.UUID,
-			checkImmediately: true, reconcile: reconcile, downloadID: row.ID,
-		})
-	}
-	slog.Info("[Deemix] Resumed in-flight downloads after restart", "count", len(rows))
-}
-
-func (s *Service) rebuildReconcileContext(userID, missingTrackID int64) *ReconcileContext {
-	user, err := db.GetUserByID(s.db, userID)
-	if err != nil {
-		return nil
-	}
-	server, err := db.GetUserMusicServer(s.db, userID)
-	if err != nil || server == nil {
-		return nil
-	}
-	return &ReconcileContext{
-		MissingTrackID: missingTrackID,
-		ServerURL:      server.ServerURL,
-		PlexToken:      plex.ResolveToken(user.PlexToken, server.AccessToken.String),
-		LibraryID:      server.LibraryID.String,
-		ServerClientID: server.ServerClientID,
+		s.notifications.Add(row.UserID, notifications.TypeDeemix, row.Title, "Download interrupted by server restart. Retry from Missing Tracks.", notifications.StatusError, nil)
 	}
 }
 
@@ -544,6 +576,9 @@ func (s *Service) trackDownload(opt trackOptions) {
 			return
 		}
 		if item.Status == "failed" || item.Status == "withErrors" {
+			if opt.reconcile != nil && item.Downloaded > 0 {
+				s.queuePlexScan(*opt.reconcile)
+			}
 			errMsg := "Download failed"
 			if len(item.Errors) > 0 && item.Errors[0].Message != "" {
 				errMsg = item.Errors[0].Message
@@ -569,71 +604,29 @@ func (s *Service) trackDownload(opt trackOptions) {
 	s.notifications.Update(opt.userID, opt.notificationID, notifications.Patch{Status: &status, Detail: &detail})
 }
 
-func (s *Service) acquireReconcileSlot() {
-	s.reconcileMu.Lock()
-	if s.reconcileActive < reconcileMaxConcurrent {
-		s.reconcileActive++
-		s.reconcileMu.Unlock()
-		return
-	}
-	ch := make(chan struct{})
-	s.reconcileWaiting = append(s.reconcileWaiting, ch)
-	s.reconcileMu.Unlock()
-	<-ch
-	s.reconcileMu.Lock()
-	s.reconcileActive++
-	s.reconcileMu.Unlock()
-}
-
-func (s *Service) releaseReconcileSlot() {
-	s.reconcileMu.Lock()
-	s.reconcileActive--
-	var next chan struct{}
-	if len(s.reconcileWaiting) > 0 {
-		next = s.reconcileWaiting[0]
-		s.reconcileWaiting = s.reconcileWaiting[1:]
-	}
-	s.reconcileMu.Unlock()
-	if next != nil {
-		close(next)
-	}
-}
-
-// scanPlexIfQueueDrained triggers a Plex library scan once deemix's whole
-// queue is drained (not per completed download - mid-batch, still-
-// downloading tracks aren't on disk yet, so scanning every time would just
-// make Plex re-walk the whole library for no gain).
-func (s *Service) scanPlexIfQueueDrained(reconcile *ReconcileContext) {
+// queuePlexScan coalesces closely spaced completions for one library.
+func (s *Service) queuePlexScan(reconcile ReconcileContext) {
 	if reconcile.LibraryID == "" {
 		return
 	}
-	s.queueMu.Lock()
-	queue := make(map[string]QueueItem, len(s.queue))
-	for k, v := range s.queue {
-		queue[k] = v
-	}
-	s.queueMu.Unlock()
-	for _, item := range queue {
-		if item.Status == "inQueue" || item.Status == "downloading" {
-			return
-		}
-	}
-
-	key := reconcile.ServerURL + ":" + reconcile.LibraryID
+	key := [2]string{reconcile.ServerURL, reconcile.LibraryID}
 	s.scanMu.Lock()
-	if time.Since(s.lastScanAt[key]) < scanDedupeWindow {
+	if s.pendingScans[key] {
 		s.scanMu.Unlock()
 		return
 	}
-	s.lastScanAt[key] = time.Now()
+	s.pendingScans[key] = true
 	s.scanMu.Unlock()
 
-	client := plex.NewClient(reconcile.ServerURL, reconcile.PlexToken, "", "Playlist Lab")
-	if err := client.ScanLibrary(reconcile.LibraryID, ""); err != nil {
-		slog.Warn("[Deemix] Could not trigger a Plex library scan", "error", err)
-		return
-	}
-	slog.Info("[Deemix] deemix queue drained - triggered a Plex library scan", "libraryId", reconcile.LibraryID)
+	time.AfterFunc(scanDebounce, func() {
+		s.scanMu.Lock()
+		delete(s.pendingScans, key)
+		s.scanMu.Unlock()
+		client := plex.NewClient(reconcile.ServerURL, reconcile.PlexToken, "", "Playlist Lab")
+		if err := client.ScanLibrary(reconcile.LibraryID, ""); err != nil {
+			slog.Warn("[Deemix] Could not trigger a Plex library scan", "error", err)
+		}
+	})
 }
 
 // reconcileDownloadedTrack asks Plex to scan, then polls for a match on the
@@ -648,9 +641,9 @@ func (s *Service) reconcileDownloadedTrack(userID int64, notificationID string, 
 	progress := 100
 	s.notifications.Update(userID, notificationID, notifications.Patch{Progress: &progress, Detail: &waitingDetail})
 
-	s.scanPlexIfQueueDrained(reconcile)
-	s.acquireReconcileSlot()
-	defer s.releaseReconcileSlot()
+	s.queuePlexScan(*reconcile)
+	s.reconcileSlots.Acquire()
+	defer s.reconcileSlots.Release()
 	s.runReconcileAttempts(userID, notificationID, reconcile, label, outcome)
 }
 
@@ -715,16 +708,21 @@ func (s *Service) runReconcileAttempts(userID int64, notificationID string, reco
 // every few months, and without a check the only signal used to be a user
 // clicking Deemix and getting an error.
 func (s *Service) CheckArl() ArlCheckResult {
-	var result ArlCheckResult
-	if err := s.login(); err != nil {
-		result = ArlCheckResult{OK: false, Error: err.Error(), At: time.Now()}
-	} else {
-		result = ArlCheckResult{OK: true, At: time.Now()}
-	}
+	arl := s.ARL()
+	result := s.ValidateARL(arl)
 	s.lastArlMu.Lock()
-	s.lastArlCheck = &result
+	if arl == s.ARL() {
+		s.lastArlCheck = &result
+	}
 	s.lastArlMu.Unlock()
 	return result
+}
+
+func checkARL(client *dzClient) ArlCheckResult {
+	if err := client.login(); err != nil {
+		return ArlCheckResult{Error: err.Error(), At: time.Now()}
+	}
+	return ArlCheckResult{OK: true, At: time.Now()}
 }
 
 func (s *Service) LastArlCheck() *ArlCheckResult {
@@ -736,6 +734,9 @@ func (s *Service) LastArlCheck() *ArlCheckResult {
 // CheckArlAndNotifyAdmins checks the ARL and, when it fails, tells every
 // admin - the ARL is server-wide config rather than any one user's.
 func (s *Service) CheckArlAndNotifyAdmins() {
+	if s.ARL() == "" {
+		return
+	}
 	result := s.CheckArl()
 	if result.OK {
 		return

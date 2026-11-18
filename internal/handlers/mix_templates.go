@@ -564,7 +564,7 @@ func (h *MixTemplatesHandler) runTemplate(userID int64, userServer *db.UserServe
 	if err != nil {
 		return err
 	}
-	if _, err := db.CreatePlaylistRow(h.DB, userID, playlist.RatingKey, playlistName, "template", ""); err != nil {
+	if _, err := db.CreatePlaylistRowForServer(h.DB, userID, userServer.ServerClientID, playlist.RatingKey, playlistName, "template", ""); err != nil {
 		return err
 	}
 	_ = db.UpdateMixTemplateUsage(h.DB, tpl.ID)

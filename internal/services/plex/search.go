@@ -2,6 +2,7 @@ package plex
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
@@ -18,7 +19,16 @@ import (
 // title-only fetch ranked by artist match. With only a query, it falls back
 // to Plex's hub search across all fields.
 func (c *Client) SearchTrack(query, libraryID, artist, title string) ([]Track, error) {
-	cacheKey := query + "|" + orAll(libraryID) + "|" + artist + "|" + title
+	return c.searchTrack(query, libraryID, artist, title, false)
+}
+
+// SearchTrackComplete rejects incomplete searches before a playlist can be replaced.
+func (c *Client) SearchTrackComplete(query, libraryID, artist, title string) ([]Track, error) {
+	return c.searchTrack(query, libraryID, artist, title, true)
+}
+
+func (c *Client) searchTrack(query, libraryID, artist, title string, strict bool) ([]Track, error) {
+	cacheKey := strconv.FormatBool(strict) + "|" + query + "|" + orAll(libraryID) + "|" + artist + "|" + title
 	if cached, ok := c.getCache(c.searchCache, cacheKey); ok {
 		return cached, nil
 	}
@@ -28,11 +38,11 @@ func (c *Client) SearchTrack(query, libraryID, artist, title string) ([]Track, e
 
 	switch {
 	case libraryID != "" && artist != "" && title != "":
-		tracks, err = c.searchByArtistFirst(libraryID, artist, title)
+		tracks, err = c.searchByArtistFirst(libraryID, artist, title, strict)
 	case libraryID != "" && title != "":
 		tracks, err = c.searchByTitleOnly(libraryID, title)
 	default:
-		tracks, err = c.searchHub(query, libraryID)
+		tracks, err = c.searchHub(query, libraryID, strict)
 	}
 	if err != nil {
 		return nil, err
@@ -61,13 +71,16 @@ func normalizeLoose(s string) string {
 	return b.String()
 }
 
-func (c *Client) searchByArtistFirst(libraryID, artist, title string) ([]Track, error) {
+func (c *Client) searchByArtistFirst(libraryID, artist, title string, strict bool) ([]Track, error) {
 	artistLookupKey := libraryID + "|" + strings.ToLower(artist)
 	artists, ok := c.getCache(c.artistLookupCache, artistLookupKey)
 	if !ok {
 		mc, err := c.get("/library/sections/" + libraryID + "/all?type=8&artist.title=" + url.QueryEscape(artist))
 		if err != nil {
-			return c.artistFirstFallback(libraryID, artist, title)
+			if strict {
+				return nil, err
+			}
+			return c.artistFirstFallback(libraryID, artist, title, strict)
 		}
 		artists, err = decodeTracks(mc.MediaContainer.Metadata)
 		if err != nil {
@@ -87,7 +100,10 @@ func (c *Client) searchByArtistFirst(libraryID, artist, title string) ([]Track, 
 				map[string]string{"X-Plex-Container-Start": "0", "X-Plex-Container-Size": strconv.Itoa(maxArtistCatalog)},
 			)
 			if err != nil {
-				return c.artistFirstFallback(libraryID, artist, title)
+				if strict {
+					return nil, err
+				}
+				return c.artistFirstFallback(libraryID, artist, title, strict)
 			}
 			artistTracks, err = decodeTracks(mc.MediaContainer.Metadata)
 			if err != nil {
@@ -106,7 +122,7 @@ func (c *Client) searchByArtistFirst(libraryID, artist, title string) ([]Track, 
 	}
 
 	if len(tracks) == 0 {
-		return c.artistFirstFallback(libraryID, artist, title)
+		return c.artistFirstFallback(libraryID, artist, title, strict)
 	}
 	return tracks, nil
 }
@@ -114,20 +130,34 @@ func (c *Client) searchByArtistFirst(libraryID, artist, title string) ([]Track, 
 // artistFirstFallback runs the three progressively looser tiers plex.ts's
 // searchTrack falls through to once the artist-first strategy (or the
 // artist/catalog lookups it depends on) comes up empty.
-func (c *Client) artistFirstFallback(libraryID, artist, title string) ([]Track, error) {
-	mc, err := c.get("/library/sections/" + libraryID + "/all?type=10&artist.title=" + url.QueryEscape(artist) + "&track.title=" + url.QueryEscape(title))
+func (c *Client) artistFirstFallback(libraryID, artist, title string, strict bool) ([]Track, error) {
+	path := "/library/sections/" + libraryID + "/all?type=10"
+	trackTitle := url.QueryEscape(title)
+	trackArtist := url.QueryEscape(artist)
+	mc, err := c.get(path + "&artist.title=" + trackArtist + "&track.title=" + trackTitle)
 	if err == nil {
-		if tracks, _ := decodeTracks(mc.MediaContainer.Metadata); len(tracks) > 0 {
+		tracks, decodeErr := decodeTracks(mc.MediaContainer.Metadata)
+		if decodeErr != nil && strict {
+			return nil, decodeErr
+		}
+		if len(tracks) > 0 {
 			return tracks, nil
 		}
+	} else if strict {
+		return nil, err
 	}
 
-	// track.originalTitle may not be supported by every Plex version - a
-	// failure here just means this tier found nothing, not a hard error.
-	if mc, err := c.get("/library/sections/" + libraryID + "/all?type=10&track.title=" + url.QueryEscape(title) + "&track.originalTitle=" + url.QueryEscape(artist)); err == nil {
-		if tracks, _ := decodeTracks(mc.MediaContainer.Metadata); len(tracks) > 0 {
+	// Older Plex versions can reject the optional original-title filter.
+	if mc, err := c.get(path + "&track.title=" + trackTitle + "&track.originalTitle=" + trackArtist); err == nil {
+		tracks, decodeErr := decodeTracks(mc.MediaContainer.Metadata)
+		if decodeErr != nil && strict {
+			return nil, decodeErr
+		}
+		if len(tracks) > 0 {
 			return tracks, nil
 		}
+	} else if strict && err != readStatusError(http.StatusBadRequest) && err.Error() != "not found" {
+		return nil, err
 	}
 
 	mc, err = c.get("/library/sections/" + libraryID + "/all?type=10&track.title=" + url.QueryEscape(title))
@@ -168,7 +198,7 @@ func (c *Client) searchByTitleOnly(libraryID, title string) ([]Track, error) {
 	return decodeTracks(mc.MediaContainer.Metadata)
 }
 
-func (c *Client) searchHub(query, libraryID string) ([]Track, error) {
+func (c *Client) searchHub(query, libraryID string, strict bool) ([]Track, error) {
 	mc, err := c.get("/hubs/search?query=" + url.QueryEscape(query) + "&limit=100")
 	if err != nil {
 		return nil, err
@@ -194,15 +224,24 @@ func (c *Client) searchHub(query, libraryID string) ([]Track, error) {
 
 	if albumHub != nil {
 		albums, err := decodeTracks(albumHub.Metadata)
+		if err != nil && strict {
+			return nil, err
+		}
 		if err == nil {
 			limit := min(5, len(albums))
 			for _, album := range albums[:limit] {
 				amc, err := c.get(album.Key)
 				if err != nil {
+					if strict {
+						return nil, err
+					}
 					continue
 				}
 				albumTracks, err := decodeTracks(amc.MediaContainer.Metadata)
 				if err != nil {
+					if strict {
+						return nil, err
+					}
 					continue
 				}
 				allTracks = append(allTracks, albumTracks...)

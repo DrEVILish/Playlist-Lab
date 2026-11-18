@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -68,6 +69,7 @@ type AdminHandler struct {
 	Deemix        *deemixsvc.Service
 	Lidarr        *lidarrsvc.Service
 	YouTube       *youtubetarget.Target
+	deemixArlMu   sync.Mutex
 }
 
 func RegisterAdmin(r chi.Router, mw *auth.Middleware, h *AdminHandler) {
@@ -767,23 +769,42 @@ func (h *AdminHandler) deemixAll(w http.ResponseWriter, r *http.Request) {
 	h.Tmpl.RenderPartial(w, "partials/notifications.html", map[string]any{"Notifications": h.Notifications.List(admin.ID)})
 }
 
-// saveDeemixArl ports PUT /api/admin/deemix-arl: persists the Deezer ARL
-// deemix-server logs in with, drops the cached session so the next download
-// uses it, and - same as the original - tests it immediately so a mistyped
-// or already-expired ARL is caught here instead of by the next user who
-// clicks Deemix.
 func (h *AdminHandler) saveDeemixArl(w http.ResponseWriter, r *http.Request) {
 	admin := auth.CurrentUser(r)
-	_ = r.ParseForm()
-	arl := strings.TrimSpace(r.FormValue("arl"))
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	if !r.PostForm.Has("arl") {
+		http.Error(w, "missing Deezer credential field", http.StatusBadRequest)
+		return
+	}
+	arl := strings.TrimSpace(r.PostForm.Get("arl"))
+	var result *deemixsvc.ArlCheckResult
+	if arl != "" {
+		check := h.Deemix.ValidateARL(arl)
+		if !check.OK {
+			h.notifyArlCheck(admin.ID, "Save Deezer ARL", check)
+			h.renderDeemixPanel(w, r, check.Error)
+			return
+		}
+		result = &check
+	}
+	h.deemixArlMu.Lock()
 	if err := db.SetAdminConfig(h.DB, configKeyDeemixArl, arl); err != nil {
+		h.deemixArlMu.Unlock()
 		slog.Error("failed to save deemix ARL", "error", err, "adminId", admin.ID)
 		h.Notifications.Add(admin.ID, notifications.TypeAction, "Save Deezer ARL", err.Error(), notifications.StatusError, nil)
 		h.renderDeemixPanel(w, r, err.Error())
 		return
 	}
-	h.Deemix.SetARL(arl)
-	h.notifyArlCheck(admin.ID, "Save Deezer ARL", h.Deemix.CheckArl())
+	h.Deemix.SetARL(arl, result)
+	h.deemixArlMu.Unlock()
+	if result != nil {
+		h.notifyArlCheck(admin.ID, "Save Deezer ARL", *result)
+	} else {
+		h.Notifications.Add(admin.ID, notifications.TypeAction, "Save Deezer ARL", "Deezer credential cleared", notifications.StatusSuccess, nil)
+	}
 	h.renderDeemixPanel(w, r, "")
 }
 
@@ -828,84 +849,76 @@ func formInt(r *http.Request, name string, fallback int) int {
 // keeps its old value) rather than silently.
 func parseDeemixSettingsForm(r *http.Request) deemixsvc.Settings {
 	f := r.PostFormValue
+	overwrite := f("overwriteFile")
+	if overwrite != deemixsvc.OverwriteYes {
+		overwrite = deemixsvc.OverwriteNo
+	}
 	return deemixsvc.Settings{
-		DownloadLocation:          strings.TrimSpace(f("downloadLocation")),
-		TracknameTemplate:         f("tracknameTemplate"),
-		AlbumTracknameTemplate:    f("albumTracknameTemplate"),
-		PlaylistTracknameTemplate: f("playlistTracknameTemplate"),
-		CreatePlaylistFolder:      formBool(r, "createPlaylistFolder"),
-		PlaylistNameTemplate:      f("playlistNameTemplate"),
-		CreateArtistFolder:        formBool(r, "createArtistFolder"),
-		ArtistNameTemplate:        f("artistNameTemplate"),
-		CreateAlbumFolder:         formBool(r, "createAlbumFolder"),
-		AlbumNameTemplate:         f("albumNameTemplate"),
-		CreateCDFolder:            formBool(r, "createCDFolder"),
-		CreateStructurePlaylist:   formBool(r, "createStructurePlaylist"),
-		CreateSingleFolder:        formBool(r, "createSingleFolder"),
-		PadTracks:                 formBool(r, "padTracks"),
-		PaddingSize:               f("paddingSize"),
-		IllegalCharacterReplacer:  f("illegalCharacterReplacer"),
-		QueueConcurrency:          formInt(r, "queueConcurrency", 3),
-		MaxBitrate:                f("maxBitrate"),
-		FeelingLucky:              formBool(r, "feelingLucky"),
-		FallbackBitrate:           formBool(r, "fallbackBitrate"),
-		FallbackSearch:            formBool(r, "fallbackSearch"),
-		FallbackISRC:              formBool(r, "fallbackISRC"),
-		LogErrors:                 formBool(r, "logErrors"),
-		LogSearched:               formBool(r, "logSearched"),
-		OverwriteFile:             f("overwriteFile"),
-		CreateM3U8File:            formBool(r, "createM3U8File"),
-		PlaylistFilenameTemplate:  f("playlistFilenameTemplate"),
-		EmbeddedArtworkSize:       formInt(r, "embeddedArtworkSize", 800),
-		EmbeddedArtworkPNG:        formBool(r, "embeddedArtworkPNG"),
-		LocalArtworkSize:          formInt(r, "localArtworkSize", 1200),
-		LocalArtworkFormat:        f("localArtworkFormat"),
-		SaveArtwork:               formBool(r, "saveArtwork"),
-		CoverImageTemplate:        f("coverImageTemplate"),
-		SaveArtworkArtist:         formBool(r, "saveArtworkArtist"),
-		ArtistImageTemplate:       f("artistImageTemplate"),
-		JpegImageQuality:          formInt(r, "jpegImageQuality", 90),
-		DateFormat:                f("dateFormat"),
-		AlbumVariousArtists:       formBool(r, "albumVariousArtists"),
-		RemoveAlbumVersion:        formBool(r, "removeAlbumVersion"),
-		RemoveDuplicateArtists:    formBool(r, "removeDuplicateArtists"),
-		FeaturedToTitle:           f("featuredToTitle"),
-		TitleCasing:               f("titleCasing"),
-		ArtistCasing:              f("artistCasing"),
-		ExecuteCommand:            f("executeCommand"),
+		DownloadLocation:         strings.TrimSpace(f("downloadLocation")),
+		TracknameTemplate:        f("tracknameTemplate"),
+		AlbumTracknameTemplate:   f("albumTracknameTemplate"),
+		CreateArtistFolder:       formBool(r, "createArtistFolder"),
+		ArtistNameTemplate:       f("artistNameTemplate"),
+		CreateAlbumFolder:        formBool(r, "createAlbumFolder"),
+		AlbumNameTemplate:        f("albumNameTemplate"),
+		CreateCDFolder:           formBool(r, "createCDFolder"),
+		CreateSingleFolder:       formBool(r, "createSingleFolder"),
+		PadTracks:                formBool(r, "padTracks"),
+		PaddingSize:              f("paddingSize"),
+		IllegalCharacterReplacer: f("illegalCharacterReplacer"),
+		QueueConcurrency:         formInt(r, "queueConcurrency", 3),
+		MaxBitrate:               f("maxBitrate"),
+		FeelingLucky:             formBool(r, "feelingLucky"),
+		FallbackBitrate:          formBool(r, "fallbackBitrate"),
+		LogErrors:                formBool(r, "logErrors"),
+		LogSearched:              formBool(r, "logSearched"),
+		OverwriteFile:            overwrite,
+		EmbeddedArtworkSize:      formInt(r, "embeddedArtworkSize", 800),
+		EmbeddedArtworkPNG:       formBool(r, "embeddedArtworkPNG"),
+		LocalArtworkSize:         formInt(r, "localArtworkSize", 1200),
+		LocalArtworkFormat:       f("localArtworkFormat"),
+		SaveArtwork:              formBool(r, "saveArtwork"),
+		CoverImageTemplate:       f("coverImageTemplate"),
+		SaveArtworkArtist:        formBool(r, "saveArtworkArtist"),
+		ArtistImageTemplate:      f("artistImageTemplate"),
+		JpegImageQuality:         formInt(r, "jpegImageQuality", 90),
+		DateFormat:               f("dateFormat"),
+		RemoveAlbumVersion:       formBool(r, "removeAlbumVersion"),
+		RemoveDuplicateArtists:   formBool(r, "removeDuplicateArtists"),
+		FeaturedToTitle:          f("featuredToTitle"),
+		TitleCasing:              f("titleCasing"),
+		ArtistCasing:             f("artistCasing"),
+		ExecuteCommand:           f("executeCommand"),
 		Tags: deemixsvc.TagSettings{
-			Title:                     formBool(r, "tags.title"),
-			Artist:                    formBool(r, "tags.artist"),
-			Artists:                   formBool(r, "tags.artists"),
-			Album:                     formBool(r, "tags.album"),
-			Cover:                     formBool(r, "tags.cover"),
-			TrackNumber:               formBool(r, "tags.trackNumber"),
-			TrackTotal:                formBool(r, "tags.trackTotal"),
-			DiscNumber:                formBool(r, "tags.discNumber"),
-			DiscTotal:                 formBool(r, "tags.discTotal"),
-			AlbumArtist:               formBool(r, "tags.albumArtist"),
-			Genre:                     formBool(r, "tags.genre"),
-			Year:                      formBool(r, "tags.year"),
-			Date:                      formBool(r, "tags.date"),
-			Explicit:                  formBool(r, "tags.explicit"),
-			ISRC:                      formBool(r, "tags.isrc"),
-			Length:                    formBool(r, "tags.length"),
-			Barcode:                   formBool(r, "tags.barcode"),
-			BPM:                       formBool(r, "tags.bpm"),
-			ReplayGain:                formBool(r, "tags.replayGain"),
-			Label:                     formBool(r, "tags.label"),
-			Lyrics:                    formBool(r, "tags.lyrics"),
-			SyncedLyrics:              formBool(r, "tags.syncedLyrics"),
-			Copyright:                 formBool(r, "tags.copyright"),
-			Composer:                  formBool(r, "tags.composer"),
-			InvolvedPeople:            formBool(r, "tags.involvedPeople"),
-			Source:                    formBool(r, "tags.source"),
-			Rating:                    formBool(r, "tags.rating"),
-			SavePlaylistAsCompilation: formBool(r, "tags.savePlaylistAsCompilation"),
-			SaveID3v1:                 formBool(r, "tags.saveID3v1"),
-			MultiArtistSeparator:      f("tags.multiArtistSeparator"),
-			SingleAlbumArtist:         formBool(r, "tags.singleAlbumArtist"),
-			CoverDescriptionUTF8:      formBool(r, "tags.coverDescriptionUTF8"),
+			Title:                formBool(r, "tags.title"),
+			Artist:               formBool(r, "tags.artist"),
+			Artists:              formBool(r, "tags.artists"),
+			Album:                formBool(r, "tags.album"),
+			Cover:                formBool(r, "tags.cover"),
+			TrackNumber:          formBool(r, "tags.trackNumber"),
+			TrackTotal:           formBool(r, "tags.trackTotal"),
+			DiscNumber:           formBool(r, "tags.discNumber"),
+			DiscTotal:            formBool(r, "tags.discTotal"),
+			AlbumArtist:          formBool(r, "tags.albumArtist"),
+			Genre:                formBool(r, "tags.genre"),
+			Year:                 formBool(r, "tags.year"),
+			Date:                 formBool(r, "tags.date"),
+			Explicit:             formBool(r, "tags.explicit"),
+			ISRC:                 formBool(r, "tags.isrc"),
+			Length:               formBool(r, "tags.length"),
+			Barcode:              formBool(r, "tags.barcode"),
+			BPM:                  formBool(r, "tags.bpm"),
+			ReplayGain:           formBool(r, "tags.replayGain"),
+			Label:                formBool(r, "tags.label"),
+			Lyrics:               formBool(r, "tags.lyrics"),
+			Copyright:            formBool(r, "tags.copyright"),
+			Composer:             formBool(r, "tags.composer"),
+			InvolvedPeople:       formBool(r, "tags.involvedPeople"),
+			Source:               formBool(r, "tags.source"),
+			Rating:               formBool(r, "tags.rating"),
+			SaveID3v1:            formBool(r, "tags.saveID3v1"),
+			MultiArtistSeparator: f("tags.multiArtistSeparator"),
+			CoverDescriptionUTF8: formBool(r, "tags.coverDescriptionUTF8"),
 		},
 	}
 }
