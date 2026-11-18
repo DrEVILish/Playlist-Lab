@@ -98,12 +98,7 @@
       <path d="m12 3 2.7 5.9 6.3.6-4.8 4.3 1.4 6.2L12 16.9 6.4 20l1.4-6.2L3 9.5l6.3-.6z" stroke-linejoin="round"/>
       <path d="M8.4 5.4 12 4.2l3.6 1.2" stroke-width="2.2" opacity="0.5"/>
     </symbol>
-    <symbol id="icon-trash" viewBox="0 0 24 24">
-      <path d="M4.5 7h15" stroke-linecap="round"/>
-      <path d="M9 7V4.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 4.5V7"/>
-      <path d="M6.5 7 7.4 19.5A1.5 1.5 0 0 0 8.9 21h6.2a1.5 1.5 0 0 0 1.5-1.5L17.5 7"/>
-      <path d="M6 5.6h12" stroke-width="2.5" opacity="0.5"/>
-    </symbol>
+    <symbol id="icon-trash" viewBox="0 0 24 24"><defs><linearGradient id="w7-tr-b" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#bcd0e6"/><stop offset=".35" stop-color="#f7fbff"/><stop offset=".7" stop-color="#d7e5f3"/><stop offset="1" stop-color="#9fb8d2"/></linearGradient></defs><g stroke="none" stroke-linejoin="round"><path d="M5 6.5h14l-1.4 14a1 1 0 0 1-1 .9H7.4a1 1 0 0 1-1-.9z" fill="url(#w7-tr-b)" stroke="#4f6f90" stroke-width=".7"/><path d="M9 9l.4 10M12 9v10M15 9l-.4 10" fill="none" stroke="#7f9dbd" stroke-width=".6"/><ellipse cx="12" cy="6.5" rx="7.6" ry="1.8" fill="#e9f1f9" stroke="#4f6f90" stroke-width=".7"/><ellipse cx="12" cy="6.6" rx="6" ry="1" fill="#9fb6cf"/></g></symbol>
     <symbol id="icon-edit" viewBox="0 0 24 24">
       <path d="M4.5 19.5h3.7L19 8.7l-3.7-3.7L4.5 15.8z" stroke-linejoin="round"/>
       <path d="M13.6 6.4l3.7 3.7"/>
@@ -148,10 +143,7 @@
       <path d="M4 4h16l-6 8v6l-4 2v-8z" stroke-linejoin="round"/>
       <path d="M5.5 4.7h13" stroke-width="2.2" opacity="0.5"/>
     </symbol>
-    <symbol id="icon-folder" viewBox="0 0 24 24">
-      <path d="M3 8.4A2.4 2.4 0 0 1 5.4 6H9l2 2h7.6A2.4 2.4 0 0 1 21 10.4v7.2A2.4 2.4 0 0 1 18.6 20H5.4A2.4 2.4 0 0 1 3 17.6z"/>
-      <path d="M4.4 8.2a2.3 2.3 0 0 1 1.6-.7h11.6" stroke-width="2.5" opacity="0.45"/>
-    </symbol>
+    <symbol id="icon-folder" viewBox="0 0 24 24"><defs><linearGradient id="w7-fo-f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fce6a0"/><stop offset=".5" stop-color="#f5d36b"/><stop offset="1" stop-color="#e8b13a"/></linearGradient><linearGradient id="w7-fo-b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ebc469"/><stop offset="1" stop-color="#c9952b"/></linearGradient></defs><g stroke="none" stroke-linejoin="round"><path d="M2.5 5.5a1 1 0 0 1 1-1h5.2l1.8 1.8h10a1 1 0 0 1 1 1v11.2h-19z" fill="url(#w7-fo-b)" stroke="#a87a1c" stroke-width=".7"/><path d="M4.5 7.8h15v8h-15z" fill="#ffffff" stroke="#c4c4c4" stroke-width=".4"/><path d="M2 9.6h20l-1 9.9H3z" fill="url(#w7-fo-f)" stroke="#c9952b" stroke-width=".7"/><path d="M2.9 10.4h18.2" fill="none" stroke="#ffffff" stroke-opacity=".8" stroke-width=".7"/></g></symbol>
     <symbol id="icon-file" viewBox="0 0 24 24">
       <path d="M6.5 3h7l4 4v13.5a1.5 1.5 0 0 1-1.5 1.5h-9.5a1.5 1.5 0 0 1-1.5-1.5V4.5A1.5 1.5 0 0 1 6.5 3z"/>
       <path d="M13.5 3v4h4"/>
@@ -242,9 +234,7 @@
       <circle cx="18" cy="5" r="2.2"/><circle cx="6" cy="12" r="2.2"/><circle cx="18" cy="19" r="2.2"/>
       <path d="m8 10.8 8-4.6" stroke-linecap="round"/><path d="m8 13.2 8 4.6" stroke-linecap="round"/>
     </symbol>
-    <symbol id="icon-save" viewBox="0 0 24 24">
-      <path d="M5 3h11l3 3v15H5z"/><path d="M8 3v6h8V3"/><path d="M8 21v-7h8v7"/><path d="M6 3.9h9.6" stroke-width="2.5" opacity="0.5"/>
-    </symbol>
+    <symbol id="icon-save" viewBox="0 0 24 24"><defs><linearGradient id="w7-sv-b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a6a96"/><stop offset="1" stop-color="#1d3557"/></linearGradient><linearGradient id="w7-sv-m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f6f8"/><stop offset="1" stop-color="#a7b0ba"/></linearGradient></defs><g stroke="none" stroke-linejoin="round"><path d="M3.5 3.5h14l3 3v14h-17z" fill="url(#w7-sv-b)" stroke="#132741" stroke-width=".7"/><rect x="7" y="3.5" width="9" height="6" fill="url(#w7-sv-m)" stroke="#5e6873" stroke-width=".5"/><rect x="12.6" y="4.6" width="2" height="3.8" fill="#3a4450"/><rect x="6" y="12.5" width="12" height="8" fill="#ffffff" stroke="#9aa6b3" stroke-width=".5"/><path d="M7.5 15h9M7.5 17.5h7" fill="none" stroke="#7b9ccc" stroke-width=".6"/></g></symbol>
     <symbol id="icon-volume" viewBox="0 0 24 24">
       <path d="M4.5 9v6h3.5l5 4V5l-5 4z" stroke-linejoin="round"/>
       <path d="M17 8a5 5 0 0 1 0 8"/>
@@ -298,11 +288,7 @@
       <circle cx="12" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/>
       <path d="M12 7v6" stroke-linecap="round"/><path d="M12 13 6 17" stroke-linecap="round"/><path d="M12 13l6 4" stroke-linecap="round"/>
     </symbol>
-    <symbol id="icon-hard-drive" viewBox="0 0 24 24">
-      <rect x="2" y="10" width="20" height="8" rx="2.5"/>
-      <path d="M6 14h.01"/><path d="M10 14h4" stroke-linecap="round"/><path d="m4 10 3-6h10l3 6" stroke-linejoin="round"/>
-      <path d="M5.5 11.4A2.4 2.4 0 0 1 7.5 10.5h9" stroke-width="2.5" opacity="0.5"/>
-    </symbol>
+    <symbol id="icon-hard-drive" viewBox="0 0 24 24"><defs><linearGradient id="w7-hd-b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f7f8fa"/><stop offset=".5" stop-color="#d3d8de"/><stop offset="1" stop-color="#9ea6b0"/></linearGradient></defs><g stroke="none" stroke-linejoin="round"><path d="M2.5 10.5 5 6h14l2.5 4.5z" fill="#e8ecf0" stroke="#5f6873" stroke-width=".6"/><rect x="2.5" y="10.5" width="19" height="7" rx="1" fill="url(#w7-hd-b)" stroke="#5f6873" stroke-width=".7"/><path d="M4.5 14h9" fill="none" stroke="#7c858f" stroke-width=".8"/><circle cx="18.5" cy="14" r="1" fill="#44d62c" stroke="#1f7a12" stroke-width=".4"/></g></symbol>
     <symbol id="icon-terminal" viewBox="0 0 24 24">
       <path d="m5 7 5 5-5 5" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 17h6" stroke-linecap="round"/>
     </symbol>
@@ -329,10 +315,7 @@
       <path d="M12 3a7 7 0 0 0-7 7v2c0 3.5 1 6 2 8"/><path d="M12 3a7 7 0 0 1 7 7v2c0 1-.1 2-.3 3"/>
       <path d="M8 21a13 13 0 0 0 1-5v-6a3 3 0 0 1 6 0v6"/><path d="M12 10v6a5 5 0 0 0 2 4"/>
     </symbol>
-    <symbol id="icon-globe" viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18"/><path d="M12 3a14 14 0 0 0 0 18"/>
-      <path d="M5.6 7.4a7 7 0 0 1 10.8 0" stroke-width="3" opacity="0.5"/>
-    </symbol>
+    <symbol id="icon-globe" viewBox="0 0 24 24"><defs><radialGradient id="w7-gl-s" cx=".38" cy=".32" r=".75"><stop offset="0" stop-color="#bfe6ff"/><stop offset=".5" stop-color="#3b97e6"/><stop offset="1" stop-color="#0d4b9a"/></radialGradient></defs><g stroke="none"><circle cx="12" cy="12" r="9.3" fill="url(#w7-gl-s)" stroke="#0b3f80" stroke-width=".7"/><path d="M6.2 7.5c1.6-.6 3 .2 3.6 1.4.5 1-.3 2 .4 3 .8 1.1-.2 2.6-1.5 2.3-1.2-.3-1.1-1.8-2-2.6-.9-.7-1.7-1.3-1.4-2.4.2-.7.5-1.3.9-1.7zM13.6 4.2c1.7.2 3.4 1 4.6 2.4-.8.4-1.6.1-2.4.6-.9.6-.5 1.8-1.5 2.2-.9.4-1.8-.4-1.6-1.3.2-1 1.2-1.3.9-2.3-.1-.6-.4-1.1 0-1.6zM14.3 12.5c1.4-.3 2.9.4 3.2 1.6.4 1.5-.9 2.4-1.6 3.6-.6 1-1.9 1.3-2.4.3-.5-1 .3-1.9 0-2.9-.2-1 .3-2.4.8-2.6z" fill="#5cbf3a" stroke="#2d7a1c" stroke-width=".4"/><ellipse cx="9.5" cy="7" rx="5" ry="2.6" fill="#ffffff" fill-opacity=".35"/></g></symbol>
     <symbol id="icon-map-pin" viewBox="0 0 24 24">
       <path d="M12 21s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/>
       <path d="M6.5 8.5a5.7 5.7 0 0 1 11 0" stroke-width="2.6" opacity="0.45"/>
@@ -542,12 +525,7 @@
     <symbol id="icon-file-stack" viewBox="0 0 24 24"><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M5 12v-7a2 2 0 0 1 2 -2h7l5 5v4" /><path d="M5 21h14" /><path d="M5 18h14" /><path d="M5 15h14" /></symbol>
     <symbol id="icon-file-star" viewBox="0 0 24 24"><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2" /><path d="M11.8 16.817l-2.172 1.138a.392 .392 0 0 1 -.568 -.41l.415 -2.411l-1.757 -1.707a.389 .389 0 0 1 .217 -.665l2.428 -.352l1.086 -2.193a.392 .392 0 0 1 .702 0l1.086 2.193l2.428 .352a.39 .39 0 0 1 .217 .665l-1.757 1.707l.414 2.41a.39 .39 0 0 1 -.567 .411l-2.172 -1.138" /></symbol>
     <symbol id="icon-file-symlink" viewBox="0 0 24 24"><path d="M4 21v-4a3 3 0 0 1 3 -3h5" /><path d="M9 17l3 -3l-3 -3" /><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M5 11v-6a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2h-9.5" /></symbol>
-    <symbol id="icon-file-text" viewBox="0 0 24 24">
-      <path d="M14 3v4a1 1 0 0 0 1 1h4"/>
-      <path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2"/>
-      <path d="M9 13h6"/><path d="M9 17h6"/>
-      <path d="M7.3 3.9A2 2 0 0 1 8.4 3.5h4.6" stroke-width="2.5" opacity="0.5"/>
-    </symbol>
+    <symbol id="icon-file-text" viewBox="0 0 24 24"><defs><linearGradient id="w7-ft-p" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e2ebf5"/></linearGradient></defs><g stroke="none" stroke-linejoin="round"><path d="M5.5 2.5h9l4 4v15h-13z" fill="url(#w7-ft-p)" stroke="#6f87a9" stroke-width=".7"/><path d="M14.5 2.5v4h4" fill="#cddbee" stroke="#6f87a9" stroke-width=".7"/><path d="M8 10h8M8 12.5h8M8 15h8M8 17.5h5" fill="none" stroke="#5a86c4" stroke-width=".7"/></g></symbol>
     <symbol id="icon-file-text-ai" viewBox="0 0 24 24"><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M10 21h-3a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v3.5" /><path d="M9 9h1" /><path d="M9 13h2.5" /><path d="M9 17h1" /><path d="M14 21v-4a2 2 0 1 1 4 0v4" /><path d="M14 19h4" /><path d="M21 15v6" /></symbol>
     <symbol id="icon-file-text-shield" viewBox="0 0 24 24"><path d="M13 3v4a.997 .997 0 0 0 1 1h4" /><path d="M11 21h-5a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v3.5" /><path d="M8 9h1" /><path d="M8 12.994l3 0" /><path d="M8 16.997l2 0" /><path d="M21 15.994c0 4 -2.5 6 -3.5 6s-3.5 -2 -3.5 -6c1 0 2.5 -.5 3.5 -1.5c1 1 2.5 1.5 3.5 1.5" /></symbol>
     <symbol id="icon-file-text-spark" viewBox="0 0 24 24"><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M12 21h-5a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v3.5" /><path d="M9 9h1" /><path d="M9 13h6" /><path d="M9 17h3" /><path d="M19 22.5a4.75 4.75 0 0 1 3.5 -3.5a4.75 4.75 0 0 1 -3.5 -3.5a4.75 4.75 0 0 1 -3.5 3.5a4.75 4.75 0 0 1 3.5 3.5" /></symbol>
@@ -642,9 +620,7 @@
     <symbol id="icon-device-computer-camera-off" viewBox="0 0 24 24"><path d="M6.15 6.153a7 7 0 0 0 9.696 9.696m2 -2a7 7 0 0 0 -9.699 -9.695" /><path d="M9.13 9.122a3 3 0 0 0 3.743 3.749m2 -2a3 3 0 0 0 -3.737 -3.736" /><path d="M8 16l-2.091 3.486a1 1 0 0 0 .857 1.514h10.468a1 1 0 0 0 .857 -1.514l-2.091 -3.486" /><path d="M3 3l18 18" /></symbol>
     <symbol id="icon-device-speaker" viewBox="0 0 24 24"><path d="M5 5a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2l0 -14" /><path d="M9 14a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /><path d="M12 7l0 .01" /></symbol>
     <symbol id="icon-device-speaker-off" viewBox="0 0 24 24"><path d="M7 3h10a2 2 0 0 1 2 2v10m0 4a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-14" /><path d="M11.114 11.133a3 3 0 1 0 3.754 3.751" /><path d="M12 7v.01" /><path d="M3 3l18 18" /></symbol>
-    <symbol id="icon-disc" viewBox="0 0 24 24">
-      <path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M7 12a5 5 0 0 1 5 -5"/><path d="M12 17a5 5 0 0 0 5 -5"/><path d="M5.11 6.21A9 9 0 0 1 18.89 6.21" stroke-width="3" opacity="0.5"/>
-    </symbol>
+    <symbol id="icon-disc" viewBox="0 0 24 24"><defs><radialGradient id="w7-dc" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffffff"/><stop offset=".3" stop-color="#e3e8ee"/><stop offset=".6" stop-color="#c7e3f5"/><stop offset=".8" stop-color="#f1d7f0"/><stop offset="1" stop-color="#b9c4cf"/></radialGradient></defs><g stroke="none"><circle cx="12" cy="12" r="9.3" fill="url(#w7-dc)" stroke="#6d7884" stroke-width=".7"/><path d="M5.5 7.5a8 8 0 0 1 6-3.6l.5 5.1a3 3 0 0 0-2 1.1z" fill="#ffffff" fill-opacity=".7"/><circle cx="12" cy="12" r="2.6" fill="#eef2f6" stroke="#6d7884" stroke-width=".6"/><circle cx="12" cy="12" r="1" fill="#ffffff" stroke="#6d7884" stroke-width=".5"/></g></symbol>
     <symbol id="icon-disc-golf" viewBox="0 0 24 24"><path d="M5 5h14" /><path d="M6 5c.32 6.744 2.74 9.246 6 10" /><path d="M18 5c-.32 6.744 -2.74 9.246 -6 10" /><path d="M10 5c0 4.915 .552 7.082 2 10" /><path d="M14 5c0 4.915 -.552 7.082 -2 10" /><path d="M12 15v6" /><path d="M12 3v2" /><path d="M7 16c.64 .64 1.509 1 2.414 1h5.172c.905 0 1.774 -.36 2.414 -1" /><path d="M11 21h2" /></symbol>
     <symbol id="icon-disc-off" viewBox="0 0 24 24"><path d="M20.044 16.04a9 9 0 0 0 -12.082 -12.085m-2.333 1.688a9 9 0 0 0 6.371 15.357c2.491 0 4.73 -1 6.36 -2.631" /><path d="M11.298 11.288a1 1 0 1 0 1.402 1.427" /><path d="M7 12c0 -1.38 .559 -2.629 1.462 -3.534m2.607 -1.38c.302 -.056 .613 -.086 .931 -.086" /><path d="M12 17a4.985 4.985 0 0 0 3.551 -1.48m1.362 -2.587c.057 -.302 .087 -.614 .087 -.933" /><path d="M3 3l18 18" /></symbol>
     <symbol id="icon-discount" viewBox="0 0 24 24">
@@ -754,10 +730,7 @@
       <path d="M6.2 6.2A2.8 2.8 0 0 1 8 5.5h8" stroke-width="2.5" opacity="0.5"/>
     </symbol>
     <symbol id="icon-cpu-off" viewBox="0 0 24 24"><path d="M9 5h9a1 1 0 0 1 1 1v9m-.292 3.706a1 1 0 0 1 -.708 .294h-12a1 1 0 0 1 -1 -1v-12c0 -.272 .108 -.518 .284 -.698" /><path d="M13 9h2v2m0 4h-6v-6" /><path d="M3 10h2" /><path d="M3 14h2" /><path d="M10 3v2" /><path d="M14 3v2" /><path d="M21 10h-2" /><path d="M21 14h-2" /><path d="M14 21v-2" /><path d="M10 21v-2" /><path d="M3 3l18 18" /></symbol>
-    <symbol id="icon-device-desktop" viewBox="0 0 24 24">
-      <rect x="3" y="4" width="18" height="12" rx="2.5"/><path d="M7 20h10" stroke-linecap="round"/><path d="M9 16v4"/><path d="M15 16v4"/>
-      <path d="M4.4 4.6A2.4 2.4 0 0 1 6 4h12" stroke-width="2.5" opacity="0.5"/>
-    </symbol>
+    <symbol id="icon-device-desktop" viewBox="0 0 24 24"><defs><linearGradient id="w7-dd-bz" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6b7480"/><stop offset=".5" stop-color="#2c333b"/><stop offset="1" stop-color="#14191e"/></linearGradient><linearGradient id="w7-dd-sc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9fd8ff"/><stop offset=".45" stop-color="#2f8de4"/><stop offset="1" stop-color="#0b4f9e"/></linearGradient><linearGradient id="w7-dd-st" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2f4f6"/><stop offset="1" stop-color="#9aa3ad"/></linearGradient></defs><g stroke="none" stroke-linejoin="round"><path d="M9.5 16.5h5l.8 3h-6.6z" fill="url(#w7-dd-st)" stroke="#6d7680" stroke-width=".6"/><rect x="6.5" y="19.2" width="11" height="1.6" rx=".8" fill="url(#w7-dd-st)" stroke="#6d7680" stroke-width=".6"/><rect x="2" y="3.5" width="20" height="13.5" rx="1.2" fill="url(#w7-dd-bz)" stroke="#0e1216" stroke-width=".7"/><rect x="3.4" y="4.9" width="17.2" height="10.4" fill="url(#w7-dd-sc)"/><path d="M3.4 4.9h17.2L3.4 11z" fill="#ffffff" fill-opacity=".28"/></g></symbol>
     <symbol id="icon-device-desktop-analytics" viewBox="0 0 24 24"><path d="M3 5a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1l0 -10" /><path d="M7 20h10" /><path d="M9 16v4" /><path d="M15 16v4" /><path d="M9 12v-4" /><path d="M12 12v-1" /><path d="M15 12v-2" /><path d="M12 12v-1" /></symbol>
     <symbol id="icon-device-desktop-bolt" viewBox="0 0 24 24"><path d="M14.5 16h-10.5a1 1 0 0 1 -1 -1v-10a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v7.5" /><path d="M7 20h6" /><path d="M9 16v4" /><path d="M19 16l-2 3h4l-2 3" /></symbol>
     <symbol id="icon-device-desktop-cancel" viewBox="0 0 24 24"><path d="M12.5 16h-8.5a1 1 0 0 1 -1 -1v-10a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v7.5" /><path d="M7 20h5" /><path d="M9 16v4" /><path d="M16 19a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /><path d="M17 21l4 -4" /></symbol>

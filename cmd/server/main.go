@@ -1,15 +1,15 @@
-// Command server is the Go+HTMX replacement for the Node/Express backend,
-// built out phase by phase per /root/.claude/plans/think-about-how-we-valiant-island.md.
-// Phase 0 (auth) and Phase 1 (Plex server setup + playlist CRUD) so far -
-// matching, adapters, scheduling, scraping, and AI/mixes land in later
-// phases.
+// Command server runs the Playlist Lab web app and background jobs.
 package main
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -37,6 +37,7 @@ import (
 	"github.com/drevilish/playlist-lab/internal/handlers"
 	"github.com/drevilish/playlist-lab/internal/logging"
 	"github.com/drevilish/playlist-lab/internal/services/actionqueue"
+	"github.com/drevilish/playlist-lab/internal/services/browser"
 	"github.com/drevilish/playlist-lab/internal/services/crossimport"
 	"github.com/drevilish/playlist-lab/internal/services/deemix"
 	"github.com/drevilish/playlist-lab/internal/services/importreview"
@@ -307,14 +308,10 @@ func main() {
 		DB: sqlDB, PlexAuth: plexClient, Tmpl: tmpl, Notifications: notificationStore, Queue: actionQueue,
 	})
 
-	// deemix keeps downloading across a restart of this server, but the
-	// pollers watching those downloads - and the link back to the missing
-	// track each one was for - only lived in memory, so a restart left the
-	// arriving files with nothing to reconcile them. Pick them back up, and
-	// re-test the ARL now rather than waiting for the daily job, so an admin
-	// checking right after a restart sees a real answer immediately.
 	deemixService.ResumeDownloads()
-	go deemixService.CheckArlAndNotifyAdmins()
+	if cfg.EnableDeemixArlCheck && (cfg.IsProduction() || cfg.EnableJobs) {
+		go deemixService.CheckArlAndNotifyAdmins()
+	}
 
 	// Background jobs (Phase 4/5/6f).
 	scheduler := jobs.NewScheduler()
@@ -377,17 +374,53 @@ func main() {
 	handlers.RegisterAdminSchedules(r, mw, &handlers.AdminSchedulesHandler{DB: sqlDB, Tmpl: tmpl, Jobs: backgroundJobs})
 	if cfg.IsProduction() || cfg.EnableJobs {
 		scheduler.Start()
-		defer scheduler.Stop()
 		slog.Info("background jobs started")
 	} else {
 		slog.Info("background jobs disabled in development mode")
 	}
 
-	addr := cfg.Host + ":" + cfg.Port
-	slog.Info("playlist-lab (go) listening", "addr", addr)
-	if err := http.ListenAndServe(addr, r); err != nil {
-		slog.Error("server exited", "error", err)
-		os.Exit(1)
+	server := &http.Server{
+		Addr:              cfg.Host + ":" + cfg.Port,
+		Handler:           r,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+	shutdownSignal, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+	defer browser.Close()
+
+	served := make(chan error, 1)
+	go func() { served <- server.ListenAndServe() }()
+	slog.Info("playlist-lab listening", "addr", server.Addr)
+	select {
+	case err := <-served:
+		if !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("server exited", "error", err)
+			os.Exit(1)
+		}
+	case <-shutdownSignal.Done():
+		stopSignals()
+		workersDone := scheduler.Stop()
+		httpDeadline, cancelHTTP := context.WithTimeout(context.Background(), 8*time.Second)
+		if err := server.Shutdown(httpDeadline); err != nil {
+			slog.Warn("HTTP shutdown reached deadline", "error", err)
+			_ = server.Close()
+		}
+		cancelHTTP()
+		workDeadline, cancelWork := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancelWork()
+		if err := actionQueue.Wait(workDeadline); err != nil {
+			slog.Warn("shutdown interrupted queued actions", "error", err)
+		}
+		if err := deemixService.WaitDownloads(workDeadline); err != nil {
+			slog.Warn("shutdown interrupted Deemix downloads", "error", err)
+		}
+		select {
+		case <-workersDone.Done():
+		case <-workDeadline.Done():
+			slog.Warn("shutdown interrupted scheduled jobs")
+		}
 	}
 }
 

@@ -6,6 +6,8 @@
 package deemix
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -64,7 +67,7 @@ func fallbackChain(preferred string, allowFallback bool) []string {
 // lyrics) the enabled tag settings actually need - each is its own network
 // call, so this only makes the ones a currently-off toggle wouldn't use
 // anyway.
-func (s *Service) buildTrackMeta(track gwTrack, settings Settings) trackMeta {
+func (s *Service) buildTrackMeta(track gwTrack, settings Settings, album albumAssets) trackMeta {
 	trackNum, _ := track.TRACK_NUMBER.Int64()
 	discNum, _ := track.DISK_NUMBER.Int64()
 	durationSec, _ := track.DURATION.Int64()
@@ -95,22 +98,12 @@ func (s *Service) buildTrackMeta(track gwTrack, settings Settings) trackMeta {
 		meta.Rating = computeRating(int(rank))
 	}
 
-	if settings.Tags.Genre || settings.Tags.Barcode {
-		info := fetchPublicAlbumInfo(track.ALB_ID.String())
-		meta.Genre = info.Genre
-		meta.Barcode = info.Barcode
-	}
-	if settings.Tags.Label || settings.Tags.Copyright || settings.Tags.TrackTotal || settings.Tags.DiscTotal {
-		if alb, err := s.dz.getAlbum(track.ALB_ID.String()); err == nil {
-			meta.Label = alb.LABEL_NAME
-			meta.Copyright = alb.COPYRIGHT
-			trackTotal, _ := alb.NUMBER_TRACK.Int64()
-			discTotal, _ := alb.NUMBER_DISK.Int64()
-			meta.TrackTotal, meta.DiscTotal = int(trackTotal), int(discTotal)
-		} else {
-			slog.Warn("[Deemix] album metadata lookup failed, leaving genre/label/copyright/totals blank", "albumId", track.ALB_ID.String(), "error", err)
-		}
-	}
+	meta.Genre, meta.Barcode = album.public.Genre, album.public.Barcode
+	meta.Label, meta.Copyright = album.private.LABEL_NAME, album.private.COPYRIGHT
+	trackTotal, _ := album.private.NUMBER_TRACK.Int64()
+	discTotal, _ := album.private.NUMBER_DISK.Int64()
+	meta.TrackTotal, meta.DiscTotal = int(trackTotal), int(discTotal)
+	meta.Cover, meta.CoverMIME = album.cover, album.coverMIME
 	if settings.Tags.BPM {
 		meta.BPM = fetchBPM(track.SNG_ID.String())
 	}
@@ -129,6 +122,16 @@ func (s *Service) buildTrackMeta(track gwTrack, settings Settings) trackMeta {
 		}
 		meta.AlbumArtist = applyCasing(meta.AlbumArtist, settings.ArtistCasing)
 	}
+	if settings.RemoveDuplicateArtists {
+		unique := meta.Artists[:0]
+		for _, artist := range meta.Artists {
+			if !slices.Contains(unique, artist) {
+				unique = append(unique, artist)
+			}
+		}
+		meta.Artists = unique
+	}
+	meta.FormattedDate = formatDate(meta.Date, settings.DateFormat)
 	if settings.RemoveAlbumVersion {
 		meta.Title = removeAlbumVersionSuffix(meta.Title)
 	}
@@ -137,6 +140,48 @@ func (s *Service) buildTrackMeta(track gwTrack, settings Settings) trackMeta {
 	}
 
 	return meta
+}
+
+type albumAssets struct {
+	public        publicAlbumInfo
+	private       gwAlbum
+	cover         []byte
+	coverMIME     string
+	separateCover []byte
+}
+
+// Album-level data is shared for one download job, including both artwork sizes.
+func (s *Service) albumAssetsFor(settings Settings) func(gwTrack) albumAssets {
+	var byAlbum sync.Map
+	return func(track gwTrack) albumAssets {
+		key := [2]string{track.ALB_ID.String(), track.ALB_PICTURE}
+		load := sync.OnceValue(func() albumAssets {
+			var album albumAssets
+			if settings.Tags.Genre || settings.Tags.Barcode {
+				album.public = fetchPublicAlbumInfo(key[0])
+			}
+			if settings.Tags.Label || settings.Tags.Copyright || settings.Tags.TrackTotal || settings.Tags.DiscTotal {
+				if data, err := s.dz.getAlbum(key[0]); err == nil {
+					album.private = *data
+				} else {
+					slog.Warn("[Deemix] album metadata lookup failed", "albumId", key[0], "error", err)
+				}
+			}
+			if settings.Tags.Cover {
+				raw := fetchCover(key[1], settings.EmbeddedArtworkSize)
+				album.cover, album.coverMIME = processCoverImage(raw, settings.EmbeddedArtworkPNG, settings.JpegImageQuality)
+				if settings.SaveArtwork && settings.LocalArtworkSize == settings.EmbeddedArtworkSize {
+					album.separateCover = raw
+				}
+			}
+			if settings.SaveArtwork && album.separateCover == nil {
+				album.separateCover = fetchCover(key[1], settings.LocalArtworkSize)
+			}
+			return album
+		})
+		cached, _ := byAlbum.LoadOrStore(key, load)
+		return cached.(func() albumAssets)()
+	}
 }
 
 // fetchCover downloads a track/album's cover art at the given pixel size -
@@ -157,7 +202,7 @@ func fetchCover(md5Image string, size int) []byte {
 // fetchImageBytes is fetchCover/fetchArtistImage's shared GET-and-read-body
 // step - best-effort, nil on any failure.
 func fetchImageBytes(url string) []byte {
-	resp, err := http.Get(url)
+	resp, err := metadataClient.Get(url)
 	if err != nil {
 		return nil
 	}
@@ -178,12 +223,16 @@ func fetchImageBytes(url string) []byte {
 type progressReader struct {
 	r      io.Reader
 	read   int64
+	err    error
 	onRead func(read int64)
 }
 
 func (p *progressReader) Read(buf []byte) (int, error) {
 	n, err := p.r.Read(buf)
 	p.read += int64(n)
+	if err != nil && err != io.EOF {
+		p.err = err
+	}
 	if p.onRead != nil {
 		p.onRead(p.read)
 	}
@@ -193,7 +242,7 @@ func (p *progressReader) Read(buf []byte) (int, error) {
 // downloadAndDecrypt streams url (a Deezer BF_CBC_STRIPE-ciphered track
 // URL) straight into destPath, decrypting as it goes so the whole file
 // never needs to fit in memory.
-func downloadAndDecrypt(url, trackID, destPath string, onProgress func(read, total int64)) error {
+func downloadAndDecrypt(url, trackID string, dst io.Writer, onProgress func(read, total int64)) error {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -205,30 +254,32 @@ func downloadAndDecrypt(url, trackID, destPath string, onProgress func(read, tot
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("downloading track: status %d", resp.StatusCode)
 	}
 
-	f, err := os.Create(destPath)
-	if err != nil {
+	total := resp.ContentLength
+	src := &progressReader{r: resp.Body}
+	if onProgress != nil {
+		src.onRead = func(read int64) { onProgress(read, total) }
+	}
+	if err := decryptStream(dst, src, trackID); err != nil {
 		return err
 	}
-	defer f.Close()
-
-	total := resp.ContentLength
-	src := io.Reader(resp.Body)
-	if onProgress != nil {
-		src = &progressReader{r: resp.Body, onRead: func(read int64) { onProgress(read, total) }}
+	if src.err != nil {
+		return fmt.Errorf("reading track download: %w", src.err)
 	}
-	return decryptStream(f, src, trackID)
+	if src.read == 0 || total >= 0 && src.read != total {
+		return fmt.Errorf("incomplete track download: received %d bytes, expected %d", src.read, total)
+	}
+	return nil
 }
 
 // downloadOneTrack resolves track's download URL (falling back down the
 // bitrate chain, and to track.FALLBACK's alternate release, same as
 // deemix's own getPreferredBitrate/Track.checkAndRenewTrackToken combo)
 // then downloads, decrypts, and tags it. Returns the final file path.
-func (s *Service) downloadOneTrack(track gwTrack, bitrate string, onProgress func(read, total int64)) (string, error) {
-	settings := s.Settings()
+func (s *Service) downloadOneTrack(track gwTrack, bitrate string, settings Settings, albumTrack bool, loadAlbum func(gwTrack) albumAssets, onProgress func(read, total int64)) (string, error) {
 	preferred := formatForBitrate(bitrate)
 	chain := fallbackChain(preferred, settings.FallbackBitrate)
 
@@ -255,7 +306,9 @@ func (s *Service) downloadOneTrack(track gwTrack, bitrate string, onProgress fun
 			if fbID := track.FALLBACK.SNG_ID.String(); fbID != "" && fbID != "0" {
 				if fbTrack, err := s.dz.getTrack(fbID); err == nil {
 					slog.Warn("[Deemix] track unavailable, trying its fallback release", "trackId", track.SNG_ID.String(), "fallbackId", fbID)
-					return s.downloadOneTrack(*fbTrack, bitrate, onProgress)
+					// A fallback release is the last attempt. Its own fallback can cycle back here.
+					fbTrack.FALLBACK = nil
+					return s.downloadOneTrack(*fbTrack, bitrate, settings, albumTrack, loadAlbum, onProgress)
 				}
 			}
 		}
@@ -265,49 +318,35 @@ func (s *Service) downloadOneTrack(track gwTrack, bitrate string, onProgress fun
 		return "", lastErr
 	}
 
-	meta := s.buildTrackMeta(track, settings)
-	var rawCover []byte
-	if settings.Tags.Cover || settings.SaveArtwork {
-		rawCover = fetchCover(track.ALB_PICTURE, settings.EmbeddedArtworkSize)
-	}
-	if settings.Tags.Cover && len(rawCover) > 0 {
-		meta.Cover, meta.CoverMIME = processCoverImage(rawCover, settings.EmbeddedArtworkPNG, settings.JpegImageQuality)
-	}
-
-	dest := trackFilePath(settings, meta, extForFormat(usedFormat), false)
+	album := loadAlbum(track)
+	meta := s.buildTrackMeta(track, settings, album)
+	dest := trackFilePath(settings, meta, extForFormat(usedFormat), albumTrack)
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return "", fmt.Errorf("creating download directory: %w", err)
 	}
-	if _, err := os.Stat(dest); err == nil && settings.OverwriteFile == OverwriteNo {
-		return dest, nil
-	}
-
-	// Suffixed with a fresh uuid, not just ".part": a fixed path derived
-	// only from track metadata let two concurrent downloads of the same
-	// track (e.g. QueueDownload's now-fixed TOCTOU window, or the same
-	// track showing up in two separate queue entries) interleave writes
-	// into the same file and corrupt it.
-	tmpPath := dest + "." + uuid.NewString() + ".part"
-	if err := downloadAndDecrypt(downloadURL, track.SNG_ID.String(), tmpPath, onProgress); err != nil {
-		os.Remove(tmpPath)
-		return "", err
-	}
-	if err := os.Rename(tmpPath, dest); err != nil {
-		os.Remove(tmpPath)
-		return "", err
-	}
-
-	if err := tagFile(dest, usedFormat, meta, settings.Tags); err != nil {
-		slog.Warn("[Deemix] downloaded but failed to tag", "path", dest, "error", err)
+	installed, err := installTrack(dest, settings.OverwriteFile, func(tmp *os.File) error {
+		if err := downloadAndDecrypt(downloadURL, track.SNG_ID.String(), tmp, onProgress); err != nil {
+			return err
+		}
+		if err := tmp.Close(); err != nil {
+			return err
+		}
+		if err := tagFile(tmp.Name(), usedFormat, meta, settings.Tags); err != nil {
+			slog.Warn("[Deemix] downloaded but failed to tag", "path", dest, "error", err)
+		}
+		return nil
+	})
+	if err != nil || !installed {
+		return dest, err
 	}
 
 	destDir := filepath.Dir(dest)
-	if settings.SaveArtwork && len(rawCover) > 0 {
+	if len(album.separateCover) > 0 {
 		name := settings.CoverImageTemplate
 		if name == "" {
 			name = "cover"
 		}
-		if err := saveImageFile(destDir, name, rawCover, settings.LocalArtworkFormat); err != nil {
+		if err := saveImageFile(destDir, name, album.separateCover, settings.LocalArtworkFormat); err != nil {
 			slog.Warn("[Deemix] failed to save separate cover image file", "error", err)
 		}
 	}
@@ -330,13 +369,47 @@ func (s *Service) downloadOneTrack(track gwTrack, bitrate string, onProgress fun
 	return dest, nil
 }
 
+func installTrack(dest, mode string, write func(*os.File) error) (bool, error) {
+	overwrite := mode == OverwriteYes
+	if !overwrite {
+		if existing, err := os.Stat(dest); err == nil {
+			if !existing.Mode().IsRegular() {
+				return false, fmt.Errorf("download destination is not a regular file: %s", dest)
+			}
+			return false, nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return false, err
+		}
+	}
+	tmpPath := filepath.Join(filepath.Dir(dest), ".playlist-lab-"+uuid.NewString()+".part")
+	tmp, err := os.OpenFile(tmpPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o666)
+	if err != nil {
+		return false, err
+	}
+	defer os.Remove(tmp.Name())
+	defer tmp.Close()
+	if err := write(tmp); err != nil {
+		return false, err
+	}
+	if overwrite {
+		err = os.Rename(tmp.Name(), dest)
+	} else {
+		err = os.Link(tmp.Name(), dest)
+		if errors.Is(err, os.ErrExist) {
+			return false, nil
+		}
+	}
+	return err == nil, err
+}
+
 // runPostDownloadCommand runs Settings.ExecuteCommand (admin-only, same
 // trust level as the admin panel already having systemd-restart power over
 // deemix-server's old config) with the finished file's path as its one
-// argument. Fire-and-forget: a failing or slow hook shouldn't affect the
-// download it's reacting to, just get logged.
+// argument. Limit how long it can hold the download worker.
 func runPostDownloadCommand(command, path string) {
-	cmd := exec.Command(command, path)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, command, path)
 	if err := cmd.Run(); err != nil {
 		slog.Warn("[Deemix] post-download command failed", "command", command, "path", path, "error", err)
 	}
@@ -359,7 +432,8 @@ func (s *Service) runTrackDownload(uuid string, track gwTrack, bitrate string) {
 	}
 
 	report("downloading", 0, "")
-	_, err := s.downloadOneTrack(track, bitrate, func(read, total int64) {
+	settings := s.Settings()
+	_, err := s.downloadOneTrack(track, bitrate, settings, false, s.albumAssetsFor(settings), func(read, total int64) {
 		pct := 0
 		if total > 0 {
 			pct = int(read * 100 / total)
@@ -386,8 +460,8 @@ func (s *Service) runAlbumDownload(uuid string, tracks []gwTrack, bitrate string
 	var downloaded, failed int
 	report := func() {
 		mu.Lock()
+		defer mu.Unlock()
 		d, f := downloaded, failed
-		mu.Unlock()
 		status, progress := "downloading", 0
 		if total > 0 {
 			progress = d * 100 / total
@@ -408,6 +482,7 @@ func (s *Service) runAlbumDownload(uuid string, tracks []gwTrack, bitrate string
 	report()
 
 	settings := s.Settings()
+	loadAlbum := s.albumAssetsFor(settings)
 	concurrency := settings.QueueConcurrency
 	if concurrency < 1 {
 		concurrency = 1
@@ -420,7 +495,7 @@ func (s *Service) runAlbumDownload(uuid string, tracks []gwTrack, bitrate string
 		go func(track gwTrack) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			if _, err := s.downloadOneTrack(track, bitrate, nil); err != nil {
+			if _, err := s.downloadOneTrack(track, bitrate, settings, true, loadAlbum, nil); err != nil {
 				if settings.LogErrors {
 					slog.Warn("[Deemix] album track failed", "uuid", uuid, "track", track.SNG_TITLE, "error", err)
 				}

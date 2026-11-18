@@ -28,12 +28,8 @@ func (s *Source) Meta() adapters.ServiceMeta {
 	return adapters.ServiceMeta{ID: "plex", Name: "Plex", Icon: "plex"}
 }
 
-func toPlaylistInfo(p plexsvc.Playlist, serverURL, token string) adapters.PlaylistInfo {
-	cover := ""
-	if p.Composite != "" {
-		cover = serverURL + p.Composite + "?X-Plex-Token=" + token
-	}
-	return adapters.PlaylistInfo{ID: p.RatingKey, Name: p.Title, TrackCount: p.LeafCount, DurationMs: p.Duration, CoverURL: cover}
+func toPlaylistInfo(p plexsvc.Playlist) adapters.PlaylistInfo {
+	return adapters.PlaylistInfo{ID: p.RatingKey, Name: p.Title, TrackCount: p.LeafCount, DurationMs: p.Duration, CoverURL: p.Composite}
 }
 
 func (s *Source) ListPlaylists(ctx context.Context, userID int64) ([]adapters.PlaylistInfo, error) {
@@ -49,7 +45,7 @@ func (s *Source) ListPlaylists(ctx context.Context, userID int64) ([]adapters.Pl
 		return nil, err
 	}
 
-	client := plexsvc.NewClient(userServer.ServerURL, user.PlexToken, s.Auth.ClientID, "Playlist Lab")
+	client := plexsvc.NewClient(userServer.ServerURL, plexsvc.ResolveToken(user.PlexToken, userServer.AccessToken.String), s.Auth.ClientID, "Playlist Lab")
 	playlists, err := client.GetPlaylists()
 	if err != nil {
 		return nil, err
@@ -58,7 +54,7 @@ func (s *Source) ListPlaylists(ctx context.Context, userID int64) ([]adapters.Pl
 	var out []adapters.PlaylistInfo
 	for _, p := range playlists {
 		if p.PlaylistType == "audio" {
-			out = append(out, toPlaylistInfo(p, userServer.ServerURL, user.PlexToken))
+			out = append(out, toPlaylistInfo(p))
 		}
 	}
 	return out, nil
@@ -80,7 +76,7 @@ func (s *Source) FetchTracks(ctx context.Context, playlistURLOrID string, userID
 		return adapters.PlaylistInfo{}, nil, err
 	}
 
-	token := user.PlexToken
+	token := plexsvc.ResolveToken(user.PlexToken, userServer.AccessToken.String)
 	playlistID := playlistURLOrID
 	if strings.HasPrefix(playlistURLOrID, "plex-home:") {
 		parts := strings.SplitN(playlistURLOrID, ":", 3)
@@ -122,5 +118,5 @@ func (s *Source) FetchTracks(ctx context.Context, playlistURLOrID string, userID
 		trackInfos[i] = adapters.TrackInfo{Title: t.Title, Artist: t.DisplayArtist(), Album: t.ParentTitle}
 	}
 
-	return toPlaylistInfo(*plexPlaylist, userServer.ServerURL, token), trackInfos, nil
+	return toPlaylistInfo(*plexPlaylist), trackInfos, nil
 }

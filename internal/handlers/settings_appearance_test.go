@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"database/sql"
+	"io/fs"
 	"net/http"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/drevilish/playlist-lab/internal/db"
 	"github.com/drevilish/playlist-lab/internal/services/notifications"
 	"github.com/drevilish/playlist-lab/internal/session"
+	"github.com/drevilish/playlist-lab/static"
 )
 
 // newSettingsRouter mirrors newAdminRouter (admin_deemix_test.go) for
@@ -135,5 +138,55 @@ func TestRemovedThemeFallsBackToDefault(t *testing.T) {
 	body := authedRequest(t, sqlDB, router, user, http.MethodGet, "/settings", "", "").Body.String()
 	if !strings.Contains(body, `data-theme="`+defaultTheme+`"`) || strings.Contains(body, "theme-that-was-removed.css") {
 		t.Fatalf("expected the %s fallback for an unknown saved theme", defaultTheme)
+	}
+}
+
+func TestRemovedVariantKeepsThemeSelected(t *testing.T) {
+	sqlDB := newTestDB(t)
+	tmpl := nopTemplates()
+	tmpl.DB = sqlDB
+	h := &SettingsHandler{DB: sqlDB, Tmpl: tmpl, Notifications: notifications.NewStore()}
+	router, user := newSettingsRouter(t, sqlDB, h)
+	if err := db.SaveThemeSelection(sqlDB, user.ID, "lcars", "removed-variant", false); err != nil {
+		t.Fatal(err)
+	}
+	body := authedRequest(t, sqlDB, router, user, http.MethodGet, "/settings", "", "").Body.String()
+	option := regexp.MustCompile(`<option value="lcars"[^>]*selected>`)
+	if !strings.Contains(body, `<html lang="en" data-theme="lcars"`) || !option.MatchString(body) {
+		t.Fatal("expected LCARS base palette to be rendered and selected")
+	}
+}
+
+func TestTintSaveUsesTheFormTheme(t *testing.T) {
+	sqlDB := newTestDB(t)
+	tmpl := nopTemplates()
+	tmpl.DB = sqlDB
+	h := &SettingsHandler{DB: sqlDB, Tmpl: tmpl, Notifications: notifications.NewStore()}
+	router, user := newSettingsRouter(t, sqlDB, h)
+	if err := db.SaveThemeSelection(sqlDB, user.ID, "lcars", "", false); err != nil {
+		t.Fatal(err)
+	}
+	rec := authedRequest(t, sqlDB, router, user, http.MethodPost, "/settings/appearance", "tintTheme=win7-aero&tint=%23006abc", "application/x-www-form-urlencoded")
+	if got := rec.Header().Get("X-Playlist-Lab-Tint"); got != "win7-aero/#006abc" {
+		t.Fatalf("saved tint response: got %q", got)
+	}
+	tints, err := db.GetThemeTints(sqlDB, user.ID)
+	if err != nil || tints["win7-aero"] != "#006abc" || tints["lcars"] != "" {
+		t.Fatalf("expected only the submitted theme to change, got %v (%v)", tints, err)
+	}
+}
+
+func TestEmbeddedThemeCatalogue(t *testing.T) {
+	if themeVersion == "" || findTheme(defaultTheme) == nil {
+		t.Fatal("embedded catalogue must identify its build and the default theme")
+	}
+	for _, theme := range ftlThemes {
+		if theme.Version != themeVersion {
+			t.Errorf("%s has version %s, expected %s", theme.Slug, theme.Version, themeVersion)
+		}
+		info, err := fs.Stat(static.FS, "themes/"+theme.Slug+".css")
+		if err != nil || info.Size() == 0 {
+			t.Errorf("%s has no embedded stylesheet: %v", theme.Slug, err)
+		}
 	}
 }

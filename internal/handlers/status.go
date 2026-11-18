@@ -58,7 +58,8 @@ func formatDurationHM(ms int) string {
 
 func (h *StatusHandler) page(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
-	data := map[string]any{"User": user}
+	isAdmin, _ := db.IsAdmin(h.DB, user.ID)
+	data := map[string]any{"User": user, "IsAdmin": isAdmin}
 	render := func() {
 		if IsModalRequest(r) {
 			h.Tmpl.RenderModal(w, r, "status", "Status and reports", data)
@@ -73,6 +74,7 @@ func (h *StatusHandler) page(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	data["HasPlexServer"] = true
 	client := plex.NewClient(userServer.ServerURL, plex.ResolveToken(user.PlexToken, userServer.AccessToken.String), h.PlexAuth.ClientID, "Playlist Lab")
 	plexPlaylists, err := client.GetPlaylists()
 	if err != nil {

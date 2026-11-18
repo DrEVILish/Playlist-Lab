@@ -446,6 +446,18 @@ a { color: var(--link, var(--accent)); }
   text-overflow: ellipsis;
 }
 .field-row > .field-hint { margin-block-start: 0; flex: none; }
+/* .field-row.is-wrap — the label is the setting's only name, so it wraps
+   instead of truncating, and a sentence-length .field-hint sits under it
+   inside the row; the control stays at the end, centred on both. */
+.field-row.is-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  row-gap: 0.15em;
+}
+.field-row.is-wrap > .label { grid-column: 1; white-space: normal; overflow: visible; }
+.field-row.is-wrap > .field-hint { grid-column: 1; }
+.field-row.is-wrap > :not(.label, .field-hint) { grid-column: 2; grid-row: 1 / span 2; }
 
 /* .input-group — an input with joined addons: a unit label, a static
    prefix, or an attached button. Children share one border; only the
@@ -500,6 +512,9 @@ a { color: var(--link, var(--accent)); }
   color: var(--check-fg, var(--text));
 }
 .check:has(:disabled) { opacity: 0.5; cursor: var(--cursor-not-allowed, not-allowed); }
+/* A hidden name (a table's select column) is positioned against its own
+   label, so it can't escape a scrolling table and widen the page. */
+.check:has(> .visually-hidden) { position: relative; }
 
 /* .radio-group — a <fieldset> of .check rows with a <legend>. */
 .radio-group {
@@ -576,7 +591,8 @@ a { color: var(--link, var(--accent)); }
    (the attribute is also what assistive tech reads). The button sizes to
    its content: the track becomes a normal flex child and an optional
    .switch-label sits beside it. */
-button.switch {
+button.switch,
+label.switch:has(> .switch-label) {
   appearance: none;
   width: auto;
   height: auto;
@@ -589,7 +605,8 @@ button.switch {
   font: inherit;
   text-align: start;
 }
-button.switch .switch-track {
+button.switch .switch-track,
+label.switch:has(> .switch-label) > .switch-track {
   position: relative;
   inset: auto;
   flex: none;
@@ -701,7 +718,7 @@ button.switch:disabled { opacity: 0.5; cursor: var(--cursor-not-allowed, not-all
   align-items: center;
   gap: 0.5rem;
   margin: calc(-1 * var(--surface-pad, 1.5rem)) calc(-1 * var(--surface-pad, 1.5rem)) var(--space-m);
-  padding: var(--modal-header-pad, var(--space-xs) var(--space-m));
+  padding: var(--modal-header-pad, var(--space-xs) var(--surface-pad, var(--space-m)));
   background: var(--modal-header-bg, transparent);
   color: var(--modal-header-fg, inherit);
   font-weight: 600;
@@ -756,6 +773,9 @@ dialog.modal:modal {
   position: fixed;
   inset: 0;
   margin: auto;
+}
+.modal[popover]:popover-open:not(:where(.is-maximized, .window-max:checked + .modal)),
+dialog.modal:modal:not(:where(.is-maximized, .window-max:checked + .modal)) {
   height: fit-content;
 }
 
@@ -950,6 +970,7 @@ dialog.modal:modal {
   color: var(--dropdown-item-fg, var(--text));
   text-align: start;
 }
+.dropdown-item.is-danger { color: var(--danger-text, var(--danger)); }
 .dropdown-item:focus-visible {
   background: var(--dropdown-item-bg-hover, var(--accent));
   color: var(--dropdown-item-fg-hover, var(--on-accent));
@@ -1094,6 +1115,7 @@ dialog.modal:modal {
  * every theme here treats it as a signature element. */
 .transport {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
   padding: var(--transport-padding, 0.6rem 0.9rem);
@@ -1503,7 +1525,7 @@ html.is-dragging-value, html.is-dragging-value * { cursor: var(--cursor-resize-y
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 0.2rem 0.35rem;
+  padding: 0.35rem 0.4rem;
   background: var(--scribble-bg, var(--surface-2));
   color: var(--scribble-fg, var(--text));
   border-top: var(--scribble-bar-width, 0.3rem) solid var(--strip-color, var(--accent));
@@ -1602,7 +1624,7 @@ html.is-dragging-value, html.is-dragging-value * { cursor: var(--cursor-resize-y
   background: var(--row-selected-bg, rgba(128, 128, 128, 0.25));
   color: var(--row-selected-fg, inherit);
 }
-.table tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) td {
+.table tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))):not(.is-selected, :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))) td {
   background: var(--row-active-bg, transparent);
 }
 /* The marker belongs to the row, so only its leading cell draws it — on
@@ -1944,7 +1966,10 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
 .status-ok { --state-fg: var(--success-text, var(--success)); color: var(--state-fg); }
 .status-warn { --state-fg: var(--warning-text, var(--warning)); color: var(--state-fg); }
 .status-error { --state-fg: var(--danger-text, var(--danger)); color: var(--state-fg); }
+/* .status-idle is neutral everywhere (offline, stopped, not running);
+   .status-ready is armed and waiting, the green of a recorder on standby. */
 .status-idle { --state-fg: var(--muted); color: var(--state-fg); }
+.status-ready { --state-fg: var(--success-text, var(--success)); color: var(--state-fg); }
 /* .status-rec: recording or on air. A bold danger label whose dot has a
    halo; the dot pulses when motion is allowed. */
 .status-rec { --state-fg: var(--danger-text, var(--danger)); color: var(--state-fg); font-weight: 700; }
@@ -2066,8 +2091,7 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
 :is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a)) {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  gap: 0.6em;
   width: 100%;
   padding: 0.45em 0.7em;
   border-radius: var(--context-menu-radius, var(--radius));
@@ -2075,6 +2099,10 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
   text-align: start;
 }
 :is(.context-menu-item, .context-menu li > :is(button, a)).is-danger { color: var(--danger-text, var(--danger)); }
+/* A leading icon stays beside its label; a trailing shortcut (<kbd>) or a
+   submenu arrow is pushed to the end. */
+:is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a)) > :is(kbd, :last-child:not(:first-child, .icon)),
+:is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a))[aria-haspopup] > :last-child:not(.icon) { margin-inline-start: auto; padding-inline-start: 0.4em; }
 :is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a)):focus-visible {
   background: var(--context-menu-item-bg-hover, var(--dropdown-item-bg-hover, var(--accent)));
   color: var(--context-menu-item-fg-hover, var(--dropdown-item-fg-hover, var(--on-accent)));
@@ -2157,6 +2185,8 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
   stroke-width: var(--icon-stroke-width, 2);
   stroke-linecap: round;
   stroke-linejoin: round;
+  /* The reset makes every svg a block; an icon sits in the line with its text. */
+  display: inline-block;
   vertical-align: -0.2em;
   flex-shrink: 0;
 }
@@ -2178,7 +2208,6 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
 /* .badge-button — a clickable badge (filter chip). */
 .badge-button {
   border: none;
-  font: inherit;
   transition: background 0.15s ease, color 0.15s ease;
 }
 .badge-button:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) {
@@ -2516,7 +2545,7 @@ html[data-motion="reduced"] .carousel { scroll-behavior: auto; }
   display: flex;
   flex-wrap: wrap;
   gap: 0.15rem 0.9rem;
-  padding-block: 0.5rem;
+  padding: 0.5rem var(--space-2xs);
   background: var(--scrollspy-nav-bg, var(--surface));
   border-block-end: 1px solid var(--scrollspy-nav-rule, var(--hairline));
 }
@@ -2634,6 +2663,8 @@ html[data-motion="reduced"] .scrollspy-body { scroll-behavior: auto; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Task buttons take the squeeze before the tray does. */
+.taskbar > .taskbar-task { flex-shrink: 1000; }
 .taskbar-task:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) {
   background: var(--taskbar-task-bg-active, var(--taskbar-task-bg, transparent));
   border-color: var(--taskbar-task-border-active, var(--taskbar-task-border, transparent));
@@ -2645,7 +2676,10 @@ html[data-motion="reduced"] .scrollspy-body { scroll-behavior: auto; }
   display: inline-flex;
   align-items: center;
   gap: 0.5em;
-  flex: none;
+  /* The tray gives way last on a narrow bar (see .taskbar > .taskbar-task):
+     its readouts then truncate rather than push the bar past its edge. */
+  flex: 0 1 auto;
+  min-inline-size: 0;
   margin-inline-start: auto;
   padding: 0.3em 0.8em;
   border: var(--taskbar-border-width, 1px) solid var(--taskbar-tray-border, transparent);
@@ -2653,6 +2687,14 @@ html[data-motion="reduced"] .scrollspy-body { scroll-behavior: auto; }
   background: var(--taskbar-tray-bg, transparent);
   color: var(--taskbar-tray-fg, inherit);
   font-variant-numeric: tabular-nums;
+}
+.taskbar-tray > * { flex: none; }
+.taskbar-tray > :is(span, time):not(.lamp) {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* .breadcrumbs */
@@ -3225,6 +3267,14 @@ pre code { padding: 0; background: none; border-radius: 0; }
   --btn-border-hover: var(--app-bar-text);
 }
 .app-bar :is(.btn-tertiary, .btn-ghost) { --btn-border: transparent; }
+/* A GO button on the bar: core's GO is an outlined accent label, which on a
+   bar painted in the accent reads at 1:1. Unless the theme styles its GO
+   (--go-fg, --go-border), it takes the bar's text colour like the other
+   unfilled buttons. A theme that fills it (--go-bg) also sets --go-fg. */
+.app-bar .btn-go {
+  --btn-fg: var(--go-fg, var(--app-bar-text));
+  --btn-border: var(--go-border, var(--app-bar-text));
+}
 
 /* Screen-reader-only content — the standard visually-hidden-but-announced
    clip-rect pattern, not display:none (which screen readers also skip). */
@@ -3305,6 +3355,9 @@ pre code { padding: 0; background: none; border-radius: 0; }
 
 /* .divide-y — hairlines between stacked children (lists, menus). */
 .divide-y > * + * { border-block-start: 1px solid var(--hairline); }
+/* Text never sits on the hairline. Zero specificity, so a child with its
+   own padding (a list item, a menu entry) keeps it. */
+:where(.divide-y > *) { padding-block: var(--divide-y-pad, var(--space-2xs)); }
 
 /* .ratio — an aspect-ratio box for video/embeds; children fill it.
    Set `--ratio` directly or use a modifier (default 16/9). */
@@ -3777,10 +3830,22 @@ html[data-pointer="touch"] { --tap-min: 44px; }
   min-block-size: var(--tap-min);
   touch-action: manipulation;
 }
-/* Short labels ("EQ", "L1") too: toggles, tabs and segments. */
-:is(.btn-icon, .btn-close, .btn-min, .btn-max, .pagination-item, .nav-toggle, .taskbar-task, .badge-button,
-    .toggle-btn, .tab, .segmented-item) {
+/* Short labels ("EQ", "L1") too: toggles, tabs, segments, scrollspy, keys. */
+:is(.btn-icon, .btn-close, .btn-min, .btn-max, .pagination-item, .nav-toggle, .taskbar-task, .taskbar-start, .badge-button,
+    .toggle-btn, .tab, .segmented-item, .scrollspy-link, .key) {
   min-inline-size: var(--tap-min);
+}
+/* Links and buttons in a toast are actions, not running text. */
+:where(.toast) :is(a, button):not(.btn, .btn-icon, .btn-close) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--tap-min);
+  min-inline-size: var(--tap-min);
+}
+/* Touch tiers: keys and reaction chips sit 8px apart (WCAG 2.5.8 spacing). */
+@media (max-width: 900px), (any-pointer: coarse) {
+  .strip-section, .message-reactions { gap: max(0.3rem, 8px); }
 }
 :is(.input, .select) { min-block-size: var(--tap-min); }
 /* Checkboxes and radios: the label is the target. */
@@ -3802,16 +3867,23 @@ html[data-pointer="touch"] { --tap-min: 44px; }
   transform: translate(-50%, -50%);
 }
 .slider { touch-action: none; }
-@media (max-width: 900px), (any-pointer: coarse) {
-  /* The range input's own box is both its track and its target. On touch
-     it grows to the target height; padding keeps the drawn track the same
-     thin line in the middle (the border can't follow it, so it hides). */
-  .slider:not(.is-range > .slider) {
-    height: var(--tap-min);
-    padding-block: calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2);
-    background-clip: content-box;
-    border-color: transparent;
-  }
+/* The range input's own box is both its track and its target. It grows to
+   --tap-min (44px on touch tiers, 24px on desktop); padding keeps the drawn
+   track the same thin line in the middle. The border can't follow it, so it
+   hides: a theme whose track is drawn by the border (a bevelled groove)
+   redraws it with --slider-bg as a background on the content box. */
+.slider:not(.is-range > .slider) {
+  height: var(--tap-min);
+  padding-block: calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2);
+  background-clip: content-box;
+  border-color: transparent;
+}
+/* The same, sideways, for a vertical slider. */
+.slider.is-vertical:not(.is-range > .slider) {
+  width: var(--tap-min);
+  height: var(--slider-length, 4.5rem);
+  /* Physical sides: under vertical-lr the logical block axis is horizontal. */
+  padding: 0 calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2);
 }
 /* Inline text links inside running text are exempt (WCAG 2.5.8); links
    that stand alone as navigation are not. */
@@ -3893,6 +3965,10 @@ input[type="color"] { min-block-size: var(--tap-min); min-inline-size: var(--tap
     margin: 0.25rem 0;
     position-area: block-end span-inline-end;
     position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+    /* Take the side with more room and scroll inside it, so the inline
+       flip can still fit when neither side holds the whole menu. */
+    position-try-order: most-block-size;
+    max-height: calc(100% - 0.5rem);
   }
 }
 /* A context menu shown at the pointer: the app sets --x/--y. */
@@ -4247,7 +4323,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .meter-pair:has(> .meter-v) { grid-auto-flow: column; justify-content: start; block-size: 100%; }
 
 /* --- .clip — a clip light that holds, with a count -------------------------
- *   <button class="clip" type="button" aria-pressed="true" aria-label="Clipped 3 times, reset">CLIP <span class="clip-count">3</span></button>
+ *   <button class="clip" type="button" aria-pressed="true" aria-label="Clip 3, press to reset">CLIP <span class="clip-count">3</span></button>
  * aria-pressed="true" (or .is-clipped) lights it; the app holds it after a
  * clip and clears it when the user presses it. */
 .clip {
@@ -4627,9 +4703,9 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: grid;
   gap: 1px;
   padding: 0.2rem;
-  background: var(--sends-bg, #0c0c12);
+  background: var(--sends-bg, var(--input-bg, var(--surface)));
   border: 1px solid var(--sends-border, var(--border));
-  color: var(--sends-fg, #ffffff);
+  color: var(--sends-fg, var(--input-fg, var(--text)));
   font-size: 0.6rem;
   line-height: 1.25;
 }
@@ -4640,7 +4716,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   content: "";
   block-size: 0.45rem;
   inline-size: calc(var(--send, 0) * 100%);
-  background: var(--sends-bar, #d8dde8);
+  background: var(--sends-bar, var(--muted));
   clip-path: polygon(0 100%, 100% 0, 100% 100%);
 }
 .sends li.is-pre::after { background: var(--sends-bar-pre, var(--accent-2)); }
@@ -4659,22 +4735,22 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   inline-size: 100%;
   aspect-ratio: 1;
   background:
-    linear-gradient(to top right, transparent calc(50% - 0.5px), var(--dyn-graph-unity, rgba(255, 255, 255, 0.25)) 0 calc(50% + 0.5px), transparent 0),
-    repeating-linear-gradient(0deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, rgba(255, 255, 255, 0.14)) 0 25%),
-    repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, rgba(255, 255, 255, 0.14)) 0 25%),
-    var(--dyn-graph-bg, linear-gradient(180deg, #3a6bd0, #1d3f96));
-  border: 1px solid var(--dyn-graph-border, var(--border));
+    linear-gradient(to top right, transparent calc(50% - 0.5px), var(--dyn-graph-unity, var(--eq-zero, var(--border))) 0 calc(50% + 0.5px), transparent 0),
+    repeating-linear-gradient(0deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, var(--eq-grid, var(--hairline))) 0 25%),
+    repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, var(--eq-grid, var(--hairline))) 0 25%),
+    var(--dyn-graph-bg, var(--eq-bg, var(--bg)));
+  border: 1px solid var(--dyn-graph-border, var(--eq-border, var(--hairline)));
   overflow: visible;
 }
 .dyn-graph-line {
   fill: none;
-  stroke: var(--dyn-graph-line, #ffffff);
+  stroke: var(--dyn-graph-line, var(--eq-line, var(--accent)));
   stroke-width: var(--dyn-graph-line-width, 2px);
   vector-effect: non-scaling-stroke;
   stroke-linejoin: round;
 }
-.dyn-graph-threshold { stroke: var(--dyn-graph-threshold, var(--accent)); stroke-width: 1px; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
-[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-line { stroke: var(--dyn-graph-line-off, rgba(255, 255, 255, 0.45)); }
+.dyn-graph-threshold { stroke: var(--dyn-graph-threshold, var(--accent-2)); stroke-width: 1px; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-line { stroke: var(--dyn-graph-line-off, var(--muted)); }
 
 /* --- .rack — an equipment rack of .rack-units ------------------------------
  *   <div class="rack" aria-label="Effects rack">
@@ -4731,7 +4807,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .rack-unit[data-finish="purple"] { --_finish: linear-gradient(180deg, #6a2f8c, #3b1150); }
 .rack-unit[data-finish="green"] { --_finish: linear-gradient(180deg, #2f8a2f, #145214); }
 .rack-unit > input[type="radio"] { position: absolute; inset: 0; margin: 0; opacity: 0; }
-.rack-unit:has(> input:checked) { outline: 2px solid var(--rack-selected, #ffe33b); outline-offset: -2px; }
+.rack-unit:has(> input:checked) { outline: 2px solid var(--rack-selected, var(--accent)); outline-offset: -2px; }
 .rack-unit:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
 .rack-unit.is-empty { --_finish: linear-gradient(180deg, #2b2b2b, #151515); justify-content: center; color: #8a8a8a; }
 .rack-unit-name {
@@ -4743,7 +4819,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .rack-unit[data-finish="silver"] .rack-unit-name { text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6); }
 .rack-unit-body { display: flex; flex: 1; flex-wrap: wrap; align-items: center; justify-content: space-around; gap: 0.3rem 0.6rem; min-inline-size: 0; }
 /* The thin "Change device / Store / Load preset" strip at the top of the rack. */
-.rack-head { display: flex; justify-content: center; gap: 0.6rem; padding: 0.4rem; background: linear-gradient(180deg, #f2f2f2, #c9c9c9); border-radius: 2px; }
+.rack-head { display: flex; justify-content: center; gap: 0.6rem; padding: 0.4rem; background: var(--rack-head-bg, var(--surface-2)); border-radius: 2px; }
 
 /* A unit's faceplate seen up close: a bigger .rack-unit inside .faceplate,
    above its .assignable panel. */
@@ -4751,8 +4827,8 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: grid;
   gap: 0.6rem;
   padding: 0.5rem;
-  background: var(--faceplate-bg, #050505);
-  border: 1px solid var(--faceplate-border, #2a2a2a);
+  background: var(--faceplate-bg, var(--surface-2));
+  border: 1px solid var(--faceplate-border, var(--border));
   border-radius: 4px;
 }
 .faceplate > .rack-unit { --_u: 2.6rem; align-items: stretch; padding-block: 0.8rem; font-size: 0.75rem; }
@@ -4770,8 +4846,8 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .faceplate-display {
   min-inline-size: 7rem;
   padding: 0.4rem 0.6rem;
-  background: var(--faceplate-display-bg, #000000);
-  color: var(--faceplate-display-fg, #e0e0e0);
+  background: var(--faceplate-display-bg, var(--input-bg, var(--surface)));
+  color: var(--faceplate-display-fg, var(--input-fg, var(--text)));
   border-radius: 4px;
   font: 800 1.2rem/1.1 var(--font);
   text-align: center;
@@ -4791,11 +4867,11 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   grid-template-columns: repeat(auto-fit, minmax(5.2rem, 1fr));
   gap: 0.4rem 0.3rem;
   padding: 0.5rem 0.6rem 0.3rem;
-  background: var(--assignable-bg, linear-gradient(180deg, #5560ab, #434d98));
-  color: var(--assignable-fg, #ffffff);
-  border: 1px solid var(--assignable-border, #2a3274);
+  background: var(--assignable-bg, var(--surface));
+  color: var(--assignable-fg, var(--text));
+  border: 1px solid var(--assignable-border, var(--border));
   border-radius: 3px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+  box-shadow: var(--assignable-shadow, none);
   font-size: 0.68rem;
   text-align: center;
 }
@@ -4805,12 +4881,12 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: block;
   inline-size: 2.6rem;
   block-size: 2.4rem;
-  background: var(--assignable-key-bg, linear-gradient(180deg, #4a54a0, #3a438b));
-  border: 2px solid var(--assignable-key-border, #6a74c0);
-  box-shadow: inset 0 0 0 2px #2b3274;
+  background: var(--assignable-key-bg, var(--key-bg, var(--surface-2)));
+  border: 2px solid var(--assignable-key-border, var(--key-border, var(--border)));
+  box-shadow: var(--assignable-key-shadow, inset 0 0 0 2px rgba(0, 0, 0, 0.25));
 }
 .assignable-key > input { position: absolute; inset: 0; margin: 0; opacity: 0; }
-.assignable-key:has(> input:checked) { background: var(--assignable-key-on, linear-gradient(180deg, #e9ecff, #b5bce8)); }
+.assignable-key:has(> input:checked) { background: var(--assignable-key-on, var(--accent)); }
 .assignable-key:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 .assignable-caption { grid-column: 1 / -1; margin: 0; font-weight: 700; opacity: 0.9; }
 
@@ -4827,9 +4903,9 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   align-items: stretch;
   gap: 2px;
   padding: 0.5rem;
-  background: var(--geq-bg, linear-gradient(180deg, #a9a9a9, #8a8a8a));
+  background: var(--geq-bg, var(--surface));
   border-radius: 3px;
-  color: var(--geq-fg, #111111);
+  color: var(--geq-fg, var(--text));
   font-size: 0.6rem;
   font-weight: 700;
 }
@@ -4840,11 +4916,11 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   gap: 1px;
   padding: 0.15rem;
   background:
-    linear-gradient(transparent calc(50% - 0.6rem), var(--geq-zero, #111111) 0 calc(50% - 0.6rem + 1px), transparent 0),
-    var(--geq-group-bg, #9a9a9a);
-  border: 1px solid var(--geq-group-border, #1f2a8a);
+    linear-gradient(transparent calc(50% - 0.6rem), var(--geq-zero, var(--border)) 0 calc(50% - 0.6rem + 1px), transparent 0),
+    var(--geq-group-bg, var(--surface-2));
+  border: 1px solid var(--geq-group-border, var(--hairline));
 }
-.geq-group:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) { --geq-group-bg: var(--geq-group-active, #e6e6e6); }
+.geq-group:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) { --geq-group-bg: var(--geq-group-active, color-mix(in srgb, var(--accent) 22%, var(--surface-2))); }
 .geq-band { display: grid; flex: 1; justify-items: center; gap: 0.15rem; min-inline-size: 0; }
 .geq-band > input[type="range"] {
   -webkit-appearance: none;
@@ -4856,7 +4932,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   min-width: 0.9rem;
   height: var(--geq-height, 7rem);
   margin: 0;
-  background: linear-gradient(90deg, transparent calc(50% - 3px), var(--geq-slot, #000000) 0 calc(50% + 3px), transparent 0);
+  background: linear-gradient(90deg, transparent calc(50% - 3px), var(--geq-slot, var(--fader-slot, var(--border))) 0 calc(50% + 3px), transparent 0);
 }
 .geq-band > input::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -4888,20 +4964,20 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: grid;
   gap: 0.4rem;
   padding: 0.5rem;
-  background: var(--patch-device-bg, linear-gradient(180deg, #4f8ad0, #2f62ae));
-  border: 1px solid var(--patch-device-border, #12285e);
+  background: var(--patch-device-bg, var(--surface));
+  border: 1px solid var(--patch-device-border, var(--border));
   border-radius: 8px;
-  color: #ffffff;
+  color: var(--patch-device-fg, var(--text));
 }
 .patch-device > header { display: flex; align-items: center; gap: 0.4rem; font-weight: 800; }
-.patch-name { flex: 1; padding: 0.15rem 0.4rem; background: #000000; border-radius: 2px; }
+.patch-name { flex: 1; padding: 0.15rem 0.4rem; background: var(--patch-name-bg, var(--input-bg, var(--surface))); color: var(--patch-name-fg, var(--input-fg, var(--text))); border-radius: 2px; }
 .patch-group-label { grid-column: 1 / -1; margin: 0.2rem 0 0; font-size: 0.75rem; font-weight: 800; text-align: center; }
 .patch-grid { display: grid; grid-template-columns: repeat(var(--patch-cols, 8), minmax(1.4rem, 1fr)); gap: 3px; }
 .patch-point {
   position: relative;
   aspect-ratio: 1;
-  background: var(--patch-free, linear-gradient(180deg, #f0f0f0, #c8c8c8));
-  border: 1px solid #333333;
+  background: var(--patch-free, var(--surface-2));
+  border: 1px solid var(--patch-point-border, var(--border));
   border-radius: 2px;
 }
 /* The jack: a small ring in the middle of each point. */
@@ -4909,12 +4985,12 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   content: "";
   position: absolute;
   inset: 28%;
-  border: 2px solid rgba(0, 0, 0, 0.45);
+  border: 2px solid var(--patch-jack, color-mix(in srgb, currentColor 45%, transparent));
   border-radius: 50%;
 }
 .patch-point > input { position: absolute; inset: 0; margin: 0; opacity: 0; }
-.patch-point:has(> input:checked) { background: var(--patch-on, linear-gradient(180deg, #8ad35a, #4e9a2a)); }
-.patch-point[data-kind="aes"]:has(> input:checked) { background: var(--patch-aes, linear-gradient(180deg, #ffe46b, #d6b21a)); }
+.patch-point:has(> input:checked) { background: var(--patch-on, var(--success)); }
+.patch-point[data-kind="aes"]:has(> input:checked) { background: var(--patch-aes, var(--warning)); }
 .patch-point:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 1px; }
 @media (forced-colors: active) {
   .patch-point:has(> input:checked), .assignable-key:has(> input:checked) { background: Highlight; }
@@ -5089,8 +5165,8 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 }
 
 /* The area under a dynamics curve, filled (console.js closes the path). */
-.dyn-graph-fill { fill: var(--dyn-graph-fill, rgba(140, 190, 255, 0.45)); stroke: none; }
-[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-fill { fill: var(--dyn-graph-fill-off, rgba(140, 190, 255, 0.18)); }
+.dyn-graph-fill { fill: var(--dyn-graph-fill, color-mix(in srgb, var(--eq-line, var(--accent)) 30%, transparent)); stroke: none; }
+[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-fill { fill: var(--dyn-graph-fill-off, color-mix(in srgb, var(--muted) 15%, transparent)); }
 
 /* --- .led-list — options chosen by a lit LED -------------------------------
  *   <ul class="led-list" role="radiogroup" aria-label="Program">
@@ -5123,6 +5199,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
  * The sixteen name-tag colours a large console offers. Each reads a
  * --tag-<name> token, so a theme can retune them. */
 .scribble[data-tag] { background: var(--_tag); color: var(--_tag-fg, #111111); border-top-color: transparent; text-align: center; }
+.scribble[data-tag] .scribble-num { color: inherit; opacity: 0.75; }
 .scribble[data-tag="black"] { --_tag: var(--tag-black, #111111); --_tag-fg: #ffffff; }
 .scribble[data-tag="dblue"] { --_tag: var(--tag-dblue, #1f3fd0); --_tag-fg: #ffffff; }
 .scribble[data-tag="dgreen"] { --_tag: var(--tag-dgreen, #1e7a2a); --_tag-fg: #ffffff; }
@@ -5157,11 +5234,11 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .assignable-nav > button {
   min-inline-size: 0;
   padding: 0;
-  background: var(--assignable-key-bg, linear-gradient(180deg, #4a54a0, #3a438b));
-  border: 1px solid var(--assignable-key-border, #6a74c0);
+  background: var(--assignable-key-bg, var(--key-bg, var(--surface-2)));
+  border: 1px solid var(--assignable-key-border, var(--key-border, var(--border)));
   border-radius: 2px;
 }
-.assignable-nav > button:active { background: var(--assignable-key-on, #b5bce8); }
+.assignable-nav > button:active { background: var(--assignable-key-on, var(--accent)); }
 .assignable-nav > :nth-child(1) { grid-area: 1 / 1 / 2 / 3; inline-size: 1.6rem; }
 .assignable-nav > :nth-child(2) { grid-area: 1 / 2 / 2 / 4; inline-size: 1.6rem; justify-self: end; }
 .assignable-nav > :nth-child(3) { grid-area: 2 / 2; }
@@ -5407,6 +5484,73 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   border-color: var(--window-pane-border, var(--input-border, var(--border)));
 }
 
+/* .window-tasks — the side pane of task groups beside a window's content
+   (XP's Explorer task pane). Each .window-task is a titled group: its
+   first child (a heading or <summary>) is the header, the rest the body. */
+.window-tasks {
+  display: grid;
+  align-content: start;
+  gap: var(--window-tasks-gap, var(--space-s, 0.75rem));
+  padding: var(--window-tasks-padding, var(--space-s, 0.75rem));
+  background: var(--window-tasks-bg, var(--surface-2));
+}
+.window-task {
+  border: 1px solid var(--window-task-border, var(--border));
+  border-radius: var(--window-task-radius, var(--radius));
+  background: var(--window-task-bg, var(--surface));
+  color: var(--window-task-fg, var(--text));
+  font-size: var(--window-task-font-size, inherit);
+  overflow: hidden;
+}
+.window-task > :first-child {
+  margin: 0;
+  padding: var(--window-task-header-pad, 0.35rem 0.6rem);
+  background: var(--window-task-header-bg, transparent);
+  color: var(--window-task-header-fg, inherit);
+  font-size: var(--window-task-header-font-size, 0.85rem);
+  font-weight: 700;
+}
+.window-task > :not(:first-child) { margin: 0; padding: var(--window-task-body-pad, 0.4rem 0.6rem); }
+/* A collapsible group is a <details> whose <summary> is the header; the
+   toggle sits at its end (a chevron by default, a theme's button image via
+   --window-task-toggle / --window-task-toggle-closed). */
+details.window-task > summary { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; cursor: var(--cursor-pointer, pointer); list-style: none; }
+details.window-task > summary::-webkit-details-marker { display: none; }
+details.window-task > summary > :is(h2, h3) { margin: 0; font: inherit; color: inherit; }
+details.window-task > summary::after {
+  content: "";
+  flex: none;
+  inline-size: var(--window-task-toggle-size, 1em);
+  block-size: var(--window-task-toggle-size, 1em);
+  background: var(--window-task-toggle, none) center / contain no-repeat;
+  background-color: var(--window-task-toggle-fg, currentColor);
+  -webkit-mask: var(--window-task-toggle-mask, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 10l4-4 4 4' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E")) center / contain no-repeat;
+  mask: var(--window-task-toggle-mask, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 10l4-4 4 4' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E")) center / contain no-repeat;
+}
+details.window-task:not([open]) > summary::after { rotate: var(--window-task-toggle-rotate, 180deg); background-image: var(--window-task-toggle-closed, var(--window-task-toggle, none)); }
+details.window-task > summary:focus-visible { outline: 2px solid var(--focus, var(--accent)); outline-offset: -2px; }
+.window-task > :not(:first-child) + :not(:first-child) { padding-block-start: 0; }
+.window-task a { color: var(--window-task-link-fg, var(--link, var(--accent))); }
+/* A .list inside a group is a plain column of task links, not a boxed list. */
+.window-task {
+  --list-bg: transparent;
+  --list-border-width: 0;
+  --list-radius: 0;
+  --list-rule: transparent;
+  --list-item-padding: var(--window-task-item-pad, 0.2em 0);
+  --list-item-fg: var(--window-task-link-fg, var(--link, var(--accent)));
+  --row-hover-bg: transparent;
+}
+@media (hover: hover) {
+  .window-task :is(a, label).list-item:hover { text-decoration: underline; color: var(--window-task-link-fg-hover, var(--window-task-link-fg, var(--link, var(--accent)))); }
+}
+/* The first, "special" group of a pane (XP: the place's own tasks). */
+.window-task.is-special > :first-child {
+  background: var(--window-task-special-header-bg, var(--window-task-header-bg, transparent));
+  color: var(--window-task-special-header-fg, var(--window-task-header-fg, inherit));
+}
+.window-task.is-special { background: var(--window-task-special-bg, var(--window-task-bg, var(--surface))); }
+
 /* Minimized and closed windows leave the screen (the inputs stay, so the
    task button and the Start menu can bring them back). */
 .desktop-window:has(> .window-minimize:checked, > .window-close:checked) > .modal { display: none; }
@@ -5425,18 +5569,28 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   outline-offset: 2px;
 }
 /* Inactive title bars: every window but the active one, which is the one
-   holding focus, else the switched-to one, else the topmost (last). */
+   holding focus, else the switched-to one, else the topmost (last). While
+   the Start menu is open it holds focus, so every window is inactive. */
 .desktop:has(.desktop-window:focus-within) .desktop-window:not(:focus-within),
 .desktop:not(:has(.desktop-window:focus-within)):has(.window-app:checked) .desktop-window:not(:has(> .window-app:checked)),
-.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) {
+.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)),
+.desktop:has(.start-menu:popover-open) .desktop-window {
   --_inactive: 1;
 }
 .desktop:has(.desktop-window:focus-within) .desktop-window:not(:focus-within) > .modal > .modal-header,
 .desktop:not(:has(.desktop-window:focus-within)):has(.window-app:checked) .desktop-window:not(:has(> .window-app:checked)) > .modal > .modal-header,
-.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) > .modal > .modal-header {
+.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) > .modal > .modal-header,
+.desktop:has(.start-menu:popover-open) .desktop-window > .modal > .modal-header {
   background: var(--window-header-bg-inactive, var(--modal-header-bg, transparent));
   color: var(--window-header-fg-inactive, var(--modal-header-fg, inherit));
   filter: var(--window-header-filter-inactive, saturate(0.45) opacity(0.85));
+}
+/* XP fades an inactive window's caption buttons into its paler title bar. */
+.desktop:has(.desktop-window:focus-within) .desktop-window:not(:focus-within) > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close),
+.desktop:not(:has(.desktop-window:focus-within)):has(.window-app:checked) .desktop-window:not(:has(> .window-app:checked)) > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close),
+.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close),
+.desktop:has(.start-menu:popover-open) .desktop-window > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close) {
+  opacity: var(--window-caption-opacity-inactive, 1);
 }
 
 /* A small monitor showing the wallpaper (Display Properties). */
@@ -5646,6 +5800,9 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   height: var(--start-menu-sub-icon-size, 1rem);
 }
 .start-menu li > :is(a, button, label) > span { display: flex; flex-direction: column; text-align: start; }
+/* "All Programs" is one line of text (its "All " is a columns-only span), not
+   a title over a subtitle. */
+.start-menu li.start-menu-all > :is(a, button) > span { display: block; white-space: nowrap; }
 .start-menu li > :is(a, button, label) > span > b { font-weight: 700; }
 .start-menu li > :is(a, button, label) small { font-size: 0.8em; opacity: 0.75; }
 .start-menu .has-submenu > :is(a, button)::after { margin-inline-start: auto; }
@@ -9839,7 +9996,7 @@ html[data-motion="reduced"] .track > .track-play::before { animation: none; }
 /* ---- Track rows ------------------------------------------------------------
  * <ol class="tracklist">
  *   <li class="track">
- *     <button class="track-play" aria-label="Play Night Drive"><span class="track-num">1</span><svg class="icon">…#icon-play</svg></button>
+ *     <button class="track-play" aria-label="Play track 1, Night Drive"><span class="track-num">1</span><svg class="icon">…#icon-play</svg></button>
  *     <img src="art.jpg" alt="">
  *     <span class="track-main"><span class="track-title">Night Drive</span><span class="track-artist">Lumen Coast</span></span>
  *     <span class="track-album">Harbour Lights</span>
@@ -10205,6 +10362,11 @@ html[data-motion="reduced"] .track > .track-play::before { animation: none; }
 
 @keyframes waveform-shimmer { to { background-position: -200% 0; } }
 .waveform:has(> input:disabled) { opacity: 0.5; }
+/* .waveform.is-static — display only: the input still paints played and
+   unplayed and the head (hide it with --waveform-head: transparent), but
+   it doesn't seek, so no hover preview and no pointer. */
+.waveform.is-static::before { content: none; }
+.waveform.is-static > input[type="range"] { pointer-events: none; }
 
 /* ---- Waveform regions, markers and hover time -------------------------------
  * <div class="waveform" data-hover-time="0:41" style="--hover: .68">
@@ -10485,7 +10647,8 @@ button.waveform-marker:focus-visible { outline: 2px solid var(--focus); outline-
  * Desktop: art and title | transport over the scrubber | extras. Tablet: the
  * scrubber takes its own row and the extras (volume, queue…) hide. Mobile and .is-mini: art, title, like and play/next only. As a
  * direct child of .app it takes the shell's status slot and sticks to the
- * bottom of the screen, clear of the home indicator. */
+ * bottom of the screen, clear of the home indicator; on a phone .app-main
+ * scrolls above it instead. */
 .now-playing {
   --_areas: "art meta like transport extras" "art meta like progress extras";
   --_cols: auto minmax(0, 1fr) auto minmax(0, 2fr) minmax(0, 1fr);
@@ -10556,6 +10719,11 @@ button.waveform-marker:focus-visible { outline: 2px solid var(--focus); outline-
     --_np-secondary: none;
     --_np-extras: none;
   }
+  /* On a phone the docked bar is a big share of the screen, so the shell
+     holds the screen height and .app-main scrolls above the bar: no row
+     ever sits under it. */
+  .app:has(> .now-playing) { block-size: 100dvh; }
+  .app:has(> .now-playing) > .app-main { overflow-y: auto; overscroll-behavior: contain; }
 }
 /* Mini player: the mobile layout at any width, as a card. */
 .now-playing.is-mini {
@@ -11744,13 +11912,18 @@ html:is([data-motion="reduced"],[data-motion="none"]) :is(:is(.is-paused,.is-pau
  * the --z-* scale from there. Docs: docs/components/navigation.md. */
 
 /* --- Closable tabs (#37) ---------------------------------------------------
- *   <div class="tabs is-scroll" role="tablist">
- *     <div class="tab is-active"><button role="tab" aria-selected="true">a.css</button>
- *       <button class="btn-close" tabindex="-1" aria-label="Close a.css"></button></div>
+ *   <div class="tabs is-scroll">
+ *     <div class="tabs" role="tablist" aria-label="Open files">
+ *       <div class="tab is-active"><button role="tab" aria-selected="true">a.css</button>
+ *         <button class="btn-close" tabindex="-1" aria-hidden="true" aria-label="Close a.css"></button></div>
+ *     </div>
  *     <button class="tab-add" aria-label="New tab"></button>
  *   </div>
  * A <button> can't hold a second button, so a closable .tab is a wrapper:
- * the first child is the tab itself, the .btn-close sits beside it. */
+ * the first child is the tab itself, the .btn-close sits beside it. A
+ * tablist may own only tabs, so the add button sits beside an inner
+ * .tabs[role=tablist] that lends its tabs to the outer strip. */
+.tabs > .tabs { display: contents; }
 .tabs.is-scroll {
   /* max-inline-size: a theme may make .tabs inline-flex (a capsule), which
      would otherwise grow with its tabs and never scroll. */
@@ -11761,7 +11934,7 @@ html:is([data-motion="reduced"],[data-motion="none"]) :is(:is(.is-paused,.is-pau
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb, var(--border)) transparent;
 }
-.tabs.is-scroll > * { flex-shrink: 0; }
+.tabs.is-scroll > *, .tabs.is-scroll > .tabs > * { flex-shrink: 0; }
 .tab:has(> .btn-close) {
   display: inline-flex;
   align-items: center;
@@ -14246,7 +14419,7 @@ pre.line-numbers > code:has(> .line-numbers-rows) { position: relative; }
   inline-size: calc(var(--_otp-n) * var(--otp-cell-size, 2.75rem) + (var(--_otp-n) - 1) * var(--_otp-gap));
   max-inline-size: 100%;
   block-size: var(--otp-height, 3.25rem);
-  overflow: hidden;
+  overflow: clip;
   direction: ltr;
 }
 .otp > span {
@@ -15477,6 +15650,10 @@ html[data-surface="signage"] { font-size: var(--signage-root, 1.5vh); overflow: 
   html[data-surface="signage"] { font-size: var(--signage-root-portrait, 1.5vw); }
 }
 html[data-surface="signage"] body { overflow: hidden; }
+/* Every pixel of a screen is content, so page-level theme art stands down:
+   the XL gutter layer here, and any corner emblem a theme fixes over the
+   page (themes hide their own under the same selector). */
+html[data-surface="signage"]::before { content: none; }
 .safe-area {
   box-sizing: border-box;
   padding:
@@ -16590,7 +16767,7 @@ html[data-pointer="touch"] { --_cell-pencil: inline-block; }
 .table tbody tr:nth-child(n):is(:hover, :focus-within):not(.table-empty, .table-more) {
   --_row-tint: var(--row-hover-bg, color-mix(in srgb, var(--accent) 8%, transparent));
 }
-.table tbody tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))):nth-child(n) { --_row-tint: var(--row-active-bg, transparent); }
+.table tbody tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))):not(.is-selected, :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))):nth-child(n) { --_row-tint: var(--row-active-bg, transparent); }
 .table tbody tr:is(.is-selected, :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))):nth-child(n) {
   --_row-tint: var(--row-selected-bg, color-mix(in srgb, var(--accent) 18%, transparent));
 }
@@ -18278,12 +18455,12 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   background: var(--app-bg, transparent);
 }
 
-/* An app that never adds the rail element at all (not even an empty one)
-   has no box for :empty to match, so a theme's --app-columns would
-   still reserve a blank gutter next to .app-main. Collapse the column
+/* An app that never adds the rail element at all (not even an empty one),
+   or marks it `hidden`, has no box for :empty to match, so a theme's
+   --app-columns would still reserve a blank gutter next to .app-main. Collapse the column
    track itself in that case. Browsers without :has() just keep the blank
    gutter — a graceful degrade, not a break. */
-.app:not(:has(> .app-rail)) {
+.app:not(:has(> .app-rail:not([hidden]))) {
   grid-template-areas: var(--app-areas-no-rail, "bar" "main" "status");
   grid-template-columns: var(--app-columns-no-rail, minmax(0, 1fr));
 }
@@ -18299,7 +18476,9 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   min-width: 0;
   padding: var(--app-bar-padding, 0.6rem 1rem);
   background: var(--app-bar-bg, var(--nav-bg, var(--surface)));
-  color: var(--app-bar-fg, inherit);
+  /* Plain text on the bar (a clock, a title) follows the bar, not the page:
+     --app-bar-fg, else --nav-item-fg, which check.py holds to 4.5:1 here. */
+  color: var(--app-bar-fg, var(--nav-item-fg, inherit));
   border-bottom: var(--app-bar-rule-width, 1px) solid var(--app-bar-rule, var(--border));
   border-radius: var(--app-bar-radius, 0);
   min-height: var(--app-bar-height, auto);
@@ -18325,6 +18504,8 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
 .app-rail:empty {
   display: var(--app-rail-empty-display, none);
 }
+/* `hidden` drops the rail in every theme, decorative or not. */
+.app-rail[hidden] { display: none !important; }
 .app-rail {
   grid-area: rail;
   display: var(--app-rail-display, none);
@@ -18477,7 +18658,7 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   .app-rail { display: none !important; }
   .app-status { position: fixed; inset-inline-start: env(viewport-segment-left 1 0); inset-block-end: 0; inline-size: env(viewport-segment-width 1 0); }
   .app-main { padding-block-end: var(--app-fold-status-space, 3rem); }
-  .app:not(:has(> .app-rail)) {
+  .app:not(:has(> .app-rail:not([hidden]))) {
     grid-template-areas: var(--app-fold-book-areas, "bar main");
     grid-template-columns: env(viewport-segment-width 0 0) env(viewport-segment-width 1 0);
   }
@@ -18493,7 +18674,7 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   .app-rail { display: none !important; }
   .app-status { position: fixed; inset-inline-start: 0; inset-block-end: 0; inline-size: 100%; }
   .app-main { padding-block-end: var(--app-fold-status-space, 3rem); }
-  .app:not(:has(> .app-rail)) {
+  .app:not(:has(> .app-rail:not([hidden]))) {
     grid-template-areas: var(--app-fold-tabletop-areas, "bar" "main");
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: env(viewport-segment-height 0 0) env(viewport-segment-height 0 1);
@@ -18556,11 +18737,12 @@ html[data-theme="lcars"] {
   color-scheme: dark;
   --bg: #000000;
   /* No grey cards: surfaces are black, so every panel is candy framing on
-     the black substrate. --surface-2 survives only for "off" tracks. */
+     the black substrate. --surface-2 is an unlit candy block (dim
+     lavender), never a navy-grey well: off tracks, off lamps, skeletons. */
   --surface: #000000;
-  --surface-2: #1c1c2c;
+  --surface-2: color-mix(in srgb, var(--lcars-lavender) 24%, #000);
   /* Hairlines and outlines don't exist in LCARS; structure is bars. */
-  --border: #333333;
+  --border: transparent;
   --hairline: #000000;
   --panel-border-width: 0;
   /* Two text colours only (reference §7): tan for normal display, the
@@ -18571,7 +18753,8 @@ html[data-theme="lcars"] {
   --accent: #ff9900;
   --accent-2: #9999cc;
   --danger: #d15a5a;
-  --success: #99cc99;
+  /* No green in the candy set: "good" reads as periwinkle (information). */
+  --success: var(--lcars-periwinkle);
   --warning: #ffcc99;
   /* Text-weight variants of the state colors, for .status, trends,
      colored badges and danger menu items: same hue, adjusted to 4.5:1 on
@@ -18587,6 +18770,10 @@ html[data-theme="lcars"] {
      = (leg + r) across × (bar + r) down, so the inner curve is a circle of
      radius r. The shell's elbows use the shell r, panels their own. */
   --lcars-r-shell: 1.5rem;
+  /* Shell structure and screen title; the eras repaint these apart from
+     the active colour (Picard: slate frames, cyan only for selection). */
+  --lcars-frame: var(--accent);
+  --lcars-title: var(--accent);
   --lcars-bar: 1.1rem;
   /* Everything is set in the condensed display face, body copy included:
      a Trebuchet paragraph under Antonio headings reads as a web page. */
@@ -18623,25 +18810,28 @@ html[data-theme="lcars"] {
      right-hand end, as on the on-screen control blocks. */
   --btn-radius: 999px;
   --btn-border-width: 0;
-  --btn-padding: 0.5rem 1rem 0.35rem 2rem;
-  --btn-padding-sm: 0.25rem 0.8rem 0.15rem 1.4rem;
+  --btn-padding: 0.6rem 0.75rem 0.3rem 2rem;
+  --btn-padding-sm: 0.3rem 0.65rem 0.25rem 1.4rem;
   --btn-weight: 400;
-  --btn-tracking: 0.06em;
+  --btn-tracking: 0.02em;
   --btn-transform: uppercase;
   --btn-bg: var(--lcars-lavender);
   --btn-fg: #000;
   --btn-bg-hover: var(--lcars-tan);
-  /* No strokes anywhere in LCARS — only solid fills. A text field is a
-     dark well with a candy pill cap on its left end. */
-  --input-bg: #14141f;
+  /* No strokes anywhere in LCARS — only solid fills. A text field is
+     black, carried by the candy pill cap on its left end. */
+  --input-bg: #000;
   --input-border: transparent;
+  --input-border-width: 0;
   --input-radius: 999px 0.3rem 0.3rem 999px;
+  /* The value starts clear of the cap's curve. */
+  --input-padding: 0.5em 0.75em 0.5em 1.15rem;
   --input-addon-bg: var(--lcars-lavender);
   --input-addon-fg: #000;
-  --log-bg: #0b0b12;
+  --log-bg: #000;
   --log-border: transparent;
   --switch-border: transparent;
-  --switch-bg: #2c2c44;
+  --switch-bg: var(--surface-2);
   --switch-bg-on: var(--accent);
   --switch-thumb-bg: var(--lcars-lavender);
   --switch-thumb-bg-on: #000;
@@ -18649,13 +18839,16 @@ html[data-theme="lcars"] {
   --table-rule: transparent;
   --focus-ring: 0 0 0 0.2rem rgba(255, 153, 0, 0.25);
   --dropdown-border: transparent;
-  --dropdown-bg: #14141f;
+  /* Menus and popovers are black, framed by a lavender leg (below). Only a
+     text field keeps a dark well, to show where you can type. */
+  --dropdown-bg: #000;
+  --window-pane-bg: #000;
   --kbd-bg: var(--lcars-lavender);
   --kbd-fg: #000;
   --kbd-border: transparent;
   --kbd-radius: 999px;
   --kbd-shadow: none;
-  --dropzone-bg: #14141f;
+  --dropzone-bg: #000;
   --dropzone-border: transparent;
   --dropdown-radius: 0;
   --table-head-bg: var(--accent);
@@ -18675,6 +18868,24 @@ html[data-theme="lcars"] {
   --nav-item-bg-active: var(--accent);
   --nav-item-fg-active: #000;
   --badge-radius: 999px;
+  --badge-bg: var(--lcars-lavender);
+  --badge-fg: #000;
+  /* Charts draw in the candy set; red stays the alert colour only. */
+  --chart-series-1: var(--accent);
+  --chart-series-2: var(--lcars-periwinkle);
+  --chart-series-3: var(--lcars-lavender);
+  --chart-series-4: var(--lcars-peach);
+  --chart-series-5: var(--lcars-tan);
+  --chart-series-6: var(--lcars-periwinkle);
+  /* Slider: a lavender candy bar; the core keeps the --tap-min hit area
+     round it with a clipped content box. */
+  --slider-bg: var(--lcars-lavender);
+  --slider-height: 0.5rem;
+  --slider-border-width: 0;
+  --slider-radius: 999px;
+  --slider-thumb-bg: var(--accent);
+  --slider-thumb-radius: 0.3rem;
+  --btn-icon-radius: 999px 0.3rem 0.3rem 999px;
   /* Tabs are a row of touching candy blocks, not underlined labels. */
   --tab-radius: 0;
   --tab-bg: var(--lcars-lavender);
@@ -18684,7 +18895,7 @@ html[data-theme="lcars"] {
   --tab-underline-active: transparent;
   --overlay-bg: rgba(0, 0, 0, 0.75);
   --label-transform: uppercase;
-  --label-tracking: 0.08em;
+  --label-tracking: 0.02em;
   --indicator-fg: var(--accent);
   --indicator-track: var(--surface-2);
 
@@ -18705,7 +18916,7 @@ html[data-theme="lcars"] {
   --readout-fg: var(--accent);
   --readout-font: "Antonio", var(--font);
   --readout-weight: 700;
-  --readout-tracking: 0.04em;
+  --readout-tracking: 0.01em;
   --readout-size: 2rem;
   --transport-bg: #000;
   /* The transport is a bracket like any frame: thick leg, thin arms,
@@ -18719,7 +18930,7 @@ html[data-theme="lcars"] {
   --go-fg: #000;
   --go-border-width: 0;
   --go-radius: 0 1.4rem 1.4rem 0;
-  --go-padding: 0.6em 2.2em;
+  --go-padding: 0.55em 0.8em 0.4em 3.2em;
   --go-bg-hover: var(--lcars-tan);
   --lamp-radius: 0.4rem;
   --lamp-size: 0.9rem;
@@ -18733,13 +18944,12 @@ html[data-theme="lcars"] {
 html[data-theme="lcars"] {
   --toast-bg: #000;
   --toast-fg: var(--text);
-  --toast-border: var(--accent);
   --toast-radius: 0.7rem 0 0 0.7rem;
   --alert-bg: #000;
   --alert-fg: var(--text);
   --alert-radius: 0.7rem 0 0 0.7rem;
   --context-menu-border: transparent;
-  --context-menu-bg: #14141f;
+  --context-menu-bg: #000;
   --context-menu-radius: 0;
   --context-menu-item-fg-hover: #000;
     --dropzone-radius: 0;
@@ -18754,7 +18964,7 @@ html[data-theme="lcars"] {
   --tooltip-border: transparent;
   --tooltip-radius: 0;
   --popover-border: transparent;
-  --popover-bg: #14141f;
+  --popover-bg: #000;
   --popover-radius: 0;
   --card-bg: transparent;
   --panel-bg: transparent;
@@ -18767,12 +18977,13 @@ html[data-theme="lcars"] h1,
 html[data-theme="lcars"] h2,
 html[data-theme="lcars"] h3 {
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.02em;
   color: var(--accent);
   font-weight: 400;
 }
-html[data-theme="lcars"] h1 { font-size: var(--lcars-size-title); line-height: 1; color: var(--accent); }
-html[data-theme="lcars"] .stat-value { font-family: var(--font); color: var(--accent); font-weight: 400; font-size: var(--lcars-size-title); }
+/* Titles and readouts are the heavy compressed cut; data stays 400. */
+html[data-theme="lcars"] h1 { font-size: var(--lcars-size-title); line-height: 1; color: var(--lcars-title); font-weight: 700; letter-spacing: 0.01em; }
+html[data-theme="lcars"] .stat-value { font-family: var(--font); color: var(--accent); font-weight: 700; font-size: var(--lcars-size-title); }
 
 /* --- Bracket frames ---------------------------------------------------- *
  * The LCARS panel is not a box: it is a bracket — a thick candy leg down
@@ -18785,7 +18996,7 @@ html[data-theme="lcars"] .stat-value { font-family: var(--font); color: var(--ac
 html[data-theme="lcars"] .panel,
 html[data-theme="lcars"] .card,
 html[data-theme="lcars"] .modal {
-  --lc: var(--accent);
+  --lc: var(--lcars-frame);
   /* Thick leg, thin bars: a frame never keeps its thickness round a turn
      (reference §3). */
   --lc-leg: 1.6rem;
@@ -18816,7 +19027,7 @@ html[data-theme="lcars"] :is(.panel, .card):nth-child(4n+4) { --lc: var(--lcars-
 html[data-theme="lcars"] .modal { --lc: var(--lcars-lavender); --lc-pad: 1.5rem; }
 /* The top arm of a panel ends flat, then — after the in-frame gap — in a
    short separate cap: the bar's full stop (reference §4). */
-html[data-theme="lcars"] :is(.panel, .modal)::after {
+html[data-theme="lcars"] :is(.panel, .card, .modal)::after {
   content: "";
   position: absolute;
   top: calc(-1 * var(--lc-top));
@@ -18838,8 +19049,8 @@ html[data-theme="lcars"] .panel-header,
 html[data-theme="lcars"] .modal-header {
   width: fit-content;
   max-width: calc(100% - 2rem);
-  margin: calc(-1 * var(--lc-pad) - var(--lc-top) - (1.6rem - var(--lc-top)) / 2) 0 calc(1rem * var(--density)) 1.5rem;
-  padding: 0 0.55rem;
+  margin: calc(-1 * var(--lc-pad) - var(--lc-top) - (1.6rem - var(--lc-top)) / 2) 0 calc(1rem * var(--density)) 1rem;
+  padding: 0 0.45rem;
   height: 1.6rem;
   line-height: 1.6rem;
   display: flex;
@@ -18850,19 +19061,21 @@ html[data-theme="lcars"] .modal-header {
   border-radius: 0;
   color: var(--lc);
   font-size: var(--lcars-size-sub);
-  font-weight: 400;
-  letter-spacing: 0.1em;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
   white-space: nowrap;
   overflow: hidden;
 }
-html[data-theme="lcars"] .panel-header :is(strong, b, h2, h3) { font-weight: 400; color: inherit; font-size: inherit; margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* A bare-text title can't ellipsize as an anonymous flex item. */
+html[data-theme="lcars"] .panel-header:not(:has(> *)) { display: block; text-overflow: ellipsis; }
+html[data-theme="lcars"] .panel-header :is(strong, b, h2, h3) { font-weight: inherit; color: inherit; font-size: inherit; margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
-html[data-theme="lcars"] .toast,
-html[data-theme="lcars"] .alert {
-  border: none;
-  border-left: 1.4rem solid var(--accent);
-}
+/* The leg carries the variant colour (core's --alert-border /
+   --toast-border): orange info, periwinkle success, tan warning, red
+   danger. */
+html[data-theme="lcars"] .alert { border: none; border-left: 1.4rem solid var(--alert-border, var(--accent)); }
+html[data-theme="lcars"] .toast { border: none; border-left: 1.4rem solid var(--toast-border, var(--accent)); }
 
 /* Buttons: pill blocks, label at the right-hand end. */
 /* Labels sit at the bottom right of the block, as on every LCARS key. */
@@ -18870,8 +19083,13 @@ html[data-theme="lcars"] .alert {
    label too long for the block's width breaks onto a second line, still
    bottom-right, as on the panels' two-line keys. Minimum widths are kept
    modest so a row of keys can still shrink to fit its frame. */
-html[data-theme="lcars"] :is(.btn:not(.btn-icon):not(.btn-sm), .toggle-btn) { justify-content: flex-end; align-items: flex-end; text-align: right; min-width: 4.8rem; min-height: max(2.3rem, var(--tap-min)); line-height: 1.05; }
-html[data-theme="lcars"] .btn-sm { justify-content: flex-end; text-align: right; min-width: 3.4rem; }
+html[data-theme="lcars"] :is(.btn:not(.btn-icon):not(.btn-sm), .toggle-btn) { justify-content: flex-end; align-items: flex-end; text-align: right; min-width: 6.5rem; min-height: max(2.3rem, var(--tap-min)); line-height: 1.05; }
+/* Small keys keep the 3:1 block proportion and the bottom-right label. */
+html[data-theme="lcars"] .btn-sm { justify-content: flex-end; align-items: flex-end; text-align: right; min-width: 4.2rem; }
+/* In a joined toggle group the keys share the row: no minimum width, no
+   wrapping, and the row scrolls sideways when it can't fit. */
+html[data-theme="lcars"] .toggle-group { overflow-x: auto; scrollbar-width: none; }
+html[data-theme="lcars"] .toggle-group > .toggle-btn:not(.btn-icon):not(.btn-sm) { min-width: 0; white-space: nowrap; flex: none; }
 html[data-theme="lcars"] .btn-primary { --btn-bg: var(--accent); --btn-bg-hover: var(--lcars-gold); }
 html[data-theme="lcars"] .btn-secondary { --btn-bg: var(--lcars-periwinkle); --btn-fg: #000; }
 html[data-theme="lcars"] .btn-success { --btn-bg: var(--lcars-sky); }
@@ -18883,7 +19101,7 @@ html[data-theme="lcars"] .tab { border: 0; padding: 0.4em 0.7em 0.25em; font-siz
 html[data-theme="lcars"] .tab:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) { border-bottom: 0; }
 html[data-theme="lcars"] .tab:hover:not(:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))) { background: var(--lcars-tan); color: #000; }
 html[data-theme="lcars"] .tab:first-child { border-radius: 999px 0 0 999px; padding-left: 1.1em; }
-html[data-theme="lcars"] .tab:last-child { border-radius: 0 999px 999px 0; padding-right: 1.1em; }
+html[data-theme="lcars"] .tab:last-child { border-radius: 0 999px 999px 0; padding-right: 1.4em; }
 
 html[data-theme="lcars"] .table th:first-child { border-radius: 1rem 0 0 1rem; }
 html[data-theme="lcars"] .table th:last-child { border-radius: 0 1rem 1rem 0; }
@@ -18928,8 +19146,8 @@ html[data-theme="lcars"] {
 html[data-theme="lcars"] .app-bar {
   position: relative;
   align-items: flex-end;
-  border-left: var(--lcars-rail) solid var(--accent);
-  border-bottom: var(--lcars-bar) solid var(--accent);
+  border-left: var(--lcars-rail) solid var(--lcars-frame);
+  border-bottom: var(--lcars-bar) solid var(--lcars-frame);
   border-bottom-left-radius: calc(var(--lcars-rail) + var(--lcars-r-shell)) calc(var(--lcars-bar) + var(--lcars-r-shell));
 }
 /* The leg carries a block code in black at its lower right, and the bar
@@ -18941,43 +19159,46 @@ html[data-theme="lcars"] .app-bar::before {
   right: calc(100% + 0.6rem);
   color: #000;
   font-size: 0.85rem;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.03em;
   white-space: nowrap;
   pointer-events: none;
 }
 html[data-theme="lcars"] .app-bar::after {
   content: "";
   position: absolute;
-  right: 0;
+  /* 1px past the bar, so its anti-aliased edge can't show the orange. */
+  right: -1px;
   bottom: -1.1rem;
   width: 62%;
   height: 1.1rem;
   /* The bar breaks into segments along its run, as on the TNG frames:
      a short gold block, a long lavender run, a thin tan strip riding the
      bar's top edge, a peach run, then a gap and a short tan end cap. */
+  /* The end cap is a half-disc painted with black outside its curve, so
+     the frame's orange border underneath can't show past it. */
   background:
+    radial-gradient(circle calc(var(--lcars-bar) / 2) at 0 50%, var(--lcars-tan) calc(100% - 0.5px), #000 100%) 100% 0 / calc(var(--lcars-bar) / 2) 100% no-repeat,
     linear-gradient(var(--lcars-tan), var(--lcars-tan)) 58% 0 / 12% 35% no-repeat,
     linear-gradient(90deg, #000 0 0.3rem, var(--lcars-gold) 0.3rem 5%, #000 5% calc(5% + 0.3rem), var(--lcars-lavender) calc(5% + 0.3rem) 50%, #000 50% calc(50% + 0.3rem), #000 calc(50% + 0.3rem) 66%, #000 66% calc(66% + 0.3rem), var(--lcars-peach) calc(66% + 0.3rem) calc(100% - 2rem), #000 calc(100% - 2rem) calc(100% - 1.7rem), var(--lcars-tan) 0);
-  border-radius: 0 999px 999px 0;
   pointer-events: none;
 }
 
 /* Inside the frame the nav is bare: no box of its own, pill items on
    black, and the brand as the big right-aligned LCARS screen title. */
 html[data-theme="lcars"] .app-bar .nav { padding: 0; flex: 1; min-width: 0; align-items: flex-end; flex-wrap: wrap; row-gap: 0.3rem; }
-html[data-theme="lcars"] .app-bar .nav-item { text-transform: uppercase; letter-spacing: 0.08em; padding: 0.35em 0.9em 0.2em 1.6em; text-align: right; }
+html[data-theme="lcars"] .app-bar .nav-item { text-transform: uppercase; letter-spacing: 0.02em; padding: 0.35em 0.6em 0.2em 2.2em; min-width: 6.5rem; justify-content: flex-end; align-items: flex-end; text-align: right; }
 html[data-theme="lcars"] .app-bar .nav-brand {
   order: 99;
   margin-left: auto;
-  color: var(--accent);
+  color: var(--lcars-title);
   /* The title shares the bar with the nav and the app's actions (the
      contract's brand / nav / actions order), so it scales down on narrower
      desktops instead of pushing them out of the frame. */
   font-size: clamp(1.6rem, 2.4vw, 2.4rem);
   line-height: 1;
-  font-weight: 400;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.01em;
   white-space: nowrap;
 }
 
@@ -18998,7 +19219,16 @@ html[data-theme="lcars"] .app-rail {
       var(--lcars-peach) 13.3rem 20rem,
       #000 20rem 20.3rem
     ) top / 100% 20.3rem no-repeat,
-    var(--lcars-tan);
+    /* Every block further down carries its code too, painted into a tile
+       that repeats with the leg's blocks (two runs, six codes). The top
+       layer above is opaque, so the tile never shows over the first run.
+       An SVG image can't reach the page's fonts, so the tile carries its
+       own Antonio digits-and-hyphen subset (1.3 KB, OFL) inline. */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='112' height='700.8'%3E%3Cstyle%3E@font-face%7Bfont-family:R;src:url(data:font/woff2;base64,d09GMgABAAAAAATsAA8AAAAACAAAAASUAAEAgwAAAAAAAAAAAAAAAAAAAAAAAAAAGhQbIBwqBmA/U1RBVC4APBEICokkiBIBNgIkAzALGgAEIAVEByAbTwYgjtReecAFKYPo9H/2LiqoVE4BJxWUmo/CJfkCCiDB/+++6dx2TD9Hq3iIzWtbF8sSTnAsX1eQyALseKDa29i7NoFwYK6mAemBAFAEQHykvQzIw5AxEh4Znw4eWADw//9Au4nOmi1KTLm2qLUeuobAaRbdQRbABtjurKcANoki1FOAHsGwJNhZX9bRihtw5Dvgv48BTlInzST2O5wPcqbodH28Hz7NZ9oQ1VFR2TqzYhQ0VAhNFih+BWofXq+mO4kSFmzByRJQS1IJHJhL6//3/n+ZWIaA/CypAFu2WRegBmQSoHxKdogBaitJBOWl2/s0NJX4Hgq0jbW6hqGKqo0aq2hKKiVcsUymMC2RgDPIMIxw+vxpmVpPekl+6gFzj+TkWaWeAwwjT+7LZCKFLgUihnTOcRm4iSG7xp70IU/Eb8fhGEnP/I5BCUVTUkIUMCh5qTBt35DKy5OZ+5mr4gVHQne6O9ERJVqR9CjwFCBPlStwU7RF4agh7FXyUwyEXBUoUodXJPIylkUpYZcSh/waYFxAxblfIyOQZi8QKrOy7O23Rf1bOopEBRveSGfeeCO9aEoqFEplMj+plHxXg7iQ8nCDPT0aWos2geqcy9f39NaSAwzXcrbnlpaAxdNM9/Tjy4QO5HtBf1ZJAVHCcc0FcZvZu1tiNlg+FVfOzvZVGj/dENOmdN5zoCu07phRf7f8YFPWmHbL2xbm8votY9nN8gObtmES7Mc9xS41hlZ7ooY9mnMMQpbA+QDHistM9yaeDuvYaVxhIFTNYec6DWj0fWHHF+iMjH36qPeaDWd2YmNbb6/TW3MirVXnSZuo7SbeJYI+rcro3s04onF2+su/Mm+ntKtNdfsKvEPVl9pHjTbFhkS47nUOi3MxHh/sNO7aZMdv0u9t4t/z/mzm7bNnN3z26VLqq3zzEKOkIYuTFf9u+tuP8TsWddtoyQ+LexbjT37/2wpuarSNZntvyL314HYEPyfY1zVdpFTGrwp0C8wuPKlSZXepdrOK0MpV1FDg+csHNjuUf/LZ3ZOCx5q1IxERI7rXuj656vHDbPNwvVjoe3dv2gXPCQ1xu5evUwxvS9/TFaGJe3dPO//rE4Kt1t+OjCydFHSpDtYMi5U3eoYKLH6rwMEardGteK72ffyBonqnNa8LKa85vx69tupUzPJ9areYXOg/pyTFcY0T219SHyEeBRZnwqf/j/MKfDrz6fzTCxdnnnw25/MoweOF/5zx2fzIzzcwx48KPBX7qsPOBx7x90k4cilis2MfuyTDao/Z7NiAYavYgT9m2NEzYjIzjEMadUNC3zuJrxnzFDjGcLf2Ph25Pv3muKBd42bAdF9cdb1PfD/TzPs40fLzchzc6TybKtioXtOyDZ5hEP21eGfx4Hxt+PUno0sFKv6/8mgeAOCdJqUr4kX95P97/h1WiJTTBsAB5Wg/3CIKHxkw1gIQjFlFFlBOC9Hb0YddqEUK5tGLdOQMKqgLyDzOxUrBRSJYIe2qUzT4aBCWHCgoA1MzAihC2UO3Hw+kogwVaEMtitAMEcpQhQpUohU0BgAA)%7D%3C/style%3E%3Cg font-family='R,Antonio,Arial Narrow,Liberation Sans Narrow,sans-serif' font-size='13.6' letter-spacing='0.4' text-anchor='end' fill='%23000'%3E%3Ctext x='104' y='108'%3E04-2271%3C/text%3E%3Ctext x='104' y='176.8'%3E05-3390%3C/text%3E%3Ctext x='104' y='341.6'%3E06-8812%3C/text%3E%3Ctext x='104' y='458.4'%3E07-1176%3C/text%3E%3Ctext x='104' y='527.2'%3E08-4078%3C/text%3E%3Ctext x='104' y='692'%3E09-5523%3C/text%3E%3C/g%3E%3C/svg%3E") 100% 20.3rem / 7rem 43.8rem repeat-y,
+    /* The leg below breaks into blocks of varied height and colour
+       (7rem / 4rem tan, 10rem lavender), not a run of equal slabs. */
+    repeating-linear-gradient(180deg, var(--lcars-tan) 0 7rem, #000 7rem 7.3rem, var(--lcars-tan) 7.3rem 11.3rem, #000 11.3rem 11.6rem, var(--lcars-lavender) 11.6rem 21.6rem, #000 21.6rem 21.9rem) 0 20.3rem / 100% 100% no-repeat,
+    #000;
 }
 /* Each labelled block carries a black code at its lower right, as on the
    on-screen panels. Two pseudo-slots, so the top two blocks. */
@@ -19008,7 +19238,7 @@ html[data-theme="lcars"] .app-rail::after {
   right: 0.5rem;
   color: #000;
   font-size: 0.85rem;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.03em;
   pointer-events: none;
 }
 html[data-theme="lcars"] .app-rail::before { content: "02-6117"; top: 3.7rem; }
@@ -19123,7 +19353,7 @@ html[data-theme="lcars"] {
 
 /* App-bar nav text. Brand is orange on black now, items black on pills. */
 html[data-theme="lcars"] .app-bar {
-  --nav-brand-fg: var(--accent);
+  --nav-brand-fg: var(--lcars-title);
 }
 
 /* --- Era variants (CONTRACT.md "Palette variants") -------------------- *
@@ -19135,8 +19365,9 @@ html[data-theme="lcars"] .app-bar {
    and blue-violet, with a muted brick red. */
 html[data-theme="lcars"][data-variant="voyager"] {
   --accent: #cc9966;
-  --lcars-peach: #ff9966;
-  --lcars-tan: #ffcc99;
+  /* Brick and a dimmer gold-tan, so the rail and bars change era too. */
+  --lcars-peach: #cc6666;
+  --lcars-tan: #ddbb88;
   --lcars-lavender: #9999cc;
   --lcars-periwinkle: #6688cc;
   --text: #ffcc99;
@@ -19145,19 +19376,27 @@ html[data-theme="lcars"][data-variant="voyager"] {
   --focus-ring: 0 0 0 0.2rem rgba(204, 153, 102, 0.3);
 }
 
-/* Picard (2399): a cold 25th-century repaint, blue structure with red
-   and orange accents and pale ice-blue text. */
+/* Picard (2399): a cold 25th-century repaint sampled from the
+   Communications screen (references/lcars/picard): desaturated slate and
+   steel structure, saturated cyan for what is active, a red-orange
+   highlight block now and then, pale ice-blue text. Every fill keeps
+   black labels at >= 4.5:1, so the darkest slate (#5d6b88) is not used. */
 html[data-theme="lcars"][data-variant="picard"] {
-  --accent: #5588ee;
-  --lcars-peach: #ff8844;
-  --lcars-tan: #aabbdd;
-  --lcars-lavender: #88aaee;
-  --lcars-periwinkle: #4477dd;
-  --text: #ddeeff;
-  --muted: #ddeeff;
-  --flare: #ee5555;
+  --accent: #4fb3f6;
+  --lcars-peach: #e8553f;
+  --lcars-tan: #b9c4d6;
+  --lcars-lavender: #8c9ab4;
+  --lcars-periwinkle: #7a8aa8;
+  --text: #dde6f2;
+  --muted: #dde6f2;
+  --flare: #e8553f;
   --link: var(--accent);
-  --focus-ring: 0 0 0 0.2rem rgba(85, 136, 238, 0.35);
+  --focus-ring: 0 0 0 0.2rem rgba(79, 179, 246, 0.35);
+  /* Frames, elbows, title and table head in slate / ice-blue; cyan is
+     kept for what is active or selected. */
+  --lcars-frame: #8c9ab4;
+  --lcars-title: var(--text);
+  --table-head-bg: #8c9ab4;
 }
 
 /* Mixing-console primitives in LCARS paint: candy knob caps, pill keys
@@ -19176,7 +19415,7 @@ html[data-theme="lcars"] {
   --key-sel: var(--accent);
   --key-sel-fg: #000000;
   /* Strips are dark filled blocks (no outlines), the bay pure black. */
-  --strip-bg: #11111c;
+  --strip-bg: var(--surface-2);
   --strip-radius: 0;
   --scribble-radius: 0;
   --mixer-radius: 0;
@@ -19221,7 +19460,7 @@ html[data-theme="lcars"] .modal-header > .btn-close {
   --btn-close-radius: 999px;
   --modal-header-close-fg: #000;
   --btn-close-fg-hover: #000;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.02em;
   position: absolute;
   top: 0;
   right: 0.5rem;
@@ -19293,16 +19532,21 @@ html[data-theme="lcars"] .modal-footer { margin-top: 0.6rem; }
 /* A panel title never runs into the cap at the end of its bar, and a
    header carrying a sub-line or controls stays on the bar: sub-lines sit
    inline after the title, buttons drop their minimum width. */
-html[data-theme="lcars"] .panel-header { max-width: calc(100% - 1.5rem - var(--lc-top) * 1.5 - 1rem); }
+/* The bar's right padding is free run for the title up to the cap. */
+html[data-theme="lcars"] .panel-header { max-width: calc(100% + var(--lc-pad) - 1rem - var(--lc-top) * 1.5 - 0.3rem); }
 html[data-theme="lcars"] .panel-header > div { display: flex; align-items: baseline; gap: 0.5rem; min-width: 0; overflow: hidden; }
 html[data-theme="lcars"] .panel-header .field-hint { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); flex: 0 20 auto; min-width: 0; }
 html[data-theme="lcars"] .panel-header :is(.btn, .btn-sm):not(.btn-icon) { min-width: 0; min-height: 0; padding: 0.05rem 0.6rem; }
-html[data-theme="lcars"] .panel-header > :not(:first-child) { flex: none; }
+/* The title takes priority in the bar break; a badge or sub-line after it
+   gives way (and clips) first when the frame is narrow. */
+html[data-theme="lcars"] .panel-header > :first-child { flex: 0 0 auto; max-width: 100%; }
+html[data-theme="lcars"] .panel-header > :not(:first-child, .btn, .btn-icon) { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+html[data-theme="lcars"] .panel-header > :is(.btn, .btn-icon):not(:first-child) { flex: none; }
 
 /* Gauges vs bars: only vertical meters are MSD tubes with a tick ruler;
    horizontal meters (in tables, cards) get a plain dark track so an empty
    one still reads as a meter. */
-html[data-theme="lcars"] .meter:not(.meter-v) { --meter-track: #1c1c2c; }
+html[data-theme="lcars"] .meter:not(.meter-v) { --meter-track: var(--surface-2); }
 html[data-theme="lcars"] .meter-v:not(.is-segmented) { --meter-thickness: 1.3rem; }
 
 /* Tabs stay one row — wrapping would leave pill caps in the middle of a
@@ -19310,6 +19554,8 @@ html[data-theme="lcars"] .meter-v:not(.is-segmented) { --meter-thickness: 1.3rem
    rather than truncating labels to nothing. */
 html[data-theme="lcars"] .tabs { flex-wrap: nowrap; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 html[data-theme="lcars"] .tab { flex: none; white-space: nowrap; }
+/* A vertical tab column is as wide as its longest label. */
+html[data-theme="lcars"] .tabs[aria-orientation="vertical"] { min-width: max-content; }
 
 /* No zebra: LCARS has no grey bands. */
 html[data-theme="lcars"] { --row-alt-bg: transparent; }
@@ -19322,8 +19568,8 @@ html[data-theme="lcars"] .accordion-trigger {
   color: #000;
   font-weight: 400;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 0.35rem 1rem 0.2rem 0.8rem;
+  letter-spacing: 0.02em;
+  padding: 0.35rem 1rem 0.3rem 0.8rem;
   border-radius: 0 999px 999px 0;
 }
 html[data-theme="lcars"] .accordion-item[open] > .accordion-trigger { background: var(--accent); }
@@ -19334,7 +19580,7 @@ html[data-theme="lcars"] {
   --scrollspy-link-fg: var(--lcars-lavender);
   --scrollspy-link-active-fg: var(--accent);
 }
-html[data-theme="lcars"] .scrollspy-link { text-transform: uppercase; letter-spacing: 0.06em; }
+html[data-theme="lcars"] .scrollspy-link { text-transform: uppercase; letter-spacing: 0.02em; }
 
 /* A page without the app shell (marketing) still gets the frame: a
    free-standing top nav is an elbow — thick leg on the left curving into
@@ -19362,8 +19608,9 @@ html[data-theme="lcars"] {
   --message-own-bg: #000000;
   --message-own-shadow: inset -0.6rem 0 0 var(--accent);
   --message-meta-fg: var(--lcars-periwinkle);
-  --attachment-bg: #1c1c2c;
+  --attachment-bg: #000;
   --attachment-border: transparent;
+  --attachment-padding: 0.45rem 0.9rem 0.45rem 1.3rem;
   --attachment-radius: 999px;
   --bar-chart-bar: var(--lcars-periwinkle);
   --bar-chart-bar-alt: var(--accent);
@@ -19419,6 +19666,7 @@ html[data-theme="lcars"] .table.is-stacked { --table-label-fg: var(--muted); }
 /* Alert level (data-alert, docs/components/live.md): at red alert every
    bar turns red and the frame strobes once a second, as on the bridge;
    yellow alert turns the palette amber. Text keeps its tan. */
+html[data-theme="lcars"][data-alert] { --lcars-frame: var(--accent); --lcars-title: var(--accent); --table-head-bg: var(--accent); }
 html[data-theme="lcars"][data-alert="red"] {
   --accent: #ff4d4d;
   --lcars-peach: #ff3333;
@@ -19434,6 +19682,386 @@ html[data-theme="lcars"][data-alert="yellow"] {
 }
 html[data-theme="lcars"][data-alert]::after { box-shadow: inset 0 0 0 0.5rem var(--alert-level); }
 html[data-theme="lcars"][data-alert="red"]::after { animation-duration: 1s; animation-timing-function: steps(1); }
+
+/* --- Polish round 1 ------------------------------------------------------ */
+
+/* Black menus, popovers and drop zones: framed by a candy leg, not a well
+   or a stroke. */
+html[data-theme="lcars"] :is(.dropdown, .context-menu, .popover, .menubar [role="menu"]) {
+  border: 0;
+  border-left: 0.6rem solid var(--lcars-lavender);
+}
+html[data-theme="lcars"] .dropzone {
+  border: 0;
+  border-left: 0.6rem solid var(--lcars-lavender);
+  border-right: 0.6rem solid var(--lcars-lavender);
+}
+
+/* Badges are solid candy blocks with black text; red only for danger. */
+html[data-theme="lcars"] .badge-accent { --badge-bg: var(--accent); --badge-fg: #000; }
+html[data-theme="lcars"] .badge-success { --badge-bg: var(--lcars-periwinkle); --badge-fg: #000; }
+html[data-theme="lcars"] .badge-warning { --badge-bg: var(--lcars-tan); --badge-fg: #000; }
+html[data-theme="lcars"] .badge-danger { --badge-bg: var(--danger); --badge-fg: #000; }
+/* A falling sparkline is information, not an alarm: peach, not red. */
+html[data-theme="lcars"] .sparkline.is-down { --sparkline-stroke: var(--lcars-peach); }
+
+/* Upper case throughout (reference §7), prose included. What the user
+   types (.input, .textarea) and code keep their own case. */
+html[data-theme="lcars"] :is(body, button, select, .dropdown, .context-menu, .popover, .toast, .alert, .modal) {
+  text-transform: uppercase;
+}
+html[data-theme="lcars"] :is(input.input, .textarea, code, samp, pre, [contenteditable]) { text-transform: none; }
+/* No strokes: a fieldset is its legend over black, the bulk-action bar a
+   lavender block edge. */
+html[data-theme="lcars"] fieldset { border: 0; padding-inline: 0; }
+html[data-theme="lcars"] { --bulk-bar-border: transparent; --bulk-bar-bg: #000; }
+html[data-theme="lcars"] .bulk-bar { border-left: 0.6rem solid var(--accent); }
+
+/* Three sizes: nothing smaller than the data size. */
+html[data-theme="lcars"] :is(small, legend, .field-group-title, .prefs-hint, .field-hint, .icon-label, .desktop-icon, .window-status, .app-status, .sparkline-label, .legend, .legend-item, figcaption, caption) {
+  font-size: var(--lcars-size-data);
+}
+
+/* Desktop windows: the title bar runs full width with its caption keys
+   after the title — small candy blocks, the close key orange. */
+html[data-theme="lcars"] .desktop-window .modal-header { width: auto; max-width: none; margin-bottom: 0.25rem; }
+html[data-theme="lcars"] .desktop-window > .modal { --lc-pad: 0.6rem; }
+html[data-theme="lcars"] .desktop-window .modal-header > .btn-close { position: static; --btn-close-bg: var(--accent); }
+html[data-theme="lcars"] :is(.modal-header > *, .modal-header * > *):is(.btn-min, .btn-max),
+html[data-theme="lcars"] :is(.modal-header * > .btn-close, .modal-header:has(> .btn-min) > .btn-close) {
+  --btn-min-glyph: "MIN";
+  --btn-max-glyph: "MAX";
+  --btn-close-width: auto;
+  --btn-close-height: 1.4rem;
+  --btn-close-pad: 0 0.7em;
+  --btn-close-glyph-size: 0.8em;
+  --btn-close-radius: 999px 0.2rem 0.2rem 999px;
+  --btn-close-bg: var(--lcars-lavender);
+  --modal-header-close-fg: #000;
+  letter-spacing: 0.02em;
+}
+html[data-theme="lcars"] :is(.modal-header > *, .modal-header * > *).btn-max { --btn-close-bg: var(--lcars-peach); --btn-close-radius: 0.2rem; }
+/* A close key nested in the header's own key group (the window pattern). */
+html[data-theme="lcars"] :is(.modal-header * > .btn-close, .modal-header:has(> .btn-min) > .btn-close) { position: static; --btn-close-glyph: "CLOSE"; --btn-close-bg: var(--accent); --btn-close-radius: 0.2rem 999px 999px 0.2rem; --btn-close-fg: #000; --btn-close-fg-hover: #000; --btn-close-bg-hover: var(--lcars-tan); }
+html[data-theme="lcars"] .modal-header :is(.btn-min, .btn-max) { --btn-close-fg: #000; --btn-close-fg-hover: #000; --btn-close-bg-hover: var(--lcars-tan); }
+html[data-theme="lcars"] { --window-header-filter-inactive: opacity(0.8); }
+
+/* --- Polish round 2 ------------------------------------------------------ */
+
+/* Fields: no stroke, a dark well with a candy cap on its left end. The cap
+   carries the state: red when invalid, periwinkle when valid, orange in a
+   table cell being edited. Inside an input group the addon is the cap. */
+html[data-theme="lcars"] :is(.input, .select, .textarea):not(.input-group > *) { border-left: 0.8rem solid var(--lcars-lavender); }
+html[data-theme="lcars"] .textarea { --input-radius: 0.8rem 0.3rem 0.3rem 0.8rem; }
+html[data-theme="lcars"] :is(.input, .select, .textarea):not(.input-group > *):is(.is-valid, .is-validated :user-valid[required]) { border-left-color: var(--success); }
+html[data-theme="lcars"] :is(.input, .select, .textarea):not(.input-group > *):is(.is-invalid, [aria-invalid="true"], .is-validated :user-invalid) { border-left-color: var(--danger); }
+html[data-theme="lcars"] .table :is(td.is-editing, tr.is-editing > td) > :is(.input, .select, .textarea) { border-left-color: var(--accent); outline: 0; }
+html[data-theme="lcars"] .table :is(td.is-editing, tr.is-editing > td) > :is(.input, .select, .textarea):focus-visible { outline: 2px solid var(--focus); }
+html[data-theme="lcars"] :is(.input, .textarea)::placeholder { text-transform: uppercase; letter-spacing: 0.02em; }
+
+/* Settings rows and segmented switches: no navy slabs. A row hangs off a
+   short lavender leg; a segmented control is a row of touching candy
+   blocks like the tabs, capped only at its two ends. */
+html[data-theme="lcars"] {
+  --field-row-bg: transparent;
+  --field-row-radius: 0;
+  --segmented-bg: transparent;
+  --segmented-padding: 0;
+  --segmented-border-width: 0;
+  --segmented-radius: 0;
+  --segmented-item-radius: 0;
+  --segmented-item-fg: #000;
+  --segmented-item-fg-hover: #000;
+  --segmented-item-bg-active: var(--accent);
+  --segmented-item-fg-active: #000;
+  --connection-size: 1em;
+}
+html[data-theme="lcars"] .field-row { border: 0; border-left: 0.6rem solid var(--lcars-lavender); }
+html[data-theme="lcars"] .segmented { gap: 0.3rem; }
+html[data-theme="lcars"] .segmented-item:not(:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))) { background: var(--lcars-lavender); }
+html[data-theme="lcars"] .segmented-item { text-transform: uppercase; letter-spacing: 0.02em; }
+html[data-theme="lcars"] .segmented-item:first-child { border-radius: 999px 0 0 999px; padding-left: 1.1em; }
+html[data-theme="lcars"] .segmented-item:last-child { border-radius: 0 999px 999px 0; padding-right: 1.1em; }
+
+/* Checkboxes and radios are flat blocks, not the native grey box: a black
+   square in a lavender ring, lit orange with a black mark when on. Radios
+   are drawn centred, so core's taller touch box still shows a disc. */
+html[data-theme="lcars"] :is(.checkbox, .radio) {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  border-radius: 0;
+}
+html[data-theme="lcars"] .checkbox { background: #000; box-shadow: inset 0 0 0 0.2rem var(--lcars-lavender); }
+html[data-theme="lcars"] .checkbox:is(:checked, :indeterminate) {
+  box-shadow: none;
+  background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3L12.5 5' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='square'/%3E%3C/svg%3E") center / 85% no-repeat;
+}
+html[data-theme="lcars"] .checkbox:indeterminate { background: var(--accent) linear-gradient(#000, #000) center / 60% 0.18rem no-repeat; }
+html[data-theme="lcars"] .radio { background: radial-gradient(circle closest-side, #000 calc(100% - 0.2rem), var(--lcars-lavender) calc(100% - 0.2rem) calc(100% - 0.5px), transparent 100%); }
+html[data-theme="lcars"] .radio:checked { background: radial-gradient(circle closest-side, #000 38%, var(--accent) 38% calc(100% - 0.5px), transparent 100%); }
+html[data-theme="lcars"] :is(.checkbox, .radio):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* A side column of nav blocks (the inbox folders): flat against the
+   frame, capped on the free right end, label bottom-right, count as a
+   code at the left. */
+html[data-theme="lcars"] .nav-rail { gap: 0.3rem; }
+html[data-theme="lcars"] .nav-rail > .nav-item { border-radius: 0 999px 999px 0; align-items: flex-end; min-block-size: max(2.4rem, var(--tap-min)); padding-block: 0.3rem 0.25rem; }
+html[data-theme="lcars"] .nav-rail > .nav-item > :not(.icon, .badge) { order: 2; margin-inline-start: auto; }
+html[data-theme="lcars"] .nav-rail > .nav-item > .badge { order: 1; margin-inline-start: 0; }
+
+/* Three sizes: core's own small labels come up to the data size too. */
+@media (max-width: 900px) {
+  html[data-theme="lcars"] .table.is-stacked > * > tr > [data-label]::before { font-size: 1em; }
+}
+html[data-theme="lcars"] .graph-card > :is(.legend, .chart-legend) { --legend-size: var(--lcars-size-data); }
+html[data-theme="lcars"] :is(.graph-card, .chart) .u-legend { font-size: var(--lcars-size-data); }
+
+/* --- Polish round 3 ------------------------------------------------------ */
+
+/* No grey wells: chips and sticky bars are black blocks hung off a
+   lavender leg (as the menus are); loading bars are unlit lavender; a
+   sparkline's area is its own hue, dimmed. */
+html[data-theme="lcars"] {
+  --banner-bg: #000;
+  --banner-border: transparent;
+  --skeleton-bg: color-mix(in srgb, var(--lcars-lavender) 35%, #000);
+  --sparkline-area-opacity: 0.3;
+  --list-card-bg: #000;
+  --list-card-border-width: 0;
+  --list-card-radius: 0;
+  --list-featured-border-width: 0;
+  --list-tone-tint: 0%;
+}
+html[data-theme="lcars"] :is(.attachment, .banner) { box-shadow: inset 0.6rem 0 0 var(--lcars-lavender); }
+html[data-theme="lcars"] .banner { padding-left: 1.3rem; }
+
+/* Card lists are LCARS data blocks: black, a solid leg in the state
+   colour (lavender plain, orange featured, the tone for a status). */
+html[data-theme="lcars"] .list-cards > .list-item { --list-card-shadow: inset 0.6rem 0 0 var(--_list-tone, var(--lcars-lavender)); padding-left: 1.3rem; }
+html[data-theme="lcars"] .list-cards > .list-item.is-featured { --_list-tone: var(--accent); }
+
+/* A lit lamp is lit: full candy, no soft breathing that reads as off. */
+/* (:root matches core's motion-gated selector so this wins.) */
+html[data-theme="lcars"]:root .connection[data-state="live"]::before { animation: none; }
+
+/* Icon-only keys are capped candy blocks too, ghost ones included. */
+html[data-theme="lcars"] .btn-ghost.btn-icon:not(.is-clear, .app-bar *, .panel-header *) {
+  --btn-bg: var(--lcars-lavender);
+  --btn-fg: #000;
+  --btn-bg-hover: var(--lcars-tan);
+}
+
+/* Window title wins over its keys: in a narrow window the MIN/MAX/CLOSE
+   keys fall back to glyph width before the title ellipsizes — only when
+   the words truly can't fit, and then the glyphs are set large. */
+html[data-theme="lcars"] .desktop-window .modal-header { container-type: inline-size; }
+@container (max-width: 20rem) {
+  html[data-theme="lcars"] .modal-header * > :is(.btn-min, .btn-max, .btn-close),
+  html[data-theme="lcars"] .desktop-window .modal-header > :is(.btn-min, .btn-max, .btn-close) {
+    --btn-min-glyph: "\2013";
+    --btn-max-glyph: "+";
+    --btn-close-glyph: "\00d7";
+    --btn-close-pad: 0 0.45em;
+    --btn-close-glyph-size: 1.25rem;
+  }
+}
+
+/* A row of switch keys keeps every key on screen on a phone: tighter
+   keys before the row has to scroll. */
+@media (max-width: 480px) {
+  html[data-theme="lcars"] .toggle-group > .toggle-btn:not(.btn-icon):not(.btn-sm) { padding-inline: 0.45em; min-width: var(--tap-min); }
+  html[data-theme="lcars"] .toggle-group > .toggle-btn:first-child { padding-left: 0.8em; }
+  html[data-theme="lcars"] .toggle-group > .toggle-btn:last-child { padding-right: 0.8em; }
+}
+
+/* --- Polish round 4 ------------------------------------------------------ */
+
+/* The panel title's bar break: everything in it is sized to the break, so
+   a badge or icon key can't push the title below the bar. Icon keys keep
+   their touch area through an invisible ::before (::after is the tooltip). */
+html[data-theme="lcars"] .panel-header { overflow: clip visible; flex-wrap: nowrap; }
+html[data-theme="lcars"] .panel-header > :is(.badge, .btn-icon) { min-height: 0; padding-block: 0; }
+html[data-theme="lcars"] .panel-header > .badge { height: 1.3rem; line-height: 1.3rem; }
+html[data-theme="lcars"] .panel-header > .btn-icon { position: relative; height: 1.6rem; line-height: 1.6rem; }
+html[data-theme="lcars"] .panel-header > .btn-icon::before { content: ""; position: absolute; inset: min(0px, (1.6rem - var(--tap-min)) / 2) 0; }
+
+/* The shell's menubar keys are candy pills along the top of the frame,
+   label bottom-right; the current section is lit orange. */
+html[data-theme="lcars"] .app-bar .menubar {
+  --menubar-gap: 0.3rem;
+  --menubar-item-radius: 999px;
+  --menubar-font-size: var(--lcars-size-data);
+  --menubar-item-bg-active: var(--accent);
+  --menubar-item-fg-active: #000;
+  padding: 0;
+}
+html[data-theme="lcars"] .app-bar .menubar > li > :is(button, a) {
+  background: var(--lcars-lavender);
+  color: #000;
+  justify-content: flex-end;
+  align-items: flex-end;
+  min-block-size: max(2rem, var(--tap-min));
+  padding: 0.3em 0.65em 0.3em 1.1em;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+/* Phones: tighter keys, so the four fit one row under the frame. */
+@media (max-width: 900px) {
+  html[data-theme="lcars"] .app-bar .menubar > li > :is(button, a) { padding-inline: 0.75em 0.55em; letter-spacing: 0.02em; min-inline-size: 0; }
+}
+html[data-theme="lcars"] .app-bar .menubar > li:is(:hover, :focus-within) > :is(button, a) { background: var(--lcars-tan); }
+html[data-theme="lcars"] .app-bar .menubar > li > :is(button, a):is(:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))), [aria-current="page"], [aria-expanded="true"]) { background: var(--accent); }
+
+/* A master-detail section list is a column of capped candy blocks, like
+   the inbox folders: label bottom-right, the open section orange. */
+html[data-theme="lcars"] .master-detail-list .list > li { border: 0; }
+html[data-theme="lcars"] .master-detail-list .list > li + li { margin-top: 0.3rem; }
+/* Rich rows (a title, meta and statuses, as in fleet) stay data rows. */
+html[data-theme="lcars"] .master-detail-list .list-item:not(:has(.list-item-meta, .list-item-title)) {
+  background: var(--lcars-lavender);
+  color: #000;
+  box-shadow: none;
+  border-radius: 0 999px 999px 0;
+  align-items: flex-end;
+  min-block-size: max(2.4rem, var(--tap-min));
+  padding-block: 0.3rem 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+html[data-theme="lcars"] .master-detail-list .list-item:not(:has(.list-item-meta, .list-item-title)) > span { margin-inline-start: auto; }
+html[data-theme="lcars"] .master-detail-list .list-item:not(:has(.list-item-meta, .list-item-title)):hover { background: var(--lcars-tan); }
+html[data-theme="lcars"] .master-detail-list .list-item:not(:has(.list-item-meta, .list-item-title)):has(input:checked) { background: var(--accent); }
+
+/* Small glyph keys (clear selection, carousel and page arrows) are candy
+   keys too, so they read on black. */
+html[data-theme="lcars"] {
+  --carousel-arrow-bg: var(--lcars-lavender);
+  --carousel-arrow-fg: #000;
+}
+html[data-theme="lcars"] .bulk-bar .btn-close {
+  --btn-close-bg: var(--lcars-lavender);
+  --btn-close-fg: #000;
+  --btn-close-bg-hover: var(--lcars-tan);
+  --btn-close-fg-hover: #000;
+  --btn-close-radius: 999px 0.3rem 0.3rem 999px;
+  /* Antonio's × is a speck; the key says what it does, as CLOSE does. */
+  --btn-close-glyph: "CLEAR";
+  --btn-close-width: auto;
+  --btn-close-pad: 0.15em 0.8em 0 1.3em;
+  --btn-close-height: max(1.7rem, var(--tap-min));
+  --btn-close-font-size: var(--lcars-size-data);
+  --btn-close-glyph-size: 1em;
+  letter-spacing: 0.02em;
+}
+html[data-theme="lcars"] .carousel-nav > :is(.carousel-prev, .carousel-next) {
+  min-width: 2.6rem;
+  height: 1.7rem;
+  line-height: 1.7rem;
+  font-size: var(--lcars-size-sub);
+  border-radius: 999px 0.3rem 0.3rem 999px;
+}
+html[data-theme="lcars"] .carousel-nav > .carousel-next { border-radius: 0.3rem 999px 999px 0.3rem; }
+html[data-theme="lcars"] .pagination > .pagination-item:is(:first-child, :last-child) {
+  background: var(--lcars-lavender);
+  color: #000;
+  font-size: var(--lcars-size-sub);
+  min-width: 2.6rem;
+}
+html[data-theme="lcars"] .pagination > .pagination-item:first-child { border-radius: 999px 0.3rem 0.3rem 999px; }
+html[data-theme="lcars"] .pagination > .pagination-item:last-child { border-radius: 0.3rem 999px 999px 0.3rem; }
+html[data-theme="lcars"] :is(.checkbox, .radio) { width: max(1.25rem, 24px); height: max(1.25rem, 24px); }
+/* Antonio's single guillemets are specks; the arrow keys borrow a bold
+   sans for the glyph alone. */
+html[data-theme="lcars"] :is(.carousel-nav > :is(.carousel-prev, .carousel-next), .pagination > .pagination-item:is(:first-child, :last-child)) {
+  font-family: Arial, "Liberation Sans", sans-serif;
+  font-weight: 700;
+}
+@supports selector(::scroll-button(*)) {
+  html[data-theme="lcars"] .carousel::scroll-button(*) {
+    inline-size: 2.6rem;
+    font: 700 var(--lcars-size-sub) Arial, "Liberation Sans", sans-serif;
+    border-radius: 999px 0.3rem 0.3rem 999px;
+  }
+  html[data-theme="lcars"] .carousel::scroll-button(right) { border-radius: 0.3rem 999px 999px 0.3rem; }
+}
+
+/* Three sizes: chart legends come up to the data size wherever they sit. */
+html[data-theme="lcars"] :is(.legend, .chart-legend) { --legend-size: var(--lcars-size-data); }
+html[data-theme="lcars"] :is(.legend, .chart-legend) > li { font-size: var(--lcars-size-data); }
+
+/* --- Polish round 6 ------------------------------------------------------ */
+
+/* Text-only keys have no block to fill, so no minimum width. */
+html[data-theme="lcars"] .btn:is(.btn-ghost, .btn-tertiary, .btn-link):not(.btn-icon) { min-width: 0; }
+
+/* A badge in a title break is never cut mid-glyph: a short one ("6 NEW")
+   stays whole and a long one stops at 8em with an ellipsis; when the break
+   is still too narrow, the title ellipsizes. */
+html[data-theme="lcars"] .panel-header > :first-child { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+html[data-theme="lcars"] .panel-header > .badge { display: block; flex: none; max-width: 8em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 400; }
+
+/* Every glyph on a candy block takes the block's black label colour: the
+   accordion's open/closed mark, the section list's chevron, the pencil on
+   a selected row. */
+html[data-theme="lcars"] { --cell-edit-glyph-fg: currentColor; }
+/* Antonio's + is a speck; the mark borrows a bold sans, as the arrow keys do. */
+html[data-theme="lcars"] .accordion-trigger::after { color: inherit; font: 700 var(--lcars-size-sub)/1 Arial, "Liberation Sans", sans-serif; }
+html[data-theme="lcars"] .master-detail-list .list-item > .icon:last-child:not(:first-child) { color: inherit; margin-inline-start: 0.4rem; }
+
+/* A thin card bar still ends in a readable full stop: the cap keeps a
+   0.75rem floor and stands proud of the bar on its outer edge, as the
+   thicker end blocks do on the ship frames. */
+html[data-theme="lcars"] :is(.panel, .card, .modal) { --lc-cap: max(var(--lc-top), 0.75rem); }
+html[data-theme="lcars"] :is(.panel, .card, .modal)::after {
+  top: calc(-1 * var(--lc-cap));
+  width: calc(var(--lc-cap) * 1.5 + 0.3rem);
+  height: var(--lc-cap);
+  background:
+    radial-gradient(circle calc(var(--lc-cap) / 2) at calc(100% - var(--lc-cap) / 2) 50%, var(--lc) calc(100% - 0.5px), transparent 100%),
+    linear-gradient(90deg, #000 0 0.3rem, var(--lc) 0.3rem calc(100% - var(--lc-cap) / 2), #000 0);
+}
+html[data-theme="lcars"] .panel-header { max-width: calc(100% + var(--lc-pad) - 1rem - var(--lc-cap) * 1.5 - 0.3rem); }
+
+/* Loading blocks blink in steps (unlit, lit); LCARS has no gradients. */
+html[data-theme="lcars"] .skeleton { background-image: none; animation-name: lcars-blink; animation-timing-function: steps(1); }
+@keyframes lcars-blink { 50% { background-color: color-mix(in srgb, var(--lcars-lavender) 50%, #000); } }
+@media (prefers-reduced-motion: reduce) { html:not([data-motion="always"])[data-theme="lcars"] .skeleton { animation: none; } }
+
+/* The rail's layered fill repaints only itself when the page scrolls. */
+html[data-theme="lcars"] .app-rail { contain: paint; }
+
+/* --- Polish round 6 ------------------------------------------------------ */
+
+/* A divider is a thin candy strip with the in-frame gap's thickness, not a
+   hairline: LCARS splits runs of content with bars. */
+html[data-theme="lcars"] .divider { border: 0; border-top: 0.3rem solid var(--lcars-lavender); align-self: stretch; inline-size: auto; }
+html[data-theme="lcars"] .divider-v { border: 0; border-inline-start: 0.3rem solid var(--lcars-lavender); }
+/* A joined switch row breaks between keys with the same black gap as tabs. */
+html[data-theme="lcars"] .toggle-group { gap: 0.3rem; }
+html[data-theme="lcars"] .toggle-group > .toggle-btn:not(:first-child) { margin-inline-start: 0; }
+/* Frames side by side share their baselines. */
+html[data-theme="lcars"] .grid > .card { align-self: stretch; }
+/* Inline code is no grey box: black, hung off a short lavender leg. */
+html[data-theme="lcars"] { --code-bg: transparent; }
+html[data-theme="lcars"] :not(pre) > code { box-shadow: inset 0.2rem 0 0 var(--lcars-lavender); padding-inline-start: 0.55em; }
+@media (max-width: 480px) {
+  /* Antonio is thin: normal data steps up a size on a phone so it holds. */
+  html[data-theme="lcars"] { --lcars-size-data: 1.05rem; --btn-padding: 0.55rem 0.75rem 0.45rem 2rem; --btn-padding-sm: 0.3rem 0.65rem 0.35rem 1.4rem; }
+  /* The title wins the bar break: the badge ellipsizes first. */
+  html[data-theme="lcars"] .panel-header > :first-child { flex-shrink: 0.05; }
+  html[data-theme="lcars"] .panel-header > .badge { flex: 0 1 auto; min-width: 1.6em; }
+  /* Icon keys in the break shrink to their glyph; the invisible ::before
+     keeps the full touch target. */
+  html[data-theme="lcars"] .panel-header > .btn-icon { width: 1.6rem; min-width: 0; }
+  html[data-theme="lcars"] .panel-header > .btn-icon::before { inset: min(0px, (1.6rem - var(--tap-min)) / 2); }
+}
+/* Window keys keep their words; they only tighten before the title has to
+   ellipsize, and fall back to large glyphs below 20rem (above). */
+@container (max-width: 28rem) {
+  html[data-theme="lcars"] .modal-header * > :is(.btn-min, .btn-max, .btn-close),
+  html[data-theme="lcars"] .desktop-window .modal-header > :is(.btn-min, .btn-max, .btn-close) { --btn-close-pad: 0 0.4em; }
+}
 
 /* ftl-themes: LCARS chrome — the OPTIONAL, richer frame.
  *

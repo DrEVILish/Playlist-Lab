@@ -76,10 +76,14 @@ func FindPlexCandidates(track Track, client *plex.Client, libraryID string, sett
 	var allResults []plex.Track
 	seen := map[string]bool{}
 
+	searchTrack := client.SearchTrack
+	if settings.StrictSearch {
+		searchTrack = client.SearchTrackComplete
+	}
 	runTier := func(name string, search func() ([]plex.Track, error)) error {
 		results, err := search()
 		if err != nil {
-			if _, ok := err.(*plex.AuthError); ok {
+			if _, ok := err.(*plex.AuthError); ok || settings.StrictSearch {
 				return err
 			}
 			if tierLog != nil {
@@ -104,7 +108,7 @@ func FindPlexCandidates(track Track, client *plex.Client, libraryID string, sett
 
 	if strings.Contains(searchTitleWithApostrophe, "'") || strings.Contains(searchArtistWithApostrophe, "'") {
 		if err := runTier("apostrophe-preserved", func() ([]plex.Track, error) {
-			return client.SearchTrack("", libraryID, searchArtistWithApostrophe, searchTitleWithApostrophe)
+			return searchTrack("", libraryID, searchArtistWithApostrophe, searchTitleWithApostrophe)
 		}); err != nil {
 			return nil, err
 		}
@@ -112,7 +116,7 @@ func FindPlexCandidates(track Track, client *plex.Client, libraryID string, sett
 
 	if stillSearching() {
 		if err := runTier("filtered", func() ([]plex.Track, error) {
-			return client.SearchTrack("", libraryID, searchArtist, searchTitle)
+			return searchTrack("", libraryID, searchArtist, searchTitle)
 		}); err != nil {
 			return nil, err
 		}
@@ -120,7 +124,7 @@ func FindPlexCandidates(track Track, client *plex.Client, libraryID string, sett
 
 	if stillSearching() && originalTitle != searchTitle {
 		if err := runTier("original-title", func() ([]plex.Track, error) {
-			return client.SearchTrack("", libraryID, searchArtist, originalTitle)
+			return searchTrack("", libraryID, searchArtist, originalTitle)
 		}); err != nil {
 			return nil, err
 		}
@@ -128,7 +132,7 @@ func FindPlexCandidates(track Track, client *plex.Client, libraryID string, sett
 
 	if stillSearching() && searchArtistNoHyphen != searchArtist {
 		if err := runTier("artist-no-hyphen", func() ([]plex.Track, error) {
-			return client.SearchTrack("", libraryID, searchArtistNoHyphen, searchTitle)
+			return searchTrack("", libraryID, searchArtistNoHyphen, searchTitle)
 		}); err != nil {
 			return nil, err
 		}
@@ -137,7 +141,7 @@ func FindPlexCandidates(track Track, client *plex.Client, libraryID string, sett
 	titleWithoutParens := normalizeSearch(strings.TrimSpace(whitespacePattern.ReplaceAllString(parenthesesPattern.ReplaceAllString(coreTitle, ""), " ")))
 	if stillSearching() && titleWithoutParens != "" && titleWithoutParens != searchTitle {
 		if err := runTier("parenthetical-stripped", func() ([]plex.Track, error) {
-			return client.SearchTrack("", libraryID, searchArtist, titleWithoutParens)
+			return searchTrack("", libraryID, searchArtist, titleWithoutParens)
 		}); err != nil {
 			return nil, err
 		}
@@ -146,7 +150,7 @@ func FindPlexCandidates(track Track, client *plex.Client, libraryID string, sett
 	if stillSearching() {
 		hubQuery := cleanedArtist + " " + cleanTrackTitle(track.Title, settings)
 		if err := runTier("hub-search", func() ([]plex.Track, error) {
-			return client.SearchTrack(hubQuery, libraryID, "", "")
+			return searchTrack(hubQuery, libraryID, "", "")
 		}); err != nil {
 			return nil, err
 		}

@@ -24,13 +24,18 @@
        same table now, per-row (collection_list.html's "Missing" column +
        expando row) - same pattern as the Playlists table's Missing Tracks
        column, not a separate section. -->
-  <div id="collections-list" hx-get="/collections/list" hx-trigger="load, collections-changed from:body" hx-swap="innerHTML"></div>
+  <div id="collections-list" hx-get="{{.CollectionsListURL}}" hx-trigger="load" hx-swap="innerHTML"></div>
 </div>
 <!-- Row-click item preview (mirrors home.html's togglePlaylistPreview) -
      defined here rather than inside collection_list.html since that
      fragment reloads on every filter/sort/refresh; this page shell loads
      once, so the function is declared once too. -->
 <script>
+  document.addEventListener('collections-changed', function () {
+    var list = document.getElementById('collections-list');
+    if (list) htmx.ajax('GET', '/collections' + location.search, { source: list, target: list, swap: 'innerHTML' });
+  });
+
   function toggleCollectionPreview(rowKey) {
     var row = document.getElementById('preview-row-' + rowKey);
     if (!row) return;

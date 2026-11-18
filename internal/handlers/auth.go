@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -198,7 +199,7 @@ func (h *AuthHandler) handleLogin(userInfo *auth.PlexUser, token string) (*db.Us
 	user, err := db.GetUserByPlexID(h.DB, plexUserID)
 	isNew := errors.Is(err, db.ErrUserNotFound)
 	if isNew {
-		user, err = db.CreateUser(h.DB, plexUserID, username, token, userInfo.Thumb)
+		user, err = db.CreateLoginUser(h.DB, plexUserID, username, token, userInfo.Thumb)
 		if err != nil {
 			return nil, false, err
 		}
@@ -212,15 +213,14 @@ func (h *AuthHandler) handleLogin(userInfo *auth.PlexUser, token string) (*db.Us
 		slog.Info("user logged in", "plexUserId", plexUserID, "username", username)
 	}
 
-	if count, _ := db.GetUserCount(h.DB); count == 1 {
-		_ = db.AddAdmin(h.DB, user.ID)
-		slog.Info("first user auto-promoted to admin", "userId", user.ID)
-	}
-
 	isAdmin, _ := db.IsAdmin(h.DB, user.ID)
-	if !isAdmin {
-		if admin, err := db.GetFirstUser(h.DB); err == nil {
-			h.reverifyMembership(admin, user, plexUserID, isNew)
+	if !isAdmin && !user.AccessManaged {
+		admin, err := db.GetFirstUser(h.DB)
+		if err != nil {
+			return nil, false, err
+		}
+		if err := h.reverifyMembership(admin, user, userInfo.ID); err != nil {
+			return nil, false, err
 		}
 	}
 
@@ -232,42 +232,27 @@ func (h *AuthHandler) handleLogin(userInfo *auth.PlexUser, token string) (*db.Us
 	return user, user.IsEnabled || isAdmin, nil
 }
 
-// reverifyMembership checks whether a non-admin user is still a member of
-// the admin's Plex Home or friends list, disabling/enabling access to
-// match. Errors are swallowed (matching the Node server): a failed lookup
-// shouldn't crash login, it should just leave existing access untouched
-// (except a brand-new account, which can't be verified yet and is left
-// disabled for the admin to approve).
-func (h *AuthHandler) reverifyMembership(admin, user *db.User, plexUserID string, isNew bool) {
-	homeUsers, err := h.Plex.GetHomeUsers(admin.PlexToken)
-	if err != nil {
-		slog.Error("failed to verify Plex Home membership", "error", err, "userId", user.ID)
-		if isNew {
-			_ = db.DisableUser(h.DB, user.ID)
+// Either Plex list can grant access. Both must succeed before revoking it.
+func (h *AuthHandler) reverifyMembership(admin, user *db.User, plexUserID int) error {
+	homeUsers, homeErr := h.Plex.GetHomeUsers(admin.PlexToken)
+	approved := slices.Contains(homeUsers, plexUserID)
+	if !approved {
+		friends, friendsErr := h.Plex.GetFriends(admin.PlexToken)
+		approved = slices.Contains(friends, plexUserID)
+		if !approved && (homeErr != nil || friendsErr != nil) {
+			slog.Warn("could not verify Plex membership", "homeError", homeErr, "friendsError", friendsErr, "userId", user.ID)
+			return nil
 		}
-		return
 	}
-	friends, err := h.Plex.GetFriends(admin.PlexToken)
-	if err != nil {
-		slog.Warn("failed to fetch Plex friends, falling back to Plex Home only", "error", err)
-		friends = nil
+	if err := db.SetUserMembershipAccess(h.DB, user.ID, approved); err != nil {
+		return err
 	}
-
-	approved := map[string]bool{}
-	for _, id := range homeUsers {
-		approved[strconv.Itoa(id)] = true
-	}
-	for _, id := range friends {
-		approved[strconv.Itoa(id)] = true
-	}
-
-	if approved[plexUserID] {
-		_ = db.EnableUser(h.DB, user.ID)
-		if servers, _ := db.GetUserServers(h.DB, user.ID); len(servers) == 0 {
-			_ = db.CopyServerConfig(h.DB, admin.ID, user.ID)
+	if approved {
+		if servers, err := db.GetUserServers(h.DB, user.ID); err == nil && len(servers) == 0 {
+			if err := db.CopyServerConfig(h.DB, admin.ID, user.ID); err != nil {
+				slog.Warn("could not copy Plex server configuration", "error", err, "userId", user.ID)
+			}
 		}
-	} else if user.IsEnabled {
-		_ = db.DisableUser(h.DB, user.ID)
-		slog.Info("user disabled: not in Plex Home and not a friend", "userId", user.ID, "isNewUser", isNew)
 	}
+	return nil
 }

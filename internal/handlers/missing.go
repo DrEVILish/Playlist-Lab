@@ -523,10 +523,29 @@ func firstArtistName(artist string) string {
 // download, through the shared action queue.
 func (h *MissingHandler) deemixAll(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
-	_ = r.ParseForm()
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
 	var playlistID int64
+	title := "Deemix All"
 	if pid := r.FormValue("playlistId"); pid != "" {
-		playlistID, _ = strconv.ParseInt(pid, 10, 64)
+		id, err := strconv.ParseInt(pid, 10, 64)
+		if err != nil || id <= 0 {
+			http.Error(w, "invalid playlist ID", http.StatusBadRequest)
+			return
+		}
+		playlist, err := db.GetPlaylistByID(h.DB, id)
+		if err != nil {
+			slog.Error("Deemix All: could not load playlist", "error", err)
+			http.Error(w, "could not load playlist", http.StatusInternalServerError)
+			return
+		}
+		if playlist == nil || playlist.UserID != user.ID {
+			http.Error(w, "playlist not found", http.StatusNotFound)
+			return
+		}
+		playlistID, title = id, "Deemix All: "+playlist.Name
 	}
 
 	dbUser, err := db.GetUserByID(h.DB, user.ID)
@@ -541,35 +560,21 @@ func (h *MissingHandler) deemixAll(w http.ResponseWriter, r *http.Request) {
 	}
 	settings := h.matchingSettings(user.ID)
 
-	missingFor := func() []db.MissingTrack {
-		all, _ := db.GetUserMissingTracks(h.DB, user.ID)
-		if playlistID == 0 {
-			return all
+	h.Queue.Enqueue(user.ID, title, notifications.TypeDeemix, func(notificationID string) error {
+		stillMissing, err := h.missingForPlaylist(user.ID, playlistID)
+		if err != nil {
+			return fmt.Errorf("loading missing tracks: %w", err)
 		}
-		var out []db.MissingTrack
-		for _, t := range all {
-			if t.PlaylistID == playlistID {
-				out = append(out, t)
+		if len(stillMissing) > 0 {
+			detail := fmt.Sprintf("Matching %d track(s) against Plex first...", len(stillMissing))
+			h.Notifications.Update(user.ID, notificationID, notifications.Patch{Detail: &detail})
+			h.startRetryChain(user.ID, dbUser, userServer, stillMissing)
+			stillMissing, err = h.missingForPlaylist(user.ID, playlistID)
+			if err != nil {
+				return fmt.Errorf("reloading missing tracks: %w", err)
 			}
 		}
-		return out
-	}
-	title := "Deemix All"
-	if playlistID != 0 {
-		if p, _ := db.GetPlaylistByID(h.DB, playlistID); p != nil {
-			title = "Deemix All: " + p.Name
-		}
-	}
 
-	h.Queue.Enqueue(user.ID, title, notifications.TypeDeemix, func(notificationID string) error {
-		toRetry := missingFor()
-		if len(toRetry) > 0 {
-			detail := fmt.Sprintf("Matching %d track(s) against Plex first...", len(toRetry))
-			h.Notifications.Update(user.ID, notificationID, notifications.Patch{Detail: &detail})
-			h.startRetryChainSync(user.ID, dbUser, userServer, toRetry)
-		}
-
-		stillMissing := missingFor()
 		if len(stillMissing) == 0 {
 			status, detail, pct := notifications.StatusSuccess, "Everything matched in Plex - nothing left to download", 100
 			h.Notifications.Update(user.ID, notificationID, notifications.Patch{Status: &status, Progress: &pct, Detail: &detail})
@@ -614,24 +619,18 @@ func (h *MissingHandler) deemixAll(w http.ResponseWriter, r *http.Request) {
 	h.Tmpl.RenderPartial(w, "partials/notifications.html", map[string]any{"Notifications": h.Notifications.List(user.ID)})
 }
 
-// startRetryChainSync runs the retry chain and waits for it to finish -
-// used by deemixAll, which is itself already backgrounded by the action
-// queue, so blocking here (unlike the standalone POST /retry route) is fine.
-func (h *MissingHandler) startRetryChainSync(userID int64, user *db.User, userServer *db.UserServer, tracks []db.MissingTrack) {
-	done := make(chan struct{})
-	go func() {
-		// close(done) must still run even if startRetryChain panics, or
-		// the actionqueue worker calling this blocks on <-done forever -
-		// deferred in this order (LIFO) so recover runs first, then close.
-		defer close(done)
-		defer func() {
-			if r := recover(); r != nil {
-				slog.Error("startRetryChain panicked", "userId", userID, "panic", r)
-			}
-		}()
-		h.startRetryChain(userID, user, userServer, tracks)
-	}()
-	<-done
+func (h *MissingHandler) missingForPlaylist(userID, playlistID int64) ([]db.MissingTrack, error) {
+	all, err := db.GetUserMissingTracks(h.DB, userID)
+	if err != nil || playlistID == 0 {
+		return all, err
+	}
+	var out []db.MissingTrack
+	for _, track := range all {
+		if track.PlaylistID == playlistID {
+			out = append(out, track)
+		}
+	}
+	return out, nil
 }
 
 // goRecover runs fn in a new goroutine with panic recovery, logging via

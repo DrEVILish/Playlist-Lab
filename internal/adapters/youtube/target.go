@@ -471,7 +471,13 @@ func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adap
 				retryAfter = 30 * time.Second
 			}
 			slog.Warn("youtube playlist add rate-limited, retrying once", "videoId", m.TargetTrackID, "playlistId", created.ID, "retryAfter", retryAfter)
-			time.Sleep(retryAfter)
+			timer := time.NewTimer(retryAfter)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return created.ID, name, addedCount, ctx.Err()
+			case <-timer.C:
+			}
 			status, _, err = addPlaylistItem(itemBody)
 		}
 

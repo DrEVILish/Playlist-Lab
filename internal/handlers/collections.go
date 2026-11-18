@@ -204,7 +204,14 @@ func (h *CollectionsHandler) libraryNamesForUser(user *db.User, server *db.UserS
 
 func (h *CollectionsHandler) renderList(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
-	filter := parseCollectionFilter(r)
+	q := r.URL.Query()
+	if r.Method != http.MethodGet {
+		if current, err := url.Parse(r.Header.Get("HX-Current-URL")); err == nil &&
+			(current.Path == "/collections" || current.Path == "/collections/list") {
+			q = current.Query()
+		}
+	}
+	filter := parseCollectionFilter(q)
 	rows, err := db.GetUserCollections(h.DB, user.ID)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -285,7 +292,6 @@ func (h *CollectionsHandler) renderList(w http.ResponseWriter, r *http.Request) 
 
 	views = filterCollectionViews(views, filter)
 
-	q := r.URL.Query()
 	sortKey, dir := q.Get("sort"), q.Get("dir")
 	if sortKey == "" {
 		// Matches GetUserCollections' own default order (created_at DESC) -
@@ -298,7 +304,7 @@ func (h *CollectionsHandler) renderList(w http.ResponseWriter, r *http.Request) 
 	h.Tmpl.RenderPartial(w, "partials/collection_list.html", map[string]any{
 		"Collections": views,
 		"MultiServer": len(ownedServers) > 1,
-		"Query":       collectionsQueryState(r.URL.Query()),
+		"Query":       collectionsQueryState(q),
 		"Filter":      filter,
 		"Libraries":   libraryOptions,
 		"Servers":     serverOptions,
@@ -307,16 +313,12 @@ func (h *CollectionsHandler) renderList(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-// collectionFilter mirrors playlists.go's rowFilter for the Collections
-// table's column-header filter popovers (DESIGN.md §11.11) - same
-// query-string-round-trips-to-the-server mechanism, scoped to the handful
-// of columns that make sense to filter here.
-// collectionsQueryState is playlists.go's queryState adapted to the
-// Collections page's lazy-fragment architecture - it links back to GET
-// /collections/list (an htmx fragment target), not the "/" full page
-// queryState.With hardcodes, since /collections itself renders an empty
-// shell that loads its data separately.
+// collectionsQueryState carries the current filters between list requests.
 type collectionsQueryState url.Values
+
+func collectionsURL(rawQuery string) string {
+	return (&url.URL{Path: "/collections", RawQuery: rawQuery}).String()
+}
 
 func (q collectionsQueryState) With(key, val string) string {
 	v := url.Values{}
@@ -328,7 +330,7 @@ func (q collectionsQueryState) With(key, val string) string {
 	} else {
 		v.Set(key, val)
 	}
-	return "/collections/list?" + v.Encode()
+	return collectionsURL(v.Encode())
 }
 
 // Toggle is With's multi-select sibling: Server/Library can have more than
@@ -359,12 +361,12 @@ func (q collectionsQueryState) Toggle(key, val string) string {
 	} else {
 		v[key] = next
 	}
-	return "/collections/list?" + v.Encode()
+	return collectionsURL(v.Encode())
 }
 
 // SortHref mirrors playlists.go's queryState.SortHref (toggle asc/desc on
-// the active column, default to asc on a newly-clicked one), filter-
-// preserving and pointed at the fragment endpoint like With/Toggle above.
+// the active column, default to asc on a newly-clicked one), preserving
+// the other active filters.
 func (q collectionsQueryState) SortHref(key string) string {
 	dir := "asc"
 	if url.Values(q).Get("sort") == key && url.Values(q).Get("dir") == "asc" {
@@ -376,7 +378,7 @@ func (q collectionsQueryState) SortHref(key string) string {
 	}
 	v.Set("sort", key)
 	v.Set("dir", dir)
-	return "/collections/list?" + v.Encode()
+	return collectionsURL(v.Encode())
 }
 
 // SetBuilder and SetProvider clear each other (DESIGN.md §11.11's Builder
@@ -396,7 +398,7 @@ func (q collectionsQueryState) SetBuilder(val string) string {
 	} else {
 		v.Set("fBuilder", val)
 	}
-	return "/collections/list?" + v.Encode()
+	return collectionsURL(v.Encode())
 }
 
 func (q collectionsQueryState) SetProvider(val string) string {
@@ -410,7 +412,7 @@ func (q collectionsQueryState) SetProvider(val string) string {
 	} else {
 		v.Set("fProvider", val)
 	}
-	return "/collections/list?" + v.Encode()
+	return collectionsURL(v.Encode())
 }
 
 type collectionFilter struct {
@@ -433,8 +435,7 @@ func (f collectionFilter) Active() bool {
 		f.Missing != "" || f.Schedule != "" || f.NextRun != "" || f.LastRun != "" || f.AddedAfter != "" || f.AddedBefore != ""
 }
 
-func parseCollectionFilter(r *http.Request) collectionFilter {
-	q := r.URL.Query()
+func parseCollectionFilter(q url.Values) collectionFilter {
 	return collectionFilter{
 		Search:      strings.TrimSpace(q.Get("q")),
 		Library:     q["fLibrary"],
@@ -633,10 +634,21 @@ func unmanagedCollectionView(server db.UserServer, lib plex.Library, pc plex.Col
 }
 
 func (h *CollectionsHandler) list(w http.ResponseWriter, r *http.Request) {
-	h.Tmpl.RenderPage(w, r, "collections", nil)
+	w.Header().Add("Vary", "HX-Request, HX-Target")
+	target := r.Header.Get("HX-Target")
+	if IsModalRequest(r) && (target == "div#collections-list" || target == "collections-list") {
+		h.renderList(w, r)
+		return
+	}
+	h.Tmpl.RenderPage(w, r, "collections", map[string]any{"CollectionsListURL": collectionsURL(r.URL.RawQuery)})
 }
 
 func (h *CollectionsHandler) listFragment(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("Vary", "HX-Request")
+	if !IsModalRequest(r) {
+		http.Redirect(w, r, collectionsURL(r.URL.RawQuery), http.StatusFound)
+		return
+	}
 	h.renderList(w, r)
 }
 

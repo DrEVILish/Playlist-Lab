@@ -1,6 +1,7 @@
 package crossimport
 
 import (
+	"context"
 	"testing"
 
 	"github.com/drevilish/playlist-lab/internal/adapters"
@@ -13,7 +14,7 @@ import (
 // GetResults must hand back a copy - a caller mutating its slice must never
 // bleed back into session state it didn't go through Update for.
 func TestSessionUpdate(t *testing.T) {
-	s := &Session{Results: []adapters.MatchResult{
+	s := &Session{Progress: Progress{Phase: PhaseReview}, Results: []adapters.MatchResult{
 		{SourceTrack: adapters.TrackInfo{Title: "a"}, Matched: true},
 		{SourceTrack: adapters.TrackInfo{Title: "b"}, Matched: true},
 	}}
@@ -106,5 +107,61 @@ func TestStoreNewAndDelete(t *testing.T) {
 	store.Delete("sid")
 	if _, ok := store.Get("sid", 7); ok {
 		t.Fatal("expected session to be gone after Delete")
+	}
+}
+
+func TestSessionCancelIsTerminal(t *testing.T) {
+	s := &Session{Progress: Progress{Phase: PhaseMatching}}
+	s.Cancel()
+	s.SetProgress(Progress{Phase: PhaseMatching})
+	s.SetResults([]adapters.MatchResult{{Matched: true}})
+	if got := s.GetProgress().Phase; got != "cancelled" {
+		t.Fatalf("late worker changed canceled phase to %q", got)
+	}
+	if len(s.GetResults()) != 0 {
+		t.Fatal("late matching results reopened review")
+	}
+}
+
+func TestCancelAndExecuteAreExclusive(t *testing.T) {
+	t.Run("cancel wins", func(t *testing.T) {
+		s := &Session{Progress: Progress{Phase: PhaseReview}, Results: []adapters.MatchResult{{Matched: true}}}
+		if _, changed := s.Cancel(); !changed {
+			t.Fatal("review must allow cancellation before export")
+		}
+		if _, ok := s.BeginExecution(); ok {
+			t.Fatal("canceled review started export")
+		}
+	})
+	t.Run("execute wins", func(t *testing.T) {
+		s := &Session{Progress: Progress{Phase: PhaseReview}, Results: []adapters.MatchResult{{Matched: true}}}
+		results, ok := s.BeginExecution()
+		if !ok || len(results) != 1 || !results[0].Matched {
+			t.Fatalf("ready review did not start with its result: %v", results)
+		}
+		if _, changed := s.Cancel(); changed {
+			t.Fatal("cancellation interrupted playlist creation")
+		}
+		if _, ok := s.BeginExecution(); ok {
+			t.Fatal("review started a second export")
+		}
+	})
+}
+
+func TestCancelStopsMatchingContext(t *testing.T) {
+	s := &Session{Progress: Progress{Phase: PhaseFetching}}
+	ctx, finish, ok := s.MatchContext(context.Background())
+	if !ok {
+		t.Fatal("fresh matching session should be eligible")
+	}
+	defer finish()
+	s.Cancel()
+	select {
+	case <-ctx.Done():
+	default:
+		t.Fatal("cancellation did not reach the adapter")
+	}
+	if _, _, ok := s.MatchContext(context.Background()); ok {
+		t.Fatal("canceled job tried to start an adapter request")
 	}
 }

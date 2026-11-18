@@ -59,7 +59,7 @@
   </table>
 
   <form hx-post="/import/confirm/{{$sid}}" hx-target="#notifications" hx-swap="innerHTML" class="stack"
-    hx-on::after-request="if(event.detail.successful) closeTopModal()">
+    hx-on::after:request="if(event.detail.ctx.response.status < 400) closeTopModal()">
     <div class="field">
       <label class="label" for="import-confirm-name">Playlist name</label>
       <input class="input" type="text" id="import-confirm-name" name="playlistName" value="{{.PlaylistName}}" required>

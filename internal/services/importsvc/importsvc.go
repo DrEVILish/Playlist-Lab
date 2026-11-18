@@ -16,6 +16,7 @@ package importsvc
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -41,9 +42,10 @@ type Result struct {
 // Options mirrors import.ts's ImportOptions (minus serverUrl/plexToken,
 // which the caller already needs to build the *plex.Client it passes in).
 type Options struct {
-	UserID     int64
-	LibraryID  string
-	CustomName string
+	UserID       int64
+	LibraryID    string
+	CustomName   string
+	StrictSearch bool
 }
 
 // ImportPlaylist scrapes sourceIdentifier via the registered source
@@ -66,10 +68,9 @@ func ImportPlaylist(
 		return nil, fmt.Errorf("unsupported import source: %s", source)
 	}
 
-	cached, err := db.GetCachedPlaylist(sqlDB, source, sourceIdentifier)
-	if err != nil {
-		slog.Warn("[Import] Failed to read cache", "source", source, "error", err)
-	}
+	// Only public charts can use shared entries. Account-backed sources
+	// must reauthorize each fetch and may have IDs that repeat across accounts.
+	useSharedCache := source == "billboard" || source == "aria"
 
 	if progress != nil {
 		progress("scraping", 0, 0)
@@ -83,6 +84,13 @@ func ImportPlaylist(
 
 	info, fetched, fetchErr := src.FetchTracks(ctx, sourceIdentifier, opts.UserID)
 	if fetchErr != nil {
+		if !useSharedCache || opts.StrictSearch {
+			return nil, fetchErr
+		}
+		cached, err := db.GetCachedPlaylist(sqlDB, source, sourceIdentifier)
+		if err != nil {
+			slog.Warn("[Import] Failed to read chart cache", "source", source, "error", err)
+		}
 		if cached == nil {
 			return nil, fetchErr
 		}
@@ -96,12 +104,14 @@ func ImportPlaylist(
 	} else {
 		playlistName, coverURL = info.Name, info.CoverURL
 		tracks = fetched
-		cacheTracks := make([]db.CachedTrack, len(tracks))
-		for i, t := range tracks {
-			cacheTracks[i] = db.CachedTrack{Title: t.Title, Artist: t.Artist, Album: t.Album}
-		}
-		if err := db.SaveCachedPlaylist(sqlDB, source, sourceIdentifier, playlistName, "", cacheTracks, coverURL); err != nil {
-			slog.Warn("[Import] Failed to save cache", "source", source, "error", err)
+		if useSharedCache {
+			cacheTracks := make([]db.CachedTrack, len(tracks))
+			for i, t := range tracks {
+				cacheTracks[i] = db.CachedTrack{Title: t.Title, Artist: t.Artist, Album: t.Album}
+			}
+			if err := db.SaveCachedPlaylist(sqlDB, source, sourceIdentifier, playlistName, "", cacheTracks, coverURL); err != nil {
+				slog.Warn("[Import] Failed to save cache", "source", source, "error", err)
+			}
 		}
 	}
 
@@ -156,6 +166,7 @@ func matchAndBuildResult(
 		slog.Warn("[Import] Failed to load matching settings, using defaults", "userId", opts.UserID, "error", err)
 	}
 	settings := matching.SettingsFromJSON(settingsJSON)
+	settings.StrictSearch = opts.StrictSearch
 
 	manualMatches, err := db.GetUserManualMatches(sqlDB, opts.UserID)
 	if err != nil {
@@ -259,15 +270,16 @@ func FinalizeImportResult(
 		return 0, "", err
 	}
 
-	if result.CoverURL != "" {
-		if err := client.UploadPlaylistPoster(newPlaylist.RatingKey, result.CoverURL); err != nil {
-			slog.Warn("[Import] Failed to upload cover art", "playlistName", playlistName, "error", err)
+	rollbackPlaylist := func(cause error) error {
+		if cleanupErr := client.DeletePlaylist(newPlaylist.RatingKey); cleanupErr != nil {
+			return errors.Join(cause, fmt.Errorf("could not remove incomplete playlist: %w", cleanupErr))
 		}
+		return cause
 	}
 
-	dbPlaylist, err := db.CreatePlaylistRow(sqlDB, userID, newPlaylist.RatingKey, playlistName, source, sourceIdentifier)
+	dbPlaylist, err := db.CreatePlaylistRowForServer(sqlDB, userID, serverClientID, newPlaylist.RatingKey, playlistName, source, sourceIdentifier)
 	if err != nil {
-		return 0, "", err
+		return 0, "", rollbackPlaylist(err)
 	}
 
 	if len(result.Unmatched) > 0 {
@@ -276,7 +288,13 @@ func FinalizeImportResult(
 			rows[i] = db.NewMissingTrack{Title: t.Title, Artist: t.Artist, Album: t.Album, Position: i, Source: source}
 		}
 		if err := db.AddMissingTracks(sqlDB, userID, dbPlaylist.ID, rows); err != nil {
-			slog.Warn("[Import] Failed to store missing tracks", "playlistId", dbPlaylist.ID, "error", err)
+			return 0, "", rollbackPlaylist(errors.Join(err, db.DeletePlaylistRow(sqlDB, dbPlaylist.ID)))
+		}
+	}
+
+	if result.CoverURL != "" {
+		if err := client.UploadPlaylistPoster(newPlaylist.RatingKey, result.CoverURL); err != nil {
+			slog.Warn("[Import] Failed to upload cover art", "playlistName", playlistName, "error", err)
 		}
 	}
 

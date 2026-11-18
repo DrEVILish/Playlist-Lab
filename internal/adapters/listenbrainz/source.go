@@ -21,6 +21,8 @@ import (
 // "no username configured" message the code implies, so there is nothing
 // working to port. Add it properly (with a real migration) if this
 // feature is wanted.
+const apiBase = "https://api.listenbrainz.org"
+
 type Source struct {
 	httpClient *http.Client
 }
@@ -30,7 +32,7 @@ func NewSource() *Source {
 }
 
 func (s *Source) Meta() adapters.ServiceMeta {
-	return adapters.ServiceMeta{ID: serviceName, Name: "ListenBrainz", Icon: "listenbrainz"}
+	return adapters.ServiceMeta{ID: "listenbrainz", Name: "ListenBrainz", Icon: "listenbrainz"}
 }
 
 var mbidPattern = regexp.MustCompile(`(?i)playlist/([0-9a-f-]{36})`)

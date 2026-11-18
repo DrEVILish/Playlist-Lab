@@ -10,63 +10,113 @@ import (
 // phases will grow this alongside a proper query package per table, but
 // hand-rolling just what's used keeps this from becoming a premature ORM.
 type User struct {
-	ID           int64
-	PlexUserID   string
-	PlexUsername string
-	PlexToken    string
-	PlexThumb    sql.NullString
-	IsEnabled    bool
+	ID            int64
+	PlexUserID    string
+	PlexUsername  string
+	PlexToken     string
+	PlexThumb     sql.NullString
+	IsEnabled     bool
+	AccessManaged bool
 }
 
 var ErrUserNotFound = errors.New("user not found")
 
+const userCols = "id, plex_user_id, plex_username, plex_token, plex_thumb, is_enabled, access_managed"
+
+func migrateManagedUserAccess(sqlDB *sql.DB, addColumn string) error {
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(addColumn); err != nil {
+		return err
+	}
+	// Legacy rows cannot distinguish a manual block from failed membership.
+	if _, err := tx.Exec(`UPDATE users SET access_managed = 1 WHERE is_enabled = 0`); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func GetUserByID(sqlDB *sql.DB, id int64) (*User, error) {
 	return scanUser(sqlDB.QueryRow(
-		"SELECT id, plex_user_id, plex_username, plex_token, plex_thumb, is_enabled FROM users WHERE id = ?", id,
+		"SELECT "+userCols+" FROM users WHERE id = ?", id,
 	))
 }
 
 func GetUserByPlexID(sqlDB *sql.DB, plexUserID string) (*User, error) {
 	return scanUser(sqlDB.QueryRow(
-		"SELECT id, plex_user_id, plex_username, plex_token, plex_thumb, is_enabled FROM users WHERE plex_user_id = ?", plexUserID,
+		"SELECT "+userCols+" FROM users WHERE plex_user_id = ?", plexUserID,
 	))
 }
 
 func GetFirstUser(sqlDB *sql.DB) (*User, error) {
 	return scanUser(sqlDB.QueryRow(
-		"SELECT id, plex_user_id, plex_username, plex_token, plex_thumb, is_enabled FROM users ORDER BY id ASC LIMIT 1",
+		"SELECT " + userCols + " FROM users ORDER BY id ASC LIMIT 1",
 	))
 }
 
 func scanUser(row *sql.Row) (*User, error) {
 	var u User
-	var isEnabled int
-	err := row.Scan(&u.ID, &u.PlexUserID, &u.PlexUsername, &u.PlexToken, &u.PlexThumb, &isEnabled)
+	err := row.Scan(&u.ID, &u.PlexUserID, &u.PlexUsername, &u.PlexToken, &u.PlexThumb, &u.IsEnabled, &u.AccessManaged)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrUserNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	u.IsEnabled = isEnabled != 0
 	return &u, nil
 }
 
 func CreateUser(sqlDB *sql.DB, plexUserID, username, token string, thumb string) (*User, error) {
-	now := time.Now().UnixMilli()
-	res, err := sqlDB.Exec(
-		`INSERT INTO users (plex_user_id, plex_username, plex_token, plex_thumb, created_at, last_login, is_enabled)
-		 VALUES (?, ?, ?, ?, ?, ?, 1)`,
-		plexUserID, username, token, thumb, now, now,
-	)
-	if err != nil {
-		return nil, err
-	}
-	id, err := res.LastInsertId()
+	id, err := insertUser(sqlDB, plexUserID, username, token, thumb, true)
 	if err != nil {
 		return nil, err
 	}
 	return GetUserByID(sqlDB, id)
+}
+
+// CreateLoginUser approves the first account and assigns its admin role in
+// one transaction. Other accounts await an explicit or Plex membership grant.
+func CreateLoginUser(sqlDB *sql.DB, plexUserID, username, token, thumb string) (*User, error) {
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	var first bool
+	if err := tx.QueryRow("SELECT NOT EXISTS (SELECT 1 FROM users)").Scan(&first); err != nil {
+		return nil, err
+	}
+	id, err := insertUser(tx, plexUserID, username, token, thumb, first)
+	if err != nil {
+		return nil, err
+	}
+	if first {
+		if _, err := tx.Exec("INSERT INTO admin_users (user_id) VALUES (?)", id); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return GetUserByID(sqlDB, id)
+}
+
+func insertUser(conn interface {
+	Exec(string, ...any) (sql.Result, error)
+}, plexUserID, username, token, thumb string, enabled bool) (int64, error) {
+	now := time.Now().UnixMilli()
+	res, err := conn.Exec(
+		`INSERT INTO users (plex_user_id, plex_username, plex_token, plex_thumb, created_at, last_login, is_enabled)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		plexUserID, username, token, thumb, now, now, enabled,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
 }
 
 func UpdateUserLogin(sqlDB *sql.DB, userID int64) error {
@@ -132,12 +182,17 @@ func RemoveAdmin(sqlDB *sql.DB, userID int64) error {
 }
 
 func EnableUser(sqlDB *sql.DB, userID int64) error {
-	_, err := sqlDB.Exec("UPDATE users SET is_enabled = 1 WHERE id = ?", userID)
+	_, err := sqlDB.Exec("UPDATE users SET is_enabled = 1, access_managed = 1 WHERE id = ?", userID)
 	return err
 }
 
 func DisableUser(sqlDB *sql.DB, userID int64) error {
-	_, err := sqlDB.Exec("UPDATE users SET is_enabled = 0 WHERE id = ?", userID)
+	_, err := sqlDB.Exec("UPDATE users SET is_enabled = 0, access_managed = 1 WHERE id = ?", userID)
+	return err
+}
+
+func SetUserMembershipAccess(sqlDB *sql.DB, userID int64, enabled bool) error {
+	_, err := sqlDB.Exec("UPDATE users SET is_enabled = ? WHERE id = ? AND access_managed = 0", enabled, userID)
 	return err
 }
 
@@ -155,7 +210,7 @@ type AdminUserRow struct {
 // isAdmin/isUserEnabled/getUserServer lookups collapsed into one query).
 func GetAllUsers(sqlDB *sql.DB) ([]AdminUserRow, error) {
 	rows, err := sqlDB.Query(
-		`SELECT u.id, u.plex_user_id, u.plex_username, u.plex_thumb, u.last_login, u.is_enabled,
+		`SELECT u.id, u.plex_user_id, u.plex_username, u.plex_thumb, u.last_login, u.is_enabled, u.access_managed,
 		        EXISTS(SELECT 1 FROM admin_users a WHERE a.user_id = u.id),
 		        EXISTS(SELECT 1 FROM user_servers s WHERE s.user_id = u.id)
 		 FROM users u ORDER BY u.id ASC`)
@@ -168,7 +223,7 @@ func GetAllUsers(sqlDB *sql.DB) ([]AdminUserRow, error) {
 	for rows.Next() {
 		var u AdminUserRow
 		var isEnabled, isAdmin, hasServer int
-		if err := rows.Scan(&u.ID, &u.PlexUserID, &u.PlexUsername, &u.PlexThumb, &u.LastLogin, &isEnabled, &isAdmin, &hasServer); err != nil {
+		if err := rows.Scan(&u.ID, &u.PlexUserID, &u.PlexUsername, &u.PlexThumb, &u.LastLogin, &isEnabled, &u.AccessManaged, &isAdmin, &hasServer); err != nil {
 			return nil, err
 		}
 		u.IsEnabled = isEnabled != 0

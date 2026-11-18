@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -42,42 +44,29 @@ func RegisterServers(r chi.Router, mw *auth.Middleware, h *ServersHandler) {
 	})
 }
 
-// serverOption is the compound "name|clientId|url" value packed into the
-// <select> so the chosen server's connection details round-trip through the
-// form. The access token is deliberately excluded here: this value is sent
-// to the browser as plain HTML (visible in page source/DevTools), so the
-// token is re-resolved server-side by ClientID via resolveServerAccessToken
-// whenever it's actually needed instead of ever leaving the server.
-type serverOption struct {
-	Name, ClientID, URL string
-}
+var errServerSelection = errors.New("select a server from your Plex account")
 
-func encodeServerOption(s auth.PlexServer) string {
-	return strings.Join([]string{s.Name, s.ClientIdentifier, s.BestURL()}, "|")
-}
-
-func decodeServerOption(v string) (serverOption, bool) {
-	parts := strings.SplitN(v, "|", 3)
-	if len(parts) != 3 {
-		return serverOption{}, false
+// Resolve the destination and credential from the same Plex discovery result.
+func (h *ServersHandler) resolveServer(plexToken, clientID string) (auth.PlexServer, string, error) {
+	if clientID == "" {
+		return auth.PlexServer{}, "", errServerSelection
 	}
-	return serverOption{Name: parts[0], ClientID: parts[1], URL: parts[2]}, true
-}
-
-// resolveServerAccessToken also returns whether the Plex account owns this
-// server (vs being a shared/managed user on it) - Collections' access gate,
-// DESIGN.md §11.11.
-func (h *ServersHandler) resolveServerAccessToken(plexToken, clientID string) (string, bool, error) {
 	servers, err := h.Plex.GetServers(plexToken)
 	if err != nil {
-		return "", false, err
+		return auth.PlexServer{}, "", err
 	}
-	for _, s := range servers {
-		if s.ClientIdentifier == clientID {
-			return s.AccessToken, s.Owned, nil
+	for _, server := range servers {
+		if server.ClientIdentifier != clientID {
+			continue
 		}
+		address, err := url.Parse(server.BestURL())
+		if err != nil || address.Hostname() == "" || (address.Scheme != "https" && address.Scheme != "http") ||
+			address.User != nil || address.RawQuery != "" || address.Fragment != "" {
+			return auth.PlexServer{}, "", fmt.Errorf("Plex returned an invalid connection for the selected server")
+		}
+		return server, address.String(), nil
 	}
-	return "", false, nil
+	return auth.PlexServer{}, "", errServerSelection
 }
 
 // setupPage is first-login-only onboarding (DESIGN.md §11.11): once a user
@@ -103,28 +92,23 @@ func (h *ServersHandler) setupPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Couldn't reach plex.tv to list your servers. Try again in a moment.", http.StatusBadGateway)
 		return
 	}
-	type option struct{ Value, Name string }
-	options := make([]option, len(servers))
-	for i, s := range servers {
-		options[i] = option{Value: encodeServerOption(s), Name: s.Name}
-	}
-	h.Tmpl.RenderPage(w, r, "setup", map[string]any{"Servers": options})
+	h.Tmpl.RenderPage(w, r, "setup", map[string]any{"Servers": servers})
 }
 
 func (h *ServersHandler) setupLibraries(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
-	opt, ok := decodeServerOption(r.URL.Query().Get("server"))
-	if !ok {
+	clientID := r.URL.Query().Get("server")
+	if clientID == "" {
 		w.Write(nil)
 		return
 	}
-	accessToken, _, err := h.resolveServerAccessToken(user.PlexToken, opt.ClientID)
+	server, address, err := h.resolveServer(user.PlexToken, clientID)
 	if err != nil {
 		slog.Error("failed to resolve Plex server access token", "error", err)
 		h.Tmpl.RenderPartial(w, "partials/libraries_select.html", map[string]any{"Error": "Failed to load libraries from that server."})
 		return
 	}
-	client := plex.NewClient(opt.URL, plex.ResolveToken(user.PlexToken, accessToken), h.Plex.ClientID, "Playlist Lab")
+	client := plex.NewClient(address, plex.ResolveToken(user.PlexToken, server.AccessToken), h.Plex.ClientID, "Playlist Lab")
 	libraries, err := client.GetLibraries()
 	if err != nil {
 		slog.Error("failed to get libraries", "error", err)
@@ -148,30 +132,19 @@ func (h *ServersHandler) setupLibraries(w http.ResponseWriter, r *http.Request) 
 // the server is saved.
 func (h *ServersHandler) addServerFromSelection(r *http.Request) (*db.UserServer, error) {
 	user := auth.CurrentUser(r)
-	opt, ok := decodeServerOption(r.FormValue("server"))
-	if !ok {
-		return nil, errServerRequired
-	}
 	libID, libName, _ := strings.Cut(r.FormValue("library"), "|")
-
-	accessToken, owned, err := h.resolveServerAccessToken(user.PlexToken, opt.ClientID)
+	server, address, err := h.resolveServer(user.PlexToken, r.FormValue("server"))
 	if err != nil {
 		return nil, err
 	}
-	return db.AddUserServer(h.DB, user.ID, opt.Name, opt.ClientID, opt.URL, libID, libName, accessToken, owned)
+	return db.AddUserServer(h.DB, user.ID, server.Name, server.ClientIdentifier, address, libID, libName, server.AccessToken, server.Owned)
 }
-
-var errServerRequired = &serverSelectionError{"server is required"}
-
-type serverSelectionError struct{ msg string }
-
-func (e *serverSelectionError) Error() string { return e.msg }
 
 // selectServer is the first-run wizard's submit (POST /servers/select) -
 // unchanged behavior, a full-page redirect to /.
 func (h *ServersHandler) selectServer(w http.ResponseWriter, r *http.Request) {
 	if _, err := h.addServerFromSelection(r); err != nil {
-		if err == errServerRequired {
+		if errors.Is(err, errServerSelection) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -227,12 +200,7 @@ func (h *ServersHandler) newServerForm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Couldn't reach plex.tv to list your servers. Try again in a moment.", http.StatusBadGateway)
 		return
 	}
-	type option struct{ Value, Name string }
-	options := make([]option, len(servers))
-	for i, s := range servers {
-		options[i] = option{Value: encodeServerOption(s), Name: s.Name}
-	}
-	h.Tmpl.RenderPartial(w, "partials/server_picker.html", map[string]any{"Servers": options})
+	h.Tmpl.RenderPartial(w, "partials/server_picker.html", map[string]any{"Servers": servers})
 }
 
 // addServer is Settings' "add another server" submit (POST
@@ -243,7 +211,7 @@ func (h *ServersHandler) addServer(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
 	server, err := h.addServerFromSelection(r)
 	if err != nil {
-		if err == errServerRequired {
+		if errors.Is(err, errServerSelection) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -320,33 +288,26 @@ func (h *ServersHandler) refreshServerConnection(w http.ResponseWriter, r *http.
 		http.Error(w, "Server not found", http.StatusNotFound)
 		return
 	}
-	servers, err := h.Plex.GetServers(user.PlexToken)
+	discovered, address, err := h.resolveServer(user.PlexToken, server.ServerClientID)
 	if isPlexAuthError(err) {
 		redirectToReauth(w, r)
 		return
 	}
-	if err != nil {
-		slog.Error("failed to refresh server connection: could not reach Plex", "error", err, "serverId", id)
-		h.Notifications.Add(user.ID, notifications.TypeAction, "Refresh server connection", "Failed to reach Plex", notifications.StatusError, nil)
-		http.Error(w, "Failed to reach Plex", http.StatusBadGateway)
-		return
-	}
-	found := false
-	for _, s := range servers {
-		if s.ClientIdentifier == server.ServerClientID {
-			if err := db.UpdateServerConnection(h.DB, id, s.BestURL(), s.Owned); err != nil {
-				slog.Error("failed to update server connection", "error", err, "serverId", id)
-				h.Notifications.Add(user.ID, notifications.TypeAction, "Refresh server connection", err.Error(), notifications.StatusError, nil)
-				http.Error(w, "Failed to update server connection", http.StatusInternalServerError)
-				return
-			}
-			found = true
-			break
-		}
-	}
-	if !found {
+	if errors.Is(err, errServerSelection) {
 		h.Notifications.Add(user.ID, notifications.TypeAction, "Refresh server connection", server.ServerName+" no longer appears in your Plex account", notifications.StatusError, nil)
 		http.Error(w, fmt.Sprintf("Server %q no longer appears in your Plex account", server.ServerName), http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		slog.Error("failed to resolve Plex server connection", "error", err, "serverId", id)
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Refresh server connection", "Failed to resolve Plex connection", notifications.StatusError, nil)
+		http.Error(w, "Failed to resolve Plex connection", http.StatusBadGateway)
+		return
+	}
+	if err := db.UpdateServerConnection(h.DB, id, user.ID, address, discovered.AccessToken, discovered.Owned); err != nil {
+		slog.Error("failed to update server connection", "error", err, "serverId", id)
+		h.Notifications.Add(user.ID, notifications.TypeAction, "Refresh server connection", "Failed to update server connection", notifications.StatusError, nil)
+		http.Error(w, "Failed to update server connection", http.StatusInternalServerError)
 		return
 	}
 	h.Notifications.Add(user.ID, notifications.TypeAction, "Refresh server connection", server.ServerName, notifications.StatusSuccess, nil)

@@ -5,7 +5,7 @@ ftl-themes bundle, using the L1 app shell and core component classes. These
 are the problems hit doing that, for the ftl-themes maintainer.
 
 - **Upstream version:** `DrEVILish/ftl-themes` `main` (v5.3.0 + Unreleased),
-  `dist/themes.json` version `fb054a88fb2b`. First filed against `b417e94`
+  `dist/themes.json` version `53597a4e1d10`, pinned at `35aaf838`. First filed against `b417e94`
   (v4.1, `d76a646cc68b`).
 - **Browser used to verify:** Chromium (headless), at 390px, 1000px and
   1280px.
@@ -26,7 +26,7 @@ are the problems hit doing that, for the ftl-themes maintainer.
 | 8 | `.scroll` clips header dropdowns | **Resolved by v5 popovers.** Menus and column filters are now `[popover]` (top layer); tables sit in `.table-wrap`. |
 | 9 | No inline `.input-group` | Open. |
 | 10 | `.nav-item` wraps | **Fixed** (nav items no longer wrap). `&nbsp;` labels removed. |
-| 11 | `imac-g3` variants missing from `themes.json` | Open: still no `variants` array in `fb054a88fb2b`. |
+| 11 | `imac-g3` variants missing from `themes.json` | Open: still no `variants` array in `53597a4e1d10`. |
 | 12 | `.panel-header` ignores density | **Fixed in v5** (`--surface-pad`). |
 | 13 | Migration tooling/docs | Partly moot: the v4 codemod is retired. Stale count in CONTRACT.md fixed. |
 | 14 | Links vanish in a selected table row | **New, open.** See below. |

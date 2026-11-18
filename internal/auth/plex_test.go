@@ -82,7 +82,10 @@ func TestPlexServer_BestURL(t *testing.T) {
 // or {"users": [...]}.
 func TestParseFriendIDs(t *testing.T) {
 	xml := `<?xml version="1.0"?><MediaContainer><User id="11" title="a"/><User id="22" title="b"/></MediaContainer>`
-	ids := parseFriendIDs(strings.NewReader(xml))
+	ids, err := parseFriendIDs(strings.NewReader(xml))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(ids) != 2 || ids[0] != 11 || ids[1] != 22 {
 		t.Fatalf("got %v, want [11 22]", ids)
 	}

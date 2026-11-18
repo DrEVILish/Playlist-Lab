@@ -57,3 +57,22 @@ func TestGWCall_PersistsSessionCookieAcrossCalls(t *testing.T) {
 		t.Fatal("session cookie set on login's response never made it onto the next gw call")
 	}
 }
+
+func TestValidateARLDoesNotReplaceConfiguredCredential(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		arl, _ := r.Cookie("arl")
+		if arl == nil || arl.Value != "test-candidate" {
+			t.Error("validation request did not use the candidate credential")
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"results": map[string]any{"USER": map[string]any{"USER_ID": "0"}}})
+	}))
+	defer server.Close()
+	svc := New(Config{ARL: "test-existing"}, nil, nil)
+	svc.dz.gwLightURL = server.URL
+	if result := svc.ValidateARL("test-candidate"); result.OK {
+		t.Fatal("accepted a rejected credential")
+	}
+	if svc.ARL() != "test-existing" || svc.LastArlCheck() != nil {
+		t.Fatal("candidate validation modified the configured credential or its status")
+	}
+}

@@ -302,3 +302,34 @@ func TestConfirmImport_OverwriteExistingDeletesOldPlaylist(t *testing.T) {
 		t.Errorf("created %d playlists, want 1", createCount)
 	}
 }
+
+func TestConfirmImport_OverwriteKeepsOriginalWhenCreationFails(t *testing.T) {
+	deleted := false
+	srv := newFakePlexServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/playlists" && r.Method == http.MethodGet:
+			w.Write([]byte(`{"MediaContainer":{"Metadata":[{"ratingKey":"old-1","title":"My Mix","playlistType":"audio"}]}}`))
+		case r.URL.Path == "/playlists/old-1" && r.Method == http.MethodDelete:
+			deleted = true
+			w.WriteHeader(http.StatusOK)
+		case r.URL.Path == "/playlists" && r.Method == http.MethodPost:
+			w.WriteHeader(http.StatusBadGateway)
+		default:
+			w.WriteHeader(http.StatusOK)
+		}
+	})
+	sqlDB := newTestDB(t)
+	user := newTestUser(t, sqlDB)
+	seedUserServer(t, sqlDB, user.ID, srv.URL)
+	store := importreview.NewStore()
+	sess := store.New("fake", "abc", "My Mix", "", user.ID)
+	sess.SetTracks([]importreview.Track{{Title: "A", Matched: true, PlexRatingKey: "t1"}})
+	h := &ImportHandler{DB: sqlDB, Tmpl: nopTemplates(), Reviews: store, Notifications: notifications.NewStore(), PlexAuth: auth.NewPlexClient("c", "Playlist Lab")}
+	router := testRouter(sqlDB, http.MethodPost, "/import/confirm/{sessionId}", h.confirmImport)
+	rec := authedRequest(t, sqlDB, router, user, http.MethodPost, "/import/confirm/"+sess.ID,
+		"playlistName=My+Mix&overwriteExisting=true", "application/x-www-form-urlencoded")
+	if rec.Code != http.StatusBadGateway || deleted {
+		t.Fatalf("status %d, original deleted %v", rec.Code, deleted)
+	}
+}

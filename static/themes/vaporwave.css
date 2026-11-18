@@ -446,6 +446,18 @@ a { color: var(--link, var(--accent)); }
   text-overflow: ellipsis;
 }
 .field-row > .field-hint { margin-block-start: 0; flex: none; }
+/* .field-row.is-wrap — the label is the setting's only name, so it wraps
+   instead of truncating, and a sentence-length .field-hint sits under it
+   inside the row; the control stays at the end, centred on both. */
+.field-row.is-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  row-gap: 0.15em;
+}
+.field-row.is-wrap > .label { grid-column: 1; white-space: normal; overflow: visible; }
+.field-row.is-wrap > .field-hint { grid-column: 1; }
+.field-row.is-wrap > :not(.label, .field-hint) { grid-column: 2; grid-row: 1 / span 2; }
 
 /* .input-group — an input with joined addons: a unit label, a static
    prefix, or an attached button. Children share one border; only the
@@ -500,6 +512,9 @@ a { color: var(--link, var(--accent)); }
   color: var(--check-fg, var(--text));
 }
 .check:has(:disabled) { opacity: 0.5; cursor: var(--cursor-not-allowed, not-allowed); }
+/* A hidden name (a table's select column) is positioned against its own
+   label, so it can't escape a scrolling table and widen the page. */
+.check:has(> .visually-hidden) { position: relative; }
 
 /* .radio-group — a <fieldset> of .check rows with a <legend>. */
 .radio-group {
@@ -576,7 +591,8 @@ a { color: var(--link, var(--accent)); }
    (the attribute is also what assistive tech reads). The button sizes to
    its content: the track becomes a normal flex child and an optional
    .switch-label sits beside it. */
-button.switch {
+button.switch,
+label.switch:has(> .switch-label) {
   appearance: none;
   width: auto;
   height: auto;
@@ -589,7 +605,8 @@ button.switch {
   font: inherit;
   text-align: start;
 }
-button.switch .switch-track {
+button.switch .switch-track,
+label.switch:has(> .switch-label) > .switch-track {
   position: relative;
   inset: auto;
   flex: none;
@@ -701,7 +718,7 @@ button.switch:disabled { opacity: 0.5; cursor: var(--cursor-not-allowed, not-all
   align-items: center;
   gap: 0.5rem;
   margin: calc(-1 * var(--surface-pad, 1.5rem)) calc(-1 * var(--surface-pad, 1.5rem)) var(--space-m);
-  padding: var(--modal-header-pad, var(--space-xs) var(--space-m));
+  padding: var(--modal-header-pad, var(--space-xs) var(--surface-pad, var(--space-m)));
   background: var(--modal-header-bg, transparent);
   color: var(--modal-header-fg, inherit);
   font-weight: 600;
@@ -756,6 +773,9 @@ dialog.modal:modal {
   position: fixed;
   inset: 0;
   margin: auto;
+}
+.modal[popover]:popover-open:not(:where(.is-maximized, .window-max:checked + .modal)),
+dialog.modal:modal:not(:where(.is-maximized, .window-max:checked + .modal)) {
   height: fit-content;
 }
 
@@ -950,6 +970,7 @@ dialog.modal:modal {
   color: var(--dropdown-item-fg, var(--text));
   text-align: start;
 }
+.dropdown-item.is-danger { color: var(--danger-text, var(--danger)); }
 .dropdown-item:focus-visible {
   background: var(--dropdown-item-bg-hover, var(--accent));
   color: var(--dropdown-item-fg-hover, var(--on-accent));
@@ -1094,6 +1115,7 @@ dialog.modal:modal {
  * every theme here treats it as a signature element. */
 .transport {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
   padding: var(--transport-padding, 0.6rem 0.9rem);
@@ -1503,7 +1525,7 @@ html.is-dragging-value, html.is-dragging-value * { cursor: var(--cursor-resize-y
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 0.2rem 0.35rem;
+  padding: 0.35rem 0.4rem;
   background: var(--scribble-bg, var(--surface-2));
   color: var(--scribble-fg, var(--text));
   border-top: var(--scribble-bar-width, 0.3rem) solid var(--strip-color, var(--accent));
@@ -1602,7 +1624,7 @@ html.is-dragging-value, html.is-dragging-value * { cursor: var(--cursor-resize-y
   background: var(--row-selected-bg, rgba(128, 128, 128, 0.25));
   color: var(--row-selected-fg, inherit);
 }
-.table tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) td {
+.table tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))):not(.is-selected, :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))) td {
   background: var(--row-active-bg, transparent);
 }
 /* The marker belongs to the row, so only its leading cell draws it — on
@@ -1944,7 +1966,10 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
 .status-ok { --state-fg: var(--success-text, var(--success)); color: var(--state-fg); }
 .status-warn { --state-fg: var(--warning-text, var(--warning)); color: var(--state-fg); }
 .status-error { --state-fg: var(--danger-text, var(--danger)); color: var(--state-fg); }
+/* .status-idle is neutral everywhere (offline, stopped, not running);
+   .status-ready is armed and waiting, the green of a recorder on standby. */
 .status-idle { --state-fg: var(--muted); color: var(--state-fg); }
+.status-ready { --state-fg: var(--success-text, var(--success)); color: var(--state-fg); }
 /* .status-rec: recording or on air. A bold danger label whose dot has a
    halo; the dot pulses when motion is allowed. */
 .status-rec { --state-fg: var(--danger-text, var(--danger)); color: var(--state-fg); font-weight: 700; }
@@ -2066,8 +2091,7 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
 :is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a)) {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  gap: 0.6em;
   width: 100%;
   padding: 0.45em 0.7em;
   border-radius: var(--context-menu-radius, var(--radius));
@@ -2075,6 +2099,10 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
   text-align: start;
 }
 :is(.context-menu-item, .context-menu li > :is(button, a)).is-danger { color: var(--danger-text, var(--danger)); }
+/* A leading icon stays beside its label; a trailing shortcut (<kbd>) or a
+   submenu arrow is pushed to the end. */
+:is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a)) > :is(kbd, :last-child:not(:first-child, .icon)),
+:is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a))[aria-haspopup] > :last-child:not(.icon) { margin-inline-start: auto; padding-inline-start: 0.4em; }
 :is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a)):focus-visible {
   background: var(--context-menu-item-bg-hover, var(--dropdown-item-bg-hover, var(--accent)));
   color: var(--context-menu-item-fg-hover, var(--dropdown-item-fg-hover, var(--on-accent)));
@@ -2157,6 +2185,8 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
   stroke-width: var(--icon-stroke-width, 2);
   stroke-linecap: round;
   stroke-linejoin: round;
+  /* The reset makes every svg a block; an icon sits in the line with its text. */
+  display: inline-block;
   vertical-align: -0.2em;
   flex-shrink: 0;
 }
@@ -2178,7 +2208,6 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
 /* .badge-button — a clickable badge (filter chip). */
 .badge-button {
   border: none;
-  font: inherit;
   transition: background 0.15s ease, color 0.15s ease;
 }
 .badge-button:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) {
@@ -2516,7 +2545,7 @@ html[data-motion="reduced"] .carousel { scroll-behavior: auto; }
   display: flex;
   flex-wrap: wrap;
   gap: 0.15rem 0.9rem;
-  padding-block: 0.5rem;
+  padding: 0.5rem var(--space-2xs);
   background: var(--scrollspy-nav-bg, var(--surface));
   border-block-end: 1px solid var(--scrollspy-nav-rule, var(--hairline));
 }
@@ -2634,6 +2663,8 @@ html[data-motion="reduced"] .scrollspy-body { scroll-behavior: auto; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Task buttons take the squeeze before the tray does. */
+.taskbar > .taskbar-task { flex-shrink: 1000; }
 .taskbar-task:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) {
   background: var(--taskbar-task-bg-active, var(--taskbar-task-bg, transparent));
   border-color: var(--taskbar-task-border-active, var(--taskbar-task-border, transparent));
@@ -2645,7 +2676,10 @@ html[data-motion="reduced"] .scrollspy-body { scroll-behavior: auto; }
   display: inline-flex;
   align-items: center;
   gap: 0.5em;
-  flex: none;
+  /* The tray gives way last on a narrow bar (see .taskbar > .taskbar-task):
+     its readouts then truncate rather than push the bar past its edge. */
+  flex: 0 1 auto;
+  min-inline-size: 0;
   margin-inline-start: auto;
   padding: 0.3em 0.8em;
   border: var(--taskbar-border-width, 1px) solid var(--taskbar-tray-border, transparent);
@@ -2653,6 +2687,14 @@ html[data-motion="reduced"] .scrollspy-body { scroll-behavior: auto; }
   background: var(--taskbar-tray-bg, transparent);
   color: var(--taskbar-tray-fg, inherit);
   font-variant-numeric: tabular-nums;
+}
+.taskbar-tray > * { flex: none; }
+.taskbar-tray > :is(span, time):not(.lamp) {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* .breadcrumbs */
@@ -3225,6 +3267,14 @@ pre code { padding: 0; background: none; border-radius: 0; }
   --btn-border-hover: var(--app-bar-text);
 }
 .app-bar :is(.btn-tertiary, .btn-ghost) { --btn-border: transparent; }
+/* A GO button on the bar: core's GO is an outlined accent label, which on a
+   bar painted in the accent reads at 1:1. Unless the theme styles its GO
+   (--go-fg, --go-border), it takes the bar's text colour like the other
+   unfilled buttons. A theme that fills it (--go-bg) also sets --go-fg. */
+.app-bar .btn-go {
+  --btn-fg: var(--go-fg, var(--app-bar-text));
+  --btn-border: var(--go-border, var(--app-bar-text));
+}
 
 /* Screen-reader-only content — the standard visually-hidden-but-announced
    clip-rect pattern, not display:none (which screen readers also skip). */
@@ -3305,6 +3355,9 @@ pre code { padding: 0; background: none; border-radius: 0; }
 
 /* .divide-y — hairlines between stacked children (lists, menus). */
 .divide-y > * + * { border-block-start: 1px solid var(--hairline); }
+/* Text never sits on the hairline. Zero specificity, so a child with its
+   own padding (a list item, a menu entry) keeps it. */
+:where(.divide-y > *) { padding-block: var(--divide-y-pad, var(--space-2xs)); }
 
 /* .ratio — an aspect-ratio box for video/embeds; children fill it.
    Set `--ratio` directly or use a modifier (default 16/9). */
@@ -3777,10 +3830,22 @@ html[data-pointer="touch"] { --tap-min: 44px; }
   min-block-size: var(--tap-min);
   touch-action: manipulation;
 }
-/* Short labels ("EQ", "L1") too: toggles, tabs and segments. */
-:is(.btn-icon, .btn-close, .btn-min, .btn-max, .pagination-item, .nav-toggle, .taskbar-task, .badge-button,
-    .toggle-btn, .tab, .segmented-item) {
+/* Short labels ("EQ", "L1") too: toggles, tabs, segments, scrollspy, keys. */
+:is(.btn-icon, .btn-close, .btn-min, .btn-max, .pagination-item, .nav-toggle, .taskbar-task, .taskbar-start, .badge-button,
+    .toggle-btn, .tab, .segmented-item, .scrollspy-link, .key) {
   min-inline-size: var(--tap-min);
+}
+/* Links and buttons in a toast are actions, not running text. */
+:where(.toast) :is(a, button):not(.btn, .btn-icon, .btn-close) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--tap-min);
+  min-inline-size: var(--tap-min);
+}
+/* Touch tiers: keys and reaction chips sit 8px apart (WCAG 2.5.8 spacing). */
+@media (max-width: 900px), (any-pointer: coarse) {
+  .strip-section, .message-reactions { gap: max(0.3rem, 8px); }
 }
 :is(.input, .select) { min-block-size: var(--tap-min); }
 /* Checkboxes and radios: the label is the target. */
@@ -3802,16 +3867,23 @@ html[data-pointer="touch"] { --tap-min: 44px; }
   transform: translate(-50%, -50%);
 }
 .slider { touch-action: none; }
-@media (max-width: 900px), (any-pointer: coarse) {
-  /* The range input's own box is both its track and its target. On touch
-     it grows to the target height; padding keeps the drawn track the same
-     thin line in the middle (the border can't follow it, so it hides). */
-  .slider:not(.is-range > .slider) {
-    height: var(--tap-min);
-    padding-block: calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2);
-    background-clip: content-box;
-    border-color: transparent;
-  }
+/* The range input's own box is both its track and its target. It grows to
+   --tap-min (44px on touch tiers, 24px on desktop); padding keeps the drawn
+   track the same thin line in the middle. The border can't follow it, so it
+   hides: a theme whose track is drawn by the border (a bevelled groove)
+   redraws it with --slider-bg as a background on the content box. */
+.slider:not(.is-range > .slider) {
+  height: var(--tap-min);
+  padding-block: calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2);
+  background-clip: content-box;
+  border-color: transparent;
+}
+/* The same, sideways, for a vertical slider. */
+.slider.is-vertical:not(.is-range > .slider) {
+  width: var(--tap-min);
+  height: var(--slider-length, 4.5rem);
+  /* Physical sides: under vertical-lr the logical block axis is horizontal. */
+  padding: 0 calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2);
 }
 /* Inline text links inside running text are exempt (WCAG 2.5.8); links
    that stand alone as navigation are not. */
@@ -3893,6 +3965,10 @@ input[type="color"] { min-block-size: var(--tap-min); min-inline-size: var(--tap
     margin: 0.25rem 0;
     position-area: block-end span-inline-end;
     position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+    /* Take the side with more room and scroll inside it, so the inline
+       flip can still fit when neither side holds the whole menu. */
+    position-try-order: most-block-size;
+    max-height: calc(100% - 0.5rem);
   }
 }
 /* A context menu shown at the pointer: the app sets --x/--y. */
@@ -4247,7 +4323,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .meter-pair:has(> .meter-v) { grid-auto-flow: column; justify-content: start; block-size: 100%; }
 
 /* --- .clip — a clip light that holds, with a count -------------------------
- *   <button class="clip" type="button" aria-pressed="true" aria-label="Clipped 3 times, reset">CLIP <span class="clip-count">3</span></button>
+ *   <button class="clip" type="button" aria-pressed="true" aria-label="Clip 3, press to reset">CLIP <span class="clip-count">3</span></button>
  * aria-pressed="true" (or .is-clipped) lights it; the app holds it after a
  * clip and clears it when the user presses it. */
 .clip {
@@ -4627,9 +4703,9 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: grid;
   gap: 1px;
   padding: 0.2rem;
-  background: var(--sends-bg, #0c0c12);
+  background: var(--sends-bg, var(--input-bg, var(--surface)));
   border: 1px solid var(--sends-border, var(--border));
-  color: var(--sends-fg, #ffffff);
+  color: var(--sends-fg, var(--input-fg, var(--text)));
   font-size: 0.6rem;
   line-height: 1.25;
 }
@@ -4640,7 +4716,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   content: "";
   block-size: 0.45rem;
   inline-size: calc(var(--send, 0) * 100%);
-  background: var(--sends-bar, #d8dde8);
+  background: var(--sends-bar, var(--muted));
   clip-path: polygon(0 100%, 100% 0, 100% 100%);
 }
 .sends li.is-pre::after { background: var(--sends-bar-pre, var(--accent-2)); }
@@ -4659,22 +4735,22 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   inline-size: 100%;
   aspect-ratio: 1;
   background:
-    linear-gradient(to top right, transparent calc(50% - 0.5px), var(--dyn-graph-unity, rgba(255, 255, 255, 0.25)) 0 calc(50% + 0.5px), transparent 0),
-    repeating-linear-gradient(0deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, rgba(255, 255, 255, 0.14)) 0 25%),
-    repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, rgba(255, 255, 255, 0.14)) 0 25%),
-    var(--dyn-graph-bg, linear-gradient(180deg, #3a6bd0, #1d3f96));
-  border: 1px solid var(--dyn-graph-border, var(--border));
+    linear-gradient(to top right, transparent calc(50% - 0.5px), var(--dyn-graph-unity, var(--eq-zero, var(--border))) 0 calc(50% + 0.5px), transparent 0),
+    repeating-linear-gradient(0deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, var(--eq-grid, var(--hairline))) 0 25%),
+    repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, var(--eq-grid, var(--hairline))) 0 25%),
+    var(--dyn-graph-bg, var(--eq-bg, var(--bg)));
+  border: 1px solid var(--dyn-graph-border, var(--eq-border, var(--hairline)));
   overflow: visible;
 }
 .dyn-graph-line {
   fill: none;
-  stroke: var(--dyn-graph-line, #ffffff);
+  stroke: var(--dyn-graph-line, var(--eq-line, var(--accent)));
   stroke-width: var(--dyn-graph-line-width, 2px);
   vector-effect: non-scaling-stroke;
   stroke-linejoin: round;
 }
-.dyn-graph-threshold { stroke: var(--dyn-graph-threshold, var(--accent)); stroke-width: 1px; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
-[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-line { stroke: var(--dyn-graph-line-off, rgba(255, 255, 255, 0.45)); }
+.dyn-graph-threshold { stroke: var(--dyn-graph-threshold, var(--accent-2)); stroke-width: 1px; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-line { stroke: var(--dyn-graph-line-off, var(--muted)); }
 
 /* --- .rack — an equipment rack of .rack-units ------------------------------
  *   <div class="rack" aria-label="Effects rack">
@@ -4731,7 +4807,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .rack-unit[data-finish="purple"] { --_finish: linear-gradient(180deg, #6a2f8c, #3b1150); }
 .rack-unit[data-finish="green"] { --_finish: linear-gradient(180deg, #2f8a2f, #145214); }
 .rack-unit > input[type="radio"] { position: absolute; inset: 0; margin: 0; opacity: 0; }
-.rack-unit:has(> input:checked) { outline: 2px solid var(--rack-selected, #ffe33b); outline-offset: -2px; }
+.rack-unit:has(> input:checked) { outline: 2px solid var(--rack-selected, var(--accent)); outline-offset: -2px; }
 .rack-unit:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
 .rack-unit.is-empty { --_finish: linear-gradient(180deg, #2b2b2b, #151515); justify-content: center; color: #8a8a8a; }
 .rack-unit-name {
@@ -4743,7 +4819,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .rack-unit[data-finish="silver"] .rack-unit-name { text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6); }
 .rack-unit-body { display: flex; flex: 1; flex-wrap: wrap; align-items: center; justify-content: space-around; gap: 0.3rem 0.6rem; min-inline-size: 0; }
 /* The thin "Change device / Store / Load preset" strip at the top of the rack. */
-.rack-head { display: flex; justify-content: center; gap: 0.6rem; padding: 0.4rem; background: linear-gradient(180deg, #f2f2f2, #c9c9c9); border-radius: 2px; }
+.rack-head { display: flex; justify-content: center; gap: 0.6rem; padding: 0.4rem; background: var(--rack-head-bg, var(--surface-2)); border-radius: 2px; }
 
 /* A unit's faceplate seen up close: a bigger .rack-unit inside .faceplate,
    above its .assignable panel. */
@@ -4751,8 +4827,8 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: grid;
   gap: 0.6rem;
   padding: 0.5rem;
-  background: var(--faceplate-bg, #050505);
-  border: 1px solid var(--faceplate-border, #2a2a2a);
+  background: var(--faceplate-bg, var(--surface-2));
+  border: 1px solid var(--faceplate-border, var(--border));
   border-radius: 4px;
 }
 .faceplate > .rack-unit { --_u: 2.6rem; align-items: stretch; padding-block: 0.8rem; font-size: 0.75rem; }
@@ -4770,8 +4846,8 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .faceplate-display {
   min-inline-size: 7rem;
   padding: 0.4rem 0.6rem;
-  background: var(--faceplate-display-bg, #000000);
-  color: var(--faceplate-display-fg, #e0e0e0);
+  background: var(--faceplate-display-bg, var(--input-bg, var(--surface)));
+  color: var(--faceplate-display-fg, var(--input-fg, var(--text)));
   border-radius: 4px;
   font: 800 1.2rem/1.1 var(--font);
   text-align: center;
@@ -4791,11 +4867,11 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   grid-template-columns: repeat(auto-fit, minmax(5.2rem, 1fr));
   gap: 0.4rem 0.3rem;
   padding: 0.5rem 0.6rem 0.3rem;
-  background: var(--assignable-bg, linear-gradient(180deg, #5560ab, #434d98));
-  color: var(--assignable-fg, #ffffff);
-  border: 1px solid var(--assignable-border, #2a3274);
+  background: var(--assignable-bg, var(--surface));
+  color: var(--assignable-fg, var(--text));
+  border: 1px solid var(--assignable-border, var(--border));
   border-radius: 3px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+  box-shadow: var(--assignable-shadow, none);
   font-size: 0.68rem;
   text-align: center;
 }
@@ -4805,12 +4881,12 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: block;
   inline-size: 2.6rem;
   block-size: 2.4rem;
-  background: var(--assignable-key-bg, linear-gradient(180deg, #4a54a0, #3a438b));
-  border: 2px solid var(--assignable-key-border, #6a74c0);
-  box-shadow: inset 0 0 0 2px #2b3274;
+  background: var(--assignable-key-bg, var(--key-bg, var(--surface-2)));
+  border: 2px solid var(--assignable-key-border, var(--key-border, var(--border)));
+  box-shadow: var(--assignable-key-shadow, inset 0 0 0 2px rgba(0, 0, 0, 0.25));
 }
 .assignable-key > input { position: absolute; inset: 0; margin: 0; opacity: 0; }
-.assignable-key:has(> input:checked) { background: var(--assignable-key-on, linear-gradient(180deg, #e9ecff, #b5bce8)); }
+.assignable-key:has(> input:checked) { background: var(--assignable-key-on, var(--accent)); }
 .assignable-key:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 .assignable-caption { grid-column: 1 / -1; margin: 0; font-weight: 700; opacity: 0.9; }
 
@@ -4827,9 +4903,9 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   align-items: stretch;
   gap: 2px;
   padding: 0.5rem;
-  background: var(--geq-bg, linear-gradient(180deg, #a9a9a9, #8a8a8a));
+  background: var(--geq-bg, var(--surface));
   border-radius: 3px;
-  color: var(--geq-fg, #111111);
+  color: var(--geq-fg, var(--text));
   font-size: 0.6rem;
   font-weight: 700;
 }
@@ -4840,11 +4916,11 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   gap: 1px;
   padding: 0.15rem;
   background:
-    linear-gradient(transparent calc(50% - 0.6rem), var(--geq-zero, #111111) 0 calc(50% - 0.6rem + 1px), transparent 0),
-    var(--geq-group-bg, #9a9a9a);
-  border: 1px solid var(--geq-group-border, #1f2a8a);
+    linear-gradient(transparent calc(50% - 0.6rem), var(--geq-zero, var(--border)) 0 calc(50% - 0.6rem + 1px), transparent 0),
+    var(--geq-group-bg, var(--surface-2));
+  border: 1px solid var(--geq-group-border, var(--hairline));
 }
-.geq-group:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) { --geq-group-bg: var(--geq-group-active, #e6e6e6); }
+.geq-group:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) { --geq-group-bg: var(--geq-group-active, color-mix(in srgb, var(--accent) 22%, var(--surface-2))); }
 .geq-band { display: grid; flex: 1; justify-items: center; gap: 0.15rem; min-inline-size: 0; }
 .geq-band > input[type="range"] {
   -webkit-appearance: none;
@@ -4856,7 +4932,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   min-width: 0.9rem;
   height: var(--geq-height, 7rem);
   margin: 0;
-  background: linear-gradient(90deg, transparent calc(50% - 3px), var(--geq-slot, #000000) 0 calc(50% + 3px), transparent 0);
+  background: linear-gradient(90deg, transparent calc(50% - 3px), var(--geq-slot, var(--fader-slot, var(--border))) 0 calc(50% + 3px), transparent 0);
 }
 .geq-band > input::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -4888,20 +4964,20 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: grid;
   gap: 0.4rem;
   padding: 0.5rem;
-  background: var(--patch-device-bg, linear-gradient(180deg, #4f8ad0, #2f62ae));
-  border: 1px solid var(--patch-device-border, #12285e);
+  background: var(--patch-device-bg, var(--surface));
+  border: 1px solid var(--patch-device-border, var(--border));
   border-radius: 8px;
-  color: #ffffff;
+  color: var(--patch-device-fg, var(--text));
 }
 .patch-device > header { display: flex; align-items: center; gap: 0.4rem; font-weight: 800; }
-.patch-name { flex: 1; padding: 0.15rem 0.4rem; background: #000000; border-radius: 2px; }
+.patch-name { flex: 1; padding: 0.15rem 0.4rem; background: var(--patch-name-bg, var(--input-bg, var(--surface))); color: var(--patch-name-fg, var(--input-fg, var(--text))); border-radius: 2px; }
 .patch-group-label { grid-column: 1 / -1; margin: 0.2rem 0 0; font-size: 0.75rem; font-weight: 800; text-align: center; }
 .patch-grid { display: grid; grid-template-columns: repeat(var(--patch-cols, 8), minmax(1.4rem, 1fr)); gap: 3px; }
 .patch-point {
   position: relative;
   aspect-ratio: 1;
-  background: var(--patch-free, linear-gradient(180deg, #f0f0f0, #c8c8c8));
-  border: 1px solid #333333;
+  background: var(--patch-free, var(--surface-2));
+  border: 1px solid var(--patch-point-border, var(--border));
   border-radius: 2px;
 }
 /* The jack: a small ring in the middle of each point. */
@@ -4909,12 +4985,12 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   content: "";
   position: absolute;
   inset: 28%;
-  border: 2px solid rgba(0, 0, 0, 0.45);
+  border: 2px solid var(--patch-jack, color-mix(in srgb, currentColor 45%, transparent));
   border-radius: 50%;
 }
 .patch-point > input { position: absolute; inset: 0; margin: 0; opacity: 0; }
-.patch-point:has(> input:checked) { background: var(--patch-on, linear-gradient(180deg, #8ad35a, #4e9a2a)); }
-.patch-point[data-kind="aes"]:has(> input:checked) { background: var(--patch-aes, linear-gradient(180deg, #ffe46b, #d6b21a)); }
+.patch-point:has(> input:checked) { background: var(--patch-on, var(--success)); }
+.patch-point[data-kind="aes"]:has(> input:checked) { background: var(--patch-aes, var(--warning)); }
 .patch-point:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 1px; }
 @media (forced-colors: active) {
   .patch-point:has(> input:checked), .assignable-key:has(> input:checked) { background: Highlight; }
@@ -5089,8 +5165,8 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 }
 
 /* The area under a dynamics curve, filled (console.js closes the path). */
-.dyn-graph-fill { fill: var(--dyn-graph-fill, rgba(140, 190, 255, 0.45)); stroke: none; }
-[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-fill { fill: var(--dyn-graph-fill-off, rgba(140, 190, 255, 0.18)); }
+.dyn-graph-fill { fill: var(--dyn-graph-fill, color-mix(in srgb, var(--eq-line, var(--accent)) 30%, transparent)); stroke: none; }
+[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-fill { fill: var(--dyn-graph-fill-off, color-mix(in srgb, var(--muted) 15%, transparent)); }
 
 /* --- .led-list — options chosen by a lit LED -------------------------------
  *   <ul class="led-list" role="radiogroup" aria-label="Program">
@@ -5123,6 +5199,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
  * The sixteen name-tag colours a large console offers. Each reads a
  * --tag-<name> token, so a theme can retune them. */
 .scribble[data-tag] { background: var(--_tag); color: var(--_tag-fg, #111111); border-top-color: transparent; text-align: center; }
+.scribble[data-tag] .scribble-num { color: inherit; opacity: 0.75; }
 .scribble[data-tag="black"] { --_tag: var(--tag-black, #111111); --_tag-fg: #ffffff; }
 .scribble[data-tag="dblue"] { --_tag: var(--tag-dblue, #1f3fd0); --_tag-fg: #ffffff; }
 .scribble[data-tag="dgreen"] { --_tag: var(--tag-dgreen, #1e7a2a); --_tag-fg: #ffffff; }
@@ -5157,11 +5234,11 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .assignable-nav > button {
   min-inline-size: 0;
   padding: 0;
-  background: var(--assignable-key-bg, linear-gradient(180deg, #4a54a0, #3a438b));
-  border: 1px solid var(--assignable-key-border, #6a74c0);
+  background: var(--assignable-key-bg, var(--key-bg, var(--surface-2)));
+  border: 1px solid var(--assignable-key-border, var(--key-border, var(--border)));
   border-radius: 2px;
 }
-.assignable-nav > button:active { background: var(--assignable-key-on, #b5bce8); }
+.assignable-nav > button:active { background: var(--assignable-key-on, var(--accent)); }
 .assignable-nav > :nth-child(1) { grid-area: 1 / 1 / 2 / 3; inline-size: 1.6rem; }
 .assignable-nav > :nth-child(2) { grid-area: 1 / 2 / 2 / 4; inline-size: 1.6rem; justify-self: end; }
 .assignable-nav > :nth-child(3) { grid-area: 2 / 2; }
@@ -5407,6 +5484,73 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   border-color: var(--window-pane-border, var(--input-border, var(--border)));
 }
 
+/* .window-tasks — the side pane of task groups beside a window's content
+   (XP's Explorer task pane). Each .window-task is a titled group: its
+   first child (a heading or <summary>) is the header, the rest the body. */
+.window-tasks {
+  display: grid;
+  align-content: start;
+  gap: var(--window-tasks-gap, var(--space-s, 0.75rem));
+  padding: var(--window-tasks-padding, var(--space-s, 0.75rem));
+  background: var(--window-tasks-bg, var(--surface-2));
+}
+.window-task {
+  border: 1px solid var(--window-task-border, var(--border));
+  border-radius: var(--window-task-radius, var(--radius));
+  background: var(--window-task-bg, var(--surface));
+  color: var(--window-task-fg, var(--text));
+  font-size: var(--window-task-font-size, inherit);
+  overflow: hidden;
+}
+.window-task > :first-child {
+  margin: 0;
+  padding: var(--window-task-header-pad, 0.35rem 0.6rem);
+  background: var(--window-task-header-bg, transparent);
+  color: var(--window-task-header-fg, inherit);
+  font-size: var(--window-task-header-font-size, 0.85rem);
+  font-weight: 700;
+}
+.window-task > :not(:first-child) { margin: 0; padding: var(--window-task-body-pad, 0.4rem 0.6rem); }
+/* A collapsible group is a <details> whose <summary> is the header; the
+   toggle sits at its end (a chevron by default, a theme's button image via
+   --window-task-toggle / --window-task-toggle-closed). */
+details.window-task > summary { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; cursor: var(--cursor-pointer, pointer); list-style: none; }
+details.window-task > summary::-webkit-details-marker { display: none; }
+details.window-task > summary > :is(h2, h3) { margin: 0; font: inherit; color: inherit; }
+details.window-task > summary::after {
+  content: "";
+  flex: none;
+  inline-size: var(--window-task-toggle-size, 1em);
+  block-size: var(--window-task-toggle-size, 1em);
+  background: var(--window-task-toggle, none) center / contain no-repeat;
+  background-color: var(--window-task-toggle-fg, currentColor);
+  -webkit-mask: var(--window-task-toggle-mask, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 10l4-4 4 4' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E")) center / contain no-repeat;
+  mask: var(--window-task-toggle-mask, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 10l4-4 4 4' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E")) center / contain no-repeat;
+}
+details.window-task:not([open]) > summary::after { rotate: var(--window-task-toggle-rotate, 180deg); background-image: var(--window-task-toggle-closed, var(--window-task-toggle, none)); }
+details.window-task > summary:focus-visible { outline: 2px solid var(--focus, var(--accent)); outline-offset: -2px; }
+.window-task > :not(:first-child) + :not(:first-child) { padding-block-start: 0; }
+.window-task a { color: var(--window-task-link-fg, var(--link, var(--accent))); }
+/* A .list inside a group is a plain column of task links, not a boxed list. */
+.window-task {
+  --list-bg: transparent;
+  --list-border-width: 0;
+  --list-radius: 0;
+  --list-rule: transparent;
+  --list-item-padding: var(--window-task-item-pad, 0.2em 0);
+  --list-item-fg: var(--window-task-link-fg, var(--link, var(--accent)));
+  --row-hover-bg: transparent;
+}
+@media (hover: hover) {
+  .window-task :is(a, label).list-item:hover { text-decoration: underline; color: var(--window-task-link-fg-hover, var(--window-task-link-fg, var(--link, var(--accent)))); }
+}
+/* The first, "special" group of a pane (XP: the place's own tasks). */
+.window-task.is-special > :first-child {
+  background: var(--window-task-special-header-bg, var(--window-task-header-bg, transparent));
+  color: var(--window-task-special-header-fg, var(--window-task-header-fg, inherit));
+}
+.window-task.is-special { background: var(--window-task-special-bg, var(--window-task-bg, var(--surface))); }
+
 /* Minimized and closed windows leave the screen (the inputs stay, so the
    task button and the Start menu can bring them back). */
 .desktop-window:has(> .window-minimize:checked, > .window-close:checked) > .modal { display: none; }
@@ -5425,18 +5569,28 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   outline-offset: 2px;
 }
 /* Inactive title bars: every window but the active one, which is the one
-   holding focus, else the switched-to one, else the topmost (last). */
+   holding focus, else the switched-to one, else the topmost (last). While
+   the Start menu is open it holds focus, so every window is inactive. */
 .desktop:has(.desktop-window:focus-within) .desktop-window:not(:focus-within),
 .desktop:not(:has(.desktop-window:focus-within)):has(.window-app:checked) .desktop-window:not(:has(> .window-app:checked)),
-.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) {
+.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)),
+.desktop:has(.start-menu:popover-open) .desktop-window {
   --_inactive: 1;
 }
 .desktop:has(.desktop-window:focus-within) .desktop-window:not(:focus-within) > .modal > .modal-header,
 .desktop:not(:has(.desktop-window:focus-within)):has(.window-app:checked) .desktop-window:not(:has(> .window-app:checked)) > .modal > .modal-header,
-.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) > .modal > .modal-header {
+.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) > .modal > .modal-header,
+.desktop:has(.start-menu:popover-open) .desktop-window > .modal > .modal-header {
   background: var(--window-header-bg-inactive, var(--modal-header-bg, transparent));
   color: var(--window-header-fg-inactive, var(--modal-header-fg, inherit));
   filter: var(--window-header-filter-inactive, saturate(0.45) opacity(0.85));
+}
+/* XP fades an inactive window's caption buttons into its paler title bar. */
+.desktop:has(.desktop-window:focus-within) .desktop-window:not(:focus-within) > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close),
+.desktop:not(:has(.desktop-window:focus-within)):has(.window-app:checked) .desktop-window:not(:has(> .window-app:checked)) > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close),
+.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close),
+.desktop:has(.start-menu:popover-open) .desktop-window > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close) {
+  opacity: var(--window-caption-opacity-inactive, 1);
 }
 
 /* A small monitor showing the wallpaper (Display Properties). */
@@ -5646,6 +5800,9 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   height: var(--start-menu-sub-icon-size, 1rem);
 }
 .start-menu li > :is(a, button, label) > span { display: flex; flex-direction: column; text-align: start; }
+/* "All Programs" is one line of text (its "All " is a columns-only span), not
+   a title over a subtitle. */
+.start-menu li.start-menu-all > :is(a, button) > span { display: block; white-space: nowrap; }
 .start-menu li > :is(a, button, label) > span > b { font-weight: 700; }
 .start-menu li > :is(a, button, label) small { font-size: 0.8em; opacity: 0.75; }
 .start-menu .has-submenu > :is(a, button)::after { margin-inline-start: auto; }
@@ -9839,7 +9996,7 @@ html[data-motion="reduced"] .track > .track-play::before { animation: none; }
 /* ---- Track rows ------------------------------------------------------------
  * <ol class="tracklist">
  *   <li class="track">
- *     <button class="track-play" aria-label="Play Night Drive"><span class="track-num">1</span><svg class="icon">…#icon-play</svg></button>
+ *     <button class="track-play" aria-label="Play track 1, Night Drive"><span class="track-num">1</span><svg class="icon">…#icon-play</svg></button>
  *     <img src="art.jpg" alt="">
  *     <span class="track-main"><span class="track-title">Night Drive</span><span class="track-artist">Lumen Coast</span></span>
  *     <span class="track-album">Harbour Lights</span>
@@ -10205,6 +10362,11 @@ html[data-motion="reduced"] .track > .track-play::before { animation: none; }
 
 @keyframes waveform-shimmer { to { background-position: -200% 0; } }
 .waveform:has(> input:disabled) { opacity: 0.5; }
+/* .waveform.is-static — display only: the input still paints played and
+   unplayed and the head (hide it with --waveform-head: transparent), but
+   it doesn't seek, so no hover preview and no pointer. */
+.waveform.is-static::before { content: none; }
+.waveform.is-static > input[type="range"] { pointer-events: none; }
 
 /* ---- Waveform regions, markers and hover time -------------------------------
  * <div class="waveform" data-hover-time="0:41" style="--hover: .68">
@@ -10485,7 +10647,8 @@ button.waveform-marker:focus-visible { outline: 2px solid var(--focus); outline-
  * Desktop: art and title | transport over the scrubber | extras. Tablet: the
  * scrubber takes its own row and the extras (volume, queue…) hide. Mobile and .is-mini: art, title, like and play/next only. As a
  * direct child of .app it takes the shell's status slot and sticks to the
- * bottom of the screen, clear of the home indicator. */
+ * bottom of the screen, clear of the home indicator; on a phone .app-main
+ * scrolls above it instead. */
 .now-playing {
   --_areas: "art meta like transport extras" "art meta like progress extras";
   --_cols: auto minmax(0, 1fr) auto minmax(0, 2fr) minmax(0, 1fr);
@@ -10556,6 +10719,11 @@ button.waveform-marker:focus-visible { outline: 2px solid var(--focus); outline-
     --_np-secondary: none;
     --_np-extras: none;
   }
+  /* On a phone the docked bar is a big share of the screen, so the shell
+     holds the screen height and .app-main scrolls above the bar: no row
+     ever sits under it. */
+  .app:has(> .now-playing) { block-size: 100dvh; }
+  .app:has(> .now-playing) > .app-main { overflow-y: auto; overscroll-behavior: contain; }
 }
 /* Mini player: the mobile layout at any width, as a card. */
 .now-playing.is-mini {
@@ -11744,13 +11912,18 @@ html:is([data-motion="reduced"],[data-motion="none"]) :is(:is(.is-paused,.is-pau
  * the --z-* scale from there. Docs: docs/components/navigation.md. */
 
 /* --- Closable tabs (#37) ---------------------------------------------------
- *   <div class="tabs is-scroll" role="tablist">
- *     <div class="tab is-active"><button role="tab" aria-selected="true">a.css</button>
- *       <button class="btn-close" tabindex="-1" aria-label="Close a.css"></button></div>
+ *   <div class="tabs is-scroll">
+ *     <div class="tabs" role="tablist" aria-label="Open files">
+ *       <div class="tab is-active"><button role="tab" aria-selected="true">a.css</button>
+ *         <button class="btn-close" tabindex="-1" aria-hidden="true" aria-label="Close a.css"></button></div>
+ *     </div>
  *     <button class="tab-add" aria-label="New tab"></button>
  *   </div>
  * A <button> can't hold a second button, so a closable .tab is a wrapper:
- * the first child is the tab itself, the .btn-close sits beside it. */
+ * the first child is the tab itself, the .btn-close sits beside it. A
+ * tablist may own only tabs, so the add button sits beside an inner
+ * .tabs[role=tablist] that lends its tabs to the outer strip. */
+.tabs > .tabs { display: contents; }
 .tabs.is-scroll {
   /* max-inline-size: a theme may make .tabs inline-flex (a capsule), which
      would otherwise grow with its tabs and never scroll. */
@@ -11761,7 +11934,7 @@ html:is([data-motion="reduced"],[data-motion="none"]) :is(:is(.is-paused,.is-pau
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb, var(--border)) transparent;
 }
-.tabs.is-scroll > * { flex-shrink: 0; }
+.tabs.is-scroll > *, .tabs.is-scroll > .tabs > * { flex-shrink: 0; }
 .tab:has(> .btn-close) {
   display: inline-flex;
   align-items: center;
@@ -14246,7 +14419,7 @@ pre.line-numbers > code:has(> .line-numbers-rows) { position: relative; }
   inline-size: calc(var(--_otp-n) * var(--otp-cell-size, 2.75rem) + (var(--_otp-n) - 1) * var(--_otp-gap));
   max-inline-size: 100%;
   block-size: var(--otp-height, 3.25rem);
-  overflow: hidden;
+  overflow: clip;
   direction: ltr;
 }
 .otp > span {
@@ -15477,6 +15650,10 @@ html[data-surface="signage"] { font-size: var(--signage-root, 1.5vh); overflow: 
   html[data-surface="signage"] { font-size: var(--signage-root-portrait, 1.5vw); }
 }
 html[data-surface="signage"] body { overflow: hidden; }
+/* Every pixel of a screen is content, so page-level theme art stands down:
+   the XL gutter layer here, and any corner emblem a theme fixes over the
+   page (themes hide their own under the same selector). */
+html[data-surface="signage"]::before { content: none; }
 .safe-area {
   box-sizing: border-box;
   padding:
@@ -16590,7 +16767,7 @@ html[data-pointer="touch"] { --_cell-pencil: inline-block; }
 .table tbody tr:nth-child(n):is(:hover, :focus-within):not(.table-empty, .table-more) {
   --_row-tint: var(--row-hover-bg, color-mix(in srgb, var(--accent) 8%, transparent));
 }
-.table tbody tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))):nth-child(n) { --_row-tint: var(--row-active-bg, transparent); }
+.table tbody tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))):not(.is-selected, :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))):nth-child(n) { --_row-tint: var(--row-active-bg, transparent); }
 .table tbody tr:is(.is-selected, :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))):nth-child(n) {
   --_row-tint: var(--row-selected-bg, color-mix(in srgb, var(--accent) 18%, transparent));
 }
@@ -18278,12 +18455,12 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   background: var(--app-bg, transparent);
 }
 
-/* An app that never adds the rail element at all (not even an empty one)
-   has no box for :empty to match, so a theme's --app-columns would
-   still reserve a blank gutter next to .app-main. Collapse the column
+/* An app that never adds the rail element at all (not even an empty one),
+   or marks it `hidden`, has no box for :empty to match, so a theme's
+   --app-columns would still reserve a blank gutter next to .app-main. Collapse the column
    track itself in that case. Browsers without :has() just keep the blank
    gutter — a graceful degrade, not a break. */
-.app:not(:has(> .app-rail)) {
+.app:not(:has(> .app-rail:not([hidden]))) {
   grid-template-areas: var(--app-areas-no-rail, "bar" "main" "status");
   grid-template-columns: var(--app-columns-no-rail, minmax(0, 1fr));
 }
@@ -18299,7 +18476,9 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   min-width: 0;
   padding: var(--app-bar-padding, 0.6rem 1rem);
   background: var(--app-bar-bg, var(--nav-bg, var(--surface)));
-  color: var(--app-bar-fg, inherit);
+  /* Plain text on the bar (a clock, a title) follows the bar, not the page:
+     --app-bar-fg, else --nav-item-fg, which check.py holds to 4.5:1 here. */
+  color: var(--app-bar-fg, var(--nav-item-fg, inherit));
   border-bottom: var(--app-bar-rule-width, 1px) solid var(--app-bar-rule, var(--border));
   border-radius: var(--app-bar-radius, 0);
   min-height: var(--app-bar-height, auto);
@@ -18325,6 +18504,8 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
 .app-rail:empty {
   display: var(--app-rail-empty-display, none);
 }
+/* `hidden` drops the rail in every theme, decorative or not. */
+.app-rail[hidden] { display: none !important; }
 .app-rail {
   grid-area: rail;
   display: var(--app-rail-display, none);
@@ -18477,7 +18658,7 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   .app-rail { display: none !important; }
   .app-status { position: fixed; inset-inline-start: env(viewport-segment-left 1 0); inset-block-end: 0; inline-size: env(viewport-segment-width 1 0); }
   .app-main { padding-block-end: var(--app-fold-status-space, 3rem); }
-  .app:not(:has(> .app-rail)) {
+  .app:not(:has(> .app-rail:not([hidden]))) {
     grid-template-areas: var(--app-fold-book-areas, "bar main");
     grid-template-columns: env(viewport-segment-width 0 0) env(viewport-segment-width 1 0);
   }
@@ -18493,7 +18674,7 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   .app-rail { display: none !important; }
   .app-status { position: fixed; inset-inline-start: 0; inset-block-end: 0; inline-size: 100%; }
   .app-main { padding-block-end: var(--app-fold-status-space, 3rem); }
-  .app:not(:has(> .app-rail)) {
+  .app:not(:has(> .app-rail:not([hidden]))) {
     grid-template-areas: var(--app-fold-tabletop-areas, "bar" "main");
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: env(viewport-segment-height 0 0) env(viewport-segment-height 0 1);
@@ -18577,21 +18758,60 @@ html[data-theme="vaporwave"] {
      token makes. */
   --on-success: #052e1c;
   --radius: 0.4rem;
-  --font: "Segoe UI", Verdana, sans-serif;
-  --font-mono: Consolas, monospace;
+  /* Japanese faces follow the Latin ones, so katakana in brand copy renders
+     in one gothic wherever it is installed. */
+  --font: "Segoe UI", "Trebuchet MS", Verdana, "DejaVu Sans", "Noto Sans JP", "Noto Sans CJK JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+  --font-mono: Consolas, "Liberation Mono", "DejaVu Sans Mono", "Noto Sans Mono", monospace;
   --flare: #01cdfe;
 
-  --btn-bg: linear-gradient(90deg, var(--accent), var(--accent-2));
-  --btn-fg: #1a0b2e;
-  --btn-weight: 700;
-  --btn-border-width: 0;
+  /* Plain buttons are the quiet purple chip; the gradient is kept for the
+     primary and the selected item, so a group shows which one is on. */
+  --btn-bg: var(--surface-2);
+  --btn-fg: var(--text);
+  --toggle-btn-bg-on: linear-gradient(90deg, var(--accent), var(--accent-2));
+  --toggle-btn-fg-on: #1a0b2e;
+  --toggle-btn-border-on: transparent;
+  --segmented-item-bg-active: linear-gradient(90deg, var(--accent), var(--accent-2));
+  --segmented-item-fg-active: #1a0b2e;
   --btn-shadow-hover: 0 0 16px rgba(255, 113, 206, 0.55), 0 0 16px rgba(1, 205, 254, 0.35);
   --focus: var(--accent-2);
-  --focus-ring: 0 0 0 3px rgba(1, 205, 254, 0.4);
+  --focus-ring: 0 0 0 2px var(--accent-2), 0 0 12px var(--accent-2);
   --input-bg: #150822;
-  --panel-shadow: inset 0 0 24px rgba(255, 113, 206, 0.08);
+  /* A pink edge ring; the blurred two-hue bloom is added below for fine
+     pointers only (blurred shadows on every card cost ~4ms a frame when a
+     phone scrolls). */
+  --panel-shadow: 0 0 0 1px rgba(255, 113, 206, 0.35);
+  /* The track is the pair itself (core clips it to the content box, so the
+     --tap-min hit area is untouched); the thumb glows. */
+  --slider-bg: linear-gradient(90deg, var(--accent), var(--accent-2));
+  --slider-thumb-shadow: 0 0 8px var(--accent);
   --modal-header-bg: linear-gradient(90deg, var(--accent), var(--accent-2));
   --modal-header-fg: #1a0b2e;
+  /* Panel and card headers carry the sunset: a 2px bar-gradient rule on
+     their bottom edge over a faint magenta wash. */
+  --panel-header-bg:
+    linear-gradient(90deg, #ff71ce, #b967ff 50%, #01cdfe) 0 100% / 100% 2px no-repeat,
+    repeating-linear-gradient(180deg, transparent 0 2px, rgba(1, 205, 254, 0.06) 2px 3px),
+    linear-gradient(90deg, rgba(255, 113, 206, 0.14), transparent 70%);
+  /* Every surface carries the pair as a 2px top edge (inside the border, so
+     the radius survives). The two color-mix() consumers get a plain fill. */
+  --panel-bg: linear-gradient(90deg, #ff71ce, #01cdfe) 0 0 / 100% 2px no-repeat, var(--surface);
+  --list-card-bg: var(--surface);
+  --ranked-item-bg: var(--surface);
+  /* Data series run the sunset ramp, not the status hues: pink, cyan,
+     violet, orange, gold. Status tokens keep their meaning elsewhere. */
+  --chart-series-1: #ff71ce;
+  --chart-series-2: #01cdfe;
+  --chart-series-3: #b967ff;
+  --chart-series-4: #ff8c3a;
+  --chart-series-5: #ffd319;
+  --meter-low: var(--accent-2);
+  --meter-mid: #b967ff;
+  /* Buttons speak the display face (one weight, so no faux bold). */
+  --btn-weight: 400;
+  --btn-tracking: 0.06em;
+  --btn-transform: uppercase;
+  --btn-font-size: 0.8em;
   --table-head-fg: var(--accent-2);
   --table-head-rule: var(--accent-2);
   --row-selected-bg: rgba(255, 113, 206, 0.12);
@@ -18603,6 +18823,26 @@ html[data-theme="vaporwave"] {
   --indicator-track: var(--hairline);
 }
 
+@media (hover: hover) and (pointer: fine) {
+  html[data-theme="vaporwave"] {
+    --panel-shadow: 0 0 0 1px rgba(255, 113, 206, 0.35), 0 0 18px -4px rgba(255, 113, 206, 0.45), 0 0 28px -8px rgba(1, 205, 254, 0.35);
+    /* Full-frame CRT scanlines, faint (2.5%) so text contrast is untouched;
+       fine pointers only, given the phone render budget. */
+    --panel-bg:
+      linear-gradient(90deg, #ff71ce, #01cdfe) 0 0 / 100% 2px no-repeat,
+      repeating-linear-gradient(180deg, transparent 0 2px, rgba(1, 205, 254, 0.025) 2px 3px),
+      var(--surface);
+  }
+}
+/* Phones and touch scroll on a budget: flat header strip and panel fill
+   (the pair's top edge becomes a plain pink border), no scanline layers. */
+@media (max-width: 480px), (pointer: coarse) {
+  html[data-theme="vaporwave"] {
+    --panel-header-bg: linear-gradient(90deg, rgba(255, 113, 206, 0.14), transparent 70%);
+    --panel-bg: var(--surface);
+  }
+}
+
 /* Chrome text: a magenta-to-cyan gradient clipped to the glyphs, the
    signature synthwave title treatment. */
 html[data-theme="vaporwave"] h1,
@@ -18611,15 +18851,113 @@ html[data-theme="vaporwave"] h3 {
   font-family: "Audiowide", var(--font);
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  background-image: linear-gradient(90deg, var(--accent), var(--accent-2));
+  /* Led by the references' hot pink (#ff2975, 5.2:1 on --bg) so the
+     chrome reads neon rather than pastel. */
+  background-image: linear-gradient(90deg, #ff2975, var(--accent) 35%, var(--accent-2));
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
 }
+/* The gradient paints the heading's own box, so the box hugs the glyphs
+   (fit-content): every title then runs the full magenta-to-cyan sweep,
+   however short. It stays a block, so inline badges beside it keep their
+   own line; in core's centred blocks (and inline text-align: center) auto
+   margins centre it again. The glyphs get 4px of the box to sit inside (v5
+   edge rule); the matching negative margin keeps the layout where it was.
+   :where() keeps it at reset weight, so any page or component margin on a
+   heading still wins. */
+:where(html[data-theme="vaporwave"]) :is(h1, h2, h3) {
+  width: fit-content;
+  max-width: calc(100% + 0.5rem);
+  padding: 0.25rem;
+  margin: -0.25rem;
+}
+:where(html[data-theme="vaporwave"]) :where(.hero, .band-head, .empty-state, .dropzone, [style*="text-align: center"], [style*="text-align:center"]) :is(h1, h2, h3) {
+  margin-inline: auto;
+}
+html[data-theme="vaporwave"] .panel > .panel-header > :is(h1, h2, h3) { margin: -0.25rem; }
+/* Neon bloom on the big titles; drop-shadow follows the clipped glyphs. */
+html[data-theme="vaporwave"] h1,
+html[data-theme="vaporwave"] h2 { filter: drop-shadow(0 0 6px rgba(255, 113, 206, 0.45)); }
+/* Phones and touch: the filter is an offscreen layer per heading, too
+   costly while scrolling; the gradient alone carries the title there. */
+@media (max-width: 480px), (pointer: coarse) {
+  html[data-theme="vaporwave"] :is(h1, h2) { filter: none; }
+}
+/* Card titles are short boxes: tighter tracking keeps them on one line. */
+html[data-theme="vaporwave"] h3 { letter-spacing: 0.08em; }
+
+/* Primary actions get the pair too (core resets .btn-primary to flat
+   --accent); dark ink clears both stops (7.5:1 / 9.9:1). */
+/* A fader runs the pair bottom-to-top along its own thin track, centred
+   in the --tap-min wide box (core's padding is logical, and the fader's
+   vertical writing mode turns it top/bottom, so the content box alone
+   would paint the full 24-44px width). */
+html[data-theme="vaporwave"] .slider.is-vertical {
+  --slider-bg: linear-gradient(0deg, var(--accent), var(--accent-2)) 50% 50% / var(--slider-height, 0.35rem) 100% no-repeat;
+}
+
+html[data-theme="vaporwave"] .btn-primary {
+  --btn-bg: linear-gradient(90deg, var(--accent), var(--accent-2));
+  --btn-fg: #1a0b2e;
+  --btn-border: transparent;
+}
+
+/* Chrome titles share the display face, so the wide outrun type is not
+   confined to page headings. Body copy and tables stay on --font. */
+html[data-theme="vaporwave"] :is(.nav-brand, .panel-header, .modal-header, .tab, .stat-label, .btn, .table th) {
+  font-family: "Audiowide", var(--font);
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+/* Audiowide runs ~25% wider than the body face; a tab strip keeps the
+   width it had. */
+html[data-theme="vaporwave"] .tab { font-size: 0.8125rem; letter-spacing: 0.01em; }
+/* A rising sparkline is cyan, not status mint; the trend text keeps it. */
+html[data-theme="vaporwave"] .sparkline.is-up { --sparkline-stroke: var(--accent-2); }
+/* Big figures (KPI values, plan prices) are display type too; Audiowide has
+   one weight, so no faux bold. */
+html[data-theme="vaporwave"] :is(.stat-value, .price) {
+  font-family: "Audiowide", var(--font);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+/* KPI figures get chrome: a white-to-pink-to-ice vertical fill (every stop
+   11:1+ on --surface), quieter than the headings' pink-cyan sweep. Not on
+   .price, whose was/sale/period children carry their own colors. */
+html[data-theme="vaporwave"] .stat-value {
+  /* 4px of painted box around the glyphs (v5 edge rule), given back by
+     the negative margin so the KPI row does not move. */
+  padding: 0.25rem;
+  margin: -0.25rem;
+  background-image: linear-gradient(180deg, #ffffff 30%, #ffd1f0 60%, #b9f3ff);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+/* Core's status labels run ~12px; a touch larger reads easier on glow. */
+html[data-theme="vaporwave"] .status { font-size: 0.8125rem; }
 
 html[data-theme="vaporwave"] .panel,
 html[data-theme="vaporwave"] .modal { border: 1px solid var(--border); }
+
+/* Disabled is a flat dashed chip, never a dimmed gradient that could read
+   as the selected primary. */
+html[data-theme="vaporwave"] :is(.btn:disabled, .btn[aria-disabled="true"]) {
+  --btn-bg: var(--surface-2);
+  --btn-fg: var(--muted);
+  --btn-border: var(--border);
+  border-style: dashed;
+}
+
+/* Alerts: the tone tints the fill (12%) as well as the edge. */
+html[data-theme="vaporwave"] .alert-info { --alert-bg: color-mix(in srgb, var(--accent) 12%, var(--surface-2)); }
+html[data-theme="vaporwave"] .alert-success { --alert-bg: color-mix(in srgb, var(--success) 12%, var(--surface-2)); }
+html[data-theme="vaporwave"] .alert-warning { --alert-bg: color-mix(in srgb, var(--warning) 12%, var(--surface-2)); }
+html[data-theme="vaporwave"] .alert-danger { --alert-bg: color-mix(in srgb, var(--danger) 12%, var(--surface-2)); }
 
 /* --- Layout ------------------------------------------------------------ *
  * An outrun horizon: a gradient sunset bar, a grid-line floor under the
@@ -18627,15 +18965,36 @@ html[data-theme="vaporwave"] .modal { border: 1px solid var(--border); }
 html[data-theme="vaporwave"] {
   --app-padding: 0.6rem;
   --app-gap: 0.6rem;
+  /* The core pair, magenta through violet to cyan. */
   --app-bar-bg: linear-gradient(90deg, #ff71ce, #b967ff 50%, #01cdfe);
   --app-bar-fg: #1a0b2e;
   --app-bar-rule-width: 0;
   --app-bar-height: 2.6rem;
-  --app-main-bg: var(--bg);
-  --app-main-padding: 1.1rem;
+  /* The well is the void itself (transparent onto --bg) over a fixed
+     starry sky (body::before below). The sun is the well's own background:
+     the references' gold-to-magenta half disc, slits widening toward the
+     horizon, pinned to the bottom of the well's bottom padding (sun height
+     plus a margin), so it sets on the status strip's horizon rule at full
+     strength, never sits behind content, and scrolls with the page (a
+     static image: no fixed layer, no scroll-driven animation). */
+  --vw-haze: #3d1250;
+  --vw-sun: clamp(11rem, 24vw, 22rem);
+  --app-main-bg: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-30 -30 260 130'><defs><radialGradient id='h' gradientUnits='userSpaceOnUse' cx='100' cy='100' r='130'><stop offset='.7' stop-color='%23ff2975' stop-opacity='.4'/><stop offset='.85' stop-color='%23ff8c3a' stop-opacity='.14'/><stop offset='1' stop-color='%23ff2975' stop-opacity='0'/></radialGradient><linearGradient id='g' gradientUnits='userSpaceOnUse' x1='0' y1='0' x2='0' y2='100'><stop offset='0' stop-color='%23ffd319'/><stop offset='.45' stop-color='%23ff8c3a'/><stop offset='.75' stop-color='%23ff2975'/><stop offset='1' stop-color='%23c800c8'/></linearGradient><clipPath id='c'><path d='M0 100A100 100 0 0 1 200 100Z'/></clipPath></defs><rect x='-30' y='-30' width='260' height='130' fill='url(%23h)'/><g clip-path='url(%23c)' fill='url(%23g)'><rect width='200' height='42'/><rect y='44' width='200' height='9'/><rect y='56' width='200' height='8'/><rect y='68.5' width='200' height='7.5'/><rect y='82' width='200' height='6'/><rect y='95' width='200' height='5'/></g></svg>") 50% 100% / calc(var(--vw-sun) * 1.3) calc(var(--vw-sun) * 0.65) no-repeat;
+  --app-main-padding: 1.1rem 1.1rem calc(var(--vw-sun) / 2 + 0.75rem);
+  --app-main-padding-tablet: var(--space-m) var(--space-m) calc(var(--vw-sun) / 2 + 0.75rem);
+  --app-main-padding-mobile: var(--space-s) var(--space-s) calc(var(--vw-sun) / 2 + 0.75rem);
   --app-status-bg: #150822;
   --app-status-fg: var(--accent-2);
-  --app-status-rule: var(--border);
+  /* The text rides the top band; the bottom padding is the floor's bright
+     near rows, so no grid line ever crosses a glyph. */
+  --app-status-padding: 0.45rem 1rem var(--vw-floor);
+  /* The floor band's depth: deeper on wider screens (below). */
+  --vw-floor: 2.4rem;
+  /* The strip's top edge is the glowing horizon the sun sets on. */
+  --app-status-rule: #ff2975;
+}
+@media (min-width: 768px) {
+  html[data-theme="vaporwave"] { --vw-floor: 3.75rem; }
 }
 /* The bar is a bright magenta-purple-cyan gradient — .nav-brand/-item's
    default colors were tuned for the dark page background and go
@@ -18653,108 +19012,81 @@ html[data-theme="vaporwave"] .app-bar {
   --nav-item-bg-active: rgba(26, 11, 46, 0.15);
 }
 html[data-theme="vaporwave"] .app-bar .nav-brand,
-html[data-theme="vaporwave"] .app-bar .nav-item {
-  text-shadow: 0 0 4px rgba(255, 255, 255, 0.9), 0 0 1px rgba(255, 255, 255, 0.9);
+html[data-theme="vaporwave"] .app-bar .nav-item,
+html[data-theme="vaporwave"] .app-bar .breadcrumb-item {
+  text-shadow: 0 0 2px rgba(255, 255, 255, 0.6);
 }
 
-/* The horizon: a striped sun disc over a real converging perspective grid —
-   the genre's single most iconic composition, previously reduced to a
-   flat repeating-line pattern that barely registered as a floor, let
-   alone a horizon. Confined to the status strip's own stacking context so
-   it never interferes with reading its text. */
+/* The horizon: the strip's top edge (--app-status-rule) is the glowing
+   pink line, pulled up over the grid gap so the sun at the foot of the
+   well (the well's background) sets right on it. Under it the floor fills the
+   strip, in its own stacking context (z-index -1 under the text). */
 html[data-theme="vaporwave"] .app-status {
   position: relative;
   overflow: hidden;
   isolation: isolate;
+  margin-block-start: calc(-1 * var(--app-gap, 0px));
+  box-shadow: 0 -2px 10px rgba(255, 41, 117, 0.55);
+  text-shadow: 0 0 2px #150822, 0 0 4px #150822;
 }
-html[data-theme="vaporwave"] .app-status::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: -0.9rem;
-  width: 1.6rem;
-  height: 1.6rem;
-  transform: translateX(-50%);
-  border-radius: 50%;
-  background:
-    repeating-linear-gradient(180deg, transparent 0 2px, #150822 2px 4px),
-    linear-gradient(180deg, #ff71ce, #ffcc66 55%, #01cdfe);
-  z-index: -1;
-  opacity: 0.9;
-}
+/* The floor, with no 3D transform so every line stays continuous: cyan
+   rays fanning from a vanishing point above the strip, and pink
+   cross-lines spaced wider toward the viewer. Soft-edged stops keep each
+   line anti-aliased; the mask fades the rows behind the text. */
 html[data-theme="vaporwave"] .app-status::after {
   content: "";
   position: absolute;
-  inset: 0.4rem 0 -1rem 0;
+  /* Only the --vw-floor bottom padding band (lengths, not %), so a tall
+     strip such as a taskbar never puts a ray or cross-line behind its text. */
+  inset: auto 0 0;
+  height: var(--vw-floor);
   background-image:
-    linear-gradient(90deg, rgba(1, 205, 254, 0.5) 1px, transparent 1px),
-    linear-gradient(0deg, rgba(1, 205, 254, 0.4) 1px, transparent 1px);
-  background-size: 2rem 100%, 100% 0.7rem;
-  transform: perspective(120px) rotateX(55deg);
-  transform-origin: center top;
+    /* Each cross-line is a hot core with a soft magenta bloom either side. */
+    linear-gradient(180deg,
+      transparent calc(18% - 3px), rgba(255, 41, 117, 0.3) calc(18% - 1px), #ff71ce 18%, rgba(255, 41, 117, 0.3) calc(18% + 1px), transparent calc(18% + 3px),
+      transparent calc(38% - 3px), rgba(255, 41, 117, 0.3) calc(38% - 1px), #ff71ce 38%, rgba(255, 41, 117, 0.3) calc(38% + 1px), transparent calc(38% + 3px),
+      transparent calc(64% - 4.5px), rgba(255, 41, 117, 0.3) calc(64% - 1.5px), #ff71ce 64%, rgba(255, 41, 117, 0.3) calc(64% + 1.5px), transparent calc(64% + 4.5px),
+      transparent calc(94% - 4.5px), rgba(255, 41, 117, 0.3) calc(94% - 1.5px), #ff71ce 94%, rgba(255, 41, 117, 0.3) calc(94% + 1.5px), transparent calc(94% + 4.5px)),
+    repeating-conic-gradient(from 0deg at 50% calc(-2 * var(--vw-floor)), transparent 0deg, rgba(1, 205, 254, 0.25) 0.1deg, #01cdfe 0.3deg, rgba(1, 205, 254, 0.25) 0.5deg, transparent 0.6deg, transparent 5deg);
+  mask-image: linear-gradient(transparent, #000 0.9rem);
+  -webkit-mask-image: linear-gradient(transparent, #000 0.9rem);
   z-index: -1;
 }
+/* A desktop taskbar has no reserved bottom band (its buttons fill the
+   strip), so it keeps the horizon rule and drops the floor. */
+html[data-theme="vaporwave"] .app-status.desktop-bar::after { display: none; }
 
-/* Page-level signature chrome: the sun-disc + grid horizon is the genre's
-   single most iconic composition (per this file's own header comment), but
-   a version merely painted BEHIND the page (negative z-index) is invisible
-   wherever the app shell puts any opaque surface in front of it — which is
-   everywhere, since .app-main and every panel/card fill their whole
-   box with a solid --surface/--bg color. That left only a thin
-   sliver visible in the status strip. Fixed here by anchoring the motif to
-   a genuinely visible zone instead: a fixed corner badge that paints ABOVE
-   the page content (positive z-index, but well under any real overlay —
-   modals/toasts start at z-index 1000+). Every fill stays a translucent
-   rgba/gradient rather than a flat opaque color, so whatever sits under the
-   corner — page background, a card edge, nav — still shows through and
-   stays legible; pointer-events: none keeps it from ever intercepting a
-   click. */
-html[data-theme="vaporwave"] body {
-  position: relative;
-}
-html[data-theme="vaporwave"] body::before,
-html[data-theme="vaporwave"] body::after {
+/* The sky, pinned to the viewport under the whole shell (z-index -1 over
+   the page background), so panels cover it and it shows in the well's
+   gaps: a sparse star field (one dot per wide, prime-sized tile, so no rows
+   or grid show) over a purple sky that deepens to the warm haze and an orange
+   glow at the horizon. One still layer, composited once: nothing on it
+   animates or repaints on scroll. */
+html[data-theme="vaporwave"] body::before {
   content: "";
   position: fixed;
-  top: 0;
-  right: 0;
+  inset: 0;
   pointer-events: none;
-  z-index: var(--z-sticky);
-}
-html[data-theme="vaporwave"] body::before {
-  /* The sun disc, a fixed emblem in the top-right corner of the viewport —
-     always on screen regardless of scroll position or page length. */
-  top: 1rem;
-  right: 1rem;
-  width: 8rem;
-  height: 8rem;
-  border-radius: 50%;
+  z-index: -1;
+  will-change: transform;
+  contain: strict;
   background:
-    repeating-linear-gradient(180deg, transparent 0 10%, rgba(21, 8, 34, 0.55) 10% 20%),
-    linear-gradient(180deg, rgba(255, 113, 206, 0.9), rgba(255, 204, 102, 0.85) 55%, rgba(1, 205, 254, 0.9));
-  opacity: 0.65;
-}
-html[data-theme="vaporwave"] body::after {
-  /* The converging perspective grid, fanning out beneath the sun corner
-     like a horizon glimpsed from the side. */
-  top: 3.6rem;
-  right: 0;
-  width: 15rem;
-  height: 9rem;
-  background-image:
-    linear-gradient(90deg, rgba(1, 205, 254, 0.6) 1px, transparent 1px),
-    linear-gradient(0deg, rgba(1, 205, 254, 0.5) 1px, transparent 1px);
-  background-size: 1.6rem 100%, 100% 1rem;
-  transform: perspective(220px) rotateX(58deg);
-  transform-origin: top right;
-  opacity: 0.55;
-  mask-image: linear-gradient(200deg, black 0 55%, transparent 85%);
-  -webkit-mask-image: linear-gradient(200deg, black 0 55%, transparent 85%);
+    radial-gradient(1.5px 1.5px at 30% 40%, rgba(255, 255, 255, 0.85), transparent) 0 0 / 1031px 487px,
+    radial-gradient(1px 1px at 70% 20%, rgba(255, 255, 255, 0.7), transparent) 0 0 / 773px 353px,
+    radial-gradient(1.5px 1.5px at 15% 75%, rgba(1, 205, 254, 0.7), transparent) 0 0 / 1213px 571px,
+    radial-gradient(1px 1px at 55% 60%, rgba(255, 255, 255, 0.6), transparent) 0 0 / 887px 419px,
+    radial-gradient(1.5px 1.5px at 85% 85%, rgba(255, 113, 206, 0.7), transparent) 0 0 / 1301px 613px,
+    radial-gradient(1px 1px at 40% 10%, rgba(255, 255, 255, 0.75), transparent) 0 0 / 659px 293px,
+    radial-gradient(1px 1px at 10% 30%, rgba(255, 255, 255, 0.65), transparent) 0 0 / 947px 331px,
+    radial-gradient(1.5px 1.5px at 60% 90%, rgba(255, 255, 255, 0.8), transparent) 0 0 / 1109px 457px,
+    radial-gradient(ellipse 50% 30% at 50% 100%, rgba(255, 140, 58, 0.2), transparent),
+    radial-gradient(ellipse 80% 45% at 50% 100%, rgba(255, 41, 117, 0.12), transparent),
+    linear-gradient(#1a0b2e, #24103d 35%, var(--vw-haze) 60%);
 }
 
 /* --- Print ----------------------------------------------------------------
- * Two things core's generic print reset can't reach: the sun-disc/grid
- * emblem lives entirely on ::before/::after pseudo-elements with their own
+ * Two things core's generic print reset can't reach: the sunset
+ * layers live entirely on ::before/::after pseudo-elements with their own
  * explicit `background`, which core only clears on the real elements it
  * lists (body and .app-status themselves go background:none, but a
  * pseudo-element is a separate paint layer, not inherited); and the
@@ -18764,25 +19096,28 @@ html[data-theme="vaporwave"] body::after {
  * -webkit-text-fill-color is reset too. */
 /* --- v5 layout (PLAN.md §2–§3) -------------------------------------------
  * No breakpoints for the shell: core's tiers stack bar, main and status on
- * phones and tablets. The fixed sun-and-grid corner emblem sits over the
- * page, which on a touch screen is right where the bar's actions and nav
- * land, so up to 900px it stands down; the gradient bar, chrome headings
- * and the status strip's sunset horizon carry the look there. On XL it
- * sits in the right-hand gutter, over the gutter art. */
-@media (max-width: 900px) {
-  html[data-theme="vaporwave"] body::before,
-  html[data-theme="vaporwave"] body::after { display: none; }
+ * phones and tablets. The fixed sky and the well's sun are the same at every tier;
+ * on XL the gutter floor joins it. */
+/* XL: the sky drops one layer so core's gutter-art layer (html::before,
+   also z-index -1) paints the floor over it. */
+@media (min-width: 1801px) {
+  html[data-theme="vaporwave"] body::before { z-index: -2; }
 }
+/* On a signage screen the whole frame is content: no sunset layers. */
+html[data-theme="vaporwave"][data-surface="signage"] body::before { display: none; }
+html[data-theme="vaporwave"][data-surface="signage"] { --app-main-bg: transparent; }
 
 /* XL gutters: the outrun floor. A perspective grid recedes to a vanishing
    point behind the app (rays in cyan from the centre of the screen,
    cross-lines in pink spaced wider toward the viewer), so each gutter shows
-   the floor sweeping in from the side. Faint (each line ~1.3:1 on --bg,
-   far less on average) and still. */
+   the floor sweeping in from the side, under a glowing #ff2975 horizon at
+   42% with only stars above it. Every line lies below the horizon (rays
+   96-264deg). Still, and never behind content. */
 html[data-theme="vaporwave"] {
   --app-gutter-art:
-    linear-gradient(transparent calc(42% - 1px), rgba(255, 113, 206, 0.2) calc(42% - 1px) 42%, transparent 42%, transparent calc(43.2% - 1px), rgba(255, 113, 206, 0.2) calc(43.2% - 1px) 43.2%, transparent 43.2%, transparent calc(45% - 1px), rgba(255, 113, 206, 0.2) calc(45% - 1px) 45%, transparent 45%, transparent calc(47.5% - 1px), rgba(255, 113, 206, 0.2) calc(47.5% - 1px) 47.5%, transparent 47.5%, transparent calc(51% - 1px), rgba(255, 113, 206, 0.2) calc(51% - 1px) 51%, transparent 51%, transparent calc(55.5% - 1px), rgba(255, 113, 206, 0.2) calc(55.5% - 1px) 55.5%, transparent 55.5%, transparent calc(61% - 1px), rgba(255, 113, 206, 0.2) calc(61% - 1px) 61%, transparent 61%, transparent calc(68% - 1px), rgba(255, 113, 206, 0.2) calc(68% - 1px) 68%, transparent 68%, transparent calc(76.5% - 1px), rgba(255, 113, 206, 0.2) calc(76.5% - 1px) 76.5%, transparent 76.5%, transparent calc(87% - 1px), rgba(255, 113, 206, 0.2) calc(87% - 1px) 87%, transparent 87%, transparent 0),
-    conic-gradient(from 0deg at 50% 42%, transparent 90deg, transparent 95.88deg, rgba(1, 205, 254, 0.14) 95.88deg 96.12deg, transparent 96.12deg, transparent 101.88deg, rgba(1, 205, 254, 0.14) 101.88deg 102.12deg, transparent 102.12deg, transparent 107.88deg, rgba(1, 205, 254, 0.14) 107.88deg 108.12deg, transparent 108.12deg, transparent 113.88deg, rgba(1, 205, 254, 0.14) 113.88deg 114.12deg, transparent 114.12deg, transparent 119.88deg, rgba(1, 205, 254, 0.14) 119.88deg 120.12deg, transparent 120.12deg, transparent 125.88deg, rgba(1, 205, 254, 0.14) 125.88deg 126.12deg, transparent 126.12deg, transparent 131.88deg, rgba(1, 205, 254, 0.14) 131.88deg 132.12deg, transparent 132.12deg, transparent 137.88deg, rgba(1, 205, 254, 0.14) 137.88deg 138.12deg, transparent 138.12deg, transparent 143.88deg, rgba(1, 205, 254, 0.14) 143.88deg 144.12deg, transparent 144.12deg, transparent 149.88deg, rgba(1, 205, 254, 0.14) 149.88deg 150.12deg, transparent 150.12deg, transparent 155.88deg, rgba(1, 205, 254, 0.14) 155.88deg 156.12deg, transparent 156.12deg, transparent 161.88deg, rgba(1, 205, 254, 0.14) 161.88deg 162.12deg, transparent 162.12deg, transparent 167.88deg, rgba(1, 205, 254, 0.14) 167.88deg 168.12deg, transparent 168.12deg, transparent 173.88deg, rgba(1, 205, 254, 0.14) 173.88deg 174.12deg, transparent 174.12deg, transparent 179.88deg, rgba(1, 205, 254, 0.14) 179.88deg 180.12deg, transparent 180.12deg, transparent 185.88deg, rgba(1, 205, 254, 0.14) 185.88deg 186.12deg, transparent 186.12deg, transparent 191.88deg, rgba(1, 205, 254, 0.14) 191.88deg 192.12deg, transparent 192.12deg, transparent 197.88deg, rgba(1, 205, 254, 0.14) 197.88deg 198.12deg, transparent 198.12deg, transparent 203.88deg, rgba(1, 205, 254, 0.14) 203.88deg 204.12deg, transparent 204.12deg, transparent 209.88deg, rgba(1, 205, 254, 0.14) 209.88deg 210.12deg, transparent 210.12deg, transparent 215.88deg, rgba(1, 205, 254, 0.14) 215.88deg 216.12deg, transparent 216.12deg, transparent 221.88deg, rgba(1, 205, 254, 0.14) 221.88deg 222.12deg, transparent 222.12deg, transparent 227.88deg, rgba(1, 205, 254, 0.14) 227.88deg 228.12deg, transparent 228.12deg, transparent 233.88deg, rgba(1, 205, 254, 0.14) 233.88deg 234.12deg, transparent 234.12deg, transparent 239.88deg, rgba(1, 205, 254, 0.14) 239.88deg 240.12deg, transparent 240.12deg, transparent 245.88deg, rgba(1, 205, 254, 0.14) 245.88deg 246.12deg, transparent 246.12deg, transparent 251.88deg, rgba(1, 205, 254, 0.14) 251.88deg 252.12deg, transparent 252.12deg, transparent 257.88deg, rgba(1, 205, 254, 0.14) 257.88deg 258.12deg, transparent 258.12deg, transparent 263.88deg, rgba(1, 205, 254, 0.14) 263.88deg 264.12deg, transparent 264.12deg, transparent 270deg);
+    linear-gradient(transparent calc(42% - 7px), rgba(255, 41, 117, 0.3) calc(42% - 2px), #ff2975 42%, rgba(255, 41, 117, 0.3) calc(42% + 2px), transparent calc(42% + 7px)),
+    linear-gradient(transparent calc(42% - 1px), rgba(255, 113, 206, 0.34) calc(42% - 1px) 42%, transparent 42%, transparent calc(43.2% - 1px), rgba(255, 113, 206, 0.34) calc(43.2% - 1px) 43.2%, transparent 43.2%, transparent calc(45% - 1px), rgba(255, 113, 206, 0.34) calc(45% - 1px) 45%, transparent 45%, transparent calc(47.5% - 1px), rgba(255, 113, 206, 0.34) calc(47.5% - 1px) 47.5%, transparent 47.5%, transparent calc(51% - 1px), rgba(255, 113, 206, 0.34) calc(51% - 1px) 51%, transparent 51%, transparent calc(55.5% - 1px), rgba(255, 113, 206, 0.34) calc(55.5% - 1px) 55.5%, transparent 55.5%, transparent calc(61% - 1px), rgba(255, 113, 206, 0.34) calc(61% - 1px) 61%, transparent 61%, transparent calc(68% - 1px), rgba(255, 113, 206, 0.34) calc(68% - 1px) 68%, transparent 68%, transparent calc(76.5% - 1px), rgba(255, 113, 206, 0.34) calc(76.5% - 1px) 76.5%, transparent 76.5%, transparent calc(87% - 1px), rgba(255, 113, 206, 0.34) calc(87% - 1px) 87%, transparent 87%, transparent 0),
+    conic-gradient(from 0deg at 50% 42%, transparent 90deg, transparent 95.88deg, rgba(1, 205, 254, 0.26) 95.88deg 96.12deg, transparent 96.12deg, transparent 101.88deg, rgba(1, 205, 254, 0.26) 101.88deg 102.12deg, transparent 102.12deg, transparent 107.88deg, rgba(1, 205, 254, 0.26) 107.88deg 108.12deg, transparent 108.12deg, transparent 113.88deg, rgba(1, 205, 254, 0.26) 113.88deg 114.12deg, transparent 114.12deg, transparent 119.88deg, rgba(1, 205, 254, 0.26) 119.88deg 120.12deg, transparent 120.12deg, transparent 125.88deg, rgba(1, 205, 254, 0.26) 125.88deg 126.12deg, transparent 126.12deg, transparent 131.88deg, rgba(1, 205, 254, 0.26) 131.88deg 132.12deg, transparent 132.12deg, transparent 137.88deg, rgba(1, 205, 254, 0.26) 137.88deg 138.12deg, transparent 138.12deg, transparent 143.88deg, rgba(1, 205, 254, 0.26) 143.88deg 144.12deg, transparent 144.12deg, transparent 149.88deg, rgba(1, 205, 254, 0.26) 149.88deg 150.12deg, transparent 150.12deg, transparent 155.88deg, rgba(1, 205, 254, 0.26) 155.88deg 156.12deg, transparent 156.12deg, transparent 161.88deg, rgba(1, 205, 254, 0.26) 161.88deg 162.12deg, transparent 162.12deg, transparent 167.88deg, rgba(1, 205, 254, 0.26) 167.88deg 168.12deg, transparent 168.12deg, transparent 173.88deg, rgba(1, 205, 254, 0.26) 173.88deg 174.12deg, transparent 174.12deg, transparent 179.88deg, rgba(1, 205, 254, 0.26) 179.88deg 180.12deg, transparent 180.12deg, transparent 185.88deg, rgba(1, 205, 254, 0.26) 185.88deg 186.12deg, transparent 186.12deg, transparent 191.88deg, rgba(1, 205, 254, 0.26) 191.88deg 192.12deg, transparent 192.12deg, transparent 197.88deg, rgba(1, 205, 254, 0.26) 197.88deg 198.12deg, transparent 198.12deg, transparent 203.88deg, rgba(1, 205, 254, 0.26) 203.88deg 204.12deg, transparent 204.12deg, transparent 209.88deg, rgba(1, 205, 254, 0.26) 209.88deg 210.12deg, transparent 210.12deg, transparent 215.88deg, rgba(1, 205, 254, 0.26) 215.88deg 216.12deg, transparent 216.12deg, transparent 221.88deg, rgba(1, 205, 254, 0.26) 221.88deg 222.12deg, transparent 222.12deg, transparent 227.88deg, rgba(1, 205, 254, 0.26) 227.88deg 228.12deg, transparent 228.12deg, transparent 233.88deg, rgba(1, 205, 254, 0.26) 233.88deg 234.12deg, transparent 234.12deg, transparent 239.88deg, rgba(1, 205, 254, 0.26) 239.88deg 240.12deg, transparent 240.12deg, transparent 245.88deg, rgba(1, 205, 254, 0.26) 245.88deg 246.12deg, transparent 246.12deg, transparent 251.88deg, rgba(1, 205, 254, 0.26) 251.88deg 252.12deg, transparent 252.12deg, transparent 257.88deg, rgba(1, 205, 254, 0.26) 257.88deg 258.12deg, transparent 258.12deg, transparent 263.88deg, rgba(1, 205, 254, 0.26) 263.88deg 264.12deg, transparent 264.12deg, transparent 270deg);
 }
 
 /* --- Conversation, file chips, bar chart (v4.1) --------------------------- *
@@ -18791,39 +19126,35 @@ html[data-theme="vaporwave"] {
   --message-own-bg: #3d1f6b;
   --message-own-border: var(--accent);
   --bar-chart-bar: linear-gradient(0deg, #ff71ce, #b967ff 55%, #01cdfe);
-  --bar-chart-bar-alt: linear-gradient(0deg, #05ffa1, #01cdfe);
+  --bar-chart-bar-alt: linear-gradient(0deg, #b967ff, #01cdfe);
   --bar-chart-radius: 0.4rem 0.4rem 0 0;
 }
 
 @media print {
+  html[data-theme="vaporwave"] { --app-main-bg: transparent; }
   html[data-theme="vaporwave"] body::before,
-  html[data-theme="vaporwave"] body::after,
   html[data-theme="vaporwave"] .app-status::before,
   html[data-theme="vaporwave"] .app-status::after {
     display: none !important;
   }
   html[data-theme="vaporwave"] h1,
   html[data-theme="vaporwave"] h2,
-  html[data-theme="vaporwave"] h3 {
+  html[data-theme="vaporwave"] h3,
+  html[data-theme="vaporwave"] .stat-value {
     background-image: none !important;
     color: #000 !important;
     -webkit-text-fill-color: #000 !important;
   }
 }
 
-/* Close (v5): vaporwave's windows are Windows 95 dialogs, so the close is
-   the 95 grey caption button. */
-html[data-theme="vaporwave"] .modal-header > .btn-close {
-  --btn-close-bg: #c0c0c0;
-  --btn-close-bg-hover: #d4d0c8;
-  --btn-close-border: #000;
-  --btn-close-border-width: 1px;
-  --btn-close-radius: 0;
-  --btn-close-width: 1.4em;
-  --btn-close-height: 1.25em;
-  --modal-header-close-fg: #000;
-  --btn-close-fg-hover: #000;
-  box-shadow: inset -1px -1px 0 #808080, inset 1px 1px 0 #fff;
+/* Close (v5): the title bar's caption controls are dark ink on the
+   gradient (7:1+ on both stops), wrapped or not, with a soft dark wash on
+   hover; no grey Win95 bevel. */
+html[data-theme="vaporwave"] .modal-header {
+  --modal-header-close-fg: #1a0b2e;
+  --btn-close-fg: #1a0b2e;
+  --btn-close-fg-hover: #1a0b2e;
+  --btn-close-bg-hover: rgba(26, 11, 46, 0.18);
 }
 
 /* A heading used as a modal title takes the title bar's ink, not the page
@@ -18831,11 +19162,45 @@ html[data-theme="vaporwave"] .modal-header > .btn-close {
 html[data-theme="vaporwave"] .modal-header > :is(h1, h2, h3, h4, h5, h6) {
   background: none;
   -webkit-text-fill-color: currentColor;
+  padding: 0;
+  margin: 0;
 }
 
 /* An open comment's anchor: core's 40% of the pale-yellow --warning turned
    the purple into a mid-tone khaki the lilac text could not clear (4.1:1);
    30% keeps it clearly brighter than the idle 22%. */
 html[data-theme="vaporwave"] { --comment-anchor-bg-active: color-mix(in srgb, var(--warning) 30%, transparent); }
+
+/* Phones: the wrapped bar would be a third of the screen of saturated
+   gradient, so only the brand row (2.75rem) keeps the sunset band, dark
+   ink on it; the wrapped nav rows below are the strip colour with light
+   ink and the pink nav underline. */
+@media (max-width: 480px) {
+  html[data-theme="vaporwave"] {
+    --app-bar-bg: linear-gradient(90deg, #ff71ce, #b967ff 50%, #01cdfe) 0 0 / 100% 2.75rem no-repeat, #150822;
+    --app-bar-fg: var(--text);
+    /* A taskbar tray needs the width; 0.5rem still clears the v5 4px edge. */
+    --app-status-padding: 0.45rem 0.5rem var(--vw-floor);
+  }
+  html[data-theme="vaporwave"] .app-bar {
+    --nav-brand-fg: #1a0b2e;
+    --nav-item-fg: var(--text);
+    --nav-item-fg-active: var(--accent);
+    --nav-item-bg-active: rgba(255, 113, 206, 0.15);
+  }
+  html[data-theme="vaporwave"] .app-bar :is(.nav-item, .breadcrumb-item) { text-shadow: none; }
+}
+
+/* Phones and touch (after the .panel border shorthand above): the pair's
+   top edge is a plain pink border, and the sky is one still gradient with
+   no star tiles. */
+@media (max-width: 480px), (pointer: coarse) {
+  html[data-theme="vaporwave"] :is(.panel, .card) { border-top-color: var(--accent); }
+  html[data-theme="vaporwave"] body::before {
+    background:
+      radial-gradient(ellipse 80% 45% at 50% 100%, rgba(255, 41, 117, 0.12), transparent),
+      linear-gradient(#1a0b2e, #24103d 35%, var(--vw-haze) 60%);
+  }
+}
 
 }

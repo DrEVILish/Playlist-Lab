@@ -204,7 +204,7 @@ func (h *ImportHandler) startImport(w http.ResponseWriter, r *http.Request) {
 // content already is the track list).
 func (h *ImportHandler) startFileImport(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
-	if err := r.ParseMultipartForm(maxImportFileSize); err != nil {
+	if err := parseLimitedMultipart(w, r, maxImportFileSize); err != nil {
 		http.Error(w, "invalid or too-large file upload (10MB limit)", http.StatusBadRequest)
 		return
 	}
@@ -223,6 +223,10 @@ func (h *ImportHandler) startFileImport(w http.ResponseWriter, r *http.Request) 
 	raw, err := io.ReadAll(io.LimitReader(file, maxImportFileSize+1))
 	if err != nil {
 		http.Error(w, "unable to read uploaded file", http.StatusBadRequest)
+		return
+	}
+	if len(raw) > maxImportFileSize {
+		http.Error(w, "playlist upload exceeds 10MB", http.StatusRequestEntityTooLarge)
 		return
 	}
 	content := string(raw)

@@ -21,7 +21,7 @@ type Source struct{}
 func NewSource() *Source { return &Source{} }
 
 func (s *Source) Meta() adapters.ServiceMeta {
-	return adapters.ServiceMeta{ID: serviceName, Name: "Apple Music", Icon: "apple"}
+	return adapters.ServiceMeta{ID: "apple", Name: "Apple Music", Icon: "apple"}
 }
 
 var applePlaylistIDPattern = regexp.MustCompile(`playlist/[^/]+/(pl\.[a-zA-Z0-9-]+)`)
@@ -118,8 +118,7 @@ const scrapeJS = `(() => {
 
 func (s *Source) FetchTracks(ctx context.Context, playlistURLOrID string, userID int64) (adapters.PlaylistInfo, []adapters.TrackInfo, error) {
 	var raw string
-	err := browser.Scrape(ctx, "Apple Music Browser", browser.DefaultTimeout,
-		chromedp.Navigate(playlistURLOrID),
+	err := browser.Scrape(ctx, "Apple Music Browser", browser.DefaultTimeout, playlistURLOrID, []string{"apple.com", "mzstatic.com"},
 		chromedp.WaitVisible(`img`, chromedp.ByQuery),
 		chromedp.Evaluate(scrapeJS, &raw),
 	)

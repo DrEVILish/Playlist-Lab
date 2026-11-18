@@ -160,7 +160,7 @@ func TestGetValidAccessToken_ExpiringSoonTriggersRefresh(t *testing.T) {
 	}
 }
 
-func TestGetValidAccessToken_RefreshFailureDeletesConnection(t *testing.T) {
+func TestGetValidAccessToken_RevokedGrantDeletesConnection(t *testing.T) {
 	sqlDB := newTestDB(t)
 	userID := newTestUser(t, sqlDB)
 
@@ -173,7 +173,7 @@ func TestGetValidAccessToken_RefreshFailureDeletesConnection(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error_description":"invalid_grant"}`))
+		w.Write([]byte(`{"error":"invalid_grant","error_description":"invalid_grant"}`))
 	}))
 	defer srv.Close()
 	origTokenURL := tokenURL
@@ -228,5 +228,26 @@ func TestGetValidAccessToken_NoRefreshTokenReturnsStaleAccessTokenAsIs(t *testin
 	}
 	if token != "stale-access-token" {
 		t.Fatalf("got %q", token)
+	}
+}
+
+func TestGetValidAccessToken_UpstreamFailureKeepsConnection(t *testing.T) {
+	sqlDB := newTestDB(t)
+	userID := newTestUser(t, sqlDB)
+	access, _ := crypto.Encrypt("old-access-token", testSecret)
+	refresh, _ := crypto.Encrypt("refresh-token", testSecret)
+	expiry := time.Now().Add(-time.Minute)
+	if err := db.SaveOAuthConnection(sqlDB, userID, ServiceName, access, refresh, &expiry); err != nil {
+		t.Fatal(err)
+	}
+	withTokenServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	_, err := GetValidAccessToken(sqlDB, testSecret, OAuthConfig{ClientID: "id", ClientSecret: "secret"}, userID)
+	if err == nil {
+		t.Fatal("expected a temporary provider error")
+	}
+	if conn, err := db.GetOAuthConnection(sqlDB, userID, ServiceName); err != nil || conn == nil {
+		t.Fatalf("connection lost during temporary provider outage: %v", err)
 	}
 }

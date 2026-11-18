@@ -11,7 +11,7 @@
       <button type="button" class="btn-close" onclick="closeTopModal()" aria-label="Close"></button>
     </div>
     <form hx-post="/collections/presets/{{.Preset.Slug}}/years" hx-target="#collections-list" hx-swap="innerHTML"
-      hx-on::after-request="if(event.detail.successful) closeTopModal()">
+      hx-on::after:request="if(event.detail.ctx.response.status < 400) closeTopModal()">
       <div class="stack advanced-mix-content">
         <p class="field-hint">Creates one collection per year - up to {{.MaxRange}} at once. Each is created empty; use "Refresh Selected" on the Collections table afterward to populate them.</p>
         <div class="field">

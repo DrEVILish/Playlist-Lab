@@ -85,7 +85,7 @@ func (s *Store) Get(sid string) (*Data, error) {
 		return nil, err
 	}
 	if expired < time.Now().UnixMilli() {
-		_, _ = s.db.Exec("DELETE FROM sessions WHERE sid = ?", sid)
+		_, _ = s.db.Exec("DELETE FROM sessions WHERE sid = ? AND expired = ?", sid, expired)
 		return nil, ErrNotFound
 	}
 	var data Data
@@ -118,6 +118,33 @@ func (s *Store) Destroy(sid string) error {
 	return err
 }
 
+func (s *Store) SetOAuthState(sid string, userID int64, state string) error {
+	return requireSessionUpdate(s.db.Exec(`
+		UPDATE sessions SET sess = json_set(sess, '$.oauthState', ?)
+		WHERE sid = ? AND user_id = ? AND expired >= ?`, state, sid, userID, time.Now().UnixMilli()))
+}
+
+func (s *Store) ConsumeOAuthState(sid string, userID int64, state string) error {
+	if state == "" {
+		return ErrNotFound
+	}
+	return requireSessionUpdate(s.db.Exec(`
+		UPDATE sessions SET sess = json_remove(sess, '$.oauthState')
+		WHERE sid = ? AND user_id = ? AND expired >= ? AND json_extract(sess, '$.oauthState') = ?`,
+		sid, userID, time.Now().UnixMilli(), state))
+}
+
+func requireSessionUpdate(result sql.Result, err error) error {
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err == nil && count == 0 {
+		return ErrNotFound
+	}
+	return err
+}
+
 // touchLastSeenInterval throttles how often a request updates its session's
 // LastSeenAt - without this, Settings > Sessions' "last active" column would
 // mean a write on every single authenticated request (RequireAuth calls
@@ -133,12 +160,16 @@ const touchLastSeenInterval = 5 * time.Minute
 // has to be cheap to skip. Mutates data in place so the caller's
 // already-loaded copy stays consistent with what was (or wasn't) saved.
 func (s *Store) TouchLastSeen(sid string, data *Data) {
-	now := time.Now().Unix()
-	if now-data.LastSeenAt < int64(touchLastSeenInterval.Seconds()) {
+	now := time.Now()
+	if now.Unix()-data.LastSeenAt < int64(touchLastSeenInterval.Seconds()) {
 		return
 	}
-	data.LastSeenAt = now
-	_ = s.Save(sid, data)
+	if err := requireSessionUpdate(s.db.Exec(`
+		UPDATE sessions SET sess = json_set(sess, '$.lastSeenAt', ?), expired = ?
+		WHERE sid = ? AND user_id = ? AND expired >= ?`,
+		now.Unix(), now.Add(maxAge).UnixMilli(), sid, data.UserID, now.UnixMilli())); err == nil {
+		data.LastSeenAt = now.Unix()
+	}
 }
 
 // Session is one row of Settings > Sessions' device list (DESIGN.md §11.4) -

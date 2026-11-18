@@ -136,3 +136,28 @@ func TestClearPlaylistMissingTracks(t *testing.T) {
 		t.Fatalf("expected 0 tracks after clear, got %d", len(got))
 	}
 }
+
+func TestRefreshKeepsMissingTrackID(t *testing.T) {
+	sqlDB := newTestDB(t)
+	u, _ := CreateUser(sqlDB, "plex-test", "Test", "fake-token", "")
+	pl, _ := CreatePlaylistRow(sqlDB, u.ID, "pl1", "P1", "spotify", "")
+	initial := []NewMissingTrack{
+		{Title: "Keep", Artist: "Artist", Position: 1},
+		{Title: "Resolve", Artist: "Artist", Position: 2},
+	}
+	if err := AddMissingTracks(sqlDB, u.ID, pl.ID, initial); err != nil {
+		t.Fatal(err)
+	}
+	before, err := GetUserMissingTracks(sqlDB, u.ID)
+	if err != nil || len(before) != 2 {
+		t.Fatalf("initial missing tracks = %v, %v", before, err)
+	}
+	remaining := []NewMissingTrack{{Title: "Keep", Artist: "Artist", Position: 3}}
+	if err := AddMissingTracks(sqlDB, u.ID, pl.ID, remaining); err != nil {
+		t.Fatal(err)
+	}
+	after, err := GetUserMissingTracks(sqlDB, u.ID)
+	if err != nil || len(after) != 1 || after[0].ID != before[0].ID || after[0].Position != 3 {
+		t.Fatalf("want stable ID %d and updated position, got %v, %v", before[0].ID, after, err)
+	}
+}

@@ -590,80 +590,16 @@ type notFoundError struct{ Message string }
 
 func (e *notFoundError) Error() string { return e.Message }
 
-// libraryDirectoryTitles fetches a library's genre/mood/style/collection
-// "Directory" list (Plex's per-library metadata browse endpoints) and
-// returns their titles sorted alphabetically. Matches plex.ts's four
-// getLibrary*() methods: any request failure yields an empty slice rather
-// than an error, since these feed optional filter dropdowns.
-func (c *Client) libraryDirectoryTitles(libraryID, kind string) []string {
-	mc, err := c.get("/library/sections/" + url.PathEscape(libraryID) + "/" + kind)
+// GetLibraryFacet fetches the distinct values of a Plex library facet.
+func (c *Client) GetLibraryFacet(libraryID, kind string) ([]string, error) {
+	mc, err := c.get("/library/sections/" + url.PathEscape(libraryID) + "/" + url.PathEscape(kind))
 	if err != nil {
-		return []string{}
+		return nil, err
 	}
 	out := make([]string, 0, len(mc.MediaContainer.Directory))
 	for _, d := range mc.MediaContainer.Directory {
 		out = append(out, d.Title)
 	}
 	sort.Strings(out)
-	return out
-}
-
-// GetLibraryGenres ports plex.ts's getLibraryGenres.
-func (c *Client) GetLibraryGenres(libraryID string) []string {
-	return c.libraryDirectoryTitles(libraryID, "genre")
-}
-
-// GetLibraryMoods ports plex.ts's getLibraryMoods.
-func (c *Client) GetLibraryMoods(libraryID string) []string {
-	return c.libraryDirectoryTitles(libraryID, "mood")
-}
-
-// GetLibraryStyles ports plex.ts's getLibraryStyles.
-func (c *Client) GetLibraryStyles(libraryID string) []string {
-	return c.libraryDirectoryTitles(libraryID, "style")
-}
-
-// GetLibraryCollections ports plex.ts's getLibraryCollections.
-func (c *Client) GetLibraryCollections(libraryID string) []string {
-	return c.libraryDirectoryTitles(libraryID, "collection")
-}
-
-// GetLibraryStudios, GetLibraryContentRatings, GetLibraryYears, and
-// GetLibraryActors round out libraryDirectoryTitles' facet coverage for
-// Dynamic Collections (DESIGN.md §11.11's dynamic-collection-set builder,
-// scheduler.GenerateDynamicCollections) - same Plex "Directory" browse
-// endpoint as genre/mood/style/collection above, just a different facet
-// kind. "decade" has no such endpoint on its own; callers derive it from
-// GetLibraryYears instead.
-func (c *Client) GetLibraryStudios(libraryID string) []string {
-	return c.libraryDirectoryTitles(libraryID, "studio")
-}
-
-func (c *Client) GetLibraryContentRatings(libraryID string) []string {
-	return c.libraryDirectoryTitles(libraryID, "contentRating")
-}
-
-func (c *Client) GetLibraryYears(libraryID string) []string {
-	return c.libraryDirectoryTitles(libraryID, "year")
-}
-
-func (c *Client) GetLibraryActors(libraryID string) []string {
-	return c.libraryDirectoryTitles(libraryID, "actor")
-}
-
-// GetLibraryDirectors and GetLibraryWriters round out the facet set with
-// the two credit types Kometa's own community configs lean on most for
-// person-based collections (fscorrupt/directors.yml's Director/Writer
-// templates) - not independently live-verified against a real Plex server
-// the way genre/actor/studio were (same caveat as GetLibraryContentRatings/
-// GetLibraryYears): Plex's per-library "Directory" browse endpoint is
-// confirmed to exist for genre/mood/style/collection/actor, and director/
-// writer are documented as the same kind of facet, but a field-name
-// mismatch here is the first place to look if either comes back empty.
-func (c *Client) GetLibraryDirectors(libraryID string) []string {
-	return c.libraryDirectoryTitles(libraryID, "director")
-}
-
-func (c *Client) GetLibraryWriters(libraryID string) []string {
-	return c.libraryDirectoryTitles(libraryID, "writer")
+	return out, nil
 }

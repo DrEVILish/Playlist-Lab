@@ -22,9 +22,11 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -47,12 +49,12 @@ type SchedulesHandler struct {
 // recognizable to the user who triggered it.
 func (h *SchedulesHandler) scheduleDisplayName(s db.Schedule) string {
 	if s.PlaylistID.Valid {
-		if playlist, err := db.GetPlaylistByID(h.DB, s.PlaylistID.Int64); err == nil && playlist != nil {
+		if playlist, err := db.GetPlaylistByID(h.DB, s.PlaylistID.Int64); err == nil && playlist != nil && playlist.UserID == s.UserID {
 			return playlist.Name
 		}
 	}
 	if s.CollectionID.Valid {
-		if coll, err := db.GetCollectionByID(h.DB, s.CollectionID.Int64); err == nil && coll != nil {
+		if coll, err := db.GetCollectionByID(h.DB, s.CollectionID.Int64); err == nil && coll != nil && coll.UserID == s.UserID {
 			return coll.Name
 		}
 	}
@@ -132,7 +134,11 @@ type scheduleView struct {
 func (h *SchedulesHandler) loadPlaylist(r *http.Request) (*db.Playlist, error) {
 	user := auth.CurrentUser(r)
 	plexID := chi.URLParam(r, "plexId")
-	return db.GetPlaylistByPlexID(h.DB, user.ID, plexID)
+	server, err := db.GetUserMusicServer(h.DB, user.ID)
+	if err != nil || server == nil {
+		return nil, err
+	}
+	return db.GetPlaylistByPlexIDForServer(h.DB, user.ID, server.ServerClientID, plexID)
 }
 
 // loadCollection resolves the {id} URL param to the current user's own
@@ -231,6 +237,25 @@ func configJSON(r *http.Request) string {
 	return string(b)
 }
 
+func validateScheduleForm(frequency, startDate, runTime string) error {
+	switch frequency {
+	case "", "daily", "weekly", "fortnightly", "monthly":
+	default:
+		return errors.New("invalid schedule frequency")
+	}
+	if startDate != "" {
+		if _, err := time.Parse("2006-01-02", startDate); err != nil {
+			return errors.New("invalid schedule start date")
+		}
+	}
+	if runTime != "" {
+		if _, err := time.Parse("15:04", runTime); err != nil {
+			return errors.New("invalid schedule time")
+		}
+	}
+	return nil
+}
+
 // create ports POST /api/schedules. Originally scoped to playlist_refresh
 // (the only type ScheduleModal.tsx could produce); now also accepts a
 // collectionId form field for collection_refresh schedules (DESIGN.md
@@ -250,12 +275,24 @@ func (h *SchedulesHandler) create(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "playlistId (or collectionId), frequency and startDate are required", http.StatusBadRequest)
 		return
 	}
+	if playlistID != 0 && collectionID != 0 {
+		http.Error(w, "select one schedule target", http.StatusBadRequest)
+		return
+	}
+	if err := validateScheduleForm(frequency, startDate, r.FormValue("runTime")); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	scheduleType := "playlist_refresh"
 	if collectionID != 0 {
 		scheduleType = "collection_refresh"
 	}
 	if _, err := db.CreateSchedule(h.DB, user.ID, playlistID, collectionID, scheduleType, frequency, startDate, configJSON(r)); err != nil {
+		if errors.Is(err, db.ErrScheduleTargetNotFound) {
+			http.Error(w, "schedule target not found", http.StatusNotFound)
+			return
+		}
 		slog.Error("failed to create schedule", "error", err)
 		h.Notifications.Add(user.ID, notifications.TypeAction, "Create schedule", err.Error(), notifications.StatusError, nil)
 		http.Error(w, "Failed to create schedule", http.StatusInternalServerError)
@@ -287,6 +324,10 @@ func (h *SchedulesHandler) update(w http.ResponseWriter, r *http.Request) {
 	}
 	frequency := r.FormValue("frequency")
 	startDate := r.FormValue("startDate")
+	if err := validateScheduleForm(frequency, startDate, r.FormValue("runTime")); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	cfg := configJSON(r)
 	u := db.ScheduleUpdate{Config: &cfg}
 	if frequency != "" {

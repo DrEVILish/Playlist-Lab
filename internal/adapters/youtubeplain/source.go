@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/drevilish/playlist-lab/internal/adapters"
+	"github.com/drevilish/playlist-lab/internal/adapters/shared"
 	"github.com/drevilish/playlist-lab/internal/crypto"
 	"github.com/drevilish/playlist-lab/internal/db"
 )
@@ -81,7 +82,7 @@ func (s *Source) FetchTracks(ctx context.Context, playlistURLOrID string, userID
 		return adapters.PlaylistInfo{}, nil, fmt.Errorf("could not parse YouTube playlist page")
 	}
 
-	itemSection := digArray(data, "contents", "twoColumnBrowseResultsRenderer", "tabs", 0,
+	itemSection := shared.DigArray(data, "contents", "twoColumnBrowseResultsRenderer", "tabs", 0,
 		"tabRenderer", "content", "sectionListRenderer", "contents", 0, "itemSectionRenderer", "contents")
 
 	// Classic pages wrap the actual video items one level deeper inside a
@@ -89,7 +90,7 @@ func (s *Source) FetchTracks(ctx context.Context, playlistURLOrID string, userID
 	// serving playlist pages where itemSection's entries (lockupViewModel
 	// items, see extractVideoTrack) sit directly at this level with no such
 	// wrapper - try the classic wrapper first, fall back to the flat shape.
-	contents := digArray(itemSection, 0, "playlistVideoListRenderer", "contents")
+	contents := shared.DigArray(itemSection, 0, "playlistVideoListRenderer", "contents")
 	if len(contents) == 0 {
 		contents = itemSection
 	}
@@ -100,12 +101,12 @@ func (s *Source) FetchTracks(ctx context.Context, playlistURLOrID string, userID
 	// originally ported against (a "pageHeaderRenderer" instead, not handled
 	// here), so the microformat fallback carries the actual name in
 	// practice.
-	name, _ := digString(data, "microformat", "microformatDataRenderer", "title")
+	name, _ := shared.DigString(data, "microformat", "microformatDataRenderer", "title")
 	if name == "" {
-		header, _ := digMap(data, "header", "playlistHeaderRenderer")
-		name, _ = digString(header, "title", "simpleText")
+		header, _ := shared.DigMap(data, "header", "playlistHeaderRenderer")
+		name, _ = shared.DigString(header, "title", "simpleText")
 		if name == "" {
-			name, _ = digStringFrom(digArray(header, "title", "runs"), 0, "text")
+			name, _ = shared.DigStringFrom(shared.DigArray(header, "title", "runs"), 0, "text")
 		}
 	}
 	if name == "" {
@@ -134,19 +135,19 @@ func (s *Source) FetchTracks(ctx context.Context, playlistURLOrID string, userID
 // handles lockupViewModel for playlist *listings*, just never for a
 // playlist's own video items.
 func extractVideoTrack(item any) (adapters.TrackInfo, bool) {
-	if video, ok := digMap(item, "playlistVideoRenderer"); ok {
-		title, _ := digStringFrom(digArray(video, "title", "runs"), 0, "text")
+	if video, ok := shared.DigMap(item, "playlistVideoRenderer"); ok {
+		title, _ := shared.DigStringFrom(shared.DigArray(video, "title", "runs"), 0, "text")
 		if title == "" {
-			title, _ = digString(video, "title", "simpleText")
+			title, _ = shared.DigString(video, "title", "simpleText")
 		}
-		artist, _ := digStringFrom(digArray(video, "shortBylineText", "runs"), 0, "text")
+		artist, _ := shared.DigStringFrom(shared.DigArray(video, "shortBylineText", "runs"), 0, "text")
 		return adapters.TrackInfo{Title: orUnknown(title), Artist: orUnknown(artist)}, true
 	}
 
-	if lvm, ok := digMap(item, "lockupViewModel"); ok {
-		title, _ := digString(lvm, "metadata", "lockupMetadataViewModel", "title", "content")
-		artist, _ := digStringFrom(
-			digArray(lvm, "metadata", "lockupMetadataViewModel", "metadata", "contentMetadataViewModel", "metadataRows", 0, "metadataParts"),
+	if lvm, ok := shared.DigMap(item, "lockupViewModel"); ok {
+		title, _ := shared.DigString(lvm, "metadata", "lockupMetadataViewModel", "title", "content")
+		artist, _ := shared.DigStringFrom(
+			shared.DigArray(lvm, "metadata", "lockupMetadataViewModel", "metadata", "contentMetadataViewModel", "metadataRows", 0, "metadataParts"),
 			0, "text", "content")
 		if title == "" {
 			return adapters.TrackInfo{}, false
@@ -207,24 +208,24 @@ func (s *Source) SearchPlaylists(ctx context.Context, query string, userID int64
 		return nil, err
 	}
 
-	items := digArray(data, "contents", "twoColumnSearchResultsRenderer", "primaryContents",
+	items := shared.DigArray(data, "contents", "twoColumnSearchResultsRenderer", "primaryContents",
 		"sectionListRenderer", "contents", 0, "itemSectionRenderer", "contents")
 
 	var playlists []adapters.PlaylistInfo
 	for _, item := range items {
-		r, ok := digMap(item, "playlistRenderer")
+		r, ok := shared.DigMap(item, "playlistRenderer")
 		if !ok {
 			continue
 		}
-		id, _ := digString(r, "playlistId")
-		title, _ := digString(r, "title", "simpleText")
+		id, _ := shared.DigString(r, "playlistId")
+		title, _ := shared.DigString(r, "title", "simpleText")
 		if title == "" {
-			title, _ = digStringFrom(digArray(r, "title", "runs"), 0, "text")
+			title, _ = shared.DigStringFrom(shared.DigArray(r, "title", "runs"), 0, "text")
 		}
 		if id == "" || title == "" {
 			continue
 		}
-		countText, _ := digStringFrom(digArray(r, "videoCountText", "runs"), 0, "text")
+		countText, _ := shared.DigStringFrom(shared.DigArray(r, "videoCountText", "runs"), 0, "text")
 		trackCount := parseDigits(countText)
 		playlists = append(playlists, adapters.PlaylistInfo{ID: id, Name: title, TrackCount: trackCount})
 	}
@@ -278,77 +279,10 @@ func (s *Source) ytAPI(ctx context.Context, endpoint string, body map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return nil, fmt.Errorf("YouTube API: invalid JSON")
 	}
-	if errObj, ok := digMap(data, "error"); ok {
+	if errObj, ok := shared.DigMap(data, "error"); ok {
 		if code, ok := errObj["code"]; ok {
 			return nil, fmt.Errorf("YouTube API error: %v", code)
 		}
 	}
 	return data, nil
-}
-
-// --- tiny untyped-JSON navigation helpers (same pattern as youtubemusic's) ---
-
-func digMap(v any, path ...any) (map[string]any, bool) {
-	cur := v
-	for _, p := range path {
-		cur = index(cur, p)
-		if cur == nil {
-			return nil, false
-		}
-	}
-	m, ok := cur.(map[string]any)
-	return m, ok
-}
-
-func digArray(v any, path ...any) []any {
-	cur := v
-	for _, p := range path {
-		cur = index(cur, p)
-		if cur == nil {
-			return nil
-		}
-	}
-	arr, _ := cur.([]any)
-	return arr
-}
-
-func digString(v any, path ...any) (string, bool) {
-	cur := v
-	for _, p := range path {
-		cur = index(cur, p)
-		if cur == nil {
-			return "", false
-		}
-	}
-	s, ok := cur.(string)
-	return s, ok
-}
-
-func digStringFrom(arr []any, idx int, path ...any) (string, bool) {
-	if idx < 0 || idx >= len(arr) {
-		return "", false
-	}
-	return digString(arr[idx], path...)
-}
-
-func index(v any, key any) any {
-	if v == nil {
-		return nil
-	}
-	switch k := key.(type) {
-	case string:
-		m, ok := v.(map[string]any)
-		if !ok {
-			return nil
-		}
-		return m[k]
-	case int:
-		arr, ok := v.([]any)
-		if !ok || k < 0 || k >= len(arr) {
-			return nil
-		}
-		return arr[k]
-	default:
-		return nil
-	}
 }

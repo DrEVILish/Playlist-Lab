@@ -225,6 +225,22 @@ func TestStore_TouchLastSeen_ThrottledWithinInterval(t *testing.T) {
 	}
 }
 
+func TestStore_TouchLastSeenKeepsOtherSessionFields(t *testing.T) {
+	store, _ := newTestStore(t)
+	old := &Data{UserID: 1}
+	if err := store.Save("sid-1", &Data{UserID: 1, OAuthState: "pending"}); err != nil {
+		t.Fatal(err)
+	}
+	store.TouchLastSeen("sid-1", old)
+	got, err := store.Get("sid-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.LastSeenAt == 0 || got.OAuthState != "pending" {
+		t.Fatalf("activity update should preserve the pending OAuth state, got %+v", got)
+	}
+}
+
 func TestDisplayIDFor_DeterministicAndDistinct(t *testing.T) {
 	if DisplayIDFor("sid-a") != DisplayIDFor("sid-a") {
 		t.Fatal("expected DisplayIDFor to be deterministic for the same sid")

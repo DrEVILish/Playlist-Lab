@@ -99,3 +99,15 @@ func TestFetchFacetKeysDecade(t *testing.T) {
 		}
 	}
 }
+
+func TestFetchFacetKeysReturnsUpstreamFailure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+	client := plex.NewClient(srv.URL, "token", "client-id", "Playlist Lab")
+	dyn := &db.DynamicCollection{FacetType: "genre", LibrarySectionID: "1"}
+	if _, err := fetchFacetKeys(client, dyn); err == nil {
+		t.Fatal("Plex failure must not be treated as an empty set of live facets")
+	}
+}

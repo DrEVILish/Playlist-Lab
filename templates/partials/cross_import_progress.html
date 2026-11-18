@@ -16,11 +16,17 @@
 {{$p := .Progress}}
 <div id="cross-import-match-status"
      {{if or (eq $p.Phase "fetching") (eq $p.Phase "matching")}}
-     hx-get="/cross-import/match/{{.SessionID}}/status" hx-trigger="every 1s" hx-swap="outerHTML"
+     hx-get="/cross-import/match/{{.SessionID}}/status" hx-trigger="every 1s" hx-swap="outerHTML" hx-sync="#cross-import-match-status:drop"
      {{end}}>
   {{template "partials/ci_step_indicator" 3}}
   {{if eq $p.Phase "error"}}
   <div class="alert alert-danger">Matching failed: {{$p.Message}}</div>
+  {{else if eq $p.Phase "cancelled"}}
+  <p class="text-muted" role="status">Matching canceled. Choose a playlist to start again.</p>
+  {{else if eq $p.Phase "executing"}}
+  <p class="text-muted" role="status">Creating your YouTube playlist. Follow its progress in notifications.</p>
+  {{else if eq $p.Phase "done"}}
+  <p class="text-muted" role="status">Check notifications for the export result.</p>
   {{else}}
   <div class="stack">
     <div>
@@ -37,7 +43,7 @@
     {{if gt $p.Total 0}}
     <div class="text-muted">{{$p.Current}} / {{$p.Total}} tracks</div>
     {{end}}
-    <form hx-post="/cross-import/match/{{.SessionID}}/cancel" hx-target="#cross-import-match-status" hx-swap="outerHTML">
+    <form hx-post="/cross-import/match/{{.SessionID}}/cancel" hx-target="#cross-import-match-status" hx-swap="outerHTML" hx-sync="#cross-import-match-status:replace">
       <button type="submit" class="btn btn-secondary btn-sm">Cancel</button>
     </form>
   </div>

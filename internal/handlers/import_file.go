@@ -24,6 +24,7 @@ import (
 	"github.com/drevilish/playlist-lab/internal/auth"
 	"github.com/drevilish/playlist-lab/internal/db"
 	"github.com/drevilish/playlist-lab/internal/services/fileimport"
+	"github.com/drevilish/playlist-lab/internal/services/importreview"
 	"github.com/drevilish/playlist-lab/internal/services/importsvc"
 	"github.com/drevilish/playlist-lab/internal/services/notifications"
 	"github.com/drevilish/playlist-lab/internal/services/plex"
@@ -62,6 +63,7 @@ func (s *pendingFileStore) New(userID int64, filename, name string, tracks []ada
 	s.mu.Lock()
 	s.items[id] = &pendingFileImport{UserID: userID, Filename: filename, Name: name, Tracks: tracks, CreatedAt: time.Now()}
 	s.mu.Unlock()
+	time.AfterFunc(importreview.SessionLifetime, func() { s.Delete(id) })
 	return id
 }
 
@@ -90,6 +92,17 @@ func (s *pendingFileStore) Get(id string, userID int64) (*pendingFileImport, boo
 	return p, true
 }
 
+func (s *pendingFileStore) Take(id string, userID int64) (*pendingFileImport, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.items[id]
+	if !ok || p.UserID != userID {
+		return nil, false
+	}
+	delete(s.items, id)
+	return p, true
+}
+
 func (s *pendingFileStore) Delete(id string) {
 	s.mu.Lock()
 	delete(s.items, id)
@@ -106,6 +119,12 @@ func RegisterImportFile(r chi.Router, mw *auth.Middleware, h *ImportHandler) {
 	})
 }
 
+// Leave space for multipart headers and ordinary companion form fields.
+func parseLimitedMultipart(w http.ResponseWriter, r *http.Request, fileLimit int64) error {
+	r.Body = http.MaxBytesReader(w, r.Body, fileLimit+(64<<10))
+	return r.ParseMultipartForm(fileLimit)
+}
+
 func (h *ImportHandler) fileImportForm(w http.ResponseWriter, r *http.Request) {
 	h.Tmpl.RenderPartial(w, "partials/import_file_modal.html", nil)
 }
@@ -119,7 +138,7 @@ func (h *ImportHandler) fileImportForm(w http.ResponseWriter, r *http.Request) {
 // immediately try a different file without reopening the modal.
 func (h *ImportHandler) previewFileImport(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
-	if err := r.ParseMultipartForm(maxFileImportPreviewSize + 4096); err != nil {
+	if err := parseLimitedMultipart(w, r, maxFileImportPreviewSize); err != nil {
 		h.Tmpl.RenderPartial(w, "partials/import_file_error.html", map[string]any{"Error": "File is too large - the limit is 100KB."})
 		return
 	}
@@ -190,7 +209,11 @@ func (h *ImportHandler) confirmFileImport(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	h.PendingFiles.Delete(sessionID)
+	pending, ok = h.PendingFiles.Take(sessionID, user.ID)
+	if !ok {
+		http.Error(w, "upload expired or already submitted", http.StatusConflict)
+		return
+	}
 	jobID, _ := h.Queue.Enqueue(user.ID, "Importing "+pending.Filename, notifications.TypeImport, func(notificationID string) error {
 		return h.runPendingFile(context.Background(), user.ID, userServer, pending, playlistName, notificationID)
 	})

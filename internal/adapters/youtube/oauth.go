@@ -96,6 +96,7 @@ func (c OAuthConfig) requestToken(form url.Values) (*GoogleTokens, error) {
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		var errBody struct {
+			Code             string `json:"error"`
 			ErrorDescription string `json:"error_description"`
 		}
 		_ = json.NewDecoder(resp.Body).Decode(&errBody)

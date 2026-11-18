@@ -17,7 +17,7 @@
 {{if not .Collections}}
 <div class="empty-state">
   <span class="empty-state-title">{{if .Filter.Active}}No collections match these filters.{{else}}No collections yet.{{end}}</span>
-  <span class="empty-state-hint">{{if .Filter.Active}}<a href="/collections/list" hx-get="/collections/list" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Clear filters</a>{{else}}Create one to start managing a Plex library's collection membership from here.{{end}}</span>
+  <span class="empty-state-hint">{{if .Filter.Active}}<a href="/collections" hx-get="/collections" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Clear filters</a>{{else}}Create one to start managing a Plex library's collection membership from here.{{end}}</span>
 </div>
 {{else}}
 <!-- Bulk select (DESIGN.md §11.11): a plain div, not a <form>, since row
@@ -31,12 +31,12 @@
   <thead>
     <tr>
       <th class="col-select"><input type="checkbox" class="checkbox select-all-in-table" aria-label="Select all collections"></th>
-      <th{{with ariaSort "name" $.Sort $.Dir}} aria-sort="{{.}}"{{end}} tabindex="0" hx-trigger="click[!event.target.closest(\'details\')]" hx-get="{{.Query.SortHref "name"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">
+      <th{{with ariaSort "name" $.Sort $.Dir}} aria-sort="{{.}}"{{end}}>
         <div class="row is-gap-2xs is-items-center">
-          <span>Name</span>
+          <button type="button" class="btn btn-ghost btn-sm" hx-get="{{.Query.SortHref "name"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Name</button>
           <details class="anchor">
             <summary class="btn btn-ghost btn-icon btn-sm{{if .Filter.Search}} is-active{{end}}" title="Search" aria-label="Search"><svg class="icon" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
-            <form class="dropdown is-below th-filter-menu" hx-get="/collections/list" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">
+            <form class="dropdown is-below th-filter-menu" action="/collections" method="get" hx-get="/collections" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">
               <!-- Preserves every OTHER active filter/sort param when
                    submitting this one - fLibrary/fServer can now hold more
                    than one value (multi-select), so every value has to
@@ -114,9 +114,9 @@
       </th>
       <th>Rules / Items</th>
       <th>Sync Mode</th>
-      <th{{with ariaSort "missing" $.Sort $.Dir}} aria-sort="{{.}}"{{end}} tabindex="0" hx-trigger="click[!event.target.closest(\'details\')]" hx-get="{{.Query.SortHref "missing"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">
+      <th{{with ariaSort "missing" $.Sort $.Dir}} aria-sort="{{.}}"{{end}}>
         <div class="row is-gap-2xs is-items-center">
-          <span>Missing</span>
+          <button type="button" class="btn btn-ghost btn-sm" hx-get="{{.Query.SortHref "missing"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Missing</button>
           <details class="anchor">
             <summary class="btn btn-ghost btn-icon btn-sm{{if .Filter.Missing}} is-active{{end}}" title="Filter" aria-label="Filter"><svg class="icon" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
             <div class="dropdown is-below th-filter-menu">
@@ -140,9 +140,9 @@
           </details>
         </div>
       </th>
-      <th{{with ariaSort "lastRun" $.Sort $.Dir}} aria-sort="{{.}}"{{end}} tabindex="0" hx-trigger="click[!event.target.closest(\'details\')]" hx-get="{{.Query.SortHref "lastRun"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">
+      <th{{with ariaSort "lastRun" $.Sort $.Dir}} aria-sort="{{.}}"{{end}}>
         <div class="row is-gap-2xs is-items-center">
-          <span>Last Run</span>
+          <button type="button" class="btn btn-ghost btn-sm" hx-get="{{.Query.SortHref "lastRun"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Last Run</button>
           <details class="anchor">
             <summary class="btn btn-ghost btn-icon btn-sm{{if .Filter.LastRun}} is-active{{end}}" title="Filter" aria-label="Filter"><svg class="icon" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
             <div class="dropdown is-below th-filter-menu">
@@ -154,9 +154,9 @@
           </details>
         </div>
       </th>
-      <th{{with ariaSort "nextRun" $.Sort $.Dir}} aria-sort="{{.}}"{{end}} tabindex="0" hx-trigger="click[!event.target.closest(\'details\')]" hx-get="{{.Query.SortHref "nextRun"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">
+      <th{{with ariaSort "nextRun" $.Sort $.Dir}} aria-sort="{{.}}"{{end}}>
         <div class="row is-gap-2xs is-items-center">
-          <span>Next Run</span>
+          <button type="button" class="btn btn-ghost btn-sm" hx-get="{{.Query.SortHref "nextRun"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Next Run</button>
           <details class="anchor">
             <summary class="btn btn-ghost btn-icon btn-sm{{if .Filter.NextRun}} is-active{{end}}" title="Filter" aria-label="Filter"><svg class="icon" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
             <div class="dropdown is-below th-filter-menu">
@@ -168,13 +168,13 @@
           </details>
         </div>
       </th>
-      <th{{with ariaSort "updatedAt" $.Sort $.Dir}} aria-sort="{{.}}"{{end}} tabindex="0" hx-trigger="click[!event.target.closest(\'details\')]" hx-get="{{.Query.SortHref "updatedAt"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true"><span>Last Updated</span></th>
-      <th{{with ariaSort "dateAdded" $.Sort $.Dir}} aria-sort="{{.}}"{{end}} tabindex="0" hx-trigger="click[!event.target.closest(\'details\')]" hx-get="{{.Query.SortHref "dateAdded"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">
+      <th{{with ariaSort "updatedAt" $.Sort $.Dir}} aria-sort="{{.}}"{{end}}><button type="button" class="btn btn-ghost btn-sm" hx-get="{{.Query.SortHref "updatedAt"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Last Updated</button></th>
+      <th{{with ariaSort "dateAdded" $.Sort $.Dir}} aria-sort="{{.}}"{{end}}>
         <div class="row is-gap-2xs is-items-center">
-          <span>Date Added</span>
+          <button type="button" class="btn btn-ghost btn-sm" hx-get="{{.Query.SortHref "dateAdded"}}" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">Date Added</button>
           <details class="anchor">
             <summary class="btn btn-ghost btn-icon btn-sm{{if or .Filter.AddedAfter .Filter.AddedBefore}} is-active{{end}}" title="Filter" aria-label="Filter"><svg class="icon" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></summary>
-            <form class="dropdown is-below th-filter-menu" hx-get="/collections/list" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">
+            <form class="dropdown is-below th-filter-menu" action="/collections" method="get" hx-get="/collections" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true">
               {{range $k, $v := .Query}}{{if and (ne $k "fAddedAfter") (ne $k "fAddedBefore")}}{{range $val := $v}}<input type="hidden" name="{{$k}}" value="{{$val}}">{{end}}{{end}}{{end}}
               <input type="date" name="fAddedAfter" value="{{.Filter.AddedAfter}}" class="input">
               <input type="date" name="fAddedBefore" value="{{.Filter.AddedBefore}}" class="input">
@@ -183,7 +183,7 @@
           </details>
         </div>
       </th>
-      <th class="col-actions">{{if .Filter.Active}}<a class="btn btn-secondary btn-sm" href="/collections/list" hx-get="/collections/list" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true" title="Clear all filters">Clear</a>{{end}}</th>
+      <th class="col-actions">{{if .Filter.Active}}<a class="btn btn-secondary btn-sm" href="/collections" hx-get="/collections" hx-target="#collections-list" hx-swap="innerHTML" hx-push-url="true" title="Clear all filters">Clear</a>{{end}}</th>
     </tr>
   </thead>
   <tbody>

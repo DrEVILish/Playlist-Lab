@@ -198,3 +198,56 @@ func TestHandleLogin_ExistingUserLosesHomeMembershipGetsDisabled(t *testing.T) {
 		t.Error("a user removed from Plex Home/friends must be disabled on next login")
 	}
 }
+
+func TestHandleLogin_AccessDecisionsSurviveAutomaticChecks(t *testing.T) {
+	sqlDB := newTestDB(t)
+	h := newAuthHandler(sqlDB)
+
+	if _, _, err := h.handleLogin(&auth.PlexUser{ID: 1}, "admin-token"); err != nil {
+		t.Fatal(err)
+	}
+	fakePlexHomeServer(t, []int{10}, nil, false)
+	member := &auth.PlexUser{ID: 10}
+	user, enabled, err := h.handleLogin(member, "user-token")
+	if err != nil || !enabled {
+		t.Fatalf("initial login: enabled=%v error=%v", enabled, err)
+	}
+	if err := db.DisableUser(sqlDB, user.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, enabled, err := h.handleLogin(member, "user-token"); err != nil || enabled {
+		t.Fatalf("manual disable: enabled=%v error=%v", enabled, err)
+	}
+	if err := db.EnableUser(sqlDB, user.ID); err != nil {
+		t.Fatal(err)
+	}
+	fakePlexHomeServer(t, nil, nil, false)
+	if _, enabled, err := h.handleLogin(member, "user-token"); err != nil || !enabled {
+		t.Fatalf("manual approval: enabled=%v error=%v", enabled, err)
+	}
+}
+
+func TestHandleLogin_FriendsUnavailableLeavesPriorApprovalIntact(t *testing.T) {
+	sqlDB := newTestDB(t)
+	h := newAuthHandler(sqlDB)
+	if _, _, err := h.handleLogin(&auth.PlexUser{ID: 1}, "admin-token"); err != nil {
+		t.Fatal(err)
+	}
+	fakePlexHomeServer(t, nil, []int{10}, false)
+	member := &auth.PlexUser{ID: 10}
+	if _, enabled, err := h.handleLogin(member, "user-token"); err != nil || !enabled {
+		t.Fatalf("initial login: enabled=%v error=%v", enabled, err)
+	}
+	degraded := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/home/users" {
+			_, _ = w.Write([]byte(`{"users":[]}`))
+			return
+		}
+		http.Error(w, "try later", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(degraded.Close)
+	t.Cleanup(auth.SetPlexAPIBaseForTest(degraded.URL, degraded.URL+"/friends"))
+	if _, enabled, err := h.handleLogin(member, "user-token"); err != nil || !enabled {
+		t.Fatalf("login during friends outage: enabled=%v error=%v", enabled, err)
+	}
+}

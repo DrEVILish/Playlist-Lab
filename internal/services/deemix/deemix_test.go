@@ -57,6 +57,28 @@ func TestQueueItem_ConcurrentAccess(t *testing.T) {
 	wg.Wait()
 }
 
+func TestDownloadQueueDeduplicatesActiveWorkAndAllowsRetry(t *testing.T) {
+	svc := New(Config{}, nil, nil)
+	candidate := &QueueItem{Status: "inQueue", Title: "A"}
+	const key = "track_1_3"
+	first := svc.queueTrack(key, candidate)
+	shared := svc.queueTrack(key, candidate)
+	if first.AlreadyQueued || !shared.AlreadyQueued || first.UUID != shared.UUID {
+		t.Fatalf("first queue result = %+v, second = %+v", first, shared)
+	}
+
+	svc.setQueueItem(first.UUID, QueueItem{Status: "failed"})
+	retry := svc.queueTrack(key, candidate)
+	if retry.AlreadyQueued || retry.UUID == first.UUID {
+		t.Fatalf("retry should start a new job, got %+v", retry)
+	}
+
+	old, err := svc.GetQueueItem(first.UUID)
+	if err != nil || old == nil || old.Status != "failed" {
+		t.Fatalf("old poller gets %+v, %v, want original failure", old, err)
+	}
+}
+
 // TestParseTrackOrAlbumURL covers QueueDownload's URL parsing: the uuid it
 // assigns a queued download is derived from the URL's own track/album id
 // (deezer's own `${type}_${id}_${bitrate}` scheme), so getting this parse

@@ -5,15 +5,11 @@ Goal-driven execution. Turn vague instructions into verifiable targets before wr
 
 # Building
 
-Run `scripts/fetch-themes.sh` before `go build` to refresh `static/themes/`
-and `static/assets/fonts/` from github.com/DrEVILish/ftl-themes (requires
-`gh` authenticated). Skippable on a routine rebuild once those directories
-already exist - it's a "pick up new/updated themes" step, not a dependency
-`go build` itself needs. Never edit files under `static/themes/` directly:
-they're that repo's compiled output, and any change to a theme goes through
-a pull request there, approved by its owner.
+Build with `go build -o bin/playlist-lab-server ./cmd/server`. The checked-in
+theme bundles and fonts are embedded in the binary.
 
-```
-scripts/fetch-themes.sh
-go build -o bin/playlist-lab-server ./cmd/server
-```
+To update ftl-themes, set the upstream Git revision in
+`scripts/fetch-themes.sh` and run it. The script validates the manifest and
+referenced assets before replacing the embedded copies. Pass an ftl-themes
+Git checkout to read the pinned revision locally. Make styling changes in the
+upstream repository, then refresh the vendor copy here.

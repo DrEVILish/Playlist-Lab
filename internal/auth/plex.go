@@ -200,6 +200,9 @@ func (c *PlexClient) GetHomeUsers(adminToken string) ([]int, error) {
 	if resp.StatusCode == http.StatusUnauthorized {
 		return nil, fmt.Errorf("invalid or expired Plex token")
 	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get Plex Home membership: status %d", resp.StatusCode)
+	}
 
 	// plex.tv answers either a bare array or {"users": [...]}.
 	body, err := decodeUsersArrayOrWrapped(resp)
@@ -217,7 +220,7 @@ func decodeUsersArrayOrWrapped(resp *http.Response) ([]int, error) {
 	var arr []struct {
 		ID int `json:"id"`
 	}
-	if err := json.Unmarshal(raw, &arr); err == nil {
+	if err := json.Unmarshal(raw, &arr); err == nil && arr != nil {
 		ids := make([]int, len(arr))
 		for i, u := range arr {
 			ids[i] = u.ID
@@ -227,6 +230,9 @@ func decodeUsersArrayOrWrapped(resp *http.Response) ([]int, error) {
 	var wrapped homeUsersResponse
 	if err := json.Unmarshal(raw, &wrapped); err != nil {
 		return nil, err
+	}
+	if wrapped.Users == nil {
+		return nil, fmt.Errorf("Plex Home response is missing the user list")
 	}
 	ids := make([]int, len(wrapped.Users))
 	for i, u := range wrapped.Users {
@@ -397,32 +403,44 @@ func (c *PlexClient) GetFriends(authToken string) ([]int, error) {
 	if resp.StatusCode == http.StatusUnauthorized {
 		return nil, fmt.Errorf("invalid or expired Plex token")
 	}
-
-	return parseFriendIDs(resp.Body), nil
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get Plex friends: status %d", resp.StatusCode)
+	}
+	return parseFriendIDs(resp.Body)
 }
 
 // parseFriendIDs pulls each <User id="..."> attribute out of plex.tv's XML
 // user list, split out of GetFriends so the parsing itself can be tested
 // without a real HTTP round trip.
-func parseFriendIDs(body io.Reader) []int {
+func parseFriendIDs(body io.Reader) ([]int, error) {
 	dec := xml.NewDecoder(body)
 	var ids []int
+	var container bool
 	for {
 		tok, err := dec.Token()
-		if err != nil {
+		if err == io.EOF {
 			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("decoding Plex friends: %w", err)
+		}
+		if start, ok := tok.(xml.StartElement); ok && start.Name.Local == "MediaContainer" {
+			container = true
 		}
 		if start, ok := tok.(xml.StartElement); ok && start.Name.Local == "User" {
 			for _, attr := range start.Attr {
 				if attr.Name.Local == "id" {
-					var id int
-					fmt.Sscanf(attr.Value, "%d", &id)
-					ids = append(ids, id)
+					if id, err := strconv.Atoi(attr.Value); err == nil {
+						ids = append(ids, id)
+					}
 				}
 			}
 		}
 	}
-	return ids
+	if !container {
+		return nil, fmt.Errorf("Plex friends response is missing the user list")
+	}
+	return ids, nil
 }
 
 // SwitchToManagedUser obtains a Plex Home managed user's own auth token via

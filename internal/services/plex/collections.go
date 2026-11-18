@@ -1,6 +1,6 @@
 // collections.go adds real Plex Collection CRUD (DESIGN.md §11.11) - a
 // separate object from a playlist, and distinct from discovery.go's
-// GetLibraryCollections, which only reads collection *names* from the
+// GetLibraryFacet, which only reads collection *names* from the
 // library's tag directory and predates any create/update/delete support.
 //
 // The full lifecycle (create -> read items -> add -> remove -> delete) has
@@ -74,11 +74,7 @@ func (c *Client) GetCollections(libraryID string) ([]Collection, error) {
 // object - /library/collections/{ratingKey}/items is the endpoint
 // confirmed against a live server to actually return its members.
 func (c *Client) GetCollectionItems(collectionRatingKey string) ([]Track, error) {
-	mc, err := c.get("/library/collections/" + url.PathEscape(collectionRatingKey) + "/items")
-	if err != nil {
-		return nil, err
-	}
-	return decodeTracks(mc.MediaContainer.Metadata)
+	return c.getTrackPages("/library/collections/" + url.PathEscape(collectionRatingKey) + "/items")
 }
 
 // CreateCollection creates a plain collection seeded with itemURIs (must be

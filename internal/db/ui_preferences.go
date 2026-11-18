@@ -63,11 +63,14 @@ func GetThemeVariant(sqlDB *sql.DB, userID int64) (string, error) {
 	return v.String, err
 }
 
-func SaveThemeVariant(sqlDB *sql.DB, userID int64, variant string) error {
+// SaveThemeSelection changes the current palette and its preset tint together.
+func SaveThemeSelection(sqlDB *sql.DB, userID int64, theme, variant string, resetTint bool) error {
 	if err := ensureUserSettingsRow(sqlDB, userID); err != nil {
 		return err
 	}
-	_, err := sqlDB.Exec("UPDATE user_settings SET theme_variant = ? WHERE user_id = ?", variant, userID)
+	_, err := sqlDB.Exec(`UPDATE user_settings SET theme = ?, theme_variant = ?,
+		theme_tints = CASE WHEN ? THEN json_remove(COALESCE(NULLIF(theme_tints, ''), '{}'), ?) ELSE theme_tints END
+		WHERE user_id = ?`, theme, variant, resetTint, "$."+theme, userID)
 	return err
 }
 
@@ -87,25 +90,14 @@ func GetThemeTints(sqlDB *sql.DB, userID int64) (map[string]string, error) {
 	return tints, json.Unmarshal([]byte(raw.String), &tints)
 }
 
-// SaveThemeTint sets (or, for color "", clears) one theme's tint colour.
+// SaveThemeTint updates only this theme's tint, including across concurrent saves.
 func SaveThemeTint(sqlDB *sql.DB, userID int64, slug, color string) error {
-	tints, err := GetThemeTints(sqlDB, userID)
-	if err != nil {
-		return err
-	}
-	if color == "" {
-		delete(tints, slug)
-	} else {
-		tints[slug] = color
-	}
-	raw, err := json.Marshal(tints)
-	if err != nil {
-		return err
-	}
 	if err := ensureUserSettingsRow(sqlDB, userID); err != nil {
 		return err
 	}
-	_, err = sqlDB.Exec("UPDATE user_settings SET theme_tints = ? WHERE user_id = ?", string(raw), userID)
+	_, err := sqlDB.Exec(`UPDATE user_settings
+		SET theme_tints = json_set(COALESCE(NULLIF(theme_tints, ''), '{}'), ?, ?)
+		WHERE user_id = ?`, "$."+slug, color, userID)
 	return err
 }
 

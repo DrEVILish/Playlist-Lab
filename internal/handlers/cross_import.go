@@ -14,6 +14,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -104,6 +105,9 @@ func (h *CrossImportHandler) playlists(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	for i := range playlists {
+		playlists[i].CoverURL = ImageProxyURL(playlists[i].CoverURL)
+	}
 	h.Tmpl.RenderPartial(w, "partials/cross_import_playlists.html", map[string]any{"Playlists": playlists})
 }
 
@@ -142,9 +146,10 @@ func (h *CrossImportHandler) startMatch(w http.ResponseWriter, r *http.Request) 
 	// The background job outlives this request (the handler returns well
 	// before matching finishes), so it must not inherit r.Context() - that
 	// gets cancelled the moment this response is written.
-	h.Queue.Enqueue(user.ID, "Cross-import: "+playlistID, notifications.TypeImport, func(notificationID string) error {
+	notificationID, _ := h.Queue.Enqueue(user.ID, "Cross-import: "+playlistID, notifications.TypeImport, func(notificationID string) error {
 		return h.runMatch(context.Background(), user.ID, jobID, playlistID, source, target, sess, notificationID)
 	})
+	sess.SetMatchNotification(notificationID)
 
 	h.Tmpl.RenderPartial(w, "partials/cross_import_progress.html", map[string]any{
 		"SessionID": sessionID, "Progress": sess.GetProgress(),
@@ -157,9 +162,16 @@ func (h *CrossImportHandler) startMatch(w http.ResponseWriter, r *http.Request) 
 // it goes. Ports the "Phase 1: fetch tracks" / "Phase 2: match tracks"
 // sections of POST /api/cross-import/match.
 func (h *CrossImportHandler) runMatch(ctx context.Context, userID, jobID int64, playlistID string, source adapters.SourceAdapter, target adapters.TargetAdapter, sess *crossimport.Session, notificationID string) error {
-	sess.SetProgress(crossimport.Progress{Phase: crossimport.PhaseFetching})
+	ctx, cancel, ok := sess.MatchContext(ctx)
+	if !ok {
+		return nil
+	}
+	defer cancel()
 
 	playlist, tracks, err := source.FetchTracks(ctx, playlistID, userID)
+	if sess.IsCancelled() {
+		return nil
+	}
 	if err != nil {
 		sess.SetProgress(crossimport.Progress{Phase: crossimport.PhaseError, Message: err.Error()})
 		_ = db.UpdateCrossImportJobStatus(h.DB, jobID, "failed")
@@ -167,11 +179,6 @@ func (h *CrossImportHandler) runMatch(ctx context.Context, userID, jobID int64, 
 	}
 	_ = db.UpdateCrossImportJobPlaylist(h.DB, jobID, playlist.Name, len(tracks))
 	sess.SetPlaylistName(playlist.Name)
-
-	if sess.IsCancelled() {
-		_ = db.DeleteCrossImportJob(h.DB, jobID)
-		return nil
-	}
 
 	sess.SetProgress(crossimport.Progress{Phase: crossimport.PhaseMatching, Total: len(tracks), PlaylistName: playlist.Name})
 	detail := "Matching tracks..."
@@ -181,18 +188,15 @@ func (h *CrossImportHandler) runMatch(ctx context.Context, userID, jobID int64, 
 		sess.SetProgress(crossimport.Progress{Phase: crossimport.PhaseMatching, Current: current, Total: total, PlaylistName: playlist.Name})
 	}
 	results, err := target.MatchTracks(ctx, tracks, sess.TargetConfig, userID, progress, sess.IsCancelled)
+	if sess.IsCancelled() {
+		return nil
+	}
 	if err != nil {
 		sess.SetProgress(crossimport.Progress{Phase: crossimport.PhaseError, Message: err.Error()})
 		_ = db.UpdateCrossImportJobStatus(h.DB, jobID, "failed")
 		return err
 	}
 
-	if sess.IsCancelled() {
-		_ = db.DeleteCrossImportJob(h.DB, jobID)
-		return nil
-	}
-
-	sess.SetResults(results)
 	_ = db.UpdateCrossImportJobStatus(h.DB, jobID, "review")
 
 	matched := 0
@@ -204,6 +208,7 @@ func (h *CrossImportHandler) runMatch(ctx context.Context, userID, jobID int64, 
 	status := notifications.StatusSuccess
 	doneDetail := fmt.Sprintf("Matched %d of %d tracks - ready to review", matched, len(results))
 	h.Notifications.Update(userID, notificationID, notifications.Patch{Status: &status, Detail: &doneDetail})
+	sess.SetResults(results)
 	return nil
 }
 
@@ -228,10 +233,24 @@ func (h *CrossImportHandler) matchStatus(w http.ResponseWriter, r *http.Request)
 func (h *CrossImportHandler) cancelMatch(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
 	sessionID := chi.URLParam(r, "sessionId")
-	if sess, ok := h.Sessions.Get(sessionID, user.ID); ok {
-		sess.Cancel()
+	sess, ok := h.Sessions.Get(sessionID, user.ID)
+	if !ok {
+		http.Error(w, "session not found", http.StatusNotFound)
+		return
 	}
-	w.WriteHeader(http.StatusNoContent)
+	if notificationID, changed := sess.Cancel(); changed {
+		h.Notifications.Dismiss(user.ID, notificationID)
+		h.Notifications.Add(user.ID, notifications.TypeImport, "Export to YouTube", "Matching canceled", notifications.StatusSuccess, nil)
+		if err := db.DeleteCrossImportJob(h.DB, sess.JobID); err != nil {
+			slog.Error("failed to discard canceled cross-import", "jobId", sess.JobID, "error", err)
+		}
+	}
+	progress := sess.GetProgress()
+	if progress.Phase != crossimport.PhaseCancelled {
+		http.Error(w, "matching has already ended", http.StatusConflict)
+		return
+	}
+	h.Tmpl.RenderPartial(w, "partials/cross_import_progress.html", map[string]any{"Progress": progress})
 }
 
 func (h *CrossImportHandler) trackIndex(r *http.Request) (int, error) {
@@ -251,7 +270,10 @@ func (h *CrossImportHandler) toggleSkip(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "invalid track index", http.StatusBadRequest)
 		return
 	}
-	sess.Update(idx, func(m *adapters.MatchResult) { m.Skipped = !m.Skipped })
+	if !sess.Update(idx, func(m *adapters.MatchResult) { m.Skipped = !m.Skipped }) {
+		http.Error(w, "track is no longer available to review", http.StatusConflict)
+		return
+	}
 	h.renderReview(w, sessionID, sess)
 }
 
@@ -285,6 +307,10 @@ func (h *CrossImportHandler) searchCandidates(w http.ResponseWriter, r *http.Req
 	sess, ok := h.Sessions.Get(sessionID, user.ID)
 	if !ok {
 		http.Error(w, "session not found", http.StatusNotFound)
+		return
+	}
+	if sess.GetProgress().Phase != crossimport.PhaseReview {
+		http.Error(w, "this export is no longer available to review", http.StatusConflict)
 		return
 	}
 	idx, err := h.trackIndex(r)
@@ -332,14 +358,17 @@ func (h *CrossImportHandler) selectCandidate(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "targetTrackId is required", http.StatusBadRequest)
 		return
 	}
-	sess.Update(idx, func(m *adapters.MatchResult) {
+	if !sess.Update(idx, func(m *adapters.MatchResult) {
 		m.TargetTrackID = trackID
 		m.TargetTitle = title
 		m.TargetArtist = artist
 		m.Matched = true
 		m.Skipped = false
 		m.Confidence = 100
-	})
+	}) {
+		http.Error(w, "track is no longer available to review", http.StatusConflict)
+		return
+	}
 	h.renderReview(w, sessionID, sess)
 }
 
@@ -363,11 +392,22 @@ func (h *CrossImportHandler) execute(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "target adapter not available", http.StatusInternalServerError)
 		return
 	}
-	results := sess.GetResults()
+	results, ok := sess.BeginExecution()
+	if !ok {
+		http.Error(w, "this export is no longer available to create", http.StatusConflict)
+		return
+	}
 	jobID := sess.JobID
 
 	h.Queue.Enqueue(user.ID, "Import: "+playlistName, notifications.TypeImport, func(notificationID string) error {
-		_, name, _, err := target.CreatePlaylist(context.Background(), playlistName, results, sess.TargetConfig, user.ID)
+		playlistID, name, added, err := target.CreatePlaylist(context.Background(), playlistName, results, sess.TargetConfig, user.ID)
+		created := err == nil || playlistID != ""
+		defer func() {
+			sess.FinishExecution(created)
+			if created {
+				h.Sessions.Delete(sessionID)
+			}
+		}()
 		if err != nil {
 			_ = db.UpdateCrossImportJobStatus(h.DB, jobID, "failed")
 			return err
@@ -389,15 +429,18 @@ func (h *CrossImportHandler) execute(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		unmatchedJSON, _ := json.Marshal(unmatchedTracks)
-		if err := db.CompleteCrossImportJob(h.DB, jobID, user.ID, name, matched, unmatched, skipped, len(results), string(unmatchedJSON)); err != nil {
+		if err := db.CompleteCrossImportJob(h.DB, jobID, user.ID, name, added, unmatched, skipped, len(results), string(unmatchedJSON)); err != nil {
 			return err
 		}
 
 		status := notifications.StatusSuccess
-		detail := fmt.Sprintf("Imported %d tracks", matched)
+		detail := fmt.Sprintf("Imported %d tracks", added)
+		if added < matched {
+			status = notifications.StatusError
+			detail = fmt.Sprintf("Imported %d of %d matched tracks. The target did not add the rest.", added, matched)
+		}
 		pct := 100
 		h.Notifications.Update(user.ID, notificationID, notifications.Patch{Status: &status, Detail: &detail, Progress: &pct})
-		h.Sessions.Delete(sessionID)
 		return nil
 	})
 
@@ -450,13 +493,7 @@ func (h *CrossImportHandler) oauthStart(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	sid := auth.SessionID(r)
-	data, err := h.Store.Get(sid)
-	if err != nil {
-		http.Error(w, "session not found", http.StatusUnauthorized)
-		return
-	}
-	data.OAuthState = nonce
-	if err := h.Store.Save(sid, data); err != nil {
+	if err := h.Store.SetOAuthState(sid, user.ID, service+":"+nonce); err != nil {
 		http.Error(w, "failed to start OAuth flow", http.StatusInternalServerError)
 		return
 	}
@@ -498,13 +535,10 @@ func (h *CrossImportHandler) oauthCallback(w http.ResponseWriter, r *http.Reques
 	// than trusting the code.
 	state := r.URL.Query().Get("state")
 	sid := auth.SessionID(r)
-	data, err := h.Store.Get(sid)
-	if err != nil || data.OAuthState == "" || state == "" || data.OAuthState != state {
+	if state == "" || h.Store.ConsumeOAuthState(sid, user.ID, service+":"+state) != nil {
 		http.Error(w, "invalid or expired OAuth state", http.StatusBadRequest)
 		return
 	}
-	data.OAuthState = ""
-	_ = h.Store.Save(sid, data)
 
 	redirectURI := fmt.Sprintf("%s://%s/cross-import/oauth/%s/callback", schemeOf(r), r.Host, service)
 	if err := oauth.HandleOAuthCallback(r.Context(), code, user.ID, redirectURI); err != nil {

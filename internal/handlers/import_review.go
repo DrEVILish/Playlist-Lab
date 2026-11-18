@@ -297,6 +297,11 @@ func (h *ImportHandler) confirmImport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "review session not found or expired - try importing again", http.StatusNotFound)
 		return
 	}
+	if !sess.BeginConfirm() {
+		http.Error(w, "Import is already being confirmed", http.StatusConflict)
+		return
+	}
+	defer sess.EndConfirm()
 	_ = r.ParseForm()
 	playlistName := strings.Join(strings.Fields(r.FormValue("playlistName")), " ")
 	if playlistName == "" {
@@ -338,18 +343,48 @@ func (h *ImportHandler) confirmImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	existingCoverURL := ""
+	var originals []plex.Playlist
 	if overwriteExisting {
-		existingCoverURL = h.overwriteExistingPlaylist(client, playlistName, keepExistingCover, userServer, dbUser)
+		playlists, err := client.GetPlaylists()
+		if err != nil {
+			http.Error(w, "Could not list existing playlists", http.StatusBadGateway)
+			return
+		}
+		for _, p := range playlists {
+			if p.PlaylistType == "audio" && strings.EqualFold(strings.Join(strings.Fields(p.Title), " "), playlistName) {
+				originals = append(originals, p)
+			}
+		}
 	}
 
 	coverURL := sess.CoverURL()
-	if keepExistingCover && existingCoverURL != "" {
-		coverURL = existingCoverURL
+	var cover []byte
+	var coverType string
+	coverRequested := false
+	if keepExistingCover {
+		for _, original := range originals {
+			if original.Composite == "" {
+				continue
+			}
+			coverRequested = true
+			body, _, err := client.FetchMedia(original.Composite)
+			if err != nil {
+				continue
+			}
+			cover, coverType, err = plex.ReadPoster(body)
+			body.Close()
+			if err == nil {
+				break
+			}
+			cover = nil
+		}
+		if len(cover) > 0 {
+			coverURL = ""
+		}
 	}
 
 	result := &importsvc.Result{PlaylistName: playlistName, Source: sess.Source, Matched: matched, Unmatched: unmatched, MatchedCount: len(matched), TotalCount: len(matched) + len(unmatched), CoverURL: coverURL}
-	dbPlaylistID, _, err := importsvc.FinalizeImportResult(h.DB, client, sess.Source, sess.SourceIdentifier, user.ID,
+	dbPlaylistID, createdKey, err := importsvc.FinalizeImportResult(h.DB, client, sess.Source, sess.SourceIdentifier, user.ID,
 		userServer.ServerClientID, userServer.LibraryID.String, result, importsvc.FinalizeOpts{PlaylistName: playlistName})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
@@ -360,41 +395,29 @@ func (h *ImportHandler) confirmImport(w http.ResponseWriter, r *http.Request) {
 
 	status, pct := notifications.StatusSuccess, 100
 	detail := fmt.Sprintf("Created %q - added %d tracks", playlistName, len(matched))
+	canRemoveOriginals := !coverRequested || len(cover) > 0
+	if len(cover) > 0 {
+		if err := client.UploadPlaylistPosterBytes(createdKey, cover, coverType); err != nil {
+			slog.Warn("overwrite: could not preserve cover", "error", err)
+			canRemoveOriginals = false
+		}
+	}
+	if !canRemoveOriginals {
+		originals = nil
+		status = notifications.StatusError
+		detail += ". Kept the previous playlists because their cover could not be copied."
+	}
+	for _, old := range originals {
+		if old.RatingKey != createdKey {
+			if err := client.DeletePlaylist(old.RatingKey); err != nil {
+				slog.Warn("overwrite: could not delete previous playlist", "error", err, "ratingKey", old.RatingKey)
+				status = notifications.StatusError
+			}
+		}
+	}
+	if canRemoveOriginals && status == notifications.StatusError {
+		detail += ". One or more previous playlists could not be removed."
+	}
 	h.Notifications.Add(user.ID, notifications.TypeImport, playlistName, detail, status, &pct)
 	h.Tmpl.RenderPartial(w, "partials/notifications.html", map[string]any{"Notifications": h.Notifications.List(user.ID)})
-}
-
-// overwriteExistingPlaylist deletes every existing Plex playlist whose
-// name normalizes (trim, collapse whitespace, lowercase) to the same
-// value as the new one, matching import.ts's own normalize-compare-delete-
-// all-matches loop (deliberately deleting every match, not just the first,
-// since duplicates can and do accumulate). Returns the first match's
-// composite-thumb URL (with this user's token attached) if the caller
-// wants to keep it - "" if there was no existing playlist, or no cover to
-// keep.
-func (h *ImportHandler) overwriteExistingPlaylist(client *plex.Client, playlistName string, keepCover bool, userServer *db.UserServer, dbUser *db.User) string {
-	normalize := func(s string) string {
-		return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(s)), " "))
-	}
-	target := normalize(playlistName)
-
-	playlists, err := client.GetPlaylists()
-	if err != nil {
-		slog.Warn("overwrite: failed to list existing playlists", "error", err)
-		return ""
-	}
-	existingCoverURL := ""
-	for _, p := range playlists {
-		if p.PlaylistType != "audio" || normalize(p.Title) != target {
-			continue
-		}
-		if keepCover && existingCoverURL == "" && p.Composite != "" {
-			token := plex.ResolveToken(dbUser.PlexToken, userServer.AccessToken.String)
-			existingCoverURL = userServer.ServerURL + p.Composite + "?X-Plex-Token=" + token
-		}
-		if err := client.DeletePlaylist(p.RatingKey); err != nil {
-			slog.Warn("overwrite: failed to delete an existing playlist", "error", err, "ratingKey", p.RatingKey)
-		}
-	}
-	return existingCoverURL
 }

@@ -17,6 +17,8 @@
 package crossimport
 
 import (
+	"context"
+	"slices"
 	"sync"
 	"time"
 
@@ -26,11 +28,13 @@ import (
 type Phase string
 
 const (
-	PhaseFetching Phase = "fetching"
-	PhaseMatching Phase = "matching"
-	PhaseReview   Phase = "review"
-	PhaseError    Phase = "error"
-	PhaseDone     Phase = "done"
+	PhaseFetching  Phase = "fetching"
+	PhaseMatching  Phase = "matching"
+	PhaseReview    Phase = "review"
+	PhaseError     Phase = "error"
+	PhaseCancelled Phase = "cancelled"
+	PhaseExecuting Phase = "executing"
+	PhaseDone      Phase = "done"
 )
 
 type Progress struct {
@@ -55,14 +59,18 @@ type Session struct {
 	PlaylistName string
 	CreatedAt    time.Time
 
-	Progress  Progress
-	Results   []adapters.MatchResult
-	Cancelled bool
+	Progress Progress
+	Results  []adapters.MatchResult
+
+	stopMatching      context.CancelFunc
+	matchNotification string
 }
 
 func (s *Session) SetProgress(p Progress) {
 	s.mu.Lock()
-	s.Progress = p
+	if s.Progress.Phase != PhaseCancelled && s.Progress.Phase != PhaseExecuting {
+		s.Progress = p
+	}
 	s.mu.Unlock()
 }
 
@@ -84,19 +92,21 @@ func (s *Session) GetPlaylistName() string {
 	return s.PlaylistName
 }
 
-func (s *Session) SetResults(results []adapters.MatchResult) {
+func (s *Session) SetResults(results []adapters.MatchResult) bool {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.Progress.Phase != PhaseMatching {
+		return false
+	}
 	s.Results = results
 	s.Progress.Phase = PhaseReview
-	s.mu.Unlock()
+	return true
 }
 
 func (s *Session) GetResults() []adapters.MatchResult {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := make([]adapters.MatchResult, len(s.Results))
-	copy(out, s.Results)
-	return out
+	return slices.Clone(s.Results)
 }
 
 // Update mutates one track's review state (override or skip) by index -
@@ -104,23 +114,75 @@ func (s *Session) GetResults() []adapters.MatchResult {
 func (s *Session) Update(index int, fn func(*adapters.MatchResult)) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if index < 0 || index >= len(s.Results) {
+	if s.Progress.Phase != PhaseReview || index < 0 || index >= len(s.Results) {
 		return false
 	}
 	fn(&s.Results[index])
 	return true
 }
 
-func (s *Session) Cancel() {
+// MatchContext lets cancellation stop a running source or target request.
+// A canceled queued job never starts matching.
+func (s *Session) MatchContext(ctx context.Context) (context.Context, context.CancelFunc, bool) {
 	s.mu.Lock()
-	s.Cancelled = true
+	defer s.mu.Unlock()
+	if s.Progress.Phase == PhaseCancelled {
+		return nil, nil, false
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	s.stopMatching = cancel
+	return ctx, cancel, true
+}
+
+func (s *Session) SetMatchNotification(id string) {
+	s.mu.Lock()
+	s.matchNotification = id
 	s.mu.Unlock()
 }
 
-func (s *Session) IsCancelled() bool {
+func (s *Session) Cancel() (notificationID string, changed bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.Cancelled
+	switch s.Progress.Phase {
+	case PhaseCancelled, PhaseExecuting, PhaseDone, PhaseError:
+		return "", false
+	}
+	s.Progress.Phase = PhaseCancelled
+	s.Results = nil
+	if s.stopMatching != nil {
+		s.stopMatching()
+		s.stopMatching = nil
+	}
+	return s.matchNotification, true
+}
+
+func (s *Session) IsCancelled() bool {
+	return s.GetProgress().Phase == PhaseCancelled
+}
+
+// BeginExecution and Cancel compete for the same phase under the same lock.
+// Once execution starts, the target playlist may already have been created.
+func (s *Session) BeginExecution() ([]adapters.MatchResult, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.Progress.Phase != PhaseReview {
+		return nil, false
+	}
+	s.Progress.Phase = PhaseExecuting
+	return slices.Clone(s.Results), true
+}
+
+func (s *Session) FinishExecution(created bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.Progress.Phase != PhaseExecuting {
+		return
+	}
+	if created {
+		s.Progress.Phase = PhaseDone
+		return
+	}
+	s.Progress.Phase = PhaseReview
 }
 
 // Store is a plain in-memory session map, same durability tradeoff as

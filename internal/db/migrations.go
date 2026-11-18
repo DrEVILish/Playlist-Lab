@@ -27,8 +27,11 @@ var additiveColumns = []columnSpec{
 	{"users", "spotify_client_secret", "ALTER TABLE users ADD COLUMN spotify_client_secret TEXT"},
 	{"cached_playlists", "cover_url", "ALTER TABLE cached_playlists ADD COLUMN cover_url TEXT"},
 	{"users", "is_enabled", "ALTER TABLE users ADD COLUMN is_enabled INTEGER DEFAULT 1"},
+	{"users", "access_managed", "ALTER TABLE users ADD COLUMN access_managed INTEGER NOT NULL DEFAULT 0"},
 	{"oauth_connections", "expires_at", "ALTER TABLE oauth_connections ADD COLUMN expires_at INTEGER"},
 	{"schedules", "created_at", "ALTER TABLE schedules ADD COLUMN created_at INTEGER"},
+	{"schedules", "last_attempt", "ALTER TABLE schedules ADD COLUMN last_attempt INTEGER"},
+	{"playlists", "server_client_id", "ALTER TABLE playlists ADD COLUMN server_client_id TEXT"},
 	{"user_servers", "access_token", "ALTER TABLE user_servers ADD COLUMN access_token TEXT"},
 	// DESIGN.md §14/§11.2: per-user UI preferences, following the same
 	// scalar-column-vs-JSON-blob-column split already used above (ai_provider
@@ -79,6 +82,12 @@ func runMigrations(sqlDB *sql.DB) error {
 		if has {
 			continue
 		}
+		if spec.table == "users" && spec.column == "access_managed" {
+			if err := migrateManagedUserAccess(sqlDB, spec.ddl); err != nil {
+				return fmt.Errorf("migrating user access: %w", err)
+			}
+			continue
+		}
 		if _, err := sqlDB.Exec(spec.ddl); err != nil {
 			return fmt.Errorf("adding %s.%s: %w", spec.table, spec.column, err)
 		}
@@ -94,6 +103,11 @@ func runMigrations(sqlDB *sql.DB) error {
 		)
 	`); err != nil {
 		return fmt.Errorf("backfilling user_servers.is_default: %w", err)
+	}
+
+	// Older versions cached private Plex metadata and token-bearing artwork URLs.
+	if _, err := sqlDB.Exec("DELETE FROM cached_playlists WHERE source = 'plex'"); err != nil {
+		return fmt.Errorf("removing legacy Plex cache entries: %w", err)
 	}
 
 	// missing_collection_items briefly shipped with a tmdb_id INTEGER

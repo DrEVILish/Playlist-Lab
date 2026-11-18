@@ -10,6 +10,7 @@
 package actionqueue
 
 import (
+	"context"
 	"log/slog"
 	"strconv"
 	"sync"
@@ -31,6 +32,7 @@ type Queue struct {
 	mu     sync.Mutex
 	queued []job
 	active int
+	idle   chan struct{}
 }
 
 func New(store *notifications.Store) *Queue {
@@ -46,6 +48,9 @@ func (q *Queue) Enqueue(userID int64, title string, notifType notifications.Type
 	j := job{id: n.ID, userID: userID, handler: handler}
 
 	q.mu.Lock()
+	if q.idle == nil {
+		q.idle = make(chan struct{})
+	}
 	q.queued = append(q.queued, j)
 	position = len(q.queued) - 1
 	q.refreshQueuedPositionsLocked()
@@ -85,10 +90,30 @@ func (q *Queue) processQueue() {
 	}
 }
 
+// Wait blocks until the already-enqueued jobs finish, or ctx expires.
+func (q *Queue) Wait(ctx context.Context) error {
+	q.mu.Lock()
+	idle := q.idle
+	q.mu.Unlock()
+	if idle == nil {
+		return nil
+	}
+	select {
+	case <-idle:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func (q *Queue) run(j job) {
 	defer func() {
 		q.mu.Lock()
 		q.active--
+		if q.active == 0 && len(q.queued) == 0 {
+			close(q.idle)
+			q.idle = nil
+		}
 		q.mu.Unlock()
 		q.processQueue()
 	}()

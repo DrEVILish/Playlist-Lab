@@ -71,20 +71,16 @@ func loadFTLThemes() []ftlTheme {
 	return themes
 }
 
-// isValidTheme reports whether slug is either "" (this app's own default
-// look) or a real ftl-themes slug - the same "fall back to the safe
-// default on anything unrecognized" guard saveAppearance already applies
-// to textScale.
-func isValidTheme(slug string) bool {
-	if slug == "" {
-		return true
+// themeSelection keeps the saved picker and the rendered palette in sync
+// when a vendor update removes a theme or one of its variants.
+func themeSelection(slug, variant string) (string, string) {
+	if findTheme(slug) == nil {
+		return "", ""
 	}
-	for _, t := range ftlThemes {
-		if t.Slug == slug {
-			return true
-		}
+	if !isValidVariant(slug, variant) {
+		variant = ""
 	}
-	return false
+	return slug, variant
 }
 
 // findTheme returns a slug's themes.json entry, or nil if unknown.

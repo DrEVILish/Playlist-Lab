@@ -446,6 +446,18 @@ a { color: var(--link, var(--accent)); }
   text-overflow: ellipsis;
 }
 .field-row > .field-hint { margin-block-start: 0; flex: none; }
+/* .field-row.is-wrap — the label is the setting's only name, so it wraps
+   instead of truncating, and a sentence-length .field-hint sits under it
+   inside the row; the control stays at the end, centred on both. */
+.field-row.is-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  row-gap: 0.15em;
+}
+.field-row.is-wrap > .label { grid-column: 1; white-space: normal; overflow: visible; }
+.field-row.is-wrap > .field-hint { grid-column: 1; }
+.field-row.is-wrap > :not(.label, .field-hint) { grid-column: 2; grid-row: 1 / span 2; }
 
 /* .input-group — an input with joined addons: a unit label, a static
    prefix, or an attached button. Children share one border; only the
@@ -500,6 +512,9 @@ a { color: var(--link, var(--accent)); }
   color: var(--check-fg, var(--text));
 }
 .check:has(:disabled) { opacity: 0.5; cursor: var(--cursor-not-allowed, not-allowed); }
+/* A hidden name (a table's select column) is positioned against its own
+   label, so it can't escape a scrolling table and widen the page. */
+.check:has(> .visually-hidden) { position: relative; }
 
 /* .radio-group — a <fieldset> of .check rows with a <legend>. */
 .radio-group {
@@ -576,7 +591,8 @@ a { color: var(--link, var(--accent)); }
    (the attribute is also what assistive tech reads). The button sizes to
    its content: the track becomes a normal flex child and an optional
    .switch-label sits beside it. */
-button.switch {
+button.switch,
+label.switch:has(> .switch-label) {
   appearance: none;
   width: auto;
   height: auto;
@@ -589,7 +605,8 @@ button.switch {
   font: inherit;
   text-align: start;
 }
-button.switch .switch-track {
+button.switch .switch-track,
+label.switch:has(> .switch-label) > .switch-track {
   position: relative;
   inset: auto;
   flex: none;
@@ -701,7 +718,7 @@ button.switch:disabled { opacity: 0.5; cursor: var(--cursor-not-allowed, not-all
   align-items: center;
   gap: 0.5rem;
   margin: calc(-1 * var(--surface-pad, 1.5rem)) calc(-1 * var(--surface-pad, 1.5rem)) var(--space-m);
-  padding: var(--modal-header-pad, var(--space-xs) var(--space-m));
+  padding: var(--modal-header-pad, var(--space-xs) var(--surface-pad, var(--space-m)));
   background: var(--modal-header-bg, transparent);
   color: var(--modal-header-fg, inherit);
   font-weight: 600;
@@ -756,6 +773,9 @@ dialog.modal:modal {
   position: fixed;
   inset: 0;
   margin: auto;
+}
+.modal[popover]:popover-open:not(:where(.is-maximized, .window-max:checked + .modal)),
+dialog.modal:modal:not(:where(.is-maximized, .window-max:checked + .modal)) {
   height: fit-content;
 }
 
@@ -950,6 +970,7 @@ dialog.modal:modal {
   color: var(--dropdown-item-fg, var(--text));
   text-align: start;
 }
+.dropdown-item.is-danger { color: var(--danger-text, var(--danger)); }
 .dropdown-item:focus-visible {
   background: var(--dropdown-item-bg-hover, var(--accent));
   color: var(--dropdown-item-fg-hover, var(--on-accent));
@@ -1094,6 +1115,7 @@ dialog.modal:modal {
  * every theme here treats it as a signature element. */
 .transport {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
   padding: var(--transport-padding, 0.6rem 0.9rem);
@@ -1503,7 +1525,7 @@ html.is-dragging-value, html.is-dragging-value * { cursor: var(--cursor-resize-y
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 0.2rem 0.35rem;
+  padding: 0.35rem 0.4rem;
   background: var(--scribble-bg, var(--surface-2));
   color: var(--scribble-fg, var(--text));
   border-top: var(--scribble-bar-width, 0.3rem) solid var(--strip-color, var(--accent));
@@ -1602,7 +1624,7 @@ html.is-dragging-value, html.is-dragging-value * { cursor: var(--cursor-resize-y
   background: var(--row-selected-bg, rgba(128, 128, 128, 0.25));
   color: var(--row-selected-fg, inherit);
 }
-.table tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) td {
+.table tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))):not(.is-selected, :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))) td {
   background: var(--row-active-bg, transparent);
 }
 /* The marker belongs to the row, so only its leading cell draws it — on
@@ -1944,7 +1966,10 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
 .status-ok { --state-fg: var(--success-text, var(--success)); color: var(--state-fg); }
 .status-warn { --state-fg: var(--warning-text, var(--warning)); color: var(--state-fg); }
 .status-error { --state-fg: var(--danger-text, var(--danger)); color: var(--state-fg); }
+/* .status-idle is neutral everywhere (offline, stopped, not running);
+   .status-ready is armed and waiting, the green of a recorder on standby. */
 .status-idle { --state-fg: var(--muted); color: var(--state-fg); }
+.status-ready { --state-fg: var(--success-text, var(--success)); color: var(--state-fg); }
 /* .status-rec: recording or on air. A bold danger label whose dot has a
    halo; the dot pulses when motion is allowed. */
 .status-rec { --state-fg: var(--danger-text, var(--danger)); color: var(--state-fg); font-weight: 700; }
@@ -2066,8 +2091,7 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
 :is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a)) {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  gap: 0.6em;
   width: 100%;
   padding: 0.45em 0.7em;
   border-radius: var(--context-menu-radius, var(--radius));
@@ -2075,6 +2099,10 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
   text-align: start;
 }
 :is(.context-menu-item, .context-menu li > :is(button, a)).is-danger { color: var(--danger-text, var(--danger)); }
+/* A leading icon stays beside its label; a trailing shortcut (<kbd>) or a
+   submenu arrow is pushed to the end. */
+:is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a)) > :is(kbd, :last-child:not(:first-child, .icon)),
+:is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a))[aria-haspopup] > :last-child:not(.icon) { margin-inline-start: auto; padding-inline-start: 0.4em; }
 :is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a)):focus-visible {
   background: var(--context-menu-item-bg-hover, var(--dropdown-item-bg-hover, var(--accent)));
   color: var(--context-menu-item-fg-hover, var(--dropdown-item-fg-hover, var(--on-accent)));
@@ -2157,6 +2185,8 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
   stroke-width: var(--icon-stroke-width, 2);
   stroke-linecap: round;
   stroke-linejoin: round;
+  /* The reset makes every svg a block; an icon sits in the line with its text. */
+  display: inline-block;
   vertical-align: -0.2em;
   flex-shrink: 0;
 }
@@ -2178,7 +2208,6 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
 /* .badge-button — a clickable badge (filter chip). */
 .badge-button {
   border: none;
-  font: inherit;
   transition: background 0.15s ease, color 0.15s ease;
 }
 .badge-button:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) {
@@ -2516,7 +2545,7 @@ html[data-motion="reduced"] .carousel { scroll-behavior: auto; }
   display: flex;
   flex-wrap: wrap;
   gap: 0.15rem 0.9rem;
-  padding-block: 0.5rem;
+  padding: 0.5rem var(--space-2xs);
   background: var(--scrollspy-nav-bg, var(--surface));
   border-block-end: 1px solid var(--scrollspy-nav-rule, var(--hairline));
 }
@@ -2634,6 +2663,8 @@ html[data-motion="reduced"] .scrollspy-body { scroll-behavior: auto; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Task buttons take the squeeze before the tray does. */
+.taskbar > .taskbar-task { flex-shrink: 1000; }
 .taskbar-task:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) {
   background: var(--taskbar-task-bg-active, var(--taskbar-task-bg, transparent));
   border-color: var(--taskbar-task-border-active, var(--taskbar-task-border, transparent));
@@ -2645,7 +2676,10 @@ html[data-motion="reduced"] .scrollspy-body { scroll-behavior: auto; }
   display: inline-flex;
   align-items: center;
   gap: 0.5em;
-  flex: none;
+  /* The tray gives way last on a narrow bar (see .taskbar > .taskbar-task):
+     its readouts then truncate rather than push the bar past its edge. */
+  flex: 0 1 auto;
+  min-inline-size: 0;
   margin-inline-start: auto;
   padding: 0.3em 0.8em;
   border: var(--taskbar-border-width, 1px) solid var(--taskbar-tray-border, transparent);
@@ -2653,6 +2687,14 @@ html[data-motion="reduced"] .scrollspy-body { scroll-behavior: auto; }
   background: var(--taskbar-tray-bg, transparent);
   color: var(--taskbar-tray-fg, inherit);
   font-variant-numeric: tabular-nums;
+}
+.taskbar-tray > * { flex: none; }
+.taskbar-tray > :is(span, time):not(.lamp) {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* .breadcrumbs */
@@ -3225,6 +3267,14 @@ pre code { padding: 0; background: none; border-radius: 0; }
   --btn-border-hover: var(--app-bar-text);
 }
 .app-bar :is(.btn-tertiary, .btn-ghost) { --btn-border: transparent; }
+/* A GO button on the bar: core's GO is an outlined accent label, which on a
+   bar painted in the accent reads at 1:1. Unless the theme styles its GO
+   (--go-fg, --go-border), it takes the bar's text colour like the other
+   unfilled buttons. A theme that fills it (--go-bg) also sets --go-fg. */
+.app-bar .btn-go {
+  --btn-fg: var(--go-fg, var(--app-bar-text));
+  --btn-border: var(--go-border, var(--app-bar-text));
+}
 
 /* Screen-reader-only content — the standard visually-hidden-but-announced
    clip-rect pattern, not display:none (which screen readers also skip). */
@@ -3305,6 +3355,9 @@ pre code { padding: 0; background: none; border-radius: 0; }
 
 /* .divide-y — hairlines between stacked children (lists, menus). */
 .divide-y > * + * { border-block-start: 1px solid var(--hairline); }
+/* Text never sits on the hairline. Zero specificity, so a child with its
+   own padding (a list item, a menu entry) keeps it. */
+:where(.divide-y > *) { padding-block: var(--divide-y-pad, var(--space-2xs)); }
 
 /* .ratio — an aspect-ratio box for video/embeds; children fill it.
    Set `--ratio` directly or use a modifier (default 16/9). */
@@ -3777,10 +3830,22 @@ html[data-pointer="touch"] { --tap-min: 44px; }
   min-block-size: var(--tap-min);
   touch-action: manipulation;
 }
-/* Short labels ("EQ", "L1") too: toggles, tabs and segments. */
-:is(.btn-icon, .btn-close, .btn-min, .btn-max, .pagination-item, .nav-toggle, .taskbar-task, .badge-button,
-    .toggle-btn, .tab, .segmented-item) {
+/* Short labels ("EQ", "L1") too: toggles, tabs, segments, scrollspy, keys. */
+:is(.btn-icon, .btn-close, .btn-min, .btn-max, .pagination-item, .nav-toggle, .taskbar-task, .taskbar-start, .badge-button,
+    .toggle-btn, .tab, .segmented-item, .scrollspy-link, .key) {
   min-inline-size: var(--tap-min);
+}
+/* Links and buttons in a toast are actions, not running text. */
+:where(.toast) :is(a, button):not(.btn, .btn-icon, .btn-close) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--tap-min);
+  min-inline-size: var(--tap-min);
+}
+/* Touch tiers: keys and reaction chips sit 8px apart (WCAG 2.5.8 spacing). */
+@media (max-width: 900px), (any-pointer: coarse) {
+  .strip-section, .message-reactions { gap: max(0.3rem, 8px); }
 }
 :is(.input, .select) { min-block-size: var(--tap-min); }
 /* Checkboxes and radios: the label is the target. */
@@ -3802,16 +3867,23 @@ html[data-pointer="touch"] { --tap-min: 44px; }
   transform: translate(-50%, -50%);
 }
 .slider { touch-action: none; }
-@media (max-width: 900px), (any-pointer: coarse) {
-  /* The range input's own box is both its track and its target. On touch
-     it grows to the target height; padding keeps the drawn track the same
-     thin line in the middle (the border can't follow it, so it hides). */
-  .slider:not(.is-range > .slider) {
-    height: var(--tap-min);
-    padding-block: calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2);
-    background-clip: content-box;
-    border-color: transparent;
-  }
+/* The range input's own box is both its track and its target. It grows to
+   --tap-min (44px on touch tiers, 24px on desktop); padding keeps the drawn
+   track the same thin line in the middle. The border can't follow it, so it
+   hides: a theme whose track is drawn by the border (a bevelled groove)
+   redraws it with --slider-bg as a background on the content box. */
+.slider:not(.is-range > .slider) {
+  height: var(--tap-min);
+  padding-block: calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2);
+  background-clip: content-box;
+  border-color: transparent;
+}
+/* The same, sideways, for a vertical slider. */
+.slider.is-vertical:not(.is-range > .slider) {
+  width: var(--tap-min);
+  height: var(--slider-length, 4.5rem);
+  /* Physical sides: under vertical-lr the logical block axis is horizontal. */
+  padding: 0 calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2);
 }
 /* Inline text links inside running text are exempt (WCAG 2.5.8); links
    that stand alone as navigation are not. */
@@ -3893,6 +3965,10 @@ input[type="color"] { min-block-size: var(--tap-min); min-inline-size: var(--tap
     margin: 0.25rem 0;
     position-area: block-end span-inline-end;
     position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+    /* Take the side with more room and scroll inside it, so the inline
+       flip can still fit when neither side holds the whole menu. */
+    position-try-order: most-block-size;
+    max-height: calc(100% - 0.5rem);
   }
 }
 /* A context menu shown at the pointer: the app sets --x/--y. */
@@ -4247,7 +4323,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .meter-pair:has(> .meter-v) { grid-auto-flow: column; justify-content: start; block-size: 100%; }
 
 /* --- .clip — a clip light that holds, with a count -------------------------
- *   <button class="clip" type="button" aria-pressed="true" aria-label="Clipped 3 times, reset">CLIP <span class="clip-count">3</span></button>
+ *   <button class="clip" type="button" aria-pressed="true" aria-label="Clip 3, press to reset">CLIP <span class="clip-count">3</span></button>
  * aria-pressed="true" (or .is-clipped) lights it; the app holds it after a
  * clip and clears it when the user presses it. */
 .clip {
@@ -4627,9 +4703,9 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: grid;
   gap: 1px;
   padding: 0.2rem;
-  background: var(--sends-bg, #0c0c12);
+  background: var(--sends-bg, var(--input-bg, var(--surface)));
   border: 1px solid var(--sends-border, var(--border));
-  color: var(--sends-fg, #ffffff);
+  color: var(--sends-fg, var(--input-fg, var(--text)));
   font-size: 0.6rem;
   line-height: 1.25;
 }
@@ -4640,7 +4716,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   content: "";
   block-size: 0.45rem;
   inline-size: calc(var(--send, 0) * 100%);
-  background: var(--sends-bar, #d8dde8);
+  background: var(--sends-bar, var(--muted));
   clip-path: polygon(0 100%, 100% 0, 100% 100%);
 }
 .sends li.is-pre::after { background: var(--sends-bar-pre, var(--accent-2)); }
@@ -4659,22 +4735,22 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   inline-size: 100%;
   aspect-ratio: 1;
   background:
-    linear-gradient(to top right, transparent calc(50% - 0.5px), var(--dyn-graph-unity, rgba(255, 255, 255, 0.25)) 0 calc(50% + 0.5px), transparent 0),
-    repeating-linear-gradient(0deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, rgba(255, 255, 255, 0.14)) 0 25%),
-    repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, rgba(255, 255, 255, 0.14)) 0 25%),
-    var(--dyn-graph-bg, linear-gradient(180deg, #3a6bd0, #1d3f96));
-  border: 1px solid var(--dyn-graph-border, var(--border));
+    linear-gradient(to top right, transparent calc(50% - 0.5px), var(--dyn-graph-unity, var(--eq-zero, var(--border))) 0 calc(50% + 0.5px), transparent 0),
+    repeating-linear-gradient(0deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, var(--eq-grid, var(--hairline))) 0 25%),
+    repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, var(--eq-grid, var(--hairline))) 0 25%),
+    var(--dyn-graph-bg, var(--eq-bg, var(--bg)));
+  border: 1px solid var(--dyn-graph-border, var(--eq-border, var(--hairline)));
   overflow: visible;
 }
 .dyn-graph-line {
   fill: none;
-  stroke: var(--dyn-graph-line, #ffffff);
+  stroke: var(--dyn-graph-line, var(--eq-line, var(--accent)));
   stroke-width: var(--dyn-graph-line-width, 2px);
   vector-effect: non-scaling-stroke;
   stroke-linejoin: round;
 }
-.dyn-graph-threshold { stroke: var(--dyn-graph-threshold, var(--accent)); stroke-width: 1px; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
-[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-line { stroke: var(--dyn-graph-line-off, rgba(255, 255, 255, 0.45)); }
+.dyn-graph-threshold { stroke: var(--dyn-graph-threshold, var(--accent-2)); stroke-width: 1px; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-line { stroke: var(--dyn-graph-line-off, var(--muted)); }
 
 /* --- .rack — an equipment rack of .rack-units ------------------------------
  *   <div class="rack" aria-label="Effects rack">
@@ -4731,7 +4807,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .rack-unit[data-finish="purple"] { --_finish: linear-gradient(180deg, #6a2f8c, #3b1150); }
 .rack-unit[data-finish="green"] { --_finish: linear-gradient(180deg, #2f8a2f, #145214); }
 .rack-unit > input[type="radio"] { position: absolute; inset: 0; margin: 0; opacity: 0; }
-.rack-unit:has(> input:checked) { outline: 2px solid var(--rack-selected, #ffe33b); outline-offset: -2px; }
+.rack-unit:has(> input:checked) { outline: 2px solid var(--rack-selected, var(--accent)); outline-offset: -2px; }
 .rack-unit:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
 .rack-unit.is-empty { --_finish: linear-gradient(180deg, #2b2b2b, #151515); justify-content: center; color: #8a8a8a; }
 .rack-unit-name {
@@ -4743,7 +4819,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .rack-unit[data-finish="silver"] .rack-unit-name { text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6); }
 .rack-unit-body { display: flex; flex: 1; flex-wrap: wrap; align-items: center; justify-content: space-around; gap: 0.3rem 0.6rem; min-inline-size: 0; }
 /* The thin "Change device / Store / Load preset" strip at the top of the rack. */
-.rack-head { display: flex; justify-content: center; gap: 0.6rem; padding: 0.4rem; background: linear-gradient(180deg, #f2f2f2, #c9c9c9); border-radius: 2px; }
+.rack-head { display: flex; justify-content: center; gap: 0.6rem; padding: 0.4rem; background: var(--rack-head-bg, var(--surface-2)); border-radius: 2px; }
 
 /* A unit's faceplate seen up close: a bigger .rack-unit inside .faceplate,
    above its .assignable panel. */
@@ -4751,8 +4827,8 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: grid;
   gap: 0.6rem;
   padding: 0.5rem;
-  background: var(--faceplate-bg, #050505);
-  border: 1px solid var(--faceplate-border, #2a2a2a);
+  background: var(--faceplate-bg, var(--surface-2));
+  border: 1px solid var(--faceplate-border, var(--border));
   border-radius: 4px;
 }
 .faceplate > .rack-unit { --_u: 2.6rem; align-items: stretch; padding-block: 0.8rem; font-size: 0.75rem; }
@@ -4770,8 +4846,8 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .faceplate-display {
   min-inline-size: 7rem;
   padding: 0.4rem 0.6rem;
-  background: var(--faceplate-display-bg, #000000);
-  color: var(--faceplate-display-fg, #e0e0e0);
+  background: var(--faceplate-display-bg, var(--input-bg, var(--surface)));
+  color: var(--faceplate-display-fg, var(--input-fg, var(--text)));
   border-radius: 4px;
   font: 800 1.2rem/1.1 var(--font);
   text-align: center;
@@ -4791,11 +4867,11 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   grid-template-columns: repeat(auto-fit, minmax(5.2rem, 1fr));
   gap: 0.4rem 0.3rem;
   padding: 0.5rem 0.6rem 0.3rem;
-  background: var(--assignable-bg, linear-gradient(180deg, #5560ab, #434d98));
-  color: var(--assignable-fg, #ffffff);
-  border: 1px solid var(--assignable-border, #2a3274);
+  background: var(--assignable-bg, var(--surface));
+  color: var(--assignable-fg, var(--text));
+  border: 1px solid var(--assignable-border, var(--border));
   border-radius: 3px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+  box-shadow: var(--assignable-shadow, none);
   font-size: 0.68rem;
   text-align: center;
 }
@@ -4805,12 +4881,12 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: block;
   inline-size: 2.6rem;
   block-size: 2.4rem;
-  background: var(--assignable-key-bg, linear-gradient(180deg, #4a54a0, #3a438b));
-  border: 2px solid var(--assignable-key-border, #6a74c0);
-  box-shadow: inset 0 0 0 2px #2b3274;
+  background: var(--assignable-key-bg, var(--key-bg, var(--surface-2)));
+  border: 2px solid var(--assignable-key-border, var(--key-border, var(--border)));
+  box-shadow: var(--assignable-key-shadow, inset 0 0 0 2px rgba(0, 0, 0, 0.25));
 }
 .assignable-key > input { position: absolute; inset: 0; margin: 0; opacity: 0; }
-.assignable-key:has(> input:checked) { background: var(--assignable-key-on, linear-gradient(180deg, #e9ecff, #b5bce8)); }
+.assignable-key:has(> input:checked) { background: var(--assignable-key-on, var(--accent)); }
 .assignable-key:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 .assignable-caption { grid-column: 1 / -1; margin: 0; font-weight: 700; opacity: 0.9; }
 
@@ -4827,9 +4903,9 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   align-items: stretch;
   gap: 2px;
   padding: 0.5rem;
-  background: var(--geq-bg, linear-gradient(180deg, #a9a9a9, #8a8a8a));
+  background: var(--geq-bg, var(--surface));
   border-radius: 3px;
-  color: var(--geq-fg, #111111);
+  color: var(--geq-fg, var(--text));
   font-size: 0.6rem;
   font-weight: 700;
 }
@@ -4840,11 +4916,11 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   gap: 1px;
   padding: 0.15rem;
   background:
-    linear-gradient(transparent calc(50% - 0.6rem), var(--geq-zero, #111111) 0 calc(50% - 0.6rem + 1px), transparent 0),
-    var(--geq-group-bg, #9a9a9a);
-  border: 1px solid var(--geq-group-border, #1f2a8a);
+    linear-gradient(transparent calc(50% - 0.6rem), var(--geq-zero, var(--border)) 0 calc(50% - 0.6rem + 1px), transparent 0),
+    var(--geq-group-bg, var(--surface-2));
+  border: 1px solid var(--geq-group-border, var(--hairline));
 }
-.geq-group:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) { --geq-group-bg: var(--geq-group-active, #e6e6e6); }
+.geq-group:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) { --geq-group-bg: var(--geq-group-active, color-mix(in srgb, var(--accent) 22%, var(--surface-2))); }
 .geq-band { display: grid; flex: 1; justify-items: center; gap: 0.15rem; min-inline-size: 0; }
 .geq-band > input[type="range"] {
   -webkit-appearance: none;
@@ -4856,7 +4932,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   min-width: 0.9rem;
   height: var(--geq-height, 7rem);
   margin: 0;
-  background: linear-gradient(90deg, transparent calc(50% - 3px), var(--geq-slot, #000000) 0 calc(50% + 3px), transparent 0);
+  background: linear-gradient(90deg, transparent calc(50% - 3px), var(--geq-slot, var(--fader-slot, var(--border))) 0 calc(50% + 3px), transparent 0);
 }
 .geq-band > input::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -4888,20 +4964,20 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: grid;
   gap: 0.4rem;
   padding: 0.5rem;
-  background: var(--patch-device-bg, linear-gradient(180deg, #4f8ad0, #2f62ae));
-  border: 1px solid var(--patch-device-border, #12285e);
+  background: var(--patch-device-bg, var(--surface));
+  border: 1px solid var(--patch-device-border, var(--border));
   border-radius: 8px;
-  color: #ffffff;
+  color: var(--patch-device-fg, var(--text));
 }
 .patch-device > header { display: flex; align-items: center; gap: 0.4rem; font-weight: 800; }
-.patch-name { flex: 1; padding: 0.15rem 0.4rem; background: #000000; border-radius: 2px; }
+.patch-name { flex: 1; padding: 0.15rem 0.4rem; background: var(--patch-name-bg, var(--input-bg, var(--surface))); color: var(--patch-name-fg, var(--input-fg, var(--text))); border-radius: 2px; }
 .patch-group-label { grid-column: 1 / -1; margin: 0.2rem 0 0; font-size: 0.75rem; font-weight: 800; text-align: center; }
 .patch-grid { display: grid; grid-template-columns: repeat(var(--patch-cols, 8), minmax(1.4rem, 1fr)); gap: 3px; }
 .patch-point {
   position: relative;
   aspect-ratio: 1;
-  background: var(--patch-free, linear-gradient(180deg, #f0f0f0, #c8c8c8));
-  border: 1px solid #333333;
+  background: var(--patch-free, var(--surface-2));
+  border: 1px solid var(--patch-point-border, var(--border));
   border-radius: 2px;
 }
 /* The jack: a small ring in the middle of each point. */
@@ -4909,12 +4985,12 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   content: "";
   position: absolute;
   inset: 28%;
-  border: 2px solid rgba(0, 0, 0, 0.45);
+  border: 2px solid var(--patch-jack, color-mix(in srgb, currentColor 45%, transparent));
   border-radius: 50%;
 }
 .patch-point > input { position: absolute; inset: 0; margin: 0; opacity: 0; }
-.patch-point:has(> input:checked) { background: var(--patch-on, linear-gradient(180deg, #8ad35a, #4e9a2a)); }
-.patch-point[data-kind="aes"]:has(> input:checked) { background: var(--patch-aes, linear-gradient(180deg, #ffe46b, #d6b21a)); }
+.patch-point:has(> input:checked) { background: var(--patch-on, var(--success)); }
+.patch-point[data-kind="aes"]:has(> input:checked) { background: var(--patch-aes, var(--warning)); }
 .patch-point:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 1px; }
 @media (forced-colors: active) {
   .patch-point:has(> input:checked), .assignable-key:has(> input:checked) { background: Highlight; }
@@ -5089,8 +5165,8 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 }
 
 /* The area under a dynamics curve, filled (console.js closes the path). */
-.dyn-graph-fill { fill: var(--dyn-graph-fill, rgba(140, 190, 255, 0.45)); stroke: none; }
-[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-fill { fill: var(--dyn-graph-fill-off, rgba(140, 190, 255, 0.18)); }
+.dyn-graph-fill { fill: var(--dyn-graph-fill, color-mix(in srgb, var(--eq-line, var(--accent)) 30%, transparent)); stroke: none; }
+[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-fill { fill: var(--dyn-graph-fill-off, color-mix(in srgb, var(--muted) 15%, transparent)); }
 
 /* --- .led-list — options chosen by a lit LED -------------------------------
  *   <ul class="led-list" role="radiogroup" aria-label="Program">
@@ -5123,6 +5199,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
  * The sixteen name-tag colours a large console offers. Each reads a
  * --tag-<name> token, so a theme can retune them. */
 .scribble[data-tag] { background: var(--_tag); color: var(--_tag-fg, #111111); border-top-color: transparent; text-align: center; }
+.scribble[data-tag] .scribble-num { color: inherit; opacity: 0.75; }
 .scribble[data-tag="black"] { --_tag: var(--tag-black, #111111); --_tag-fg: #ffffff; }
 .scribble[data-tag="dblue"] { --_tag: var(--tag-dblue, #1f3fd0); --_tag-fg: #ffffff; }
 .scribble[data-tag="dgreen"] { --_tag: var(--tag-dgreen, #1e7a2a); --_tag-fg: #ffffff; }
@@ -5157,11 +5234,11 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .assignable-nav > button {
   min-inline-size: 0;
   padding: 0;
-  background: var(--assignable-key-bg, linear-gradient(180deg, #4a54a0, #3a438b));
-  border: 1px solid var(--assignable-key-border, #6a74c0);
+  background: var(--assignable-key-bg, var(--key-bg, var(--surface-2)));
+  border: 1px solid var(--assignable-key-border, var(--key-border, var(--border)));
   border-radius: 2px;
 }
-.assignable-nav > button:active { background: var(--assignable-key-on, #b5bce8); }
+.assignable-nav > button:active { background: var(--assignable-key-on, var(--accent)); }
 .assignable-nav > :nth-child(1) { grid-area: 1 / 1 / 2 / 3; inline-size: 1.6rem; }
 .assignable-nav > :nth-child(2) { grid-area: 1 / 2 / 2 / 4; inline-size: 1.6rem; justify-self: end; }
 .assignable-nav > :nth-child(3) { grid-area: 2 / 2; }
@@ -5407,6 +5484,73 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   border-color: var(--window-pane-border, var(--input-border, var(--border)));
 }
 
+/* .window-tasks — the side pane of task groups beside a window's content
+   (XP's Explorer task pane). Each .window-task is a titled group: its
+   first child (a heading or <summary>) is the header, the rest the body. */
+.window-tasks {
+  display: grid;
+  align-content: start;
+  gap: var(--window-tasks-gap, var(--space-s, 0.75rem));
+  padding: var(--window-tasks-padding, var(--space-s, 0.75rem));
+  background: var(--window-tasks-bg, var(--surface-2));
+}
+.window-task {
+  border: 1px solid var(--window-task-border, var(--border));
+  border-radius: var(--window-task-radius, var(--radius));
+  background: var(--window-task-bg, var(--surface));
+  color: var(--window-task-fg, var(--text));
+  font-size: var(--window-task-font-size, inherit);
+  overflow: hidden;
+}
+.window-task > :first-child {
+  margin: 0;
+  padding: var(--window-task-header-pad, 0.35rem 0.6rem);
+  background: var(--window-task-header-bg, transparent);
+  color: var(--window-task-header-fg, inherit);
+  font-size: var(--window-task-header-font-size, 0.85rem);
+  font-weight: 700;
+}
+.window-task > :not(:first-child) { margin: 0; padding: var(--window-task-body-pad, 0.4rem 0.6rem); }
+/* A collapsible group is a <details> whose <summary> is the header; the
+   toggle sits at its end (a chevron by default, a theme's button image via
+   --window-task-toggle / --window-task-toggle-closed). */
+details.window-task > summary { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; cursor: var(--cursor-pointer, pointer); list-style: none; }
+details.window-task > summary::-webkit-details-marker { display: none; }
+details.window-task > summary > :is(h2, h3) { margin: 0; font: inherit; color: inherit; }
+details.window-task > summary::after {
+  content: "";
+  flex: none;
+  inline-size: var(--window-task-toggle-size, 1em);
+  block-size: var(--window-task-toggle-size, 1em);
+  background: var(--window-task-toggle, none) center / contain no-repeat;
+  background-color: var(--window-task-toggle-fg, currentColor);
+  -webkit-mask: var(--window-task-toggle-mask, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 10l4-4 4 4' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E")) center / contain no-repeat;
+  mask: var(--window-task-toggle-mask, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 10l4-4 4 4' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E")) center / contain no-repeat;
+}
+details.window-task:not([open]) > summary::after { rotate: var(--window-task-toggle-rotate, 180deg); background-image: var(--window-task-toggle-closed, var(--window-task-toggle, none)); }
+details.window-task > summary:focus-visible { outline: 2px solid var(--focus, var(--accent)); outline-offset: -2px; }
+.window-task > :not(:first-child) + :not(:first-child) { padding-block-start: 0; }
+.window-task a { color: var(--window-task-link-fg, var(--link, var(--accent))); }
+/* A .list inside a group is a plain column of task links, not a boxed list. */
+.window-task {
+  --list-bg: transparent;
+  --list-border-width: 0;
+  --list-radius: 0;
+  --list-rule: transparent;
+  --list-item-padding: var(--window-task-item-pad, 0.2em 0);
+  --list-item-fg: var(--window-task-link-fg, var(--link, var(--accent)));
+  --row-hover-bg: transparent;
+}
+@media (hover: hover) {
+  .window-task :is(a, label).list-item:hover { text-decoration: underline; color: var(--window-task-link-fg-hover, var(--window-task-link-fg, var(--link, var(--accent)))); }
+}
+/* The first, "special" group of a pane (XP: the place's own tasks). */
+.window-task.is-special > :first-child {
+  background: var(--window-task-special-header-bg, var(--window-task-header-bg, transparent));
+  color: var(--window-task-special-header-fg, var(--window-task-header-fg, inherit));
+}
+.window-task.is-special { background: var(--window-task-special-bg, var(--window-task-bg, var(--surface))); }
+
 /* Minimized and closed windows leave the screen (the inputs stay, so the
    task button and the Start menu can bring them back). */
 .desktop-window:has(> .window-minimize:checked, > .window-close:checked) > .modal { display: none; }
@@ -5425,18 +5569,28 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   outline-offset: 2px;
 }
 /* Inactive title bars: every window but the active one, which is the one
-   holding focus, else the switched-to one, else the topmost (last). */
+   holding focus, else the switched-to one, else the topmost (last). While
+   the Start menu is open it holds focus, so every window is inactive. */
 .desktop:has(.desktop-window:focus-within) .desktop-window:not(:focus-within),
 .desktop:not(:has(.desktop-window:focus-within)):has(.window-app:checked) .desktop-window:not(:has(> .window-app:checked)),
-.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) {
+.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)),
+.desktop:has(.start-menu:popover-open) .desktop-window {
   --_inactive: 1;
 }
 .desktop:has(.desktop-window:focus-within) .desktop-window:not(:focus-within) > .modal > .modal-header,
 .desktop:not(:has(.desktop-window:focus-within)):has(.window-app:checked) .desktop-window:not(:has(> .window-app:checked)) > .modal > .modal-header,
-.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) > .modal > .modal-header {
+.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) > .modal > .modal-header,
+.desktop:has(.start-menu:popover-open) .desktop-window > .modal > .modal-header {
   background: var(--window-header-bg-inactive, var(--modal-header-bg, transparent));
   color: var(--window-header-fg-inactive, var(--modal-header-fg, inherit));
   filter: var(--window-header-filter-inactive, saturate(0.45) opacity(0.85));
+}
+/* XP fades an inactive window's caption buttons into its paler title bar. */
+.desktop:has(.desktop-window:focus-within) .desktop-window:not(:focus-within) > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close),
+.desktop:not(:has(.desktop-window:focus-within)):has(.window-app:checked) .desktop-window:not(:has(> .window-app:checked)) > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close),
+.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close),
+.desktop:has(.start-menu:popover-open) .desktop-window > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close) {
+  opacity: var(--window-caption-opacity-inactive, 1);
 }
 
 /* A small monitor showing the wallpaper (Display Properties). */
@@ -5646,6 +5800,9 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   height: var(--start-menu-sub-icon-size, 1rem);
 }
 .start-menu li > :is(a, button, label) > span { display: flex; flex-direction: column; text-align: start; }
+/* "All Programs" is one line of text (its "All " is a columns-only span), not
+   a title over a subtitle. */
+.start-menu li.start-menu-all > :is(a, button) > span { display: block; white-space: nowrap; }
 .start-menu li > :is(a, button, label) > span > b { font-weight: 700; }
 .start-menu li > :is(a, button, label) small { font-size: 0.8em; opacity: 0.75; }
 .start-menu .has-submenu > :is(a, button)::after { margin-inline-start: auto; }
@@ -9839,7 +9996,7 @@ html[data-motion="reduced"] .track > .track-play::before { animation: none; }
 /* ---- Track rows ------------------------------------------------------------
  * <ol class="tracklist">
  *   <li class="track">
- *     <button class="track-play" aria-label="Play Night Drive"><span class="track-num">1</span><svg class="icon">…#icon-play</svg></button>
+ *     <button class="track-play" aria-label="Play track 1, Night Drive"><span class="track-num">1</span><svg class="icon">…#icon-play</svg></button>
  *     <img src="art.jpg" alt="">
  *     <span class="track-main"><span class="track-title">Night Drive</span><span class="track-artist">Lumen Coast</span></span>
  *     <span class="track-album">Harbour Lights</span>
@@ -10205,6 +10362,11 @@ html[data-motion="reduced"] .track > .track-play::before { animation: none; }
 
 @keyframes waveform-shimmer { to { background-position: -200% 0; } }
 .waveform:has(> input:disabled) { opacity: 0.5; }
+/* .waveform.is-static — display only: the input still paints played and
+   unplayed and the head (hide it with --waveform-head: transparent), but
+   it doesn't seek, so no hover preview and no pointer. */
+.waveform.is-static::before { content: none; }
+.waveform.is-static > input[type="range"] { pointer-events: none; }
 
 /* ---- Waveform regions, markers and hover time -------------------------------
  * <div class="waveform" data-hover-time="0:41" style="--hover: .68">
@@ -10485,7 +10647,8 @@ button.waveform-marker:focus-visible { outline: 2px solid var(--focus); outline-
  * Desktop: art and title | transport over the scrubber | extras. Tablet: the
  * scrubber takes its own row and the extras (volume, queue…) hide. Mobile and .is-mini: art, title, like and play/next only. As a
  * direct child of .app it takes the shell's status slot and sticks to the
- * bottom of the screen, clear of the home indicator. */
+ * bottom of the screen, clear of the home indicator; on a phone .app-main
+ * scrolls above it instead. */
 .now-playing {
   --_areas: "art meta like transport extras" "art meta like progress extras";
   --_cols: auto minmax(0, 1fr) auto minmax(0, 2fr) minmax(0, 1fr);
@@ -10556,6 +10719,11 @@ button.waveform-marker:focus-visible { outline: 2px solid var(--focus); outline-
     --_np-secondary: none;
     --_np-extras: none;
   }
+  /* On a phone the docked bar is a big share of the screen, so the shell
+     holds the screen height and .app-main scrolls above the bar: no row
+     ever sits under it. */
+  .app:has(> .now-playing) { block-size: 100dvh; }
+  .app:has(> .now-playing) > .app-main { overflow-y: auto; overscroll-behavior: contain; }
 }
 /* Mini player: the mobile layout at any width, as a card. */
 .now-playing.is-mini {
@@ -11744,13 +11912,18 @@ html:is([data-motion="reduced"],[data-motion="none"]) :is(:is(.is-paused,.is-pau
  * the --z-* scale from there. Docs: docs/components/navigation.md. */
 
 /* --- Closable tabs (#37) ---------------------------------------------------
- *   <div class="tabs is-scroll" role="tablist">
- *     <div class="tab is-active"><button role="tab" aria-selected="true">a.css</button>
- *       <button class="btn-close" tabindex="-1" aria-label="Close a.css"></button></div>
+ *   <div class="tabs is-scroll">
+ *     <div class="tabs" role="tablist" aria-label="Open files">
+ *       <div class="tab is-active"><button role="tab" aria-selected="true">a.css</button>
+ *         <button class="btn-close" tabindex="-1" aria-hidden="true" aria-label="Close a.css"></button></div>
+ *     </div>
  *     <button class="tab-add" aria-label="New tab"></button>
  *   </div>
  * A <button> can't hold a second button, so a closable .tab is a wrapper:
- * the first child is the tab itself, the .btn-close sits beside it. */
+ * the first child is the tab itself, the .btn-close sits beside it. A
+ * tablist may own only tabs, so the add button sits beside an inner
+ * .tabs[role=tablist] that lends its tabs to the outer strip. */
+.tabs > .tabs { display: contents; }
 .tabs.is-scroll {
   /* max-inline-size: a theme may make .tabs inline-flex (a capsule), which
      would otherwise grow with its tabs and never scroll. */
@@ -11761,7 +11934,7 @@ html:is([data-motion="reduced"],[data-motion="none"]) :is(:is(.is-paused,.is-pau
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb, var(--border)) transparent;
 }
-.tabs.is-scroll > * { flex-shrink: 0; }
+.tabs.is-scroll > *, .tabs.is-scroll > .tabs > * { flex-shrink: 0; }
 .tab:has(> .btn-close) {
   display: inline-flex;
   align-items: center;
@@ -14246,7 +14419,7 @@ pre.line-numbers > code:has(> .line-numbers-rows) { position: relative; }
   inline-size: calc(var(--_otp-n) * var(--otp-cell-size, 2.75rem) + (var(--_otp-n) - 1) * var(--_otp-gap));
   max-inline-size: 100%;
   block-size: var(--otp-height, 3.25rem);
-  overflow: hidden;
+  overflow: clip;
   direction: ltr;
 }
 .otp > span {
@@ -15477,6 +15650,10 @@ html[data-surface="signage"] { font-size: var(--signage-root, 1.5vh); overflow: 
   html[data-surface="signage"] { font-size: var(--signage-root-portrait, 1.5vw); }
 }
 html[data-surface="signage"] body { overflow: hidden; }
+/* Every pixel of a screen is content, so page-level theme art stands down:
+   the XL gutter layer here, and any corner emblem a theme fixes over the
+   page (themes hide their own under the same selector). */
+html[data-surface="signage"]::before { content: none; }
 .safe-area {
   box-sizing: border-box;
   padding:
@@ -16590,7 +16767,7 @@ html[data-pointer="touch"] { --_cell-pencil: inline-block; }
 .table tbody tr:nth-child(n):is(:hover, :focus-within):not(.table-empty, .table-more) {
   --_row-tint: var(--row-hover-bg, color-mix(in srgb, var(--accent) 8%, transparent));
 }
-.table tbody tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))):nth-child(n) { --_row-tint: var(--row-active-bg, transparent); }
+.table tbody tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))):not(.is-selected, :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))):nth-child(n) { --_row-tint: var(--row-active-bg, transparent); }
 .table tbody tr:is(.is-selected, :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))):nth-child(n) {
   --_row-tint: var(--row-selected-bg, color-mix(in srgb, var(--accent) 18%, transparent));
 }
@@ -18278,12 +18455,12 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   background: var(--app-bg, transparent);
 }
 
-/* An app that never adds the rail element at all (not even an empty one)
-   has no box for :empty to match, so a theme's --app-columns would
-   still reserve a blank gutter next to .app-main. Collapse the column
+/* An app that never adds the rail element at all (not even an empty one),
+   or marks it `hidden`, has no box for :empty to match, so a theme's
+   --app-columns would still reserve a blank gutter next to .app-main. Collapse the column
    track itself in that case. Browsers without :has() just keep the blank
    gutter — a graceful degrade, not a break. */
-.app:not(:has(> .app-rail)) {
+.app:not(:has(> .app-rail:not([hidden]))) {
   grid-template-areas: var(--app-areas-no-rail, "bar" "main" "status");
   grid-template-columns: var(--app-columns-no-rail, minmax(0, 1fr));
 }
@@ -18299,7 +18476,9 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   min-width: 0;
   padding: var(--app-bar-padding, 0.6rem 1rem);
   background: var(--app-bar-bg, var(--nav-bg, var(--surface)));
-  color: var(--app-bar-fg, inherit);
+  /* Plain text on the bar (a clock, a title) follows the bar, not the page:
+     --app-bar-fg, else --nav-item-fg, which check.py holds to 4.5:1 here. */
+  color: var(--app-bar-fg, var(--nav-item-fg, inherit));
   border-bottom: var(--app-bar-rule-width, 1px) solid var(--app-bar-rule, var(--border));
   border-radius: var(--app-bar-radius, 0);
   min-height: var(--app-bar-height, auto);
@@ -18325,6 +18504,8 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
 .app-rail:empty {
   display: var(--app-rail-empty-display, none);
 }
+/* `hidden` drops the rail in every theme, decorative or not. */
+.app-rail[hidden] { display: none !important; }
 .app-rail {
   grid-area: rail;
   display: var(--app-rail-display, none);
@@ -18477,7 +18658,7 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   .app-rail { display: none !important; }
   .app-status { position: fixed; inset-inline-start: env(viewport-segment-left 1 0); inset-block-end: 0; inline-size: env(viewport-segment-width 1 0); }
   .app-main { padding-block-end: var(--app-fold-status-space, 3rem); }
-  .app:not(:has(> .app-rail)) {
+  .app:not(:has(> .app-rail:not([hidden]))) {
     grid-template-areas: var(--app-fold-book-areas, "bar main");
     grid-template-columns: env(viewport-segment-width 0 0) env(viewport-segment-width 1 0);
   }
@@ -18493,7 +18674,7 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   .app-rail { display: none !important; }
   .app-status { position: fixed; inset-inline-start: 0; inset-block-end: 0; inline-size: 100%; }
   .app-main { padding-block-end: var(--app-fold-status-space, 3rem); }
-  .app:not(:has(> .app-rail)) {
+  .app:not(:has(> .app-rail:not([hidden]))) {
     grid-template-areas: var(--app-fold-tabletop-areas, "bar" "main");
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: env(viewport-segment-height 0 0) env(viewport-segment-height 0 1);
@@ -18545,38 +18726,64 @@ html[data-contrast="high"] { --cursor-default: default !important; --cursor-text
   font-weight: 400;
   font-display: swap;
 }
+/* EB Garamond, Duensing's revival of the Garamond book types: a period
+   text face with real bold, set a touch larger (its x-height is small),
+   and Courier Prime as the clerk's typewriter. Latin subsets. */
+@font-face {
+  font-family: "EB Garamond";
+  src: url("../assets/fonts/EBGaramond-Variable.woff2") format("woff2");
+  font-weight: 400 800;
+  font-display: swap;
+  size-adjust: 108%;
+  /* Times-like line metrics: the face's own 1.3em ascent+descent would
+     crowd text against compact boxes (pagination, chips). */
+  ascent-override: 88%;
+  descent-override: 23%;
+}
+@font-face {
+  font-family: "Courier Prime";
+  src: url("../assets/fonts/CourierPrime-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
 
 html[data-theme="steampunk"] {
   --motion-leave: iris;
   /* Vacuum-fluorescent displays glow amber here (metering.css VFD). */
   --vfd-ink: #ffb547;
   color-scheme: dark;
-  --bg: #241a12;
-  --surface: #33241a;
-  --surface-2: #46301f;
+  --bg: #2c3020;
+  /* Walnut, after the recorder's Nixie plate (~#5a3a22), not a black
+     leather: the plates sit a step above the olive backplate. */
+  --surface: #4a3220;
+  --surface-2: #5a3c24;
   --border: #8a5a2e;
   --hairline: #5c3d22;
   --text: #f0e0c0;
-  --muted: #c0a379;
-  --accent: #c9962c;
-  --accent-2: #e0b04a;
+  --muted: #d0b68f;
+  /* Champagne brass, after the recorder plate (#b8a070-#c8a060), not
+     a mustard paint. */
+  --accent: #c7a35a;
+  --accent-2: #dcc08a;
   --danger: #9e3a2b;
   --success: #3f5c26;
   --warning: #c9962c;
   /* Text-weight variants of the state colors, for .status, trends,
      colored badges and danger menu items: same hue, adjusted to 4.5:1 on
      this theme's surfaces. The fills above stay as-is for lamps/buttons. */
-  --success-text: #7fb750;
-  --warning-text: #d4a23a;
+  --success-text: #8cc45c;
+  --warning-text: #dfae45;
   /* Brass as text on its own tinted wash (badges, code keywords). */
-  --accent-text: #d4a23b;
-  --danger-text: #df9488;
+  --accent-text: #d8b46e;
+  --danger-text: #eba89c;
   --on-accent: #241a12;
   --on-danger: #f0e0c0;
   --on-success: #f0e0c0;
   --radius: 0.3rem;
-  --font: "Playfair Display", Georgia, "Times New Roman", serif;
-  --font-mono: Consolas, monospace;
+  /* Book serifs of the period first; EB Garamond is vendored, so that is
+     what readers without IM Fell English get. Mono is a typewriter. */
+  --font: "IM Fell English", "Libre Caslon Text", "EB Garamond", Georgia, "Times New Roman", serif;
+  --font-mono: "Courier Prime", "Courier New", Courier, monospace;
   --steampunk-display: "IM Fell English SC", Georgia, serif;
   /* A copper steam pipe: a lit cylinder, and bolted flanges every 220px.
      Two separate layers, positioned where they're used (bar foot, status
@@ -18584,50 +18791,139 @@ html[data-theme="steampunk"] {
   --steampunk-pipe-flanges: repeating-linear-gradient(90deg, transparent 0 200px, #3a2008 200px 202px, #d99a5a 202px 208px, #8a4a1c 208px 214px, #3a2008 214px 216px, transparent 216px 220px);
   --steampunk-pipe: linear-gradient(180deg, #4a2810, #f2b98a 30%, #c07038 55%, #7a3e16 80%, #3a2008);
   --flare: #7a8c93;
+  /* Carved walnut for secondary plates (menus, popovers, lists, side
+     nav): a fine vertical grain and a polish line along the top edge.
+     No rivets: those belong to top-level panels only. */
+  --steampunk-walnut:
+    linear-gradient(rgba(255, 226, 170, 0.3), rgba(255, 226, 170, 0.3)) top / 100% 1px no-repeat,
+    repeating-linear-gradient(91deg, rgba(255, 220, 170, 0.04) 0 1px, transparent 1px 5px, rgba(0, 0, 0, 0.08) 5px 7px, transparent 7px 11px),
+    linear-gradient(180deg, #5a3c24, #46301f);
+  /* A brass rule set just inside the edge, then the dark seam outside. */
+  --steampunk-walnut-shadow: inset 0 0 0 1px rgba(138, 94, 26, 0.5), inset 0 0 0 3px rgba(20, 12, 4, 0.35), 0 0 0 1px #1a1008, 0 4px 10px rgba(0, 0, 0, 0.5);
+  --dropdown-bg: var(--steampunk-walnut);
+  --context-menu-bg: var(--steampunk-walnut);
+  --popover-shadow: var(--steampunk-walnut-shadow);
+  --list-bg: var(--steampunk-walnut);
+  --nav-rail-bg: var(--steampunk-walnut);
+  /* List cards are too short for corner scrollwork: bezel only. */
+  --list-card-bg: var(--steampunk-leather-inset), var(--steampunk-bezel);
 
   /* Polished brass: a hard vertical gradient plus one sharp diagonal
      polish streak — the highlight a curved metal surface throws under a
      single light source, not a soft all-over sheen. */
   --steampunk-brass:
-    linear-gradient(115deg, transparent 40%, rgba(255, 245, 220, 0.55) 46%, transparent 52%),
+    linear-gradient(115deg, transparent 8%, rgba(255, 245, 220, 0.45) 12%, transparent 17%),
     linear-gradient(180deg, #e8c06a, #a97a24 55%, #6e4c14);
+  /* The most polished plate: primary buttons and the selected item of a
+     group are the brightest brass on the page, not a flat accent paint. */
+  --steampunk-brass-lit:
+    linear-gradient(115deg, transparent 8%, rgba(255, 250, 230, 0.55) 12%, transparent 17%),
+    linear-gradient(180deg, #f2d690, #d9b062 50%, #8a6420);
+  --steampunk-brass-lit-hover:
+    linear-gradient(115deg, transparent 8%, rgba(255, 250, 230, 0.65) 12%, transparent 17%),
+    linear-gradient(180deg, #f8e2a8, #e2bc70 50%, #9a7228);
+  /* Lit jewel enamels for danger/success: a domed fill, same streak. */
+  --steampunk-oxblood:
+    linear-gradient(115deg, transparent 8%, rgba(255, 220, 200, 0.35) 12%, transparent 17%),
+    linear-gradient(180deg, #c0503c, #9e3a2b 55%, #5e1f16);
+  --steampunk-racing-green:
+    linear-gradient(115deg, transparent 8%, rgba(230, 255, 200, 0.3) 12%, transparent 17%),
+    linear-gradient(180deg, #5e8a3a, #3f5c26 55%, #233614);
+  --segmented-item-bg-active: var(--steampunk-brass-lit);
+  --badge-bg-active: var(--steampunk-brass-lit);
+  --toggle-btn-bg-on: var(--steampunk-brass-lit);
   --steampunk-leather:
     repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.05) 0 2px, transparent 2px 6px),
     repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.05) 0 2px, transparent 2px 6px),
-    linear-gradient(180deg, #3c2a1c, #241a12);
+    linear-gradient(180deg, #4e3522, #33241a);
+  /* The same leather kept inside a bezel (padding box only). */
+  --steampunk-leather-inset:
+    repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.05) 0 2px, transparent 2px 6px) padding-box,
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.05) 0 2px, transparent 2px 6px) padding-box,
+    linear-gradient(180deg, #4e3522, #33241a) padding-box;
   /* Four brass rivet domes, one at each corner — background layers, not
      ::before/::after, because a plate only has two pseudo-elements to
      spend and this needs four. Stacks on top of --steampunk-leather
      for anything riveted (panel/card/modal/transport), not the page/bar/
      status strips, which have no "corners" to rivet. */
-  --steampunk-rivet: radial-gradient(circle at 35% 30%, #f0d9a0, #a97a24 55%, #5c3d15);
+  /* A domed head, lit off-centre, ringed by its dark shadow on the plate.
+     One layer (it is sized per use) and transparent past r=4.5px. */
+  --steampunk-rivet: radial-gradient(circle 4.5px at 45% 42%, #fbecc4 0, #d9ab4a 30%, #8a5e1a 62%, #3a2610 78%, rgba(20, 12, 4, 0.55) 90%, transparent 100%);
   --steampunk-riveted-leather:
-    var(--steampunk-rivet) 7px 7px / 7px 7px no-repeat,
-    var(--steampunk-rivet) calc(100% - 7px) 7px / 7px 7px no-repeat,
-    var(--steampunk-rivet) 7px calc(100% - 7px) / 7px 7px no-repeat,
-    var(--steampunk-rivet) calc(100% - 7px) calc(100% - 7px) / 7px 7px no-repeat,
+    var(--steampunk-rivet) 3px 3px / 10px 10px no-repeat,
+    var(--steampunk-rivet) calc(100% - 3px) 3px / 10px 10px no-repeat,
+    var(--steampunk-rivet) 3px calc(100% - 3px) / 10px 10px no-repeat,
+    var(--steampunk-rivet) calc(100% - 3px) calc(100% - 3px) / 10px 10px no-repeat,
     var(--steampunk-leather);
+  /* The cast-brass bezel of a top-level plate: the border is transparent
+     and a diagonal brass gradient (light top-left, dark bottom-right)
+     fills the border box under it; the leather sits in the padding box,
+     and the rivets sit on the frame's corners. */
+  --steampunk-bezel: linear-gradient(135deg, #f5e2b0, #c9962c 30%, #8a5e1a 65%, #4a3010) border-box;
+  /* A top-level plate's frame is a cast moulding: the outer 4px lip lit
+     from the top-left, then a stepped inner band lit the other way, with a
+     dark fillet between, so the frame reads as two faces, not a rule. */
+  --steampunk-bezel-cast:
+    linear-gradient(315deg, #d9b062, #c9962c 35%, #6e4c14) center / calc(100% - 8px) calc(100% - 8px) no-repeat border-box,
+    linear-gradient(#3a2610, #3a2610) center / calc(100% - 6px) calc(100% - 6px) no-repeat border-box,
+    var(--steampunk-bezel);
+  /* Rivets centred on the frame, whatever its width. */
+  --steampunk-rivet-at: calc(var(--panel-border-width) / 2 - 5px);
+  --steampunk-frame-rivets:
+    var(--steampunk-rivet) left var(--steampunk-rivet-at) top var(--steampunk-rivet-at) / 10px 10px no-repeat border-box,
+    var(--steampunk-rivet) right var(--steampunk-rivet-at) top var(--steampunk-rivet-at) / 10px 10px no-repeat border-box,
+    var(--steampunk-rivet) left var(--steampunk-rivet-at) bottom var(--steampunk-rivet-at) / 10px 10px no-repeat border-box,
+    var(--steampunk-rivet) right var(--steampunk-rivet-at) bottom var(--steampunk-rivet-at) / 10px 10px no-repeat border-box;
+  /* Olive perforated metal: the plant-room backplate behind the plates. */
+  --steampunk-perforated:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Ccircle cx='4' cy='4' r='1.45' fill='%231a1d12'/%3E%3C/svg%3E") 0 0 / 8px 8px,
+    linear-gradient(180deg, #363a27, #262a1c);
 
   --btn-bg: var(--steampunk-brass);
   --btn-fg: #241a12;
   --btn-border: #5c3d15;
-  --btn-shadow: 0 1px 0 rgba(255,230,180,0.4) inset, 0 2px 4px rgba(0,0,0,0.4);
+  /* A double bezel: dark border, a polished inner rim, a shaded foot. */
+  --btn-shadow: inset 0 0 0 1px rgba(255, 236, 190, 0.55), inset 0 -3px 4px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.4);
+  --btn-radius: 6px;
   --input-bg: #1c130c;
+  /* Fields are slots let into a brass bezel: dark rim, lit brass ring,
+     a recess, and a faint lip catching light at the foot. */
+  --input-border: #6e4c14;
+  --input-shadow: 0 0 0 1px #c7a35a, inset 0 2px 4px rgba(0, 0, 0, 0.6), inset 0 -1px 0 rgba(242, 214, 144, 0.15);
   --input-fg: var(--text);
-  --focus-ring: 0 0 0 3px rgba(201, 150, 44, 0.35);
-  --panel-bg: var(--steampunk-riveted-leather);
-  --card-bg: var(--steampunk-riveted-leather);
-  --panel-border-width: 2px;
-  --panel-shadow: 0 4px 10px rgba(0,0,0,0.5);
+  --focus-ring: 0 0 0 3px rgba(199, 163, 90, 0.4);
+  --panel-bg: var(--steampunk-frame-rivets), var(--steampunk-leather-inset), var(--steampunk-bezel-cast);
+  --panel-border: transparent;
+  /* A chunky 10px casting at desktop (6px on a phone, below). */
+  --panel-border-width: 10px;
+  --modal-border: transparent;
+  /* Cards (stat tiles included) are lesser plates: a 6px casting. */
+  --card-border-width: 6px;
+  --list-card-border-width: 2px;
+  --list-card-border: var(--border);
+  /* Outer seam, then the dark recess where the frame meets the leather. */
+  --panel-shadow: 0 0 0 1px #3a2610, inset 0 0 0 1px #3a2610, inset 0 2px 5px rgba(0, 0, 0, 0.55), 0 4px 10px rgba(0, 0, 0, 0.5);
   --modal-header-bg: var(--steampunk-brass);
   --modal-header-fg: #241a12;
-  --table-head-bg: #46301f;
+  --table-head-bg: var(--surface-2);
   --table-head-fg: var(--accent-2);
-  --row-selected-bg: rgba(201, 150, 44, 0.18);
+  --table-head-transform: none;
+  --table-head-tracking: 0.04em;
+  --list-item-title-weight: 400;
+  --row-selected-bg: rgba(199, 163, 90, 0.18);
   --nav-bg: linear-gradient(180deg, #33241a, #241a12);
   --nav-rule: var(--border);
   --overlay-bg: rgba(20, 14, 9, 0.75);
   --indicator-fg: var(--accent);
+  /* Feed lamps sit on the olive backplate: the racing-green and oxblood
+     fills vanish there, so they burn in the text-weight tints. */
+  --connection-live: var(--success-text);
+  --connection-offline: var(--danger-text);
+  /* Waveforms keep the deeper walnut well, so marker tags on it hold 4.5:1. */
+  --waveform-bg: #46301f;
+  /* The generic sprite (ids this theme's icons.svg doesn't redraw) takes
+     the engraved 1.4 line of the brass set. */
+  --icon-stroke-width: 1.4;
 
   /* The sight glass: a copper-liquid level in a glass tube, not a flat
      progress bar. Bands stay the semantic success/warning/danger ramp —
@@ -18641,13 +18937,16 @@ html[data-theme="steampunk"] {
   --app-bar-bg: var(--steampunk-leather);
   --app-bar-rule: var(--border);
   --app-status-bg: var(--steampunk-leather);
-  --app-bg: var(--steampunk-leather);
+  --app-bg: var(--steampunk-perforated);
   --transport-bg: var(--steampunk-riveted-leather);
+  /* The book serif runs wide; a slimmer Start keeps a phone's tray inside
+     the status strip. */
+  --taskbar-start-padding: 0.3em 0.5em;
 }
 
 /* The page backdrop at L0 (no app shell adopted): same leather the shell
    uses at L1, so recoloring alone doesn't lose the material. */
-html[data-theme="steampunk"] { background: var(--steampunk-leather); }
+html[data-theme="steampunk"] { background: var(--steampunk-perforated); }
 
 html[data-theme="steampunk"] h1,
 html[data-theme="steampunk"] h2,
@@ -18663,7 +18962,7 @@ html[data-theme="steampunk"] h3 { color: var(--accent-2); font-variant: small-ca
 html[data-theme="steampunk"] .readout {
   position: relative;
   white-space: nowrap;
-  padding: 0.15em 0.7em;
+  padding: 0.3em 0.7em;
   background: radial-gradient(circle at 30% 25%, #f0d9a0, #d9ab4a 55%, #a97a24);
   color: #2a1c10;
   border: 2px solid #5c3d15;
@@ -18682,21 +18981,8 @@ html[data-theme="steampunk"] .readout::before {
   background: repeating-conic-gradient(from 0deg, #7a5416 0deg 3deg, transparent 3deg 30deg);
   opacity: 0.7;
 }
-/* A fixed needle, canted off-center: decorative (this readout still shows
-   real digits, the needle doesn't track a value), but it's what makes the
-   brass disc read as a dial rather than a coin. */
-html[data-theme="steampunk"] .readout::after {
-  content: "";
-  position: absolute;
-  bottom: 50%;
-  left: 12%;
-  width: 1.6em;
-  height: 2px;
-  background: linear-gradient(90deg, #2a1c10, transparent);
-  transform-origin: right center;
-  transform: rotate(20deg);
-  pointer-events: none;
-}
+/* No fixed needle: at readout sizes a 0.5em stroke read as a stray tick,
+   not a pointer. The tick ring on the bezel is what makes it a dial. */
 
 /* The sight glass: brass end-caps bolted onto a glass tube, a curved
    highlight down the glass, and the copper "liquid" (--meter-*) fill
@@ -18724,7 +19010,55 @@ html[data-theme="steampunk"] .meter-v .meter-fill {
 
 /* --- Steam-age furniture ----------------------------------------------- */
 
-html[data-theme="steampunk"] :is(h1, h2, h3, .nav-brand, .btn, .tab, .panel-header, .modal-header, .stat-value) {
+/* Emphasised buttons are the most polished plates, never flat paint:
+   primary is the brightest brass; danger and confirm are lit enamel
+   jewels, as on the recorder. */
+html[data-theme="steampunk"] .btn-primary {
+  --btn-bg: var(--steampunk-brass-lit);
+  --btn-bg-hover: var(--steampunk-brass-lit-hover);
+  --btn-border: #5c3d15;
+}
+html[data-theme="steampunk"] .btn-danger {
+  --btn-bg: var(--steampunk-oxblood);
+  --btn-bg-hover: linear-gradient(180deg, #d0604a, #ae4433 55%, #6a2419);
+  --btn-border: #3e140d;
+}
+html[data-theme="steampunk"] .btn-success {
+  --btn-bg: var(--steampunk-racing-green);
+  --btn-bg-hover: linear-gradient(180deg, #6c9a44, #4a6a2e 55%, #2a4018);
+  --btn-border: #182610;
+}
+html[data-theme="steampunk"] .toggle-btn.is-danger { --toggle-btn-bg-on: var(--steampunk-oxblood); }
+html[data-theme="steampunk"] :is(.btn-danger, .btn-success) { text-shadow: 0 1px 1px rgba(0, 0, 0, 0.6); }
+
+/* Checkboxes are small brass toggles: a cast rim round a dark enamel
+   well, and a lit brass tick when set. */
+html[data-theme="steampunk"] .checkbox[type="checkbox"] {
+  appearance: none;
+  width: calc(1.15em * var(--density));
+  height: calc(1.15em * var(--density));
+  border: 2px solid transparent;
+  border-radius: 3px;
+  background: radial-gradient(circle at 50% 35%, #33241a, #140d08 80%) padding-box, var(--steampunk-bezel);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8), 0 1px 2px rgba(0, 0, 0, 0.5);
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+}
+html[data-theme="steampunk"] .checkbox[type="checkbox"]::before {
+  content: "";
+  width: 0.62em;
+  height: 0.62em;
+  background: linear-gradient(180deg, #fbecc4, #e0b04a 50%, #a97a24);
+  clip-path: polygon(14% 44%, 0 60%, 40% 100%, 100% 18%, 86% 4%, 40% 70%);
+  transform: scale(0);
+  transition: transform 0.1s ease;
+}
+html[data-theme="steampunk"] .checkbox[type="checkbox"]:checked::before { transform: scale(1); }
+html[data-theme="steampunk"] .checkbox[type="checkbox"]:indeterminate::before { transform: scale(1); clip-path: inset(38% 0); }
+html[data-theme="steampunk"] .checkbox[type="checkbox"]:disabled { opacity: 0.5; cursor: not-allowed; }
+
+html[data-theme="steampunk"] :is(h1, h2, h3, .nav-brand, .btn, .tab, .panel-header, .modal-header, .stat-value, .scrollspy-link, details > summary, .empty-state-title, .popover > strong:first-child) {
   font-family: var(--steampunk-display);
   font-variant: normal;
 }
@@ -18741,11 +19075,11 @@ html[data-theme="steampunk"] .panel-header {
   width: fit-content;
   max-width: 100%;
   margin: 0 0 calc(1rem * var(--density));
-  padding: 0.2rem 1.6rem;
+  padding: 0.3rem 1.6rem;
   background:
     radial-gradient(circle, #f0d9a0 0 2px, #5c3d15 2.5px 3px, #a97a24 3.5px 4px, transparent 4.5px) 0.55rem 50% / 9px 9px no-repeat,
     radial-gradient(circle, #f0d9a0 0 2px, #5c3d15 2.5px 3px, #a97a24 3.5px 4px, transparent 4.5px) calc(100% - 0.55rem) 50% / 9px 9px no-repeat,
-    linear-gradient(115deg, transparent 35%, rgba(255, 250, 230, 0.5) 42%, transparent 50%),
+    linear-gradient(115deg, transparent 4%, rgba(255, 250, 230, 0.5) 8%, transparent 13%),
     linear-gradient(180deg, #f5e2b0, #d9ab4a 55%, #b8892f);
   color: #241a12;
   border: 1px solid #5c3d15;
@@ -18785,20 +19119,21 @@ html[data-theme="steampunk"] .app-bar::after {
   content: "";
   position: absolute;
   pointer-events: none;
+  will-change: transform;
 }
 html[data-theme="steampunk"] .app-bar::before {
-  width: 72px;
-  height: 72px;
+  width: 56px;
+  height: 56px;
   right: 1.2rem;
-  top: -8px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72'%3E%3Cdefs%3E%3CradialGradient id='b' cx='.35' cy='.3' r='.8'%3E%3Cstop offset='0' stop-color='%23f0d9a0'/%3E%3Cstop offset='.55' stop-color='%23a97a24'/%3E%3Cstop offset='1' stop-color='%235c3d15'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='36.0' cy='36.0' r='28.80' fill='none' stroke='url(%23b)' stroke-width='10.08' stroke-dasharray='6.463 6.463'/%3E%3Ccircle cx='36.0' cy='36.0' r='24.48' fill='url(%23b)' stroke='%233a2610'/%3E%3Cg fill='%23241a12'%3E%3Ccircle cx='50.40' cy='36.00' r='5.04'/%3E%3Ccircle cx='21.60' cy='36.00' r='5.04'/%3E%3Ccircle cx='36.00' cy='50.40' r='5.04'/%3E%3Ccircle cx='36.00' cy='21.60' r='5.04'/%3E%3Ccircle cx='36.0' cy='36.0' r='6.48'/%3E%3C/g%3E%3C/svg%3E") no-repeat;
+  top: 2px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3CradialGradient id='b' cx='.35' cy='.3' r='.8'%3E%3Cstop offset='0' stop-color='%23f0d9a0'/%3E%3Cstop offset='.55' stop-color='%23a97a24'/%3E%3Cstop offset='1' stop-color='%235c3d15'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='50' cy='50' r='42.5' fill='none' stroke='url(%23b)' stroke-width='13' stroke-dasharray='11.126 11.126'/%3E%3Ccircle cx='50' cy='50' r='40' fill='url(%23b)'/%3E%3Ccircle cx='50' cy='50' r='31' fill='none' stroke='%23241a12' stroke-opacity='.35' stroke-width='1.5'/%3E%3Cg fill='%23241a12'%3E%3Ccircle cx='64.14' cy='64.14' r='7'/%3E%3Ccircle cx='35.86' cy='64.14' r='7'/%3E%3Ccircle cx='35.86' cy='35.86' r='7'/%3E%3Ccircle cx='64.14' cy='35.86' r='7'/%3E%3Ccircle cx='50' cy='50' r='7'/%3E%3C/g%3E%3Ccircle cx='50' cy='50' r='3' fill='%23f0d9a0'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
 }
 html[data-theme="steampunk"] .app-bar::after {
-  width: 46px;
-  height: 46px;
-  right: calc(1.2rem + 64px);
-  top: 32px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='46' height='46'%3E%3Cdefs%3E%3CradialGradient id='b' cx='.35' cy='.3' r='.8'%3E%3Cstop offset='0' stop-color='%23f2b98a'/%3E%3Cstop offset='.55' stop-color='%23b0642c'/%3E%3Cstop offset='1' stop-color='%234a2810'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='23.0' cy='23.0' r='18.40' fill='none' stroke='url(%23b)' stroke-width='6.44' stroke-dasharray='5.781 5.781'/%3E%3Ccircle cx='23.0' cy='23.0' r='15.64' fill='url(%23b)' stroke='%233a2610'/%3E%3Cg fill='%23241a12'%3E%3Ccircle cx='32.20' cy='23.00' r='3.22'/%3E%3Ccircle cx='13.80' cy='23.00' r='3.22'/%3E%3Ccircle cx='23.00' cy='32.20' r='3.22'/%3E%3Ccircle cx='23.00' cy='13.80' r='3.22'/%3E%3Ccircle cx='23.0' cy='23.0' r='4.14'/%3E%3C/g%3E%3C/svg%3E") no-repeat;
+  width: 38px;
+  height: 38px;
+  right: calc(1.2rem + 46px);
+  top: 28px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3CradialGradient id='b' cx='.35' cy='.3' r='.8'%3E%3Cstop offset='0' stop-color='%23f2b98a'/%3E%3Cstop offset='.55' stop-color='%23b0642c'/%3E%3Cstop offset='1' stop-color='%234a2810'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='50' cy='50' r='42.5' fill='none' stroke='url(%23b)' stroke-width='13' stroke-dasharray='13.352 13.352'/%3E%3Ccircle cx='50' cy='50' r='40' fill='url(%23b)'/%3E%3Ccircle cx='50' cy='50' r='31' fill='none' stroke='%23241a12' stroke-opacity='.35' stroke-width='1.5'/%3E%3Cg fill='%23241a12'%3E%3Ccircle cx='64.14' cy='64.14' r='7'/%3E%3Ccircle cx='35.86' cy='64.14' r='7'/%3E%3Ccircle cx='35.86' cy='35.86' r='7'/%3E%3Ccircle cx='64.14' cy='35.86' r='7'/%3E%3Ccircle cx='50' cy='50' r='7'/%3E%3C/g%3E%3Ccircle cx='50' cy='50' r='3' fill='%23f2b98a'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
 }
 /* The gears turn — slowly, and only for readers who haven't asked for
    less motion. Meshed, so they turn opposite ways. */
@@ -18815,7 +19150,7 @@ html[data-theme="steampunk"] .app-bar::after {
    goes and the bar loses its gear bay; tablets keep both. The display
    face steps down so a heading isn't half the screen. */
 @media (max-width: 480px) {
-  html[data-theme="steampunk"] .app-bar { padding-right: 1rem; }
+  html[data-theme="steampunk"] .app-bar { padding: 0.35rem 1rem calc(0.3rem + 14px); }
   html[data-theme="steampunk"] .app-bar::before,
   html[data-theme="steampunk"] .app-bar::after { content: none; }
   html[data-theme="steampunk"] h1 { font-size: 1.9rem; }
@@ -18828,15 +19163,15 @@ html[data-theme="steampunk"] .app-bar::after {
    about 1.2:1 of --bg. Still: the bar's small gears are the ones that turn. */
 html[data-theme="steampunk"] {
   --app-gutter-art:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320' opacity='0.3'%3E%3Ccircle cx='160' cy='160' r='128' fill='none' stroke='%238a5a2e' stroke-width='40' stroke-dasharray='25.1 25.1'/%3E%3Ccircle cx='160' cy='160' r='112' fill='%235c3d22'/%3E%3Ccircle cx='160' cy='160' r='78' fill='none' stroke='%23241a12' stroke-width='22' stroke-dasharray='61.3 61.3'/%3E%3Ccircle cx='160' cy='160' r='22' fill='%23241a12'/%3E%3C/svg%3E") left -160px top 18% / 320px 320px no-repeat,
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320' opacity='0.3'%3E%3Ccircle cx='160' cy='160' r='128' fill='none' stroke='%238a5a2e' stroke-width='40' stroke-dasharray='25.1 25.1'/%3E%3Ccircle cx='160' cy='160' r='112' fill='%235c3d22'/%3E%3Ccircle cx='160' cy='160' r='78' fill='none' stroke='%23241a12' stroke-width='22' stroke-dasharray='61.3 61.3'/%3E%3Ccircle cx='160' cy='160' r='22' fill='%23241a12'/%3E%3C/svg%3E") right -160px top 64% / 320px 320px no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320' opacity='0.3'%3E%3Cg fill='none' stroke='%238a5a2e'%3E%3Ccircle cx='160' cy='160' r='144' stroke-width='24' stroke-dasharray='22.62 22.62'/%3E%3Ccircle cx='160' cy='160' r='121' stroke-width='22'/%3E%3Cpath d='M160 50V270M64.7 105L255.3 215M64.7 215L255.3 105' stroke-width='18'/%3E%3Ccircle cx='160' cy='160' r='26' stroke-width='22'/%3E%3C/g%3E%3C/svg%3E") left -160px top 18% / 320px 320px no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320' opacity='0.3'%3E%3Cg fill='none' stroke='%238a5a2e'%3E%3Ccircle cx='160' cy='160' r='144' stroke-width='24' stroke-dasharray='22.62 22.62'/%3E%3Ccircle cx='160' cy='160' r='121' stroke-width='22'/%3E%3Cpath d='M160 50V270M64.7 105L255.3 215M64.7 215L255.3 105' stroke-width='18'/%3E%3Ccircle cx='160' cy='160' r='26' stroke-width='22'/%3E%3C/g%3E%3C/svg%3E") right -160px top 64% / 320px 320px no-repeat,
     linear-gradient(rgba(169, 122, 36, 0.16) 0 10px, transparent 10px) 116px 40px / 30px 320px repeat-y,
     linear-gradient(rgba(169, 122, 36, 0.16) 0 10px, transparent 10px) right 116px top 200px / 30px 320px repeat-y,
     linear-gradient(90deg, rgba(74, 40, 16, 0.5), rgba(192, 112, 56, 0.2) 35%, rgba(122, 62, 22, 0.25) 60%, rgba(58, 32, 8, 0.5)) 120px 0 / 22px 100% no-repeat,
     linear-gradient(90deg, rgba(74, 40, 16, 0.5), rgba(192, 112, 56, 0.16) 35%, rgba(122, 62, 22, 0.2) 60%, rgba(58, 32, 8, 0.5)) 196px 0 / 14px 100% no-repeat,
     linear-gradient(90deg, rgba(74, 40, 16, 0.5), rgba(192, 112, 56, 0.2) 35%, rgba(122, 62, 22, 0.25) 60%, rgba(58, 32, 8, 0.5)) right 120px top 0 / 22px 100% no-repeat,
     linear-gradient(90deg, rgba(74, 40, 16, 0.5), rgba(192, 112, 56, 0.16) 35%, rgba(122, 62, 22, 0.2) 60%, rgba(58, 32, 8, 0.5)) right 196px top 0 / 14px 100% no-repeat,
-    var(--steampunk-leather);
+    var(--steampunk-perforated);
 }
 
 /* --- Controls as plant: valves, sight glasses, brass push-buttons ------ */
@@ -18903,11 +19238,21 @@ html[data-theme="steampunk"] {
   --progress-border: #8a5a2e;
   --progress-border-width: 2px;
   --progress-radius: 999px;
-  --slider-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent 50%), linear-gradient(180deg, #241a12, #140d08);
-  --slider-border: #8a5a2e;
-  --slider-height: 0.55rem;
+  /* Core hides the border and clips this to the content box, so the brass
+     rim is a layer too: glass highlight, dark liquid inset 2px (square
+     ends sit inside the brass end-caps), then the full brass tube. */
+  --slider-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 50%) center / calc(100% - 0.8rem) calc(var(--slider-height) - 4px) no-repeat,
+    linear-gradient(#140d08, #140d08) center / calc(100% - 0.8rem) calc(var(--slider-height) - 4px) no-repeat,
+    linear-gradient(180deg, #f0d08a, #b8892f 50%, #6e4c14);
+  --slider-height: 0.7rem;
   --slider-radius: 999px;
-  --slider-thumb-bg: radial-gradient(circle at 35% 30%, #f5e2b0, #b8892f 60%, #5c3d15);
+  /* A knurled brass knob, as on the recorder's slider: a lit dome inside
+     a milled rim. */
+  --slider-thumb-bg:
+    radial-gradient(circle at 40% 35%, #f5e2b0, #c8a060 40%, #6e4c14 58%, transparent 60%),
+    radial-gradient(circle, transparent 70%, rgba(20, 12, 4, 0.6) 71%),
+    repeating-conic-gradient(#5c3d15 0 10deg, #e8c88a 10deg 20deg);
 }
 /* The handwheel itself: rim, spokes and hub painted in one turning disc. */
 html[data-theme="steampunk"] .knob-dial::after {
@@ -18926,7 +19271,7 @@ html[data-theme="steampunk"] {
   --message-bg: var(--steampunk-riveted-leather);
   --message-border: #8a5a2e;
   --message-padding: 0.6rem 1rem;
-  --message-own-bg: var(--steampunk-rivet) 7px 7px / 7px 7px no-repeat, var(--steampunk-rivet) calc(100% - 7px) 7px / 7px 7px no-repeat, var(--steampunk-brass);
+  --message-own-bg: var(--steampunk-rivet) 3px 3px / 10px 10px no-repeat, var(--steampunk-rivet) calc(100% - 3px) 3px / 10px 10px no-repeat, var(--steampunk-brass);
   --message-own-fg: #241a12;
   --message-own-meta-fg: #3c2a1c;
   --message-own-border: #6e4c14;
@@ -18961,14 +19306,15 @@ html[data-theme="steampunk"] {
     var(--steampunk-filigree-br) calc(100% - 3px) calc(100% - 3px) / 1.3rem 1.3rem no-repeat;
   /* Cards are filigreed plates (panels keep their rivets); a dialog's
      brass title band covers its top edge, so it carries the lower pair. */
-  --card-bg: var(--steampunk-filigree), var(--steampunk-leather);
+  --card-bg: var(--steampunk-filigree), var(--steampunk-leather-inset), var(--steampunk-bezel-cast);
   /* A little more pad than core so a card's first line clears the
      1.3rem scrollwork in its corners. */
   --card-pad: calc(var(--space-m) * var(--density) + 0.4rem);
   --modal-bg:
-    var(--steampunk-filigree-bl) 4px calc(100% - 4px) / 2.2rem 2.2rem no-repeat,
-    var(--steampunk-filigree-br) calc(100% - 4px) calc(100% - 4px) / 2.2rem 2.2rem no-repeat,
-    var(--steampunk-leather);
+    var(--steampunk-filigree-bl) 4px calc(100% - 4px) / 1.6rem 1.6rem no-repeat,
+    var(--steampunk-filigree-br) calc(100% - 4px) calc(100% - 4px) / 1.6rem 1.6rem no-repeat,
+    var(--steampunk-leather-inset),
+    var(--steampunk-bezel-cast);
 
   /* Knife switch: a slate base with a hinge post and a copper clip; the
      blade (thumb) is copper with a black insulated handle. */
@@ -18976,40 +19322,59 @@ html[data-theme="steampunk"] {
   --switch-border: #1a1c18;
   --switch-border-on: #1a1c18;
   --switch-bg:
-    radial-gradient(circle at 0.45em 50%, #f2b98a 0 0.16em, #7a3e16 0.17em 0.24em, transparent 0.25em),
-    linear-gradient(90deg, transparent calc(100% - 0.55em), #c07038 calc(100% - 0.55em) calc(100% - 0.4em), transparent calc(100% - 0.4em) calc(100% - 0.3em), #c07038 calc(100% - 0.3em) calc(100% - 0.15em), transparent calc(100% - 0.15em)) 0 50% / 100% 0.7em no-repeat,
+    radial-gradient(circle at 62% 80%, #4a3a2a 0 0.16em, #1a1410 0.22em, #8a6420 0.24em 0.29em, transparent 0.31em),
+    radial-gradient(circle at 0.5em 50%, #f2b98a 0 0.18em, #7a3e16 0.19em 0.28em, transparent 0.29em),
+    linear-gradient(90deg, transparent calc(100% - 0.6em), #c07038 calc(100% - 0.6em) calc(100% - 0.44em), transparent calc(100% - 0.44em) calc(100% - 0.32em), #c07038 calc(100% - 0.32em) calc(100% - 0.16em), transparent calc(100% - 0.16em)) 0 50% / 100% 0.85em no-repeat,
     linear-gradient(180deg, #4a5048, #262a24);
-  --switch-bg-on: var(--switch-bg);
+  --switch-bg-on:
+    radial-gradient(circle at 62% 80%, #fff6d8 0 0.08em, #ffc160 0.17em, #e08a20 0.25em, rgba(255, 150, 40, 0.45) 0.32em, transparent 0.6em),
+    var(--switch-bg);
   --switch-thumb-radius: 1px;
   --switch-thumb-bg: linear-gradient(90deg, #f2b98a, #c07038 30%, #c07038 74%, #1a1410 74%, #3a3330 90%, #1a1410);
   --switch-thumb-bg-on: var(--switch-thumb-bg);
 }
+/* Drawn at 3.7em x 2em (about 56x30px) so the slate reads, and with a
+   9px contact lamp below the blade that lights and glows when the circuit
+   is closed: the state is the lamp as well as the blade's angle. The open
+   blade lifts 20deg, which keeps its handle inside the slate. */
+html[data-theme="steampunk"] :is(label.switch:not(:has(> .switch-label)), .switch .switch-track) {
+  width: calc(3.7em * var(--density));
+  height: calc(2em * var(--density));
+}
 html[data-theme="steampunk"] .switch-thumb {
-  top: calc(50% - 0.14em);
-  inset-inline-start: 0.35em;
-  width: calc(100% - 0.35em);
-  height: 0.28em;
+  top: calc(50% - 0.19em);
+  inset-inline-start: 0.4em;
+  width: calc(100% - 0.7em);
+  height: 0.38em;
   transform-origin: 0.1em 50%;
-  transform: rotate(-32deg);
+  transform: rotate(-20deg);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
 html[data-theme="steampunk"] .switch input:checked ~ .switch-track .switch-thumb,
 html[data-theme="steampunk"] .switch[aria-checked="true"] .switch-thumb { transform: rotate(0deg); }
-html[data-theme="steampunk"] .switch:dir(rtl) .switch-thumb { transform-origin: calc(100% - 0.1em) 50%; transform: rotate(32deg); }
+html[data-theme="steampunk"] .switch:dir(rtl) .switch-thumb { transform-origin: calc(100% - 0.1em) 50%; transform: rotate(20deg); }
 
 /* Nixie tubes for counters and timecode (.readout-lg, a transport's
    readout): orange neon numerals in a smoked-glass envelope with the
    tube's honeycomb anode mesh, in place of the brass dial. */
 html[data-theme="steampunk"] :is(.readout-lg, .transport .readout) {
-  padding: 0.1em 0.45em;
+  padding: 0.3em 0.55em calc(0.3em + 0.32em);
+  /* The last digit's tracking would otherwise hang past the glass. */
+  padding-inline-end: calc(0.55em - 0.18em);
   font-family: "Antonio", "Arial Narrow", sans-serif;
   font-weight: 400;
+  font-variant-numeric: tabular-nums;
   letter-spacing: 0.18em;
-  color: #ffc58a;
-  text-shadow: 0 0 0.08em #ff9a3d, 0 0 0.3em #ff6a00, 0 0 0.75em rgba(255, 90, 0, 0.6);
+  color: #ffd2a0;
+  text-shadow: 0 0 0.05em #ffb060, 0 0 0.18em #ff7a10, 0 0 0.45em #ff6a00, 0 0 0.9em rgba(255, 90, 0, 0.55);
+  /* One glass envelope per digit: a curved highlight down each tube's
+     left shoulder and a dark seam between tubes, every digit-plus-tracking
+     step; the row stands on a walnut plinth with a brass rail. */
   background:
+    linear-gradient(#f0d08a, #8a5e1a) 0 calc(100% - 0.32em) / 100% 2px no-repeat,
+    repeating-linear-gradient(90deg, #5a3a22 0 2px, #3c2a1c 2px 5px, #2a1c12 5px 7px) 0 100% / 100% 0.32em no-repeat,
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.55) 0 1px, rgba(255, 230, 200, 0.16) 1px 0.12em, transparent 0.3em calc(1ch + 0.18em)) 0.55em 0 / 100% calc(100% - 0.32em) no-repeat,
     radial-gradient(circle, rgba(255, 150, 70, 0.14) 0.6px, transparent 1px) 0 0 / 5px 5px,
-    linear-gradient(90deg, rgba(255, 255, 255, 0.14), transparent 18%, transparent 82%, rgba(255, 255, 255, 0.08)),
     radial-gradient(ellipse at 50% 20%, #3a2a20, #120c08 75%);
   border: 2px solid #5c3d15;
   border-radius: 0.6em 0.6em 0.25em 0.25em;
@@ -19050,6 +19415,9 @@ html[data-theme="steampunk"] :is(.panel, .card, .modal, .drawer) :is(.panel, .ca
   --panel-bg: var(--steampunk-leather);
   --card-bg: var(--steampunk-leather);
   --card-pad: calc(var(--space-m) * var(--density));
+  --panel-border: var(--border);
+  --panel-border-width: 2px;
+  --card-border-width: 1px;
   --panel-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
   --card-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
@@ -19060,10 +19428,224 @@ html[data-theme="steampunk"] :is(.panel, .card, .modal, .drawer) :is(.panel, .ca
     linear-gradient(180deg, #d9b468, #a97a24);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
   font-size: 0.88rem;
-  padding: 0.25rem 1.3rem;
+  padding: 0.3rem 1.3rem;
 }
-/* A dialog's lower scrollwork is 2.2rem: its content (a footer's buttons,
+/* A dialog's lower scrollwork is 1.6rem: its content (a footer's buttons,
    a scrolling panel) ends above it instead of running over it. */
-html[data-theme="steampunk"] .modal { padding-block-end: max(var(--surface-pad, 1.5rem), calc(2.2rem + 6px)); }
+html[data-theme="steampunk"] .modal { padding-block-end: max(var(--surface-pad, 1.5rem), calc(1.6rem + 4px)); }
+/* A desktop window has a fixed height: a 6px casting, no scrollwork and
+   no reserved foot, so its content box keeps the height. */
+html[data-theme="steampunk"] .desktop-window > .modal {
+  --panel-border-width: 6px;
+  --modal-bg: var(--steampunk-leather-inset), var(--steampunk-bezel-cast);
+  padding-block-end: var(--surface-pad);
+}
+/* Focus brightens the field's brass ring. */
+html[data-theme="steampunk"] :is(.input, .select, .textarea) {
+  --focus-ring: 0 0 0 1px #f2d690, 0 0 0 4px rgba(199, 163, 90, 0.4), inset 0 2px 4px rgba(0, 0, 0, 0.6);
+}
+
+/* Vertical sliders: the same tube, turned on end. */
+html[data-theme="steampunk"] .slider.is-vertical {
+  --slider-bg:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.22), transparent 50%) center / calc(var(--slider-height) - 4px) calc(100% - 0.8rem) no-repeat,
+    linear-gradient(#140d08, #140d08) center / calc(var(--slider-height) - 4px) calc(100% - 0.8rem) no-repeat,
+    linear-gradient(90deg, #f0d08a, #b8892f 50%, #6e4c14);
+}
+
+/* IM Fell SC is all small capitals, so its labels read a size smaller
+   than they are: buttons and tabs keep a floor, and a little tracking. */
+html[data-theme="steampunk"] :is(.tab, .btn) { letter-spacing: 0.03em; }
+html[data-theme="steampunk"] .btn { --btn-font-size: max(0.95rem, 0.9em); }
+/* SC floors: an all-small-caps face needs ~15-20% more size than
+   lowercase body text to reach the same x-height. */
+html[data-theme="steampunk"] :is(.btn-sm, .segmented .btn) { font-size: max(1rem, 0.9em); }
+html[data-theme="steampunk"] .tab { font-size: max(1rem, 0.9em); }
+html[data-theme="steampunk"] .tabs .tab { font-size: max(1.05rem, 0.9em); }
+
+/* Column heads, stat labels and list titles are engraved in the SC face:
+   the face supplies its own capitals, so no forced uppercase or bold. */
+html[data-theme="steampunk"] :is(.table th, .stat-label, .list-item-title, .nav-item) {
+  font-family: var(--steampunk-display);
+  font-weight: 400;
+}
+html[data-theme="steampunk"] .table th { font-size: max(0.95rem, 0.95em); }
+html[data-theme="steampunk"] .list-item-title { font-size: 1.08em; letter-spacing: 0.02em; }
+html[data-theme="steampunk"] .stat-label { text-transform: none; font-size: 0.95em; letter-spacing: 0.04em; }
+html[data-theme="steampunk"] .nav-item { font-size: max(1.05rem, 1em); letter-spacing: 0.03em; }
+/* The bar's menubar too, above phone width: on a phone the wider SC face
+   would wrap the nav to a second row, so it keeps the book serif there. */
+@media (min-width: 481px) {
+  html[data-theme="steampunk"] .app-bar .menubar > li > :is(a, button) { font-family: var(--steampunk-display); font-weight: 400; font-size: max(1.05rem, 1em); letter-spacing: 0.03em; }
+}
+
+/* Menus and context menus are walnut plates with a brass inner rule. */
+html[data-theme="steampunk"] :is(.dropdown, .context-menu, .list:not(.list-cards), .nav-rail) { box-shadow: var(--steampunk-walnut-shadow); }
+
+/* Title-band controls are engraved into the brass: dark ink, lit lip. */
+html[data-theme="steampunk"] .modal-header {
+  --btn-close-fg: #2a1c0e;
+  --btn-close-fg-hover: #140d08;
+  --btn-close-bg-hover: rgba(42, 28, 14, 0.18);
+}
+html[data-theme="steampunk"] .modal-header :is(.btn-close, .btn-min, .btn-max) { text-shadow: 0 1px 0 rgba(255, 240, 200, 0.6); }
+
+/* The current item of a pattern nav is accent-text on an accent fill
+   (page CSS, unlayered, so only a token can reach it): inside that nav the
+   accent text is the on-accent ink. */
+html[data-theme="steampunk"] .pattern-nav { --accent-text: var(--on-accent); }
+
+/* GO is a round brass-bezel jewel, as on the recorder: a dark enamel face
+   in a cast bezel with a lit green legend. */
+html[data-theme="steampunk"] {
+  --go-bg: radial-gradient(circle at 50% 40%, #4a3322, #140d08 75%) padding-box, var(--steampunk-bezel);
+  --go-bg-hover: radial-gradient(circle at 50% 40%, #5a4030, #1c130c 75%) padding-box, var(--steampunk-bezel);
+  --go-fg: #8fd060;
+  --go-border: transparent;
+  --go-border-width: 4px;
+  --go-radius: 999px;
+  --go-shadow: inset 0 0 0 1px #3a2610, inset 0 3px 8px rgba(0, 0, 0, 0.7), 0 2px 5px rgba(0, 0, 0, 0.5);
+}
+
+/* Desktop: the plant room's big gears behind the plates, dim. */
+@media (min-width: 901px) {
+  html[data-theme="steampunk"] {
+    --app-bg:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320' opacity='0.2'%3E%3Cg fill='none' stroke='%238a5a2e'%3E%3Ccircle cx='160' cy='160' r='144' stroke-width='24' stroke-dasharray='22.62 22.62'/%3E%3Ccircle cx='160' cy='160' r='121' stroke-width='22'/%3E%3Cpath d='M160 50V270M64.7 105L255.3 215M64.7 215L255.3 105' stroke-width='18'/%3E%3Ccircle cx='160' cy='160' r='26' stroke-width='22'/%3E%3C/g%3E%3C/svg%3E") right -140px bottom -140px / 480px 480px no-repeat,
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320' opacity='0.16'%3E%3Cg fill='none' stroke='%23b0642c'%3E%3Ccircle cx='160' cy='160' r='144' stroke-width='24' stroke-dasharray='22.62 22.62'/%3E%3Ccircle cx='160' cy='160' r='121' stroke-width='22'/%3E%3Cpath d='M160 50V270M64.7 105L255.3 215M64.7 215L255.3 105' stroke-width='18'/%3E%3Ccircle cx='160' cy='160' r='26' stroke-width='22'/%3E%3C/g%3E%3C/svg%3E") left -90px top 40% / 260px 260px no-repeat,
+      var(--steampunk-perforated);
+  }
+}
+
+/* --- Secondary plates, plaques and the phone budget ----------------------- *
+ * Alerts, toasts, toolbars, form rows and drop zones are walnut plates
+ * like the menus: grain, a polish line along the top, a brass rule set
+ * inside the edge. No rivets: those stay on top-level panels. */
+html[data-theme="steampunk"] {
+  --alert-bg: var(--steampunk-walnut);
+  --alert-border-width: 2px;
+  --toast-bg: var(--steampunk-walnut);
+  --toast-border-width: 2px;
+  --toast-shadow: var(--steampunk-walnut-shadow);
+  --toolbar-bg: var(--steampunk-walnut);
+  --field-row-bg: var(--steampunk-walnut);
+  --dropzone-bg: var(--steampunk-walnut);
+  --skeleton-bg: var(--surface-2);
+  --band-tint-bg: var(--steampunk-walnut);
+  /* Secondary bars (banners, scrollspy) are walnut with a brass rule at
+     the foot; the current section wears a brass underline plate. */
+  --banner-bg: var(--steampunk-walnut);
+  --banner-border: #c7a35a;
+  --scrollspy-nav-bg: var(--steampunk-walnut);
+  --scrollspy-nav-rule: #c7a35a;
+  --scrollspy-link-active-fg: var(--accent-2);
+  --scrollspy-link-active-marker: inset 0 -3px 0 #c7a35a, inset 0 -4px 0 #3a2610;
+  /* Icon labels: the wide book serif would split "Neighborhood". */
+  --desktop-icon-font-size: 0.74rem;
+}
+html[data-theme="steampunk"] :is(.alert, .toolbar:not(.is-plain), .field-row, .dropzone) {
+  box-shadow: inset 0 0 0 1px rgba(199, 163, 90, 0.35), inset 0 0 0 3px rgba(20, 12, 4, 0.3), 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+/* Badges are brass-rimmed enamel plaques, as the kit's counters: a lit
+   brass rim and a fill fired in the tone's own enamel. */
+html[data-theme="steampunk"] .badge {
+  box-shadow: 0 0 0 1px #c7a35a, inset 0 1px 0 rgba(255, 236, 190, 0.3), 0 1px 2px rgba(0, 0, 0, 0.5);
+  border-color: #3a2610;
+}
+html[data-theme="steampunk"] .badge:not(.badge-solid, .badge-outline) { --badge-bg: linear-gradient(180deg, #52381f, #33241a); --badge-fg: #e6d0a6; }
+html[data-theme="steampunk"] .badge-accent:not(.badge-solid, .badge-outline) { --badge-bg: linear-gradient(180deg, #4a3618, #2e2010); --badge-fg: #e8c680; }
+html[data-theme="steampunk"] .badge-danger:not(.badge-solid, .badge-outline) { --badge-bg: linear-gradient(180deg, #6a2018, #4a140e); --badge-fg: #f2c4b8; }
+html[data-theme="steampunk"] .badge-success:not(.badge-solid, .badge-outline) { --badge-bg: linear-gradient(180deg, #2c4018, #1c2a10); --badge-fg: #a8d878; }
+html[data-theme="steampunk"] .badge-warning:not(.badge-solid, .badge-outline) { --badge-bg: linear-gradient(180deg, #4a3410, #30220a); --badge-fg: #ecbf5c; }
+/* Avatars are brass-rimmed medallions (a presence button's own hover
+   ring still wins). */
+html[data-theme="steampunk"] .avatar:not(button.presence:is(:hover, :focus-visible, [aria-expanded="true"]) > *) {
+  box-shadow: inset 0 0 0 2px #c7a35a, inset 0 0 0 3px rgba(20, 12, 4, 0.5), 0 1px 3px rgba(0, 0, 0, 0.55);
+}
+
+/* Engraved SC on the rest of the selectors: the settings section list,
+   and (above phone width, where the wider face would wrap a row of
+   toggles) segmented toggles and filter chips, with the tabs' size floor. */
+html[data-theme="steampunk"] .master-detail-list .list-item {
+  font-family: var(--steampunk-display);
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  font-size: max(1.05rem, 1em);
+}
+@media (min-width: 481px) {
+  html[data-theme="steampunk"] :is(.toggle-btn, .badge-button, .chip, .segmented > *) {
+    font-family: var(--steampunk-display);
+    font-weight: 400;
+    letter-spacing: 0.03em;
+    font-size: max(1rem, 0.9em);
+  }
+}
+
+/* Phone budget: the cross-hatch grain is two repeating gradients per
+   plate, repainted on every scroll frame of a long list; a phone keeps
+   the leather's colour and bezels and drops the grain. */
+@media (max-width: 480px) {
+  html[data-theme="steampunk"] {
+    --panel-border-width: 6px;
+    --card-border-width: 6px;
+    --steampunk-leather: linear-gradient(180deg, #4e3522, #33241a);
+    --steampunk-leather-inset: linear-gradient(180deg, #4e3522, #33241a) padding-box;
+    --steampunk-walnut:
+      linear-gradient(rgba(255, 226, 170, 0.3), rgba(255, 226, 170, 0.3)) top / 100% 1px no-repeat,
+      linear-gradient(180deg, #5a3c24, #46301f);
+    /* Cards and stat tiles: a two-stop casting, no rivets or scrollwork;
+       only panels keep the full moulding. The backplate is solid. */
+    --card-bg: var(--steampunk-leather-inset), linear-gradient(135deg, #c9962c, #6e4c14) border-box;
+    --card-pad: calc(var(--space-m) * var(--density));
+    --steampunk-perforated: #2f3322;
+  }
+  /* Filter chips stay wider than tall; toggles keep one line and scroll. */
+  html[data-theme="steampunk"] .badge-button { padding-inline: 1em; min-inline-size: 4.25rem; }
+  html[data-theme="steampunk"] .toggle-btn { white-space: nowrap; }
+  html[data-theme="steampunk"] .toggle-group { max-inline-size: 100%; overflow-x: auto; }
+}
+
+/* Stacked-table labels are engraved like the table head, whatever face the
+   cell itself uses (mono order/total columns included). */
+html[data-theme="steampunk"] .table.is-stacked > * > tr > [data-label]::before {
+  font-family: var(--steampunk-display);
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+}
+
+/* Tree rows are one voice: every node in the SC face at one size, on one
+   line, so a leaf never outgrows its parent or wraps the narrow pane. */
+html[data-theme="steampunk"] .tree :is(summary, li > a, li > button, li > span) {
+  font-family: var(--steampunk-display);
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+/* Small labels straight on the perforated backplate (not on a plate):
+   full ink and a dark engraved cut so the dot grid can't eat them. */
+html[data-theme="steampunk"] .app-main :is(.label, .text-muted):not(:is(.panel, .card, .modal, .toolbar, .alert, .list, .table, .field-row, .drawer) *) {
+  color: var(--text);
+  text-shadow: 0 1px 1px #000;
+}
+html[data-theme="steampunk"] .btn:is(.btn-tertiary, .btn-ghost) { text-shadow: 0 1px 1px #000; }
+
+/* A phone nameplate with only a title and a badge stays one line: tighter
+   tracking and padding, and the badge gives way (ellipsis) before the plate
+   breaks into a two-row slab. */
+@media (max-width: 480px) {
+  html[data-theme="steampunk"] .panel-header:has(> :first-child + .badge:last-child) {
+    flex-wrap: nowrap;
+    padding-inline: 1.3rem;
+    gap: 0.35rem;
+    letter-spacing: 0.03em;
+  }
+  html[data-theme="steampunk"] .panel-header:has(> :first-child + .badge:last-child) > .badge {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    letter-spacing: 0;
+  }
+}
 
 }

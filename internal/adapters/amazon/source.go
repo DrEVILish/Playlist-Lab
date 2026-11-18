@@ -59,8 +59,7 @@ const amazonScrapeJS = `(() => {
 
 func (s *Source) FetchTracks(ctx context.Context, playlistURLOrID string, userID int64) (adapters.PlaylistInfo, []adapters.TrackInfo, error) {
 	var raw string
-	err := browser.Scrape(ctx, "Amazon Music Browser", browser.DefaultTimeout,
-		chromedp.Navigate(playlistURLOrID),
+	err := browser.Scrape(ctx, "Amazon Music Browser", browser.DefaultTimeout, playlistURLOrID, []string{"amazon.com", "amazon.co.uk", "amazon.de", "amazon.fr", "amazon.ca", "amazon.com.au", "media-amazon.com", "ssl-images-amazon.com"},
 		chromedp.WaitVisible(`body`, chromedp.ByQuery),
 		chromedp.Evaluate(amazonScrapeJS, &raw),
 	)

@@ -2,7 +2,9 @@
 <div class="stack">
   {{if not .InModal}}<h1>Status and reports</h1>{{end}}
 
-  {{if .PlexError}}
+  {{if not .HasPlexServer}}
+  <p class="empty-state">Link a <a href="/settings#servers">Plex server and music library</a> to see reports.</p>
+  {{else if .PlexError}}
   <div class="alert alert-danger">Could not reach your Plex server.</div>
   {{else}}
   <div class="cluster cluster-lg">
@@ -36,7 +38,7 @@
     <ul class="divide-y">
     <li class="row is-justify-between"><span>Total scheduled</span><span class="mono">{{.TotalSchedules}}</span></li>
     {{range .ByFrequency}}<li class="row is-justify-between"><span>{{.Freq}}</span><span class="mono">{{.Count}}</span></li>{{end}}
-    <li class="row is-justify-between"><span>Last 100 runs</span><span><span class="mono">{{.Succeeded}} succeeded, {{.Failed}} failed</span> &middot; <a href="/settings#admin-logs">View logs</a></span></li>
+    <li class="row is-justify-between"><span>Last 100 runs</span><span><span class="mono">{{.Succeeded}} succeeded, {{.Failed}} failed</span>{{if .IsAdmin}} &middot; <a href="/settings#admin-logs">View logs</a>{{end}}</span></li>
     </ul>
   </section>
 

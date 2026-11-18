@@ -19,7 +19,7 @@
           hx-on::after:request="document.getElementById('setup-step-1').classList.remove('is-current'); document.getElementById('setup-step-2').classList.add('is-current')">
           <option value="">Select a server...</option>
           {{range .Servers}}
-          <option value="{{.Value}}">{{.Name}}</option>
+          <option value="{{.ClientIdentifier}}">{{.Name}}</option>
           {{end}}
         </select>
       </div>

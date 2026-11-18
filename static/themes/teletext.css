@@ -446,6 +446,18 @@ a { color: var(--link, var(--accent)); }
   text-overflow: ellipsis;
 }
 .field-row > .field-hint { margin-block-start: 0; flex: none; }
+/* .field-row.is-wrap — the label is the setting's only name, so it wraps
+   instead of truncating, and a sentence-length .field-hint sits under it
+   inside the row; the control stays at the end, centred on both. */
+.field-row.is-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  row-gap: 0.15em;
+}
+.field-row.is-wrap > .label { grid-column: 1; white-space: normal; overflow: visible; }
+.field-row.is-wrap > .field-hint { grid-column: 1; }
+.field-row.is-wrap > :not(.label, .field-hint) { grid-column: 2; grid-row: 1 / span 2; }
 
 /* .input-group — an input with joined addons: a unit label, a static
    prefix, or an attached button. Children share one border; only the
@@ -500,6 +512,9 @@ a { color: var(--link, var(--accent)); }
   color: var(--check-fg, var(--text));
 }
 .check:has(:disabled) { opacity: 0.5; cursor: var(--cursor-not-allowed, not-allowed); }
+/* A hidden name (a table's select column) is positioned against its own
+   label, so it can't escape a scrolling table and widen the page. */
+.check:has(> .visually-hidden) { position: relative; }
 
 /* .radio-group — a <fieldset> of .check rows with a <legend>. */
 .radio-group {
@@ -576,7 +591,8 @@ a { color: var(--link, var(--accent)); }
    (the attribute is also what assistive tech reads). The button sizes to
    its content: the track becomes a normal flex child and an optional
    .switch-label sits beside it. */
-button.switch {
+button.switch,
+label.switch:has(> .switch-label) {
   appearance: none;
   width: auto;
   height: auto;
@@ -589,7 +605,8 @@ button.switch {
   font: inherit;
   text-align: start;
 }
-button.switch .switch-track {
+button.switch .switch-track,
+label.switch:has(> .switch-label) > .switch-track {
   position: relative;
   inset: auto;
   flex: none;
@@ -701,7 +718,7 @@ button.switch:disabled { opacity: 0.5; cursor: var(--cursor-not-allowed, not-all
   align-items: center;
   gap: 0.5rem;
   margin: calc(-1 * var(--surface-pad, 1.5rem)) calc(-1 * var(--surface-pad, 1.5rem)) var(--space-m);
-  padding: var(--modal-header-pad, var(--space-xs) var(--space-m));
+  padding: var(--modal-header-pad, var(--space-xs) var(--surface-pad, var(--space-m)));
   background: var(--modal-header-bg, transparent);
   color: var(--modal-header-fg, inherit);
   font-weight: 600;
@@ -756,6 +773,9 @@ dialog.modal:modal {
   position: fixed;
   inset: 0;
   margin: auto;
+}
+.modal[popover]:popover-open:not(:where(.is-maximized, .window-max:checked + .modal)),
+dialog.modal:modal:not(:where(.is-maximized, .window-max:checked + .modal)) {
   height: fit-content;
 }
 
@@ -950,6 +970,7 @@ dialog.modal:modal {
   color: var(--dropdown-item-fg, var(--text));
   text-align: start;
 }
+.dropdown-item.is-danger { color: var(--danger-text, var(--danger)); }
 .dropdown-item:focus-visible {
   background: var(--dropdown-item-bg-hover, var(--accent));
   color: var(--dropdown-item-fg-hover, var(--on-accent));
@@ -1094,6 +1115,7 @@ dialog.modal:modal {
  * every theme here treats it as a signature element. */
 .transport {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
   padding: var(--transport-padding, 0.6rem 0.9rem);
@@ -1503,7 +1525,7 @@ html.is-dragging-value, html.is-dragging-value * { cursor: var(--cursor-resize-y
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 0.2rem 0.35rem;
+  padding: 0.35rem 0.4rem;
   background: var(--scribble-bg, var(--surface-2));
   color: var(--scribble-fg, var(--text));
   border-top: var(--scribble-bar-width, 0.3rem) solid var(--strip-color, var(--accent));
@@ -1602,7 +1624,7 @@ html.is-dragging-value, html.is-dragging-value * { cursor: var(--cursor-resize-y
   background: var(--row-selected-bg, rgba(128, 128, 128, 0.25));
   color: var(--row-selected-fg, inherit);
 }
-.table tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) td {
+.table tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))):not(.is-selected, :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))) td {
   background: var(--row-active-bg, transparent);
 }
 /* The marker belongs to the row, so only its leading cell draws it — on
@@ -1944,7 +1966,10 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
 .status-ok { --state-fg: var(--success-text, var(--success)); color: var(--state-fg); }
 .status-warn { --state-fg: var(--warning-text, var(--warning)); color: var(--state-fg); }
 .status-error { --state-fg: var(--danger-text, var(--danger)); color: var(--state-fg); }
+/* .status-idle is neutral everywhere (offline, stopped, not running);
+   .status-ready is armed and waiting, the green of a recorder on standby. */
 .status-idle { --state-fg: var(--muted); color: var(--state-fg); }
+.status-ready { --state-fg: var(--success-text, var(--success)); color: var(--state-fg); }
 /* .status-rec: recording or on air. A bold danger label whose dot has a
    halo; the dot pulses when motion is allowed. */
 .status-rec { --state-fg: var(--danger-text, var(--danger)); color: var(--state-fg); font-weight: 700; }
@@ -2066,8 +2091,7 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
 :is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a)) {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  gap: 0.6em;
   width: 100%;
   padding: 0.45em 0.7em;
   border-radius: var(--context-menu-radius, var(--radius));
@@ -2075,6 +2099,10 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
   text-align: start;
 }
 :is(.context-menu-item, .context-menu li > :is(button, a)).is-danger { color: var(--danger-text, var(--danger)); }
+/* A leading icon stays beside its label; a trailing shortcut (<kbd>) or a
+   submenu arrow is pushed to the end. */
+:is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a)) > :is(kbd, :last-child:not(:first-child, .icon)),
+:is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a))[aria-haspopup] > :last-child:not(.icon) { margin-inline-start: auto; padding-inline-start: 0.4em; }
 :is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a)):focus-visible {
   background: var(--context-menu-item-bg-hover, var(--dropdown-item-bg-hover, var(--accent)));
   color: var(--context-menu-item-fg-hover, var(--dropdown-item-fg-hover, var(--on-accent)));
@@ -2157,6 +2185,8 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
   stroke-width: var(--icon-stroke-width, 2);
   stroke-linecap: round;
   stroke-linejoin: round;
+  /* The reset makes every svg a block; an icon sits in the line with its text. */
+  display: inline-block;
   vertical-align: -0.2em;
   flex-shrink: 0;
 }
@@ -2178,7 +2208,6 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
 /* .badge-button — a clickable badge (filter chip). */
 .badge-button {
   border: none;
-  font: inherit;
   transition: background 0.15s ease, color 0.15s ease;
 }
 .badge-button:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) {
@@ -2516,7 +2545,7 @@ html[data-motion="reduced"] .carousel { scroll-behavior: auto; }
   display: flex;
   flex-wrap: wrap;
   gap: 0.15rem 0.9rem;
-  padding-block: 0.5rem;
+  padding: 0.5rem var(--space-2xs);
   background: var(--scrollspy-nav-bg, var(--surface));
   border-block-end: 1px solid var(--scrollspy-nav-rule, var(--hairline));
 }
@@ -2634,6 +2663,8 @@ html[data-motion="reduced"] .scrollspy-body { scroll-behavior: auto; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Task buttons take the squeeze before the tray does. */
+.taskbar > .taskbar-task { flex-shrink: 1000; }
 .taskbar-task:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) {
   background: var(--taskbar-task-bg-active, var(--taskbar-task-bg, transparent));
   border-color: var(--taskbar-task-border-active, var(--taskbar-task-border, transparent));
@@ -2645,7 +2676,10 @@ html[data-motion="reduced"] .scrollspy-body { scroll-behavior: auto; }
   display: inline-flex;
   align-items: center;
   gap: 0.5em;
-  flex: none;
+  /* The tray gives way last on a narrow bar (see .taskbar > .taskbar-task):
+     its readouts then truncate rather than push the bar past its edge. */
+  flex: 0 1 auto;
+  min-inline-size: 0;
   margin-inline-start: auto;
   padding: 0.3em 0.8em;
   border: var(--taskbar-border-width, 1px) solid var(--taskbar-tray-border, transparent);
@@ -2653,6 +2687,14 @@ html[data-motion="reduced"] .scrollspy-body { scroll-behavior: auto; }
   background: var(--taskbar-tray-bg, transparent);
   color: var(--taskbar-tray-fg, inherit);
   font-variant-numeric: tabular-nums;
+}
+.taskbar-tray > * { flex: none; }
+.taskbar-tray > :is(span, time):not(.lamp) {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* .breadcrumbs */
@@ -3225,6 +3267,14 @@ pre code { padding: 0; background: none; border-radius: 0; }
   --btn-border-hover: var(--app-bar-text);
 }
 .app-bar :is(.btn-tertiary, .btn-ghost) { --btn-border: transparent; }
+/* A GO button on the bar: core's GO is an outlined accent label, which on a
+   bar painted in the accent reads at 1:1. Unless the theme styles its GO
+   (--go-fg, --go-border), it takes the bar's text colour like the other
+   unfilled buttons. A theme that fills it (--go-bg) also sets --go-fg. */
+.app-bar .btn-go {
+  --btn-fg: var(--go-fg, var(--app-bar-text));
+  --btn-border: var(--go-border, var(--app-bar-text));
+}
 
 /* Screen-reader-only content — the standard visually-hidden-but-announced
    clip-rect pattern, not display:none (which screen readers also skip). */
@@ -3305,6 +3355,9 @@ pre code { padding: 0; background: none; border-radius: 0; }
 
 /* .divide-y — hairlines between stacked children (lists, menus). */
 .divide-y > * + * { border-block-start: 1px solid var(--hairline); }
+/* Text never sits on the hairline. Zero specificity, so a child with its
+   own padding (a list item, a menu entry) keeps it. */
+:where(.divide-y > *) { padding-block: var(--divide-y-pad, var(--space-2xs)); }
 
 /* .ratio — an aspect-ratio box for video/embeds; children fill it.
    Set `--ratio` directly or use a modifier (default 16/9). */
@@ -3777,10 +3830,22 @@ html[data-pointer="touch"] { --tap-min: 44px; }
   min-block-size: var(--tap-min);
   touch-action: manipulation;
 }
-/* Short labels ("EQ", "L1") too: toggles, tabs and segments. */
-:is(.btn-icon, .btn-close, .btn-min, .btn-max, .pagination-item, .nav-toggle, .taskbar-task, .badge-button,
-    .toggle-btn, .tab, .segmented-item) {
+/* Short labels ("EQ", "L1") too: toggles, tabs, segments, scrollspy, keys. */
+:is(.btn-icon, .btn-close, .btn-min, .btn-max, .pagination-item, .nav-toggle, .taskbar-task, .taskbar-start, .badge-button,
+    .toggle-btn, .tab, .segmented-item, .scrollspy-link, .key) {
   min-inline-size: var(--tap-min);
+}
+/* Links and buttons in a toast are actions, not running text. */
+:where(.toast) :is(a, button):not(.btn, .btn-icon, .btn-close) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--tap-min);
+  min-inline-size: var(--tap-min);
+}
+/* Touch tiers: keys and reaction chips sit 8px apart (WCAG 2.5.8 spacing). */
+@media (max-width: 900px), (any-pointer: coarse) {
+  .strip-section, .message-reactions { gap: max(0.3rem, 8px); }
 }
 :is(.input, .select) { min-block-size: var(--tap-min); }
 /* Checkboxes and radios: the label is the target. */
@@ -3802,16 +3867,23 @@ html[data-pointer="touch"] { --tap-min: 44px; }
   transform: translate(-50%, -50%);
 }
 .slider { touch-action: none; }
-@media (max-width: 900px), (any-pointer: coarse) {
-  /* The range input's own box is both its track and its target. On touch
-     it grows to the target height; padding keeps the drawn track the same
-     thin line in the middle (the border can't follow it, so it hides). */
-  .slider:not(.is-range > .slider) {
-    height: var(--tap-min);
-    padding-block: calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2);
-    background-clip: content-box;
-    border-color: transparent;
-  }
+/* The range input's own box is both its track and its target. It grows to
+   --tap-min (44px on touch tiers, 24px on desktop); padding keeps the drawn
+   track the same thin line in the middle. The border can't follow it, so it
+   hides: a theme whose track is drawn by the border (a bevelled groove)
+   redraws it with --slider-bg as a background on the content box. */
+.slider:not(.is-range > .slider) {
+  height: var(--tap-min);
+  padding-block: calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2);
+  background-clip: content-box;
+  border-color: transparent;
+}
+/* The same, sideways, for a vertical slider. */
+.slider.is-vertical:not(.is-range > .slider) {
+  width: var(--tap-min);
+  height: var(--slider-length, 4.5rem);
+  /* Physical sides: under vertical-lr the logical block axis is horizontal. */
+  padding: 0 calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2);
 }
 /* Inline text links inside running text are exempt (WCAG 2.5.8); links
    that stand alone as navigation are not. */
@@ -3893,6 +3965,10 @@ input[type="color"] { min-block-size: var(--tap-min); min-inline-size: var(--tap
     margin: 0.25rem 0;
     position-area: block-end span-inline-end;
     position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+    /* Take the side with more room and scroll inside it, so the inline
+       flip can still fit when neither side holds the whole menu. */
+    position-try-order: most-block-size;
+    max-height: calc(100% - 0.5rem);
   }
 }
 /* A context menu shown at the pointer: the app sets --x/--y. */
@@ -4247,7 +4323,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .meter-pair:has(> .meter-v) { grid-auto-flow: column; justify-content: start; block-size: 100%; }
 
 /* --- .clip — a clip light that holds, with a count -------------------------
- *   <button class="clip" type="button" aria-pressed="true" aria-label="Clipped 3 times, reset">CLIP <span class="clip-count">3</span></button>
+ *   <button class="clip" type="button" aria-pressed="true" aria-label="Clip 3, press to reset">CLIP <span class="clip-count">3</span></button>
  * aria-pressed="true" (or .is-clipped) lights it; the app holds it after a
  * clip and clears it when the user presses it. */
 .clip {
@@ -4627,9 +4703,9 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: grid;
   gap: 1px;
   padding: 0.2rem;
-  background: var(--sends-bg, #0c0c12);
+  background: var(--sends-bg, var(--input-bg, var(--surface)));
   border: 1px solid var(--sends-border, var(--border));
-  color: var(--sends-fg, #ffffff);
+  color: var(--sends-fg, var(--input-fg, var(--text)));
   font-size: 0.6rem;
   line-height: 1.25;
 }
@@ -4640,7 +4716,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   content: "";
   block-size: 0.45rem;
   inline-size: calc(var(--send, 0) * 100%);
-  background: var(--sends-bar, #d8dde8);
+  background: var(--sends-bar, var(--muted));
   clip-path: polygon(0 100%, 100% 0, 100% 100%);
 }
 .sends li.is-pre::after { background: var(--sends-bar-pre, var(--accent-2)); }
@@ -4659,22 +4735,22 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   inline-size: 100%;
   aspect-ratio: 1;
   background:
-    linear-gradient(to top right, transparent calc(50% - 0.5px), var(--dyn-graph-unity, rgba(255, 255, 255, 0.25)) 0 calc(50% + 0.5px), transparent 0),
-    repeating-linear-gradient(0deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, rgba(255, 255, 255, 0.14)) 0 25%),
-    repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, rgba(255, 255, 255, 0.14)) 0 25%),
-    var(--dyn-graph-bg, linear-gradient(180deg, #3a6bd0, #1d3f96));
-  border: 1px solid var(--dyn-graph-border, var(--border));
+    linear-gradient(to top right, transparent calc(50% - 0.5px), var(--dyn-graph-unity, var(--eq-zero, var(--border))) 0 calc(50% + 0.5px), transparent 0),
+    repeating-linear-gradient(0deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, var(--eq-grid, var(--hairline))) 0 25%),
+    repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, var(--eq-grid, var(--hairline))) 0 25%),
+    var(--dyn-graph-bg, var(--eq-bg, var(--bg)));
+  border: 1px solid var(--dyn-graph-border, var(--eq-border, var(--hairline)));
   overflow: visible;
 }
 .dyn-graph-line {
   fill: none;
-  stroke: var(--dyn-graph-line, #ffffff);
+  stroke: var(--dyn-graph-line, var(--eq-line, var(--accent)));
   stroke-width: var(--dyn-graph-line-width, 2px);
   vector-effect: non-scaling-stroke;
   stroke-linejoin: round;
 }
-.dyn-graph-threshold { stroke: var(--dyn-graph-threshold, var(--accent)); stroke-width: 1px; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
-[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-line { stroke: var(--dyn-graph-line-off, rgba(255, 255, 255, 0.45)); }
+.dyn-graph-threshold { stroke: var(--dyn-graph-threshold, var(--accent-2)); stroke-width: 1px; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-line { stroke: var(--dyn-graph-line-off, var(--muted)); }
 
 /* --- .rack — an equipment rack of .rack-units ------------------------------
  *   <div class="rack" aria-label="Effects rack">
@@ -4731,7 +4807,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .rack-unit[data-finish="purple"] { --_finish: linear-gradient(180deg, #6a2f8c, #3b1150); }
 .rack-unit[data-finish="green"] { --_finish: linear-gradient(180deg, #2f8a2f, #145214); }
 .rack-unit > input[type="radio"] { position: absolute; inset: 0; margin: 0; opacity: 0; }
-.rack-unit:has(> input:checked) { outline: 2px solid var(--rack-selected, #ffe33b); outline-offset: -2px; }
+.rack-unit:has(> input:checked) { outline: 2px solid var(--rack-selected, var(--accent)); outline-offset: -2px; }
 .rack-unit:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
 .rack-unit.is-empty { --_finish: linear-gradient(180deg, #2b2b2b, #151515); justify-content: center; color: #8a8a8a; }
 .rack-unit-name {
@@ -4743,7 +4819,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .rack-unit[data-finish="silver"] .rack-unit-name { text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6); }
 .rack-unit-body { display: flex; flex: 1; flex-wrap: wrap; align-items: center; justify-content: space-around; gap: 0.3rem 0.6rem; min-inline-size: 0; }
 /* The thin "Change device / Store / Load preset" strip at the top of the rack. */
-.rack-head { display: flex; justify-content: center; gap: 0.6rem; padding: 0.4rem; background: linear-gradient(180deg, #f2f2f2, #c9c9c9); border-radius: 2px; }
+.rack-head { display: flex; justify-content: center; gap: 0.6rem; padding: 0.4rem; background: var(--rack-head-bg, var(--surface-2)); border-radius: 2px; }
 
 /* A unit's faceplate seen up close: a bigger .rack-unit inside .faceplate,
    above its .assignable panel. */
@@ -4751,8 +4827,8 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: grid;
   gap: 0.6rem;
   padding: 0.5rem;
-  background: var(--faceplate-bg, #050505);
-  border: 1px solid var(--faceplate-border, #2a2a2a);
+  background: var(--faceplate-bg, var(--surface-2));
+  border: 1px solid var(--faceplate-border, var(--border));
   border-radius: 4px;
 }
 .faceplate > .rack-unit { --_u: 2.6rem; align-items: stretch; padding-block: 0.8rem; font-size: 0.75rem; }
@@ -4770,8 +4846,8 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .faceplate-display {
   min-inline-size: 7rem;
   padding: 0.4rem 0.6rem;
-  background: var(--faceplate-display-bg, #000000);
-  color: var(--faceplate-display-fg, #e0e0e0);
+  background: var(--faceplate-display-bg, var(--input-bg, var(--surface)));
+  color: var(--faceplate-display-fg, var(--input-fg, var(--text)));
   border-radius: 4px;
   font: 800 1.2rem/1.1 var(--font);
   text-align: center;
@@ -4791,11 +4867,11 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   grid-template-columns: repeat(auto-fit, minmax(5.2rem, 1fr));
   gap: 0.4rem 0.3rem;
   padding: 0.5rem 0.6rem 0.3rem;
-  background: var(--assignable-bg, linear-gradient(180deg, #5560ab, #434d98));
-  color: var(--assignable-fg, #ffffff);
-  border: 1px solid var(--assignable-border, #2a3274);
+  background: var(--assignable-bg, var(--surface));
+  color: var(--assignable-fg, var(--text));
+  border: 1px solid var(--assignable-border, var(--border));
   border-radius: 3px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+  box-shadow: var(--assignable-shadow, none);
   font-size: 0.68rem;
   text-align: center;
 }
@@ -4805,12 +4881,12 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: block;
   inline-size: 2.6rem;
   block-size: 2.4rem;
-  background: var(--assignable-key-bg, linear-gradient(180deg, #4a54a0, #3a438b));
-  border: 2px solid var(--assignable-key-border, #6a74c0);
-  box-shadow: inset 0 0 0 2px #2b3274;
+  background: var(--assignable-key-bg, var(--key-bg, var(--surface-2)));
+  border: 2px solid var(--assignable-key-border, var(--key-border, var(--border)));
+  box-shadow: var(--assignable-key-shadow, inset 0 0 0 2px rgba(0, 0, 0, 0.25));
 }
 .assignable-key > input { position: absolute; inset: 0; margin: 0; opacity: 0; }
-.assignable-key:has(> input:checked) { background: var(--assignable-key-on, linear-gradient(180deg, #e9ecff, #b5bce8)); }
+.assignable-key:has(> input:checked) { background: var(--assignable-key-on, var(--accent)); }
 .assignable-key:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 .assignable-caption { grid-column: 1 / -1; margin: 0; font-weight: 700; opacity: 0.9; }
 
@@ -4827,9 +4903,9 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   align-items: stretch;
   gap: 2px;
   padding: 0.5rem;
-  background: var(--geq-bg, linear-gradient(180deg, #a9a9a9, #8a8a8a));
+  background: var(--geq-bg, var(--surface));
   border-radius: 3px;
-  color: var(--geq-fg, #111111);
+  color: var(--geq-fg, var(--text));
   font-size: 0.6rem;
   font-weight: 700;
 }
@@ -4840,11 +4916,11 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   gap: 1px;
   padding: 0.15rem;
   background:
-    linear-gradient(transparent calc(50% - 0.6rem), var(--geq-zero, #111111) 0 calc(50% - 0.6rem + 1px), transparent 0),
-    var(--geq-group-bg, #9a9a9a);
-  border: 1px solid var(--geq-group-border, #1f2a8a);
+    linear-gradient(transparent calc(50% - 0.6rem), var(--geq-zero, var(--border)) 0 calc(50% - 0.6rem + 1px), transparent 0),
+    var(--geq-group-bg, var(--surface-2));
+  border: 1px solid var(--geq-group-border, var(--hairline));
 }
-.geq-group:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) { --geq-group-bg: var(--geq-group-active, #e6e6e6); }
+.geq-group:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) { --geq-group-bg: var(--geq-group-active, color-mix(in srgb, var(--accent) 22%, var(--surface-2))); }
 .geq-band { display: grid; flex: 1; justify-items: center; gap: 0.15rem; min-inline-size: 0; }
 .geq-band > input[type="range"] {
   -webkit-appearance: none;
@@ -4856,7 +4932,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   min-width: 0.9rem;
   height: var(--geq-height, 7rem);
   margin: 0;
-  background: linear-gradient(90deg, transparent calc(50% - 3px), var(--geq-slot, #000000) 0 calc(50% + 3px), transparent 0);
+  background: linear-gradient(90deg, transparent calc(50% - 3px), var(--geq-slot, var(--fader-slot, var(--border))) 0 calc(50% + 3px), transparent 0);
 }
 .geq-band > input::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -4888,20 +4964,20 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: grid;
   gap: 0.4rem;
   padding: 0.5rem;
-  background: var(--patch-device-bg, linear-gradient(180deg, #4f8ad0, #2f62ae));
-  border: 1px solid var(--patch-device-border, #12285e);
+  background: var(--patch-device-bg, var(--surface));
+  border: 1px solid var(--patch-device-border, var(--border));
   border-radius: 8px;
-  color: #ffffff;
+  color: var(--patch-device-fg, var(--text));
 }
 .patch-device > header { display: flex; align-items: center; gap: 0.4rem; font-weight: 800; }
-.patch-name { flex: 1; padding: 0.15rem 0.4rem; background: #000000; border-radius: 2px; }
+.patch-name { flex: 1; padding: 0.15rem 0.4rem; background: var(--patch-name-bg, var(--input-bg, var(--surface))); color: var(--patch-name-fg, var(--input-fg, var(--text))); border-radius: 2px; }
 .patch-group-label { grid-column: 1 / -1; margin: 0.2rem 0 0; font-size: 0.75rem; font-weight: 800; text-align: center; }
 .patch-grid { display: grid; grid-template-columns: repeat(var(--patch-cols, 8), minmax(1.4rem, 1fr)); gap: 3px; }
 .patch-point {
   position: relative;
   aspect-ratio: 1;
-  background: var(--patch-free, linear-gradient(180deg, #f0f0f0, #c8c8c8));
-  border: 1px solid #333333;
+  background: var(--patch-free, var(--surface-2));
+  border: 1px solid var(--patch-point-border, var(--border));
   border-radius: 2px;
 }
 /* The jack: a small ring in the middle of each point. */
@@ -4909,12 +4985,12 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   content: "";
   position: absolute;
   inset: 28%;
-  border: 2px solid rgba(0, 0, 0, 0.45);
+  border: 2px solid var(--patch-jack, color-mix(in srgb, currentColor 45%, transparent));
   border-radius: 50%;
 }
 .patch-point > input { position: absolute; inset: 0; margin: 0; opacity: 0; }
-.patch-point:has(> input:checked) { background: var(--patch-on, linear-gradient(180deg, #8ad35a, #4e9a2a)); }
-.patch-point[data-kind="aes"]:has(> input:checked) { background: var(--patch-aes, linear-gradient(180deg, #ffe46b, #d6b21a)); }
+.patch-point:has(> input:checked) { background: var(--patch-on, var(--success)); }
+.patch-point[data-kind="aes"]:has(> input:checked) { background: var(--patch-aes, var(--warning)); }
 .patch-point:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 1px; }
 @media (forced-colors: active) {
   .patch-point:has(> input:checked), .assignable-key:has(> input:checked) { background: Highlight; }
@@ -5089,8 +5165,8 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 }
 
 /* The area under a dynamics curve, filled (console.js closes the path). */
-.dyn-graph-fill { fill: var(--dyn-graph-fill, rgba(140, 190, 255, 0.45)); stroke: none; }
-[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-fill { fill: var(--dyn-graph-fill-off, rgba(140, 190, 255, 0.18)); }
+.dyn-graph-fill { fill: var(--dyn-graph-fill, color-mix(in srgb, var(--eq-line, var(--accent)) 30%, transparent)); stroke: none; }
+[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-fill { fill: var(--dyn-graph-fill-off, color-mix(in srgb, var(--muted) 15%, transparent)); }
 
 /* --- .led-list — options chosen by a lit LED -------------------------------
  *   <ul class="led-list" role="radiogroup" aria-label="Program">
@@ -5123,6 +5199,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
  * The sixteen name-tag colours a large console offers. Each reads a
  * --tag-<name> token, so a theme can retune them. */
 .scribble[data-tag] { background: var(--_tag); color: var(--_tag-fg, #111111); border-top-color: transparent; text-align: center; }
+.scribble[data-tag] .scribble-num { color: inherit; opacity: 0.75; }
 .scribble[data-tag="black"] { --_tag: var(--tag-black, #111111); --_tag-fg: #ffffff; }
 .scribble[data-tag="dblue"] { --_tag: var(--tag-dblue, #1f3fd0); --_tag-fg: #ffffff; }
 .scribble[data-tag="dgreen"] { --_tag: var(--tag-dgreen, #1e7a2a); --_tag-fg: #ffffff; }
@@ -5157,11 +5234,11 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .assignable-nav > button {
   min-inline-size: 0;
   padding: 0;
-  background: var(--assignable-key-bg, linear-gradient(180deg, #4a54a0, #3a438b));
-  border: 1px solid var(--assignable-key-border, #6a74c0);
+  background: var(--assignable-key-bg, var(--key-bg, var(--surface-2)));
+  border: 1px solid var(--assignable-key-border, var(--key-border, var(--border)));
   border-radius: 2px;
 }
-.assignable-nav > button:active { background: var(--assignable-key-on, #b5bce8); }
+.assignable-nav > button:active { background: var(--assignable-key-on, var(--accent)); }
 .assignable-nav > :nth-child(1) { grid-area: 1 / 1 / 2 / 3; inline-size: 1.6rem; }
 .assignable-nav > :nth-child(2) { grid-area: 1 / 2 / 2 / 4; inline-size: 1.6rem; justify-self: end; }
 .assignable-nav > :nth-child(3) { grid-area: 2 / 2; }
@@ -5407,6 +5484,73 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   border-color: var(--window-pane-border, var(--input-border, var(--border)));
 }
 
+/* .window-tasks — the side pane of task groups beside a window's content
+   (XP's Explorer task pane). Each .window-task is a titled group: its
+   first child (a heading or <summary>) is the header, the rest the body. */
+.window-tasks {
+  display: grid;
+  align-content: start;
+  gap: var(--window-tasks-gap, var(--space-s, 0.75rem));
+  padding: var(--window-tasks-padding, var(--space-s, 0.75rem));
+  background: var(--window-tasks-bg, var(--surface-2));
+}
+.window-task {
+  border: 1px solid var(--window-task-border, var(--border));
+  border-radius: var(--window-task-radius, var(--radius));
+  background: var(--window-task-bg, var(--surface));
+  color: var(--window-task-fg, var(--text));
+  font-size: var(--window-task-font-size, inherit);
+  overflow: hidden;
+}
+.window-task > :first-child {
+  margin: 0;
+  padding: var(--window-task-header-pad, 0.35rem 0.6rem);
+  background: var(--window-task-header-bg, transparent);
+  color: var(--window-task-header-fg, inherit);
+  font-size: var(--window-task-header-font-size, 0.85rem);
+  font-weight: 700;
+}
+.window-task > :not(:first-child) { margin: 0; padding: var(--window-task-body-pad, 0.4rem 0.6rem); }
+/* A collapsible group is a <details> whose <summary> is the header; the
+   toggle sits at its end (a chevron by default, a theme's button image via
+   --window-task-toggle / --window-task-toggle-closed). */
+details.window-task > summary { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; cursor: var(--cursor-pointer, pointer); list-style: none; }
+details.window-task > summary::-webkit-details-marker { display: none; }
+details.window-task > summary > :is(h2, h3) { margin: 0; font: inherit; color: inherit; }
+details.window-task > summary::after {
+  content: "";
+  flex: none;
+  inline-size: var(--window-task-toggle-size, 1em);
+  block-size: var(--window-task-toggle-size, 1em);
+  background: var(--window-task-toggle, none) center / contain no-repeat;
+  background-color: var(--window-task-toggle-fg, currentColor);
+  -webkit-mask: var(--window-task-toggle-mask, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 10l4-4 4 4' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E")) center / contain no-repeat;
+  mask: var(--window-task-toggle-mask, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 10l4-4 4 4' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E")) center / contain no-repeat;
+}
+details.window-task:not([open]) > summary::after { rotate: var(--window-task-toggle-rotate, 180deg); background-image: var(--window-task-toggle-closed, var(--window-task-toggle, none)); }
+details.window-task > summary:focus-visible { outline: 2px solid var(--focus, var(--accent)); outline-offset: -2px; }
+.window-task > :not(:first-child) + :not(:first-child) { padding-block-start: 0; }
+.window-task a { color: var(--window-task-link-fg, var(--link, var(--accent))); }
+/* A .list inside a group is a plain column of task links, not a boxed list. */
+.window-task {
+  --list-bg: transparent;
+  --list-border-width: 0;
+  --list-radius: 0;
+  --list-rule: transparent;
+  --list-item-padding: var(--window-task-item-pad, 0.2em 0);
+  --list-item-fg: var(--window-task-link-fg, var(--link, var(--accent)));
+  --row-hover-bg: transparent;
+}
+@media (hover: hover) {
+  .window-task :is(a, label).list-item:hover { text-decoration: underline; color: var(--window-task-link-fg-hover, var(--window-task-link-fg, var(--link, var(--accent)))); }
+}
+/* The first, "special" group of a pane (XP: the place's own tasks). */
+.window-task.is-special > :first-child {
+  background: var(--window-task-special-header-bg, var(--window-task-header-bg, transparent));
+  color: var(--window-task-special-header-fg, var(--window-task-header-fg, inherit));
+}
+.window-task.is-special { background: var(--window-task-special-bg, var(--window-task-bg, var(--surface))); }
+
 /* Minimized and closed windows leave the screen (the inputs stay, so the
    task button and the Start menu can bring them back). */
 .desktop-window:has(> .window-minimize:checked, > .window-close:checked) > .modal { display: none; }
@@ -5425,18 +5569,28 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   outline-offset: 2px;
 }
 /* Inactive title bars: every window but the active one, which is the one
-   holding focus, else the switched-to one, else the topmost (last). */
+   holding focus, else the switched-to one, else the topmost (last). While
+   the Start menu is open it holds focus, so every window is inactive. */
 .desktop:has(.desktop-window:focus-within) .desktop-window:not(:focus-within),
 .desktop:not(:has(.desktop-window:focus-within)):has(.window-app:checked) .desktop-window:not(:has(> .window-app:checked)),
-.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) {
+.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)),
+.desktop:has(.start-menu:popover-open) .desktop-window {
   --_inactive: 1;
 }
 .desktop:has(.desktop-window:focus-within) .desktop-window:not(:focus-within) > .modal > .modal-header,
 .desktop:not(:has(.desktop-window:focus-within)):has(.window-app:checked) .desktop-window:not(:has(> .window-app:checked)) > .modal > .modal-header,
-.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) > .modal > .modal-header {
+.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) > .modal > .modal-header,
+.desktop:has(.start-menu:popover-open) .desktop-window > .modal > .modal-header {
   background: var(--window-header-bg-inactive, var(--modal-header-bg, transparent));
   color: var(--window-header-fg-inactive, var(--modal-header-fg, inherit));
   filter: var(--window-header-filter-inactive, saturate(0.45) opacity(0.85));
+}
+/* XP fades an inactive window's caption buttons into its paler title bar. */
+.desktop:has(.desktop-window:focus-within) .desktop-window:not(:focus-within) > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close),
+.desktop:not(:has(.desktop-window:focus-within)):has(.window-app:checked) .desktop-window:not(:has(> .window-app:checked)) > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close),
+.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close),
+.desktop:has(.start-menu:popover-open) .desktop-window > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close) {
+  opacity: var(--window-caption-opacity-inactive, 1);
 }
 
 /* A small monitor showing the wallpaper (Display Properties). */
@@ -5646,6 +5800,9 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   height: var(--start-menu-sub-icon-size, 1rem);
 }
 .start-menu li > :is(a, button, label) > span { display: flex; flex-direction: column; text-align: start; }
+/* "All Programs" is one line of text (its "All " is a columns-only span), not
+   a title over a subtitle. */
+.start-menu li.start-menu-all > :is(a, button) > span { display: block; white-space: nowrap; }
 .start-menu li > :is(a, button, label) > span > b { font-weight: 700; }
 .start-menu li > :is(a, button, label) small { font-size: 0.8em; opacity: 0.75; }
 .start-menu .has-submenu > :is(a, button)::after { margin-inline-start: auto; }
@@ -9839,7 +9996,7 @@ html[data-motion="reduced"] .track > .track-play::before { animation: none; }
 /* ---- Track rows ------------------------------------------------------------
  * <ol class="tracklist">
  *   <li class="track">
- *     <button class="track-play" aria-label="Play Night Drive"><span class="track-num">1</span><svg class="icon">…#icon-play</svg></button>
+ *     <button class="track-play" aria-label="Play track 1, Night Drive"><span class="track-num">1</span><svg class="icon">…#icon-play</svg></button>
  *     <img src="art.jpg" alt="">
  *     <span class="track-main"><span class="track-title">Night Drive</span><span class="track-artist">Lumen Coast</span></span>
  *     <span class="track-album">Harbour Lights</span>
@@ -10205,6 +10362,11 @@ html[data-motion="reduced"] .track > .track-play::before { animation: none; }
 
 @keyframes waveform-shimmer { to { background-position: -200% 0; } }
 .waveform:has(> input:disabled) { opacity: 0.5; }
+/* .waveform.is-static — display only: the input still paints played and
+   unplayed and the head (hide it with --waveform-head: transparent), but
+   it doesn't seek, so no hover preview and no pointer. */
+.waveform.is-static::before { content: none; }
+.waveform.is-static > input[type="range"] { pointer-events: none; }
 
 /* ---- Waveform regions, markers and hover time -------------------------------
  * <div class="waveform" data-hover-time="0:41" style="--hover: .68">
@@ -10485,7 +10647,8 @@ button.waveform-marker:focus-visible { outline: 2px solid var(--focus); outline-
  * Desktop: art and title | transport over the scrubber | extras. Tablet: the
  * scrubber takes its own row and the extras (volume, queue…) hide. Mobile and .is-mini: art, title, like and play/next only. As a
  * direct child of .app it takes the shell's status slot and sticks to the
- * bottom of the screen, clear of the home indicator. */
+ * bottom of the screen, clear of the home indicator; on a phone .app-main
+ * scrolls above it instead. */
 .now-playing {
   --_areas: "art meta like transport extras" "art meta like progress extras";
   --_cols: auto minmax(0, 1fr) auto minmax(0, 2fr) minmax(0, 1fr);
@@ -10556,6 +10719,11 @@ button.waveform-marker:focus-visible { outline: 2px solid var(--focus); outline-
     --_np-secondary: none;
     --_np-extras: none;
   }
+  /* On a phone the docked bar is a big share of the screen, so the shell
+     holds the screen height and .app-main scrolls above the bar: no row
+     ever sits under it. */
+  .app:has(> .now-playing) { block-size: 100dvh; }
+  .app:has(> .now-playing) > .app-main { overflow-y: auto; overscroll-behavior: contain; }
 }
 /* Mini player: the mobile layout at any width, as a card. */
 .now-playing.is-mini {
@@ -11744,13 +11912,18 @@ html:is([data-motion="reduced"],[data-motion="none"]) :is(:is(.is-paused,.is-pau
  * the --z-* scale from there. Docs: docs/components/navigation.md. */
 
 /* --- Closable tabs (#37) ---------------------------------------------------
- *   <div class="tabs is-scroll" role="tablist">
- *     <div class="tab is-active"><button role="tab" aria-selected="true">a.css</button>
- *       <button class="btn-close" tabindex="-1" aria-label="Close a.css"></button></div>
+ *   <div class="tabs is-scroll">
+ *     <div class="tabs" role="tablist" aria-label="Open files">
+ *       <div class="tab is-active"><button role="tab" aria-selected="true">a.css</button>
+ *         <button class="btn-close" tabindex="-1" aria-hidden="true" aria-label="Close a.css"></button></div>
+ *     </div>
  *     <button class="tab-add" aria-label="New tab"></button>
  *   </div>
  * A <button> can't hold a second button, so a closable .tab is a wrapper:
- * the first child is the tab itself, the .btn-close sits beside it. */
+ * the first child is the tab itself, the .btn-close sits beside it. A
+ * tablist may own only tabs, so the add button sits beside an inner
+ * .tabs[role=tablist] that lends its tabs to the outer strip. */
+.tabs > .tabs { display: contents; }
 .tabs.is-scroll {
   /* max-inline-size: a theme may make .tabs inline-flex (a capsule), which
      would otherwise grow with its tabs and never scroll. */
@@ -11761,7 +11934,7 @@ html:is([data-motion="reduced"],[data-motion="none"]) :is(:is(.is-paused,.is-pau
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb, var(--border)) transparent;
 }
-.tabs.is-scroll > * { flex-shrink: 0; }
+.tabs.is-scroll > *, .tabs.is-scroll > .tabs > * { flex-shrink: 0; }
 .tab:has(> .btn-close) {
   display: inline-flex;
   align-items: center;
@@ -14246,7 +14419,7 @@ pre.line-numbers > code:has(> .line-numbers-rows) { position: relative; }
   inline-size: calc(var(--_otp-n) * var(--otp-cell-size, 2.75rem) + (var(--_otp-n) - 1) * var(--_otp-gap));
   max-inline-size: 100%;
   block-size: var(--otp-height, 3.25rem);
-  overflow: hidden;
+  overflow: clip;
   direction: ltr;
 }
 .otp > span {
@@ -15477,6 +15650,10 @@ html[data-surface="signage"] { font-size: var(--signage-root, 1.5vh); overflow: 
   html[data-surface="signage"] { font-size: var(--signage-root-portrait, 1.5vw); }
 }
 html[data-surface="signage"] body { overflow: hidden; }
+/* Every pixel of a screen is content, so page-level theme art stands down:
+   the XL gutter layer here, and any corner emblem a theme fixes over the
+   page (themes hide their own under the same selector). */
+html[data-surface="signage"]::before { content: none; }
 .safe-area {
   box-sizing: border-box;
   padding:
@@ -16590,7 +16767,7 @@ html[data-pointer="touch"] { --_cell-pencil: inline-block; }
 .table tbody tr:nth-child(n):is(:hover, :focus-within):not(.table-empty, .table-more) {
   --_row-tint: var(--row-hover-bg, color-mix(in srgb, var(--accent) 8%, transparent));
 }
-.table tbody tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))):nth-child(n) { --_row-tint: var(--row-active-bg, transparent); }
+.table tbody tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))):not(.is-selected, :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))):nth-child(n) { --_row-tint: var(--row-active-bg, transparent); }
 .table tbody tr:is(.is-selected, :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))):nth-child(n) {
   --_row-tint: var(--row-selected-bg, color-mix(in srgb, var(--accent) 18%, transparent));
 }
@@ -18278,12 +18455,12 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   background: var(--app-bg, transparent);
 }
 
-/* An app that never adds the rail element at all (not even an empty one)
-   has no box for :empty to match, so a theme's --app-columns would
-   still reserve a blank gutter next to .app-main. Collapse the column
+/* An app that never adds the rail element at all (not even an empty one),
+   or marks it `hidden`, has no box for :empty to match, so a theme's
+   --app-columns would still reserve a blank gutter next to .app-main. Collapse the column
    track itself in that case. Browsers without :has() just keep the blank
    gutter — a graceful degrade, not a break. */
-.app:not(:has(> .app-rail)) {
+.app:not(:has(> .app-rail:not([hidden]))) {
   grid-template-areas: var(--app-areas-no-rail, "bar" "main" "status");
   grid-template-columns: var(--app-columns-no-rail, minmax(0, 1fr));
 }
@@ -18299,7 +18476,9 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   min-width: 0;
   padding: var(--app-bar-padding, 0.6rem 1rem);
   background: var(--app-bar-bg, var(--nav-bg, var(--surface)));
-  color: var(--app-bar-fg, inherit);
+  /* Plain text on the bar (a clock, a title) follows the bar, not the page:
+     --app-bar-fg, else --nav-item-fg, which check.py holds to 4.5:1 here. */
+  color: var(--app-bar-fg, var(--nav-item-fg, inherit));
   border-bottom: var(--app-bar-rule-width, 1px) solid var(--app-bar-rule, var(--border));
   border-radius: var(--app-bar-radius, 0);
   min-height: var(--app-bar-height, auto);
@@ -18325,6 +18504,8 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
 .app-rail:empty {
   display: var(--app-rail-empty-display, none);
 }
+/* `hidden` drops the rail in every theme, decorative or not. */
+.app-rail[hidden] { display: none !important; }
 .app-rail {
   grid-area: rail;
   display: var(--app-rail-display, none);
@@ -18477,7 +18658,7 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   .app-rail { display: none !important; }
   .app-status { position: fixed; inset-inline-start: env(viewport-segment-left 1 0); inset-block-end: 0; inline-size: env(viewport-segment-width 1 0); }
   .app-main { padding-block-end: var(--app-fold-status-space, 3rem); }
-  .app:not(:has(> .app-rail)) {
+  .app:not(:has(> .app-rail:not([hidden]))) {
     grid-template-areas: var(--app-fold-book-areas, "bar main");
     grid-template-columns: env(viewport-segment-width 0 0) env(viewport-segment-width 1 0);
   }
@@ -18493,7 +18674,7 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   .app-rail { display: none !important; }
   .app-status { position: fixed; inset-inline-start: 0; inset-block-end: 0; inline-size: 100%; }
   .app-main { padding-block-end: var(--app-fold-status-space, 3rem); }
-  .app:not(:has(> .app-rail)) {
+  .app:not(:has(> .app-rail:not([hidden]))) {
     grid-template-areas: var(--app-fold-tabletop-areas, "bar" "main");
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: env(viewport-segment-height 0 0) env(viewport-segment-height 0 1);
@@ -18545,7 +18726,9 @@ html[data-theme="teletext"] {
   --bg: #000000;
   --surface: #000000;
   --surface-2: #000000;
-  --border: #ffffff;
+  /* Edges are a blue cell, never a white hairline: white is kept for
+     the focus ring alone. */
+  --border: #0000ff;
   --hairline: #4d4d4d;
   --text: #ffffff;
   /* Not part of the real 8-colour set — teletext had no "muted" register,
@@ -18585,7 +18768,6 @@ html[data-theme="teletext"] {
   --focus-ring: 0 0 0 2px #ffffff;
   --input-bg: #000000;
   --input-border-width: 2px;
-  --input-border: #ffffff;
   --input-radius: 0;
   --panel-border-width: 0;
   --panel-bg: #000000;
@@ -18613,7 +18795,108 @@ html[data-theme="teletext"] {
   --badge-radius: 0;
   --overlay-bg: rgba(0, 0, 0, 0.85);
   --indicator-fg: var(--accent);
-  --indicator-track: #333333;
+  --indicator-track: #0000ff;
+  --spinner-track: #0000ff;
+  --spinner-fg: var(--accent);
+  /* Carousel dots: white cells, the current one cyan. */
+  --carousel-dot: #ffffff;
+  --carousel-dot-active: #00ffff;
+  /* Secondary roles take a broadcast colour, not the grey: nav links
+     white, form labels yellow (as a listings page labels its rows). */
+  --nav-item-fg: #ffffff;
+  --label-fg: #ffff00;
+  --nav-rail-rule: transparent;
+  --desktop-monitor-radius: 0;
+  /* An inactive window is a blue band, active magenta: no filter, which
+     would push the band off the eight colours. */
+  --window-header-bg-inactive: #0000ff;
+  --window-header-fg-inactive: #ffffff;
+  --window-header-filter-inactive: none;
+  /* Teletext had one weight: never let the browser smear a faux bold
+     over the stepped SAA5050 cells. */
+  font-synthesis: none;
+  /* Zero roundness: every core circle and pill becomes a square cell. */
+  --switch-radius: 0;
+  --switch-thumb-radius: 0;
+  --switch-thumb-bg: #ffffff;
+  --switch-border: #ffffff;
+  --slider-thumb-radius: 0;
+  --slider-thumb-bg: #00ffff;
+  /* Core paints the track on the content box with --slider-bg; the
+     default (--surface-2) is black here, so the track would vanish. */
+  --slider-bg: #ffffff;
+  --avatar-radius: 0;
+  --avatar-bg: #ff00ff;
+  --avatar-fg: #000000;
+  /* User colours from the broadcast set, each under black ink. */
+  --presence-color-1: #00ffff;
+  --presence-color-2: #00ff00;
+  --presence-color-3: #ffff00;
+  --presence-color-4: #ff00ff;
+  --presence-color-5: #ff0000;
+  --presence-color-6: #ffffff;
+  --lamp-glow: none;
+  --badge-fg: #ffffff;
+  --btn-icon-radius: 0;
+  --status-dot-radius: 0;
+  --lamp-radius: 0;
+  --presence-radius: 0;
+  --steps-marker-radius: 0;
+  --swatch-radius: 0;
+  --fab-radius: 0;
+  --calendar-date-radius: 0;
+  --scrubber-thumb-radius: 0;
+  --scrollbar-radius: 0;
+  --prefs-swatch-radius: 0;
+  /* No tints: the eight colours are flat or absent. */
+  --sparkline-area-opacity: 0;
+  --skeleton-bg: #0000ff;
+  --skeleton-shine: transparent;
+  --skeleton-radius: 0;
+  --bulk-bar-bg: #0000ff;
+  --bulk-bar-fg: #ffffff;
+  --bulk-bar-border: #0000ff;
+  --bulk-bar-radius: 0;
+  /* Edited cells keep core's marker, glyph and ink, not a wash. */
+  --cell-dirty-bg: transparent;
+  --cell-saved-bg: transparent;
+  --cell-error-bg: transparent;
+  --input-error-bg: #000000;
+  --list-tone-tint: 0%;
+  /* Secondary lines in cyan, as a real index page's, not grey. */
+  --list-item-meta-fg: var(--accent);
+  /* Boxes are colour, not white outlines: inputs keep a cyan edge for
+     affordance, floating menus and logs a blue one. */
+  --input-border: #00ffff;
+  --dropdown-border: #0000ff;
+  --dropdown-border-width: 2px;
+  --popover-border: #0000ff;
+  --popover-border-width: 2px;
+  --listbox-border: #0000ff;
+  --list-border: #0000ff;
+  --log-border: #0000ff;
+  /* Charts in flat cells: no area tint, square legend keys, adjacent
+     heatmap blocks like mosaic cells. */
+  --chart-area-opacity: 0;
+  --chart-point-ring: #000000;
+  --legend-swatch-radius: 0;
+  --heatmap-radius: 0;
+  --heatmap-gap: 0;
+  /* A saving cell keeps full-brightness ink, not a 0.8 blend. */
+  --pending-opacity: 1;
+  /* The count badge: a square red cell at the one cell size, no ring. */
+  --has-badge-font-size: 0.75rem;
+  --has-badge-x: -0.6rem;
+  --has-badge-ring-width: 0;
+  /* Transparent buttons hover to a blue cell and press to a cyan invert:
+     flat palette colours, never an accent wash. */
+  --btn-clear-bg-hover: #0000ff;
+  --btn-clear-bg-active: #00ffff;
+  /* The presence cell sits outside the avatar's corner, small. */
+  --presence-dot-size: 0.5rem;
+  --kbd-border: #0000ff;
+  --kbd-shadow: none;
+  --kbd-hint-border: #0000ff;
 }
 
 /* Headline double-height: real teletext hardware could stretch a text row
@@ -18628,12 +18911,16 @@ html[data-theme="teletext"] h1 {
   color: var(--warning);
   text-transform: uppercase;
   font-weight: 400;
-  font-size: 1.5rem;
+  /* The body cell size: the SAA5050 doubled only the height, so the
+     headline keeps the 40-column advance and reads tall and narrow. */
+  font-size: 1rem;
   line-height: 1.2;
-  padding: 0 0.5ch;
+  /* Block padding keeps the mosaic cells, which fill the whole cell
+     height, clear of the band's edge. */
+  padding: 0.2em 0.5ch;
   transform: scaleY(2);
   transform-origin: left top;
-  margin-bottom: calc(1.2em + 0.4rem);
+  margin-bottom: calc(1.6em + 0.4rem);
 }
 html[data-theme="teletext"] :is(h1, h2, h3, .panel-header, .stat-value) { font-weight: 400; }
 html[data-theme="teletext"] .stat-value { color: var(--warning); }
@@ -18652,6 +18939,9 @@ html[data-theme="teletext"] .panel-header {
   text-transform: uppercase;
   font-size: 1em;
 }
+/* A badge or console key on a band stays a black box, so its text takes
+   the band's ink. */
+html[data-theme="teletext"] .panel-header :is(.badge, .key) { --muted: var(--tt-ink, #00ffff); }
 html[data-theme="teletext"] .card { border: 0; border-top: 0.35rem solid var(--tt-band, #0000ff); }
 /* A panel inside another surface steps down: no second full-width band
    under the parent's, just the title in its colour (blue reads as cyan
@@ -18672,6 +18962,25 @@ html[data-theme="teletext"] h3 {
   color: var(--accent);
   text-transform: uppercase;
 }
+/* A plain section heading is a strapline: a colour band at the body cell
+   size, blue with yellow ink first (the Ceefax lead colour), then green,
+   cyan and magenta with black ink down the page. h3 stays cyan ink. */
+html[data-theme="teletext"] :is(main, section, article, .stack) > h2:not([class]) {
+  background: #0000ff;
+  color: #ffff00;
+  font-size: 1rem;
+  padding: 0.25em 0.5ch;
+}
+html[data-theme="teletext"] :is(main, section, article, .stack) > h2:not([class]):nth-of-type(4n+2) { background: #00ff00; color: #000000; }
+html[data-theme="teletext"] :is(main, section, article, .stack) > h2:not([class]):nth-of-type(4n+3) { background: #00ffff; color: #000000; }
+html[data-theme="teletext"] :is(main, section, article, .stack) > h2:not([class]):nth-of-type(4n+4) { background: #ff00ff; color: #000000; }
+/* The headline band opens with a strip of yellow sextant mosaic, the
+   Ceefax wordmark's block graphics at double height. Decorative. */
+html[data-theme="teletext"] h1::before {
+  content: "\1FB1E\1FB39\2588\1FB2D\1FB0F\2590\1FB39\1FB1E" / "";
+  margin-inline-end: 1ch;
+  color: #ffff00;
+}
 
 /* The page-number header: every real teletext page opens with a cyan
    "Pnnn" index in the top-left corner of the frame. */
@@ -18689,6 +18998,35 @@ html[data-theme="teletext"] .app-bar::before {
 html[data-theme="teletext"] .app-bar .nav-item:nth-of-type(4n+2) { --nav-item-fg: #00ff00; }
 html[data-theme="teletext"] .app-bar .nav-item:nth-of-type(4n+3) { --nav-item-fg: #ffff00; }
 html[data-theme="teletext"] .app-bar .nav-item:nth-of-type(4n+4) { --nav-item-fg: #ff00ff; }
+/* The same for the demo pages' menubar (li > [role=menuitem]); the
+   current item is the red index block. */
+html[data-theme="teletext"] .app-bar .menubar > li:nth-child(4n+1) { color: #00ffff; }
+html[data-theme="teletext"] .app-bar .menubar > li:nth-child(4n+2) { color: #00ff00; }
+html[data-theme="teletext"] .app-bar .menubar > li:nth-child(4n+3) { color: #ffff00; }
+html[data-theme="teletext"] .app-bar .menubar > li:nth-child(4n+4) { color: #ff00ff; }
+html[data-theme="teletext"] .app-bar .menubar > li > [role="menuitem"]:is(:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))), [aria-current]) {
+  background: #ff0000;
+  color: #000000;
+}
+/* The header clock: yellow, at the far end of the row, as on every page.
+   Hidden on phones, where the row has no cells to spare. */
+html[data-theme="teletext"] .app-bar::after {
+  content: "16:24/41";
+  order: 99;
+  flex: none;
+  color: #ffff00;
+}
+@media (max-width: 480px) {
+  html[data-theme="teletext"] .app-bar::after { content: none; }
+}
+
+/* One Bedstead pixel is 1/10 of the cell height: at a 20px cell every
+   stem is exactly two device pixels, the chunky SAA5050 stroke, instead of
+   a 1.6px anti-aliased smear. Only on wide screens: at 1280 the 25% bump
+   wraps the bar and stat rows. Phones keep 16px, the 40-column row. */
+@media (min-width: 1600px) {
+  html[data-theme="teletext"] { font-size: 125%; }
+}
 
 /* --- Layout ------------------------------------------------------------ *
  * A broadcast frame: solid colour-block bar and status strip, zero
@@ -18713,23 +19051,67 @@ html[data-theme="teletext"] .app-bar {
   --nav-item-bg-active: var(--danger);
 }
 /* Fastext: the bottom row of a Ceefax page — four words in red, green,
-   yellow and cyan, one per remote-control key. One monospaced string,
-   each word padded to 12 cells, coloured cell-for-cell by a hard-stopped
-   gradient clipped to the text. */
+   yellow and cyan, one per remote-control key, under a blue strapline.
+   Each is its own full-width row at body size. One monospaced string of
+   four 10-cell words (the 40-column row), coloured cell-for-cell by a
+   hard-stopped gradient clipped to the text. The row spans the whole
+   strip, as it spanned the screen: the cell size follows the strip up to
+   a cap, each key word starts a quarter (tab stops at 25%, the 10-cell
+   columns) and the strapline sits centred in its band. */
+html[data-theme="teletext"] .app-status { flex-wrap: wrap; row-gap: 0.2rem; container-type: inline-size; }
+html[data-theme="teletext"] .app-status::before,
 html[data-theme="teletext"] .app-status::after {
-  content: "Headlines   Sport       Weather     TV Guide";
-  display: block;
-  white-space: pre;
-  margin-top: 0.3rem;
+  flex: 0 0 100%;
   font-family: var(--font-mono);
-  background: linear-gradient(90deg, #ff0000 0 12ch, #00ff00 12ch 24ch, #ffff00 24ch 36ch, #00ffff 36ch 48ch) 0 0 / 48ch 100% no-repeat;
+  font-size: min(1.5rem, calc(100cqi / 24.5));
+  tab-size: 25cqi;
+  white-space: pre;
+  overflow: hidden;
+}
+html[data-theme="teletext"] .app-status::before {
+  content: "Teletext: the world at your fingertips";
+  text-align: center;
+  order: 98;
+  margin-top: 0.3rem;
+  background: #0000ff;
+  color: #ffff00;
+}
+html[data-theme="teletext"] .app-status::after {
+  content: "Headlines\9Sport\9Weather\9TV Guide";
+  order: 99;
+  background: linear-gradient(90deg, #ff0000 0 25%, #00ff00 25% 50%, #ffff00 50% 75%, #00ffff 75%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  width: 48ch;
-  max-width: 100%;
-  overflow: hidden;
 }
+
+/* On a phone the four words get the short labels so each sits in its own
+   quarter column, as on a set with a narrow safe area. */
+@media (max-width: 480px) {
+  html[data-theme="teletext"] .app-status::after { content: "News\9Sport\9Weather\9TV"; }
+}
+
+/* Bedstead's wide cells: a long toggle row wraps rather than overflow. */
+html[data-theme="teletext"] .toggle-group { flex-wrap: wrap; }
+html[data-theme="teletext"] .toggle-group > .toggle-btn { flex: 1 1 auto; }
+/* Stat labels in cyan, not grey: an index page's secondary line. */
+html[data-theme="teletext"] .stat-label { --muted: var(--accent); }
+/* Badges: a black cell with the colour as ink, never a dark tint. */
+html[data-theme="teletext"] :is(.badge-accent, .badge-danger, .badge-success, .badge-warning):not(.badge-solid, .badge-outline) { --badge-bg: #000000; }
+/* Disabled: black with grey ink and a grey edge, not a dimmed fill. */
+html[data-theme="teletext"] :is(.btn:disabled, .btn[aria-disabled="true"]) {
+  --btn-bg: #000000;
+  --btn-fg: #b3b3b3;
+  opacity: 1;
+  outline: 2px solid #b3b3b3;
+  outline-offset: -2px;
+}
+/* A user's avatar is their colour cell, flat, not a 28% tint. */
+html[data-theme="teletext"] .avatar[data-color] { --avatar-bg: var(--user-color); --avatar-fg: #000000; }
+/* Skeleton: a still blue placeholder block, no shimmer gradient. */
+html[data-theme="teletext"] .skeleton { background-image: none; animation: none; border-radius: 0; }
+/* The headline band spans the row even in a flex page header. */
+html[data-theme="teletext"] h1 { flex-grow: 1; }
 
 /* Mixing-console primitives in the broadcast eight: red/green/blue caps,
    magenta for LF (teletext has no brown), square keys, no rounding. */
@@ -18773,10 +19155,7 @@ html[data-theme="teletext"] {
 
 /* --- v5 layout (PLAN.md §2–§3) -------------------------------------------
  * No breakpoints of its own: core's tiers stack bar, main and status on
- * phones and tablets, and "P100" leads the brand line at every size. The
- * double-height headline shrinks on touch tiers so OVERVIEW still fits a
- * 393px screen at its doubled height. */
-html[data-theme="teletext"] h1 { font-size: clamp(1.1rem, 4vw + 0.3rem, 1.5rem); }
+ * phones and tablets, and "P100" leads the brand line at every size. */
 
 /* XL gutters: a dark teletext page beside the frame. Character cells 12x20
    (the SAA5050 grid), a dim blue header band every ten rows, and sparse
@@ -18790,5 +19169,104 @@ html[data-theme="teletext"] {
     conic-gradient(from 270deg at 12px 20px, #262600 25%, transparent 0) 60px 180px / 132px 300px,
     repeating-linear-gradient(#000 0 200px, #000038 200px 240px);
 }
+
+/* No circles: every core ring, dot and ball is a square cell. The rings
+   step round a quarter at a time, the way a cell grid can only move. */
+html[data-theme="teletext"] :is(.carousel-nav > a, .indicator, .spinner) { border-radius: 0; }
+html[data-theme="teletext"] :is(.avatar[data-status], .presence-status)::after { border-radius: 0; }
+html[data-theme="teletext"] .carousel > .carousel-slide::scroll-marker { border-radius: 0; }
+html[data-theme="teletext"] :is(.indicator, .spinner:not(.is-grow)) { animation-timing-function: steps(4); animation-duration: 0.8s; }
+/* Core draws a table cell's saving ring itself (round, smooth): square it. */
+html[data-theme="teletext"] :is(.table tr > td, .editable):is(.is-saving, .htmx-request)::after { border-radius: 0; animation-timing-function: steps(4); }
+/* One cell size: small print never drops more than a step under body. */
+html[data-theme="teletext"] :is(.badge, .stat-label, .stat-trend, .table th, .btn-sm, .field-hint, .status, .list-item-meta, .thread .time) { font-size: max(0.875rem, 0.78em); }
+
+/* Heatmap and its scale legend in palette steps, not an oklab ramp:
+   black (none), then blue, green, cyan, hard-switched on --v. */
+html[data-theme="teletext"] .heatmap:not(.is-diverging) > *,
+html[data-theme="teletext"] :is(.legend, .chart-legend).is-scale > li::before {
+  background: color-mix(in srgb, #00ffff clamp(0%, (var(--v, 0) - 0.66) * 100000%, 100%),
+    color-mix(in srgb, #00ff00 clamp(0%, (var(--v, 0) - 0.33) * 100000%, 100%),
+    color-mix(in srgb, #0000ff clamp(0%, var(--v, 0) * 100000%, 100%), #000000)));
+}
+/* The black "none" key stays visible as a blue-edged cell. */
+html[data-theme="teletext"] :is(.legend, .chart-legend).is-scale > li::before { outline: 1px solid #0000ff; }
+/* Line charts step like a cell grid: aliased edges, square joins. */
+html[data-theme="teletext"] :is(.chart-series, .chart-point) { shape-rendering: crispEdges; stroke-linejoin: miter; stroke-linecap: square; }
+/* Data points shrink to a 2-pixel-radius aliased block on the line. */
+html[data-theme="teletext"] .chart-point { r: 2.5px; stroke-width: 1; }
+
+/* Checkboxes and radios are drawn cells, not the browser's grey dark-scheme
+   box: black with a cyan edge; checked fills cyan (a black tick, or a black
+   centre for a radio). Forced colours keep the native control. */
+@media not (forced-colors: active) {
+  html[data-theme="teletext"] :is(.checkbox, .radio, .check > input:is([type="checkbox"], [type="radio"]), .prose li > input[type="checkbox"]) {
+    appearance: none;
+    border: 2px solid #00ffff;
+    border-radius: 0;
+    background: #000000 no-repeat center / 100% 100%;
+    vertical-align: middle;
+  }
+  :where(html[data-theme="teletext"] :is(.check > input:not(.checkbox, .radio), .prose li > input[type="checkbox"])) { inline-size: 1.1em; block-size: 1.1em; }
+  html[data-theme="teletext"] :is(.checkbox, .check > input[type="checkbox"], .prose li > input[type="checkbox"]):checked {
+    background-color: #00ffff;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8' shape-rendering='crispEdges'%3E%3Cpath d='M1 4h2v1h1V3h1V2h1V1h1v2H6v1H5v1H4v2H3V6H2V5H1z'/%3E%3C/svg%3E");
+  }
+  html[data-theme="teletext"] :is(.checkbox, .check > input[type="checkbox"]):indeterminate {
+    background-color: #00ffff;
+    background-image: linear-gradient(#000000, #000000);
+    background-size: 60% 25%;
+  }
+  html[data-theme="teletext"] :is(.radio, .check > input[type="radio"]):checked {
+    background-color: #00ffff;
+    box-shadow: inset 0 0 0 0.2em #000000;
+  }
+}
+/* Core pads a vertical fader with padding-inline, which vertical-lr turns
+   vertical; physical side padding keeps the track thin in its tap box. */
+html[data-theme="teletext"] .slider.is-vertical:not(.is-range > .slider) { padding: 0 calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2); }
+/* A block-mosaic mark before the brand, built only from teletext mosaic
+   cells, yellow over a hard one-cell-step blue shadow, as the Ceefax
+   wordmark sat on its page. Decorative: generated content is not read. */
+html[data-theme="teletext"] .app-bar .nav-brand::before {
+  content: "\2584\2588\2580" / "";
+  margin-inline-end: 0.5ch;
+  color: #ffff00;
+  text-shadow: 0.25em 0.2em 0 #0000ff;
+}
+/* A bare fieldset's UA groove reads as a white box: a blue cell edge. */
+html[data-theme="teletext"] fieldset:not(.radio-group) { border: 2px solid var(--border); }
+/* No circles: the count badge is a square cell (core hard-codes 999px). */
+html[data-theme="teletext"] .has-badge::after { border-radius: 0; }
+html[data-theme="teletext"] :is(.btn-clear, .btn-icon.is-clear):is(:active, [aria-pressed="true"], [aria-expanded="true"]) { --btn-fg: #000000; }
+html[data-theme="teletext"] .avatar[data-status]::after { inset-block-end: -0.25rem; inset-inline-end: -0.25rem; }
+/* Initials at the one cell size. */
+html[data-theme="teletext"] .avatar-sm { font-size: 0.875rem; }
+/* The header row is text only: the bar's select and buttons lose their
+   edges and invert to a cyan cell on hover, as a page's index lines did. */
+html[data-theme="teletext"] .app-bar .select { --input-border: transparent; --input-fg: #00ffff; }
+html[data-theme="teletext"] .app-bar :is(.btn-secondary, .btn-tertiary, .btn-ghost) {
+  --btn-border: transparent;
+  --btn-bg-hover: #00ffff;
+  --btn-border-hover: transparent;
+}
+@media (hover: hover) {
+  html[data-theme="teletext"] .app-bar :is(.btn-secondary, .btn-tertiary, .btn-ghost):hover { --btn-fg: #000000; }
+}
+/* On a phone the tools stay one row: no keyboard hint, no wrap. */
+@media (max-width: 480px) {
+  html[data-theme="teletext"] .app-bar kbd { display: none; }
+  html[data-theme="teletext"] .app-bar .cluster { flex-wrap: nowrap; min-inline-size: 0; }
+  html[data-theme="teletext"] .app-bar .cluster > .select { flex: 0 1 auto; min-inline-size: 0; }
+}
+/* Secondary text in cyan, as an index page's: real teletext had no grey,
+   which stays for hints and the disabled state only. */
+/* Set on the regions, so a colour band that sets its own --muted (panel
+   headers, selected rows) still wins for the text on it. */
+html[data-theme="teletext"] :is(.app-main, .app-status) { --muted: #00ffff; }
+html[data-theme="teletext"] :is(.field-hint, :disabled) { --muted: #b3b3b3; }
+/* .divide-y rules are blue cell edges, not the black table hairline. */
+html[data-theme="teletext"] .divide-y { --hairline: #0000ff; }
+html[data-theme="teletext"] ::-webkit-resizer { background: #0000ff; }
 
 }

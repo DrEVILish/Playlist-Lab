@@ -446,6 +446,18 @@ a { color: var(--link, var(--accent)); }
   text-overflow: ellipsis;
 }
 .field-row > .field-hint { margin-block-start: 0; flex: none; }
+/* .field-row.is-wrap — the label is the setting's only name, so it wraps
+   instead of truncating, and a sentence-length .field-hint sits under it
+   inside the row; the control stays at the end, centred on both. */
+.field-row.is-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  row-gap: 0.15em;
+}
+.field-row.is-wrap > .label { grid-column: 1; white-space: normal; overflow: visible; }
+.field-row.is-wrap > .field-hint { grid-column: 1; }
+.field-row.is-wrap > :not(.label, .field-hint) { grid-column: 2; grid-row: 1 / span 2; }
 
 /* .input-group — an input with joined addons: a unit label, a static
    prefix, or an attached button. Children share one border; only the
@@ -500,6 +512,9 @@ a { color: var(--link, var(--accent)); }
   color: var(--check-fg, var(--text));
 }
 .check:has(:disabled) { opacity: 0.5; cursor: var(--cursor-not-allowed, not-allowed); }
+/* A hidden name (a table's select column) is positioned against its own
+   label, so it can't escape a scrolling table and widen the page. */
+.check:has(> .visually-hidden) { position: relative; }
 
 /* .radio-group — a <fieldset> of .check rows with a <legend>. */
 .radio-group {
@@ -576,7 +591,8 @@ a { color: var(--link, var(--accent)); }
    (the attribute is also what assistive tech reads). The button sizes to
    its content: the track becomes a normal flex child and an optional
    .switch-label sits beside it. */
-button.switch {
+button.switch,
+label.switch:has(> .switch-label) {
   appearance: none;
   width: auto;
   height: auto;
@@ -589,7 +605,8 @@ button.switch {
   font: inherit;
   text-align: start;
 }
-button.switch .switch-track {
+button.switch .switch-track,
+label.switch:has(> .switch-label) > .switch-track {
   position: relative;
   inset: auto;
   flex: none;
@@ -701,7 +718,7 @@ button.switch:disabled { opacity: 0.5; cursor: var(--cursor-not-allowed, not-all
   align-items: center;
   gap: 0.5rem;
   margin: calc(-1 * var(--surface-pad, 1.5rem)) calc(-1 * var(--surface-pad, 1.5rem)) var(--space-m);
-  padding: var(--modal-header-pad, var(--space-xs) var(--space-m));
+  padding: var(--modal-header-pad, var(--space-xs) var(--surface-pad, var(--space-m)));
   background: var(--modal-header-bg, transparent);
   color: var(--modal-header-fg, inherit);
   font-weight: 600;
@@ -756,6 +773,9 @@ dialog.modal:modal {
   position: fixed;
   inset: 0;
   margin: auto;
+}
+.modal[popover]:popover-open:not(:where(.is-maximized, .window-max:checked + .modal)),
+dialog.modal:modal:not(:where(.is-maximized, .window-max:checked + .modal)) {
   height: fit-content;
 }
 
@@ -950,6 +970,7 @@ dialog.modal:modal {
   color: var(--dropdown-item-fg, var(--text));
   text-align: start;
 }
+.dropdown-item.is-danger { color: var(--danger-text, var(--danger)); }
 .dropdown-item:focus-visible {
   background: var(--dropdown-item-bg-hover, var(--accent));
   color: var(--dropdown-item-fg-hover, var(--on-accent));
@@ -1094,6 +1115,7 @@ dialog.modal:modal {
  * every theme here treats it as a signature element. */
 .transport {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
   padding: var(--transport-padding, 0.6rem 0.9rem);
@@ -1503,7 +1525,7 @@ html.is-dragging-value, html.is-dragging-value * { cursor: var(--cursor-resize-y
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 0.2rem 0.35rem;
+  padding: 0.35rem 0.4rem;
   background: var(--scribble-bg, var(--surface-2));
   color: var(--scribble-fg, var(--text));
   border-top: var(--scribble-bar-width, 0.3rem) solid var(--strip-color, var(--accent));
@@ -1602,7 +1624,7 @@ html.is-dragging-value, html.is-dragging-value * { cursor: var(--cursor-resize-y
   background: var(--row-selected-bg, rgba(128, 128, 128, 0.25));
   color: var(--row-selected-fg, inherit);
 }
-.table tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) td {
+.table tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))):not(.is-selected, :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))) td {
   background: var(--row-active-bg, transparent);
 }
 /* The marker belongs to the row, so only its leading cell draws it — on
@@ -1944,7 +1966,10 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
 .status-ok { --state-fg: var(--success-text, var(--success)); color: var(--state-fg); }
 .status-warn { --state-fg: var(--warning-text, var(--warning)); color: var(--state-fg); }
 .status-error { --state-fg: var(--danger-text, var(--danger)); color: var(--state-fg); }
+/* .status-idle is neutral everywhere (offline, stopped, not running);
+   .status-ready is armed and waiting, the green of a recorder on standby. */
 .status-idle { --state-fg: var(--muted); color: var(--state-fg); }
+.status-ready { --state-fg: var(--success-text, var(--success)); color: var(--state-fg); }
 /* .status-rec: recording or on air. A bold danger label whose dot has a
    halo; the dot pulses when motion is allowed. */
 .status-rec { --state-fg: var(--danger-text, var(--danger)); color: var(--state-fg); font-weight: 700; }
@@ -2066,8 +2091,7 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
 :is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a)) {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  gap: 0.6em;
   width: 100%;
   padding: 0.45em 0.7em;
   border-radius: var(--context-menu-radius, var(--radius));
@@ -2075,6 +2099,10 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
   text-align: start;
 }
 :is(.context-menu-item, .context-menu li > :is(button, a)).is-danger { color: var(--danger-text, var(--danger)); }
+/* A leading icon stays beside its label; a trailing shortcut (<kbd>) or a
+   submenu arrow is pushed to the end. */
+:is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a)) > :is(kbd, :last-child:not(:first-child, .icon)),
+:is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a))[aria-haspopup] > :last-child:not(.icon) { margin-inline-start: auto; padding-inline-start: 0.4em; }
 :is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a)):focus-visible {
   background: var(--context-menu-item-bg-hover, var(--dropdown-item-bg-hover, var(--accent)));
   color: var(--context-menu-item-fg-hover, var(--dropdown-item-fg-hover, var(--on-accent)));
@@ -2157,6 +2185,8 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
   stroke-width: var(--icon-stroke-width, 2);
   stroke-linecap: round;
   stroke-linejoin: round;
+  /* The reset makes every svg a block; an icon sits in the line with its text. */
+  display: inline-block;
   vertical-align: -0.2em;
   flex-shrink: 0;
 }
@@ -2178,7 +2208,6 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
 /* .badge-button — a clickable badge (filter chip). */
 .badge-button {
   border: none;
-  font: inherit;
   transition: background 0.15s ease, color 0.15s ease;
 }
 .badge-button:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) {
@@ -2516,7 +2545,7 @@ html[data-motion="reduced"] .carousel { scroll-behavior: auto; }
   display: flex;
   flex-wrap: wrap;
   gap: 0.15rem 0.9rem;
-  padding-block: 0.5rem;
+  padding: 0.5rem var(--space-2xs);
   background: var(--scrollspy-nav-bg, var(--surface));
   border-block-end: 1px solid var(--scrollspy-nav-rule, var(--hairline));
 }
@@ -2634,6 +2663,8 @@ html[data-motion="reduced"] .scrollspy-body { scroll-behavior: auto; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Task buttons take the squeeze before the tray does. */
+.taskbar > .taskbar-task { flex-shrink: 1000; }
 .taskbar-task:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) {
   background: var(--taskbar-task-bg-active, var(--taskbar-task-bg, transparent));
   border-color: var(--taskbar-task-border-active, var(--taskbar-task-border, transparent));
@@ -2645,7 +2676,10 @@ html[data-motion="reduced"] .scrollspy-body { scroll-behavior: auto; }
   display: inline-flex;
   align-items: center;
   gap: 0.5em;
-  flex: none;
+  /* The tray gives way last on a narrow bar (see .taskbar > .taskbar-task):
+     its readouts then truncate rather than push the bar past its edge. */
+  flex: 0 1 auto;
+  min-inline-size: 0;
   margin-inline-start: auto;
   padding: 0.3em 0.8em;
   border: var(--taskbar-border-width, 1px) solid var(--taskbar-tray-border, transparent);
@@ -2653,6 +2687,14 @@ html[data-motion="reduced"] .scrollspy-body { scroll-behavior: auto; }
   background: var(--taskbar-tray-bg, transparent);
   color: var(--taskbar-tray-fg, inherit);
   font-variant-numeric: tabular-nums;
+}
+.taskbar-tray > * { flex: none; }
+.taskbar-tray > :is(span, time):not(.lamp) {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* .breadcrumbs */
@@ -3225,6 +3267,14 @@ pre code { padding: 0; background: none; border-radius: 0; }
   --btn-border-hover: var(--app-bar-text);
 }
 .app-bar :is(.btn-tertiary, .btn-ghost) { --btn-border: transparent; }
+/* A GO button on the bar: core's GO is an outlined accent label, which on a
+   bar painted in the accent reads at 1:1. Unless the theme styles its GO
+   (--go-fg, --go-border), it takes the bar's text colour like the other
+   unfilled buttons. A theme that fills it (--go-bg) also sets --go-fg. */
+.app-bar .btn-go {
+  --btn-fg: var(--go-fg, var(--app-bar-text));
+  --btn-border: var(--go-border, var(--app-bar-text));
+}
 
 /* Screen-reader-only content — the standard visually-hidden-but-announced
    clip-rect pattern, not display:none (which screen readers also skip). */
@@ -3305,6 +3355,9 @@ pre code { padding: 0; background: none; border-radius: 0; }
 
 /* .divide-y — hairlines between stacked children (lists, menus). */
 .divide-y > * + * { border-block-start: 1px solid var(--hairline); }
+/* Text never sits on the hairline. Zero specificity, so a child with its
+   own padding (a list item, a menu entry) keeps it. */
+:where(.divide-y > *) { padding-block: var(--divide-y-pad, var(--space-2xs)); }
 
 /* .ratio — an aspect-ratio box for video/embeds; children fill it.
    Set `--ratio` directly or use a modifier (default 16/9). */
@@ -3777,10 +3830,22 @@ html[data-pointer="touch"] { --tap-min: 44px; }
   min-block-size: var(--tap-min);
   touch-action: manipulation;
 }
-/* Short labels ("EQ", "L1") too: toggles, tabs and segments. */
-:is(.btn-icon, .btn-close, .btn-min, .btn-max, .pagination-item, .nav-toggle, .taskbar-task, .badge-button,
-    .toggle-btn, .tab, .segmented-item) {
+/* Short labels ("EQ", "L1") too: toggles, tabs, segments, scrollspy, keys. */
+:is(.btn-icon, .btn-close, .btn-min, .btn-max, .pagination-item, .nav-toggle, .taskbar-task, .taskbar-start, .badge-button,
+    .toggle-btn, .tab, .segmented-item, .scrollspy-link, .key) {
   min-inline-size: var(--tap-min);
+}
+/* Links and buttons in a toast are actions, not running text. */
+:where(.toast) :is(a, button):not(.btn, .btn-icon, .btn-close) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--tap-min);
+  min-inline-size: var(--tap-min);
+}
+/* Touch tiers: keys and reaction chips sit 8px apart (WCAG 2.5.8 spacing). */
+@media (max-width: 900px), (any-pointer: coarse) {
+  .strip-section, .message-reactions { gap: max(0.3rem, 8px); }
 }
 :is(.input, .select) { min-block-size: var(--tap-min); }
 /* Checkboxes and radios: the label is the target. */
@@ -3802,16 +3867,23 @@ html[data-pointer="touch"] { --tap-min: 44px; }
   transform: translate(-50%, -50%);
 }
 .slider { touch-action: none; }
-@media (max-width: 900px), (any-pointer: coarse) {
-  /* The range input's own box is both its track and its target. On touch
-     it grows to the target height; padding keeps the drawn track the same
-     thin line in the middle (the border can't follow it, so it hides). */
-  .slider:not(.is-range > .slider) {
-    height: var(--tap-min);
-    padding-block: calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2);
-    background-clip: content-box;
-    border-color: transparent;
-  }
+/* The range input's own box is both its track and its target. It grows to
+   --tap-min (44px on touch tiers, 24px on desktop); padding keeps the drawn
+   track the same thin line in the middle. The border can't follow it, so it
+   hides: a theme whose track is drawn by the border (a bevelled groove)
+   redraws it with --slider-bg as a background on the content box. */
+.slider:not(.is-range > .slider) {
+  height: var(--tap-min);
+  padding-block: calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2);
+  background-clip: content-box;
+  border-color: transparent;
+}
+/* The same, sideways, for a vertical slider. */
+.slider.is-vertical:not(.is-range > .slider) {
+  width: var(--tap-min);
+  height: var(--slider-length, 4.5rem);
+  /* Physical sides: under vertical-lr the logical block axis is horizontal. */
+  padding: 0 calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2);
 }
 /* Inline text links inside running text are exempt (WCAG 2.5.8); links
    that stand alone as navigation are not. */
@@ -3893,6 +3965,10 @@ input[type="color"] { min-block-size: var(--tap-min); min-inline-size: var(--tap
     margin: 0.25rem 0;
     position-area: block-end span-inline-end;
     position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+    /* Take the side with more room and scroll inside it, so the inline
+       flip can still fit when neither side holds the whole menu. */
+    position-try-order: most-block-size;
+    max-height: calc(100% - 0.5rem);
   }
 }
 /* A context menu shown at the pointer: the app sets --x/--y. */
@@ -4247,7 +4323,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .meter-pair:has(> .meter-v) { grid-auto-flow: column; justify-content: start; block-size: 100%; }
 
 /* --- .clip — a clip light that holds, with a count -------------------------
- *   <button class="clip" type="button" aria-pressed="true" aria-label="Clipped 3 times, reset">CLIP <span class="clip-count">3</span></button>
+ *   <button class="clip" type="button" aria-pressed="true" aria-label="Clip 3, press to reset">CLIP <span class="clip-count">3</span></button>
  * aria-pressed="true" (or .is-clipped) lights it; the app holds it after a
  * clip and clears it when the user presses it. */
 .clip {
@@ -4627,9 +4703,9 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: grid;
   gap: 1px;
   padding: 0.2rem;
-  background: var(--sends-bg, #0c0c12);
+  background: var(--sends-bg, var(--input-bg, var(--surface)));
   border: 1px solid var(--sends-border, var(--border));
-  color: var(--sends-fg, #ffffff);
+  color: var(--sends-fg, var(--input-fg, var(--text)));
   font-size: 0.6rem;
   line-height: 1.25;
 }
@@ -4640,7 +4716,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   content: "";
   block-size: 0.45rem;
   inline-size: calc(var(--send, 0) * 100%);
-  background: var(--sends-bar, #d8dde8);
+  background: var(--sends-bar, var(--muted));
   clip-path: polygon(0 100%, 100% 0, 100% 100%);
 }
 .sends li.is-pre::after { background: var(--sends-bar-pre, var(--accent-2)); }
@@ -4659,22 +4735,22 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   inline-size: 100%;
   aspect-ratio: 1;
   background:
-    linear-gradient(to top right, transparent calc(50% - 0.5px), var(--dyn-graph-unity, rgba(255, 255, 255, 0.25)) 0 calc(50% + 0.5px), transparent 0),
-    repeating-linear-gradient(0deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, rgba(255, 255, 255, 0.14)) 0 25%),
-    repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, rgba(255, 255, 255, 0.14)) 0 25%),
-    var(--dyn-graph-bg, linear-gradient(180deg, #3a6bd0, #1d3f96));
-  border: 1px solid var(--dyn-graph-border, var(--border));
+    linear-gradient(to top right, transparent calc(50% - 0.5px), var(--dyn-graph-unity, var(--eq-zero, var(--border))) 0 calc(50% + 0.5px), transparent 0),
+    repeating-linear-gradient(0deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, var(--eq-grid, var(--hairline))) 0 25%),
+    repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, var(--eq-grid, var(--hairline))) 0 25%),
+    var(--dyn-graph-bg, var(--eq-bg, var(--bg)));
+  border: 1px solid var(--dyn-graph-border, var(--eq-border, var(--hairline)));
   overflow: visible;
 }
 .dyn-graph-line {
   fill: none;
-  stroke: var(--dyn-graph-line, #ffffff);
+  stroke: var(--dyn-graph-line, var(--eq-line, var(--accent)));
   stroke-width: var(--dyn-graph-line-width, 2px);
   vector-effect: non-scaling-stroke;
   stroke-linejoin: round;
 }
-.dyn-graph-threshold { stroke: var(--dyn-graph-threshold, var(--accent)); stroke-width: 1px; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
-[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-line { stroke: var(--dyn-graph-line-off, rgba(255, 255, 255, 0.45)); }
+.dyn-graph-threshold { stroke: var(--dyn-graph-threshold, var(--accent-2)); stroke-width: 1px; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-line { stroke: var(--dyn-graph-line-off, var(--muted)); }
 
 /* --- .rack — an equipment rack of .rack-units ------------------------------
  *   <div class="rack" aria-label="Effects rack">
@@ -4731,7 +4807,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .rack-unit[data-finish="purple"] { --_finish: linear-gradient(180deg, #6a2f8c, #3b1150); }
 .rack-unit[data-finish="green"] { --_finish: linear-gradient(180deg, #2f8a2f, #145214); }
 .rack-unit > input[type="radio"] { position: absolute; inset: 0; margin: 0; opacity: 0; }
-.rack-unit:has(> input:checked) { outline: 2px solid var(--rack-selected, #ffe33b); outline-offset: -2px; }
+.rack-unit:has(> input:checked) { outline: 2px solid var(--rack-selected, var(--accent)); outline-offset: -2px; }
 .rack-unit:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
 .rack-unit.is-empty { --_finish: linear-gradient(180deg, #2b2b2b, #151515); justify-content: center; color: #8a8a8a; }
 .rack-unit-name {
@@ -4743,7 +4819,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .rack-unit[data-finish="silver"] .rack-unit-name { text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6); }
 .rack-unit-body { display: flex; flex: 1; flex-wrap: wrap; align-items: center; justify-content: space-around; gap: 0.3rem 0.6rem; min-inline-size: 0; }
 /* The thin "Change device / Store / Load preset" strip at the top of the rack. */
-.rack-head { display: flex; justify-content: center; gap: 0.6rem; padding: 0.4rem; background: linear-gradient(180deg, #f2f2f2, #c9c9c9); border-radius: 2px; }
+.rack-head { display: flex; justify-content: center; gap: 0.6rem; padding: 0.4rem; background: var(--rack-head-bg, var(--surface-2)); border-radius: 2px; }
 
 /* A unit's faceplate seen up close: a bigger .rack-unit inside .faceplate,
    above its .assignable panel. */
@@ -4751,8 +4827,8 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: grid;
   gap: 0.6rem;
   padding: 0.5rem;
-  background: var(--faceplate-bg, #050505);
-  border: 1px solid var(--faceplate-border, #2a2a2a);
+  background: var(--faceplate-bg, var(--surface-2));
+  border: 1px solid var(--faceplate-border, var(--border));
   border-radius: 4px;
 }
 .faceplate > .rack-unit { --_u: 2.6rem; align-items: stretch; padding-block: 0.8rem; font-size: 0.75rem; }
@@ -4770,8 +4846,8 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .faceplate-display {
   min-inline-size: 7rem;
   padding: 0.4rem 0.6rem;
-  background: var(--faceplate-display-bg, #000000);
-  color: var(--faceplate-display-fg, #e0e0e0);
+  background: var(--faceplate-display-bg, var(--input-bg, var(--surface)));
+  color: var(--faceplate-display-fg, var(--input-fg, var(--text)));
   border-radius: 4px;
   font: 800 1.2rem/1.1 var(--font);
   text-align: center;
@@ -4791,11 +4867,11 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   grid-template-columns: repeat(auto-fit, minmax(5.2rem, 1fr));
   gap: 0.4rem 0.3rem;
   padding: 0.5rem 0.6rem 0.3rem;
-  background: var(--assignable-bg, linear-gradient(180deg, #5560ab, #434d98));
-  color: var(--assignable-fg, #ffffff);
-  border: 1px solid var(--assignable-border, #2a3274);
+  background: var(--assignable-bg, var(--surface));
+  color: var(--assignable-fg, var(--text));
+  border: 1px solid var(--assignable-border, var(--border));
   border-radius: 3px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+  box-shadow: var(--assignable-shadow, none);
   font-size: 0.68rem;
   text-align: center;
 }
@@ -4805,12 +4881,12 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: block;
   inline-size: 2.6rem;
   block-size: 2.4rem;
-  background: var(--assignable-key-bg, linear-gradient(180deg, #4a54a0, #3a438b));
-  border: 2px solid var(--assignable-key-border, #6a74c0);
-  box-shadow: inset 0 0 0 2px #2b3274;
+  background: var(--assignable-key-bg, var(--key-bg, var(--surface-2)));
+  border: 2px solid var(--assignable-key-border, var(--key-border, var(--border)));
+  box-shadow: var(--assignable-key-shadow, inset 0 0 0 2px rgba(0, 0, 0, 0.25));
 }
 .assignable-key > input { position: absolute; inset: 0; margin: 0; opacity: 0; }
-.assignable-key:has(> input:checked) { background: var(--assignable-key-on, linear-gradient(180deg, #e9ecff, #b5bce8)); }
+.assignable-key:has(> input:checked) { background: var(--assignable-key-on, var(--accent)); }
 .assignable-key:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 .assignable-caption { grid-column: 1 / -1; margin: 0; font-weight: 700; opacity: 0.9; }
 
@@ -4827,9 +4903,9 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   align-items: stretch;
   gap: 2px;
   padding: 0.5rem;
-  background: var(--geq-bg, linear-gradient(180deg, #a9a9a9, #8a8a8a));
+  background: var(--geq-bg, var(--surface));
   border-radius: 3px;
-  color: var(--geq-fg, #111111);
+  color: var(--geq-fg, var(--text));
   font-size: 0.6rem;
   font-weight: 700;
 }
@@ -4840,11 +4916,11 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   gap: 1px;
   padding: 0.15rem;
   background:
-    linear-gradient(transparent calc(50% - 0.6rem), var(--geq-zero, #111111) 0 calc(50% - 0.6rem + 1px), transparent 0),
-    var(--geq-group-bg, #9a9a9a);
-  border: 1px solid var(--geq-group-border, #1f2a8a);
+    linear-gradient(transparent calc(50% - 0.6rem), var(--geq-zero, var(--border)) 0 calc(50% - 0.6rem + 1px), transparent 0),
+    var(--geq-group-bg, var(--surface-2));
+  border: 1px solid var(--geq-group-border, var(--hairline));
 }
-.geq-group:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) { --geq-group-bg: var(--geq-group-active, #e6e6e6); }
+.geq-group:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) { --geq-group-bg: var(--geq-group-active, color-mix(in srgb, var(--accent) 22%, var(--surface-2))); }
 .geq-band { display: grid; flex: 1; justify-items: center; gap: 0.15rem; min-inline-size: 0; }
 .geq-band > input[type="range"] {
   -webkit-appearance: none;
@@ -4856,7 +4932,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   min-width: 0.9rem;
   height: var(--geq-height, 7rem);
   margin: 0;
-  background: linear-gradient(90deg, transparent calc(50% - 3px), var(--geq-slot, #000000) 0 calc(50% + 3px), transparent 0);
+  background: linear-gradient(90deg, transparent calc(50% - 3px), var(--geq-slot, var(--fader-slot, var(--border))) 0 calc(50% + 3px), transparent 0);
 }
 .geq-band > input::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -4888,20 +4964,20 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: grid;
   gap: 0.4rem;
   padding: 0.5rem;
-  background: var(--patch-device-bg, linear-gradient(180deg, #4f8ad0, #2f62ae));
-  border: 1px solid var(--patch-device-border, #12285e);
+  background: var(--patch-device-bg, var(--surface));
+  border: 1px solid var(--patch-device-border, var(--border));
   border-radius: 8px;
-  color: #ffffff;
+  color: var(--patch-device-fg, var(--text));
 }
 .patch-device > header { display: flex; align-items: center; gap: 0.4rem; font-weight: 800; }
-.patch-name { flex: 1; padding: 0.15rem 0.4rem; background: #000000; border-radius: 2px; }
+.patch-name { flex: 1; padding: 0.15rem 0.4rem; background: var(--patch-name-bg, var(--input-bg, var(--surface))); color: var(--patch-name-fg, var(--input-fg, var(--text))); border-radius: 2px; }
 .patch-group-label { grid-column: 1 / -1; margin: 0.2rem 0 0; font-size: 0.75rem; font-weight: 800; text-align: center; }
 .patch-grid { display: grid; grid-template-columns: repeat(var(--patch-cols, 8), minmax(1.4rem, 1fr)); gap: 3px; }
 .patch-point {
   position: relative;
   aspect-ratio: 1;
-  background: var(--patch-free, linear-gradient(180deg, #f0f0f0, #c8c8c8));
-  border: 1px solid #333333;
+  background: var(--patch-free, var(--surface-2));
+  border: 1px solid var(--patch-point-border, var(--border));
   border-radius: 2px;
 }
 /* The jack: a small ring in the middle of each point. */
@@ -4909,12 +4985,12 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   content: "";
   position: absolute;
   inset: 28%;
-  border: 2px solid rgba(0, 0, 0, 0.45);
+  border: 2px solid var(--patch-jack, color-mix(in srgb, currentColor 45%, transparent));
   border-radius: 50%;
 }
 .patch-point > input { position: absolute; inset: 0; margin: 0; opacity: 0; }
-.patch-point:has(> input:checked) { background: var(--patch-on, linear-gradient(180deg, #8ad35a, #4e9a2a)); }
-.patch-point[data-kind="aes"]:has(> input:checked) { background: var(--patch-aes, linear-gradient(180deg, #ffe46b, #d6b21a)); }
+.patch-point:has(> input:checked) { background: var(--patch-on, var(--success)); }
+.patch-point[data-kind="aes"]:has(> input:checked) { background: var(--patch-aes, var(--warning)); }
 .patch-point:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 1px; }
 @media (forced-colors: active) {
   .patch-point:has(> input:checked), .assignable-key:has(> input:checked) { background: Highlight; }
@@ -5089,8 +5165,8 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 }
 
 /* The area under a dynamics curve, filled (console.js closes the path). */
-.dyn-graph-fill { fill: var(--dyn-graph-fill, rgba(140, 190, 255, 0.45)); stroke: none; }
-[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-fill { fill: var(--dyn-graph-fill-off, rgba(140, 190, 255, 0.18)); }
+.dyn-graph-fill { fill: var(--dyn-graph-fill, color-mix(in srgb, var(--eq-line, var(--accent)) 30%, transparent)); stroke: none; }
+[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-fill { fill: var(--dyn-graph-fill-off, color-mix(in srgb, var(--muted) 15%, transparent)); }
 
 /* --- .led-list — options chosen by a lit LED -------------------------------
  *   <ul class="led-list" role="radiogroup" aria-label="Program">
@@ -5123,6 +5199,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
  * The sixteen name-tag colours a large console offers. Each reads a
  * --tag-<name> token, so a theme can retune them. */
 .scribble[data-tag] { background: var(--_tag); color: var(--_tag-fg, #111111); border-top-color: transparent; text-align: center; }
+.scribble[data-tag] .scribble-num { color: inherit; opacity: 0.75; }
 .scribble[data-tag="black"] { --_tag: var(--tag-black, #111111); --_tag-fg: #ffffff; }
 .scribble[data-tag="dblue"] { --_tag: var(--tag-dblue, #1f3fd0); --_tag-fg: #ffffff; }
 .scribble[data-tag="dgreen"] { --_tag: var(--tag-dgreen, #1e7a2a); --_tag-fg: #ffffff; }
@@ -5157,11 +5234,11 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .assignable-nav > button {
   min-inline-size: 0;
   padding: 0;
-  background: var(--assignable-key-bg, linear-gradient(180deg, #4a54a0, #3a438b));
-  border: 1px solid var(--assignable-key-border, #6a74c0);
+  background: var(--assignable-key-bg, var(--key-bg, var(--surface-2)));
+  border: 1px solid var(--assignable-key-border, var(--key-border, var(--border)));
   border-radius: 2px;
 }
-.assignable-nav > button:active { background: var(--assignable-key-on, #b5bce8); }
+.assignable-nav > button:active { background: var(--assignable-key-on, var(--accent)); }
 .assignable-nav > :nth-child(1) { grid-area: 1 / 1 / 2 / 3; inline-size: 1.6rem; }
 .assignable-nav > :nth-child(2) { grid-area: 1 / 2 / 2 / 4; inline-size: 1.6rem; justify-self: end; }
 .assignable-nav > :nth-child(3) { grid-area: 2 / 2; }
@@ -5407,6 +5484,73 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   border-color: var(--window-pane-border, var(--input-border, var(--border)));
 }
 
+/* .window-tasks — the side pane of task groups beside a window's content
+   (XP's Explorer task pane). Each .window-task is a titled group: its
+   first child (a heading or <summary>) is the header, the rest the body. */
+.window-tasks {
+  display: grid;
+  align-content: start;
+  gap: var(--window-tasks-gap, var(--space-s, 0.75rem));
+  padding: var(--window-tasks-padding, var(--space-s, 0.75rem));
+  background: var(--window-tasks-bg, var(--surface-2));
+}
+.window-task {
+  border: 1px solid var(--window-task-border, var(--border));
+  border-radius: var(--window-task-radius, var(--radius));
+  background: var(--window-task-bg, var(--surface));
+  color: var(--window-task-fg, var(--text));
+  font-size: var(--window-task-font-size, inherit);
+  overflow: hidden;
+}
+.window-task > :first-child {
+  margin: 0;
+  padding: var(--window-task-header-pad, 0.35rem 0.6rem);
+  background: var(--window-task-header-bg, transparent);
+  color: var(--window-task-header-fg, inherit);
+  font-size: var(--window-task-header-font-size, 0.85rem);
+  font-weight: 700;
+}
+.window-task > :not(:first-child) { margin: 0; padding: var(--window-task-body-pad, 0.4rem 0.6rem); }
+/* A collapsible group is a <details> whose <summary> is the header; the
+   toggle sits at its end (a chevron by default, a theme's button image via
+   --window-task-toggle / --window-task-toggle-closed). */
+details.window-task > summary { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; cursor: var(--cursor-pointer, pointer); list-style: none; }
+details.window-task > summary::-webkit-details-marker { display: none; }
+details.window-task > summary > :is(h2, h3) { margin: 0; font: inherit; color: inherit; }
+details.window-task > summary::after {
+  content: "";
+  flex: none;
+  inline-size: var(--window-task-toggle-size, 1em);
+  block-size: var(--window-task-toggle-size, 1em);
+  background: var(--window-task-toggle, none) center / contain no-repeat;
+  background-color: var(--window-task-toggle-fg, currentColor);
+  -webkit-mask: var(--window-task-toggle-mask, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 10l4-4 4 4' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E")) center / contain no-repeat;
+  mask: var(--window-task-toggle-mask, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 10l4-4 4 4' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E")) center / contain no-repeat;
+}
+details.window-task:not([open]) > summary::after { rotate: var(--window-task-toggle-rotate, 180deg); background-image: var(--window-task-toggle-closed, var(--window-task-toggle, none)); }
+details.window-task > summary:focus-visible { outline: 2px solid var(--focus, var(--accent)); outline-offset: -2px; }
+.window-task > :not(:first-child) + :not(:first-child) { padding-block-start: 0; }
+.window-task a { color: var(--window-task-link-fg, var(--link, var(--accent))); }
+/* A .list inside a group is a plain column of task links, not a boxed list. */
+.window-task {
+  --list-bg: transparent;
+  --list-border-width: 0;
+  --list-radius: 0;
+  --list-rule: transparent;
+  --list-item-padding: var(--window-task-item-pad, 0.2em 0);
+  --list-item-fg: var(--window-task-link-fg, var(--link, var(--accent)));
+  --row-hover-bg: transparent;
+}
+@media (hover: hover) {
+  .window-task :is(a, label).list-item:hover { text-decoration: underline; color: var(--window-task-link-fg-hover, var(--window-task-link-fg, var(--link, var(--accent)))); }
+}
+/* The first, "special" group of a pane (XP: the place's own tasks). */
+.window-task.is-special > :first-child {
+  background: var(--window-task-special-header-bg, var(--window-task-header-bg, transparent));
+  color: var(--window-task-special-header-fg, var(--window-task-header-fg, inherit));
+}
+.window-task.is-special { background: var(--window-task-special-bg, var(--window-task-bg, var(--surface))); }
+
 /* Minimized and closed windows leave the screen (the inputs stay, so the
    task button and the Start menu can bring them back). */
 .desktop-window:has(> .window-minimize:checked, > .window-close:checked) > .modal { display: none; }
@@ -5425,18 +5569,28 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   outline-offset: 2px;
 }
 /* Inactive title bars: every window but the active one, which is the one
-   holding focus, else the switched-to one, else the topmost (last). */
+   holding focus, else the switched-to one, else the topmost (last). While
+   the Start menu is open it holds focus, so every window is inactive. */
 .desktop:has(.desktop-window:focus-within) .desktop-window:not(:focus-within),
 .desktop:not(:has(.desktop-window:focus-within)):has(.window-app:checked) .desktop-window:not(:has(> .window-app:checked)),
-.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) {
+.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)),
+.desktop:has(.start-menu:popover-open) .desktop-window {
   --_inactive: 1;
 }
 .desktop:has(.desktop-window:focus-within) .desktop-window:not(:focus-within) > .modal > .modal-header,
 .desktop:not(:has(.desktop-window:focus-within)):has(.window-app:checked) .desktop-window:not(:has(> .window-app:checked)) > .modal > .modal-header,
-.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) > .modal > .modal-header {
+.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) > .modal > .modal-header,
+.desktop:has(.start-menu:popover-open) .desktop-window > .modal > .modal-header {
   background: var(--window-header-bg-inactive, var(--modal-header-bg, transparent));
   color: var(--window-header-fg-inactive, var(--modal-header-fg, inherit));
   filter: var(--window-header-filter-inactive, saturate(0.45) opacity(0.85));
+}
+/* XP fades an inactive window's caption buttons into its paler title bar. */
+.desktop:has(.desktop-window:focus-within) .desktop-window:not(:focus-within) > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close),
+.desktop:not(:has(.desktop-window:focus-within)):has(.window-app:checked) .desktop-window:not(:has(> .window-app:checked)) > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close),
+.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close),
+.desktop:has(.start-menu:popover-open) .desktop-window > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close) {
+  opacity: var(--window-caption-opacity-inactive, 1);
 }
 
 /* A small monitor showing the wallpaper (Display Properties). */
@@ -5646,6 +5800,9 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   height: var(--start-menu-sub-icon-size, 1rem);
 }
 .start-menu li > :is(a, button, label) > span { display: flex; flex-direction: column; text-align: start; }
+/* "All Programs" is one line of text (its "All " is a columns-only span), not
+   a title over a subtitle. */
+.start-menu li.start-menu-all > :is(a, button) > span { display: block; white-space: nowrap; }
 .start-menu li > :is(a, button, label) > span > b { font-weight: 700; }
 .start-menu li > :is(a, button, label) small { font-size: 0.8em; opacity: 0.75; }
 .start-menu .has-submenu > :is(a, button)::after { margin-inline-start: auto; }
@@ -9839,7 +9996,7 @@ html[data-motion="reduced"] .track > .track-play::before { animation: none; }
 /* ---- Track rows ------------------------------------------------------------
  * <ol class="tracklist">
  *   <li class="track">
- *     <button class="track-play" aria-label="Play Night Drive"><span class="track-num">1</span><svg class="icon">…#icon-play</svg></button>
+ *     <button class="track-play" aria-label="Play track 1, Night Drive"><span class="track-num">1</span><svg class="icon">…#icon-play</svg></button>
  *     <img src="art.jpg" alt="">
  *     <span class="track-main"><span class="track-title">Night Drive</span><span class="track-artist">Lumen Coast</span></span>
  *     <span class="track-album">Harbour Lights</span>
@@ -10205,6 +10362,11 @@ html[data-motion="reduced"] .track > .track-play::before { animation: none; }
 
 @keyframes waveform-shimmer { to { background-position: -200% 0; } }
 .waveform:has(> input:disabled) { opacity: 0.5; }
+/* .waveform.is-static — display only: the input still paints played and
+   unplayed and the head (hide it with --waveform-head: transparent), but
+   it doesn't seek, so no hover preview and no pointer. */
+.waveform.is-static::before { content: none; }
+.waveform.is-static > input[type="range"] { pointer-events: none; }
 
 /* ---- Waveform regions, markers and hover time -------------------------------
  * <div class="waveform" data-hover-time="0:41" style="--hover: .68">
@@ -10485,7 +10647,8 @@ button.waveform-marker:focus-visible { outline: 2px solid var(--focus); outline-
  * Desktop: art and title | transport over the scrubber | extras. Tablet: the
  * scrubber takes its own row and the extras (volume, queue…) hide. Mobile and .is-mini: art, title, like and play/next only. As a
  * direct child of .app it takes the shell's status slot and sticks to the
- * bottom of the screen, clear of the home indicator. */
+ * bottom of the screen, clear of the home indicator; on a phone .app-main
+ * scrolls above it instead. */
 .now-playing {
   --_areas: "art meta like transport extras" "art meta like progress extras";
   --_cols: auto minmax(0, 1fr) auto minmax(0, 2fr) minmax(0, 1fr);
@@ -10556,6 +10719,11 @@ button.waveform-marker:focus-visible { outline: 2px solid var(--focus); outline-
     --_np-secondary: none;
     --_np-extras: none;
   }
+  /* On a phone the docked bar is a big share of the screen, so the shell
+     holds the screen height and .app-main scrolls above the bar: no row
+     ever sits under it. */
+  .app:has(> .now-playing) { block-size: 100dvh; }
+  .app:has(> .now-playing) > .app-main { overflow-y: auto; overscroll-behavior: contain; }
 }
 /* Mini player: the mobile layout at any width, as a card. */
 .now-playing.is-mini {
@@ -11744,13 +11912,18 @@ html:is([data-motion="reduced"],[data-motion="none"]) :is(:is(.is-paused,.is-pau
  * the --z-* scale from there. Docs: docs/components/navigation.md. */
 
 /* --- Closable tabs (#37) ---------------------------------------------------
- *   <div class="tabs is-scroll" role="tablist">
- *     <div class="tab is-active"><button role="tab" aria-selected="true">a.css</button>
- *       <button class="btn-close" tabindex="-1" aria-label="Close a.css"></button></div>
+ *   <div class="tabs is-scroll">
+ *     <div class="tabs" role="tablist" aria-label="Open files">
+ *       <div class="tab is-active"><button role="tab" aria-selected="true">a.css</button>
+ *         <button class="btn-close" tabindex="-1" aria-hidden="true" aria-label="Close a.css"></button></div>
+ *     </div>
  *     <button class="tab-add" aria-label="New tab"></button>
  *   </div>
  * A <button> can't hold a second button, so a closable .tab is a wrapper:
- * the first child is the tab itself, the .btn-close sits beside it. */
+ * the first child is the tab itself, the .btn-close sits beside it. A
+ * tablist may own only tabs, so the add button sits beside an inner
+ * .tabs[role=tablist] that lends its tabs to the outer strip. */
+.tabs > .tabs { display: contents; }
 .tabs.is-scroll {
   /* max-inline-size: a theme may make .tabs inline-flex (a capsule), which
      would otherwise grow with its tabs and never scroll. */
@@ -11761,7 +11934,7 @@ html:is([data-motion="reduced"],[data-motion="none"]) :is(:is(.is-paused,.is-pau
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb, var(--border)) transparent;
 }
-.tabs.is-scroll > * { flex-shrink: 0; }
+.tabs.is-scroll > *, .tabs.is-scroll > .tabs > * { flex-shrink: 0; }
 .tab:has(> .btn-close) {
   display: inline-flex;
   align-items: center;
@@ -14246,7 +14419,7 @@ pre.line-numbers > code:has(> .line-numbers-rows) { position: relative; }
   inline-size: calc(var(--_otp-n) * var(--otp-cell-size, 2.75rem) + (var(--_otp-n) - 1) * var(--_otp-gap));
   max-inline-size: 100%;
   block-size: var(--otp-height, 3.25rem);
-  overflow: hidden;
+  overflow: clip;
   direction: ltr;
 }
 .otp > span {
@@ -15477,6 +15650,10 @@ html[data-surface="signage"] { font-size: var(--signage-root, 1.5vh); overflow: 
   html[data-surface="signage"] { font-size: var(--signage-root-portrait, 1.5vw); }
 }
 html[data-surface="signage"] body { overflow: hidden; }
+/* Every pixel of a screen is content, so page-level theme art stands down:
+   the XL gutter layer here, and any corner emblem a theme fixes over the
+   page (themes hide their own under the same selector). */
+html[data-surface="signage"]::before { content: none; }
 .safe-area {
   box-sizing: border-box;
   padding:
@@ -16590,7 +16767,7 @@ html[data-pointer="touch"] { --_cell-pencil: inline-block; }
 .table tbody tr:nth-child(n):is(:hover, :focus-within):not(.table-empty, .table-more) {
   --_row-tint: var(--row-hover-bg, color-mix(in srgb, var(--accent) 8%, transparent));
 }
-.table tbody tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))):nth-child(n) { --_row-tint: var(--row-active-bg, transparent); }
+.table tbody tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))):not(.is-selected, :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))):nth-child(n) { --_row-tint: var(--row-active-bg, transparent); }
 .table tbody tr:is(.is-selected, :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))):nth-child(n) {
   --_row-tint: var(--row-selected-bg, color-mix(in srgb, var(--accent) 18%, transparent));
 }
@@ -18278,12 +18455,12 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   background: var(--app-bg, transparent);
 }
 
-/* An app that never adds the rail element at all (not even an empty one)
-   has no box for :empty to match, so a theme's --app-columns would
-   still reserve a blank gutter next to .app-main. Collapse the column
+/* An app that never adds the rail element at all (not even an empty one),
+   or marks it `hidden`, has no box for :empty to match, so a theme's
+   --app-columns would still reserve a blank gutter next to .app-main. Collapse the column
    track itself in that case. Browsers without :has() just keep the blank
    gutter — a graceful degrade, not a break. */
-.app:not(:has(> .app-rail)) {
+.app:not(:has(> .app-rail:not([hidden]))) {
   grid-template-areas: var(--app-areas-no-rail, "bar" "main" "status");
   grid-template-columns: var(--app-columns-no-rail, minmax(0, 1fr));
 }
@@ -18299,7 +18476,9 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   min-width: 0;
   padding: var(--app-bar-padding, 0.6rem 1rem);
   background: var(--app-bar-bg, var(--nav-bg, var(--surface)));
-  color: var(--app-bar-fg, inherit);
+  /* Plain text on the bar (a clock, a title) follows the bar, not the page:
+     --app-bar-fg, else --nav-item-fg, which check.py holds to 4.5:1 here. */
+  color: var(--app-bar-fg, var(--nav-item-fg, inherit));
   border-bottom: var(--app-bar-rule-width, 1px) solid var(--app-bar-rule, var(--border));
   border-radius: var(--app-bar-radius, 0);
   min-height: var(--app-bar-height, auto);
@@ -18325,6 +18504,8 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
 .app-rail:empty {
   display: var(--app-rail-empty-display, none);
 }
+/* `hidden` drops the rail in every theme, decorative or not. */
+.app-rail[hidden] { display: none !important; }
 .app-rail {
   grid-area: rail;
   display: var(--app-rail-display, none);
@@ -18477,7 +18658,7 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   .app-rail { display: none !important; }
   .app-status { position: fixed; inset-inline-start: env(viewport-segment-left 1 0); inset-block-end: 0; inline-size: env(viewport-segment-width 1 0); }
   .app-main { padding-block-end: var(--app-fold-status-space, 3rem); }
-  .app:not(:has(> .app-rail)) {
+  .app:not(:has(> .app-rail:not([hidden]))) {
     grid-template-areas: var(--app-fold-book-areas, "bar main");
     grid-template-columns: env(viewport-segment-width 0 0) env(viewport-segment-width 1 0);
   }
@@ -18493,7 +18674,7 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   .app-rail { display: none !important; }
   .app-status { position: fixed; inset-inline-start: 0; inset-block-end: 0; inline-size: 100%; }
   .app-main { padding-block-end: var(--app-fold-status-space, 3rem); }
-  .app:not(:has(> .app-rail)) {
+  .app:not(:has(> .app-rail:not([hidden]))) {
     grid-template-areas: var(--app-fold-tabletop-areas, "bar" "main");
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: env(viewport-segment-height 0 0) env(viewport-segment-height 0 1);
@@ -18526,23 +18707,69 @@ html[data-contrast="high"] { --cursor-default: default !important; --cursor-text
 /* theme source: cyber-goth */
 /* ftl-themes: Cyber-Goth
  * Theme-Name: Cyber-Goth
- * Description: Pitch-black club vinyl gloss with toxic neon green and hot purple sharing the accent role.
+ * Description: Pitch-black club vinyl with a toxic-green EL-wire signal over hot-purple sawtooth structure.
+ *
+ * Fonts (SIL OFL, vendored in assets/fonts/, see NOTICE.md): Audiowide is
+ * the rave-flyer display face for headings and panel/modal titles;
+ * Titillium Web, a squared techno sans in Eurostile's family tree, carries
+ * body, buttons and tabs. Eurostile itself is commercial and not named.
+ * Share Tech Mono, from the same squared techno family, sets readouts
+ * and stat values.
  */
+@font-face {
+  font-family: "Audiowide";
+  src: url("../assets/fonts/Audiowide-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Share Tech Mono";
+  src: url("../assets/fonts/ShareTechMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Titillium Web";
+  src: url("../assets/fonts/TitilliumWeb-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  /* Titillium's own metrics give a 1.52em content area; trim it to the
+     glyphs so tight chips and buttons keep their padding. */
+  ascent-override: 96%;
+  descent-override: 26%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: "Titillium Web";
+  src: url("../assets/fonts/TitilliumWeb-Bold.woff2") format("woff2");
+  font-weight: 600 800;
+  font-style: normal;
+  font-display: swap;
+  ascent-override: 96%;
+  descent-override: 26%;
+  line-gap-override: 0%;
+}
 
 html[data-theme="cyber-goth"] {
   --motion-leave: rain;
   color-scheme: dark;
-  --bg: #050006;
-  --surface: #0d0710;
-  --surface-2: #180f1e;
+  /* Near-neutral black, as the leather capture: purple stays in the
+     rules, teeth, plates and titles, not in the fills. */
+  --bg: #050406;
+  --surface: #0b090c;
+  --surface-2: #141117;
   --border: #7a1fbf;
   --hairline: #2e1240;
   --text: #f0e6ff;
   --muted: #9d7ec2;
-  --accent: #b6ff1a;
+  /* EL-wire green, sampled from cyber-goth-el-wire-closeup.jpg (glow
+     mean #3de65d, core #87faac), pushed to full neon. */
+  --accent: #39ff5a;
+  --accent-text: #39ff5a;  /* labels read this, so an app that sets --accent keeps them legible */
   --accent-2: #d61fff;
   --danger: #d61048;
-  --success: #b6ff1a;
+  --success: #39ff5a;
   --warning: #ffe11a;
   /* Text-weight variants of the state colors, for .status, trends,
      colored badges and danger menu items: same hue, adjusted to 4.5:1 on
@@ -18552,45 +18779,137 @@ html[data-theme="cyber-goth"] {
   --on-danger: #ffffff;
   --on-success: #0a0f00;
   --radius: 0.2rem;
-  --font: "Eurostile", "IBM Plex Sans", sans-serif;
-  --font-mono: Consolas, monospace;
+  --font: "Titillium Web", sans-serif;
+  --font-display: "Audiowide", var(--font);
+  --font-mono: "Share Tech Mono", Consolas, monospace;
+  /* Share Tech Mono ships one weight: keep it unsynthesised. */
+  --readout-weight: 400;
   --flare: #d61fff;
+  /* Text weight of --flare: the same purple lifted to 4.5:1 on the
+     glossiest tinted surfaces (#d61fff is 4.4:1 on #2d1137). */
+  --flare-text: #e04dff;
+  /* Titles (h3, panel, modal and window titles, table heads) are a dim
+     lavender, not hot purple: the captures show one neon, so green stays
+     the brightest, most saturated thing on the page. */
+  --title: #b9a0d8;
 
-  --btn-bg: linear-gradient(180deg, #1c0f26, #0d0710);
-  --btn-fg: var(--accent);
-  --btn-border: var(--flare);
+  /* Vinyl gloss: a lit 1px lip and a specular band feathered out over the
+     top ~60% (max 56px), as on the leather capture's soft sheen, so a tall
+     surface reads glossy, not two-tone. */
+  --gloss: linear-gradient(180deg, rgba(255,255,255,0.1) 0 1px, rgba(255,255,255,0.07) 1px, rgba(255,255,255,0.035) min(30%, 24px), transparent min(60%, 56px));
+  --btn-bg: var(--gloss), linear-gradient(180deg, #19151c, #080609);
+  --btn-fg: var(--accent-text);
+  /* Control outlines take a dimmer purple than the hot --flare: the
+     blacklight ambience, with green carrying the one neon. 3.5:1 on --bg,
+     so input and track boundaries clear the 3:1 non-text floor. */
+  --line: #9030d8;
+  --btn-border: var(--line);
   --btn-shadow: 0 1px 0 rgba(255,255,255,0.05) inset;
   --btn-shadow-hover: 0 0 14px rgba(214, 31, 255, 0.6);
-  --input-bg: #0a0510;
-  --input-border: var(--flare);
+  --input-bg: #09070a;
+  --input-border: var(--line);
   --focus-ring: 0 0 10px var(--accent);
-  --panel-bg: linear-gradient(180deg, #150a1c, #0a0510);
-  --panel-shadow: 0 0 24px rgba(122, 31, 191, 0.25), inset 0 1px 0 rgba(255,255,255,0.04);
-  --table-head-fg: var(--flare);
-  --table-head-rule: var(--flare);
-  --row-selected-bg: rgba(214, 31, 255, 0.18);
-  --nav-bg: #050006;
+  /* Four cone studs riveted into the corners, like a collar's, then the
+     gloss: a lit tip, a violet cone and a dark rim. */
+  /* Studs sit in the outer 14px of the 16px+ padding, clear of the first
+     glyph; a near-black rim lifts each cone off the gloss as metal. */
+  --stud: radial-gradient(circle at 46% 44%, #f3e3ff 0 1.1px, #a65ee0 2.4px, #4a1a70 4.2px, #120616 4.8px, transparent 5.2px);
+  --_studs-top: var(--stud) 2px 2px / 12px 12px no-repeat, var(--stud) calc(100% - 2px) 2px / 12px 12px no-repeat;
+  --_studs-bottom: var(--stud) 2px calc(100% - 2px) / 12px 12px no-repeat, var(--stud) calc(100% - 2px) calc(100% - 2px) / 12px 12px no-repeat;
+  /* Decorative panel and window edges sit dimmer than the control --line,
+     so purple stays ambience and the green neon is the brightest light. */
+  --panel-border: #4a1a70;
+  --modal-border: #4a1a70;
+  /* A pending cell keeps its yellow bar; the wash stays faint so it never
+     muddies a purple-selected row. */
+  --cell-dirty-bg: color-mix(in srgb, var(--warning) 5%, transparent);
+  /* EL-wire halo for green signals at rest. */
+  --_neon-halo: 0 0 3px rgba(57, 255, 90, 0.5), 0 0 14px rgba(57, 255, 90, 0.4);
+  /* A second, diagonal sheen where the leather capture catches the light. */
+  --_vinyl: var(--gloss), linear-gradient(115deg, transparent 62%, rgba(255,255,255,0.022) 70%, transparent 78%), linear-gradient(180deg, #151217, #070608);
+  /* Leather grain: a static feTurbulence tile at ~7%, desktop tiers only. */
+  --_grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E") 0 0 / 160px 160px;
+  --panel-bg: var(--_studs-top), var(--_studs-bottom), var(--_grain), var(--_vinyl);
+  --panel-shadow: 0 0 12px rgba(122, 31, 191, 0.28), inset 0 1px 0 rgba(255,255,255,0.04);
+  --modal-header-fg: var(--title);
+  --table-head-fg: var(--title);
+  --panel-header-fg: var(--title);
+  /* The track is purple structure; the core content-box clip keeps the
+     24/44px hit area around it. */
+  --slider-bg: var(--line);
+  --slider-height: 0.3rem;
+  --slider-thumb-shadow: 0 0 8px var(--accent);
+  --table-head-rule: var(--line);
+  --row-selected-bg: rgba(214, 31, 255, 0.1);
+  --nav-bg: var(--bg);
   --nav-rule: var(--flare);
+  /* Green is never an edge: current-item markers are purple bars; the
+     item's own text carries the green. */
+  --row-active-marker: inset 0.25rem 0 0 var(--line);
+  --nav-rail-marker: var(--line);
+  --tree-selected-marker: inset 0.2rem 0 0 var(--line);
+  --list-featured-border: var(--flare);
+  --list-featured-border-width: 2px;
   --overlay-bg: rgba(3, 0, 5, 0.85);
   --indicator-fg: var(--accent);
   /* The drop column's green tint is kept faint: the purple column title
      sits on it (core's 12% took it to 3.4:1). */
   --kanban-drop-bg: color-mix(in srgb, var(--accent) 4%, var(--surface-2));
+  /* Accent and success are the same green, so series 2 takes the
+     structural purple and series 5 a lavender, keeping every pair apart. */
+  --chart-series-2: var(--flare-text);
+  --chart-series-5: #b98cff;
 
-  --app-bar-bg: #050006;
+  --app-bar-bg: var(--bg);
   --app-bar-rule: var(--flare);
-  --app-status-bg: #050006;
-  --app-status-fg: var(--flare);
+  --app-status-bg: var(--bg);
+  --app-status-fg: var(--muted);
+
+  /* Alerts, menus, popovers and lists share the vinyl gloss. */
+  --alert-bg: var(--gloss), var(--surface-2);
+  --dropdown-bg: var(--gloss), var(--surface-2);
+  --list-bg: var(--gloss), var(--surface);
+  /* Rails and toolbars are vinyl too, on the lighter 3px slab. */
+  --nav-rail-bg: var(--gloss), var(--surface);
+  --nav-rail-rule: var(--border);
+  --toolbar-bg: var(--gloss), var(--surface-2);
+  /* Green fills and text only: bubbles and the bulk bar keep purple edges. */
+  --message-own-border: var(--line);
+  --bulk-bar-border: var(--line);
+  /* Window controls share one hue, lit green on hover. */
+  --modal-header-close-fg: var(--muted);
+  --btn-close-fg-hover: var(--accent-text);
 }
 
 html[data-theme="cyber-goth"] h1,
 html[data-theme="cyber-goth"] h2,
 html[data-theme="cyber-goth"] h3 {
-  color: var(--flare);
+  color: var(--title);
+  font-family: var(--font-display);
+  font-weight: 400;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  text-shadow: 0 0 10px rgba(214, 31, 255, 0.6);
+  text-shadow: 0 0 10px rgba(214, 31, 255, 0.35);
 }
+/* Page titles are pale tube-white under a purple bloom: the big type
+   stops outweighing the green neon, which the captures make the one hue. */
+html[data-theme="cyber-goth"] :is(h1, h2) { color: var(--text); text-shadow: 0 0 12px rgba(214, 31, 255, 0.55); }
+/* A title inside a panel speaks with the panel headers, purple and unbloomed:
+   the bloom softened Audiowide's thin counters at panel-title size. */
+html[data-theme="cyber-goth"] :is(.panel, .card) :is(h2, h3),
+html[data-theme="cyber-goth"] .panel-header :is(h1, h2, h3, h4) { color: var(--title); text-shadow: none; }
+/* Dense column heads: at least 12px, tracked. */
+html[data-theme="cyber-goth"] .table th { font-size: max(0.78em, 0.75rem); }
+html[data-theme="cyber-goth"] .stat-label { font-size: max(0.78em, 0.75rem); }
+html[data-theme="cyber-goth"] .status { font-size: max(0.85em, 0.75rem); }
+/* A disabled pager arrow stays a visible muted glyph, not a near-bg tone. */
+html[data-theme="cyber-goth"] .pagination-item.is-disabled { opacity: 0.6; }
+/* Window and modal titles share the panel headers' purple voice. */
+html[data-theme="cyber-goth"] .modal-header { text-shadow: 0 0 10px rgba(214, 31, 255, 0.35); }
+/* Caption glyphs stay one flat --muted: the bloom tinted only the heavy "_". */
+html[data-theme="cyber-goth"] .modal-header > :is(.btn-min, .btn-max, .btn-close) { text-shadow: none; }
+/* Dense stat labels: a lighter lavender than --muted at 11px. */
+html[data-theme="cyber-goth"] .stat-label { --muted: #b9a0d8; }
 /* Kanban column titles sit on a tinted column: the purple bloom behind
    them dropped the title to 4.4:1, so they keep the colour, not the glow. */
 html[data-theme="cyber-goth"] .kanban-column-title { text-shadow: none; }
@@ -18601,6 +18920,24 @@ html[data-theme="cyber-goth"] .tab {
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+/* Navigation labels speak the same flyer voice; body copy and data cells
+   stay mixed case. The brand is set in the display face. */
+html[data-theme="cyber-goth"] :is(.nav-item, .menubar > li > [role="menuitem"], .master-detail-list .list-item:not(:has(.list-item-title))) {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+html[data-theme="cyber-goth"] .nav-brand {
+  font-family: var(--font-display);
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+/* Toggle buttons share a squeezed segmented row on phones: uppercase, but
+   untracked, so the longest label keeps its padding. */
+html[data-theme="cyber-goth"] .toggle-btn { text-transform: uppercase; }
+/* Titillium's narrow figures let a dense edit table fit the phone, which
+   brings its tiny Qty fields on screen: keep table fields at --tap-min. */
+html[data-theme="cyber-goth"] td > :is(.input, .select) { min-inline-size: var(--tap-min); }
 /* Hover bloom stays purple (structural colour) even on the green primary
    fill — see README "Signature details": the glow always reads as
    structure, never as the signal colour it happens to be lighting up. */
@@ -18611,85 +18948,178 @@ html[data-theme="cyber-goth"] .btn-primary { --btn-fg: #0a0f00; --btn-bg: var(--
  * tron/matrix at a glance). This theme's own identity is a spiked,
  * studded-leather/vinyl silhouette: a jagged sawtooth trim (not a smooth
  * clip-path bevel like alienware's, and not matrix's monospace rain) on
- * every structural bar, plus a harsh two-layer drop-shadow (a hard black
- * offset under the neon bloom) standing in for rivets/studs on buttons and
- * panels. The sawtooth is a decorative pseudo-element strip, never applied
- * to the interactive element's own clip-path, so it never clips focus
- * rings, click targets or label text. */
+ * the structural bars, a hard offset slab under buttons and panels, and
+ * cone studs riveted into panel corners. The sawtooth is a decorative
+ * pseudo-element strip, never the interactive element's own clip-path. */
 html[data-theme="cyber-goth"] .app-bar,
 html[data-theme="cyber-goth"] .nav,
 html[data-theme="cyber-goth"] .panel-header,
 html[data-theme="cyber-goth"] .modal-header {
   position: relative;
 }
+/* Full glowing fang strip: the bars and modal titles only. */
 html[data-theme="cyber-goth"] .app-bar::after,
 html[data-theme="cyber-goth"] .nav::after,
-html[data-theme="cyber-goth"] .panel-header::after,
 html[data-theme="cyber-goth"] .modal-header::after {
   content: "";
   position: absolute;
   inset: auto 0 -9px 0;
   height: 9px;
   background:
-    linear-gradient(-45deg, var(--flare) 6px, transparent 0),
-    linear-gradient(45deg, var(--flare) 6px, transparent 0);
+    linear-gradient(-45deg, var(--_teeth, #7a1fbf) 6px, transparent 0),
+    linear-gradient(45deg, var(--_teeth, #7a1fbf) 6px, transparent 0);
   background-position: left bottom;
   background-repeat: repeat-x;
   background-size: 12px 12px;
-  filter: drop-shadow(0 0 5px rgba(214, 31, 255, 0.7));
+  filter: drop-shadow(0 0 4px rgba(214, 31, 255, 0.45));
   pointer-events: none;
 }
-html[data-theme="cyber-goth"] .panel-header,
+/* A loose nav (not inside the bar) keeps the teeth off the next line. */
+html[data-theme="cyber-goth"] .nav:not(.app-bar .nav) { margin-block-end: 9px; }
 html[data-theme="cyber-goth"] .modal-header {
   overflow: visible;
-  /* The 9px sawtooth hangs into the gap under the header; widen the gap
-     by that much so the teeth never touch the first line of the body. */
   margin-bottom: calc(var(--space-m) + 9px);
 }
-/* Nesting steps the trim down: a panel inside another surface gets a
-   smaller, unlit sawtooth, so stacked levels don't repeat the full glowing
-   fang strip (and it stays inside the inner panel's tighter padding). */
-html[data-theme="cyber-goth"] :is(.panel, .card, .modal, .drawer) .panel > .panel-header::after {
-  inset: auto 0 -5px 0;
-  height: 5px;
-  background-size: 8px 8px;
-  background-image:
-    linear-gradient(-45deg, var(--flare) 4px, transparent 0),
-    linear-gradient(45deg, var(--flare) 4px, transparent 0);
-  filter: none;
-  opacity: 0.6;
+/* Panel headers step the trim down to a smaller, unlit sawtooth, so the
+   bars and modals stay the loudest structure on the page. */
+html[data-theme="cyber-goth"] .panel-header::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -7px 0;
+  height: 7px;
+  background:
+    linear-gradient(-45deg, var(--border) 5px, transparent 0),
+    linear-gradient(45deg, var(--border) 5px, transparent 0);
+  background-position: left bottom;
+  background-repeat: repeat-x;
+  background-size: 10px 10px;
+  pointer-events: none;
+}
+html[data-theme="cyber-goth"] .panel-header {
+  overflow: visible;
+  margin-bottom: calc(var(--space-m) + 7px);
+  /* No solid rule under the teeth, or the two merge into a dashed line. */
+  border-bottom-color: transparent;
+  font-family: var(--font-display);
+  font-weight: 400;
+  --label-transform: uppercase;
+  --label-tracking: 0.05em;
+  /* Audiowide's counters close up under 14px. */
+  font-size: max(0.85em, 0.9rem);
+}
+html[data-theme="cyber-goth"] .modal-header {
+  font-family: var(--font-display);
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
-/* Asymmetric single-corner chrome cut — one sharp diagonal fang on the
-   top-right only, unlike alienware's symmetric two-corner bevel (cut on
-   both opposing corners at matching size). clip-path clips the standard
-   focus outline, so drop-shadow (never clipped) stands in for it instead
-   of ever setting outline: none, same technique as alienware/tron. */
-html[data-theme="cyber-goth"] .btn {
-  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+/* Asymmetric single-corner fang cut on text buttons — one sharp diagonal
+   on the top-right only, unlike alienware's symmetric two-corner bevel.
+   The clip polygon runs on past the box by the slab's 3px, so the offset
+   slab (box-shadow) survives the cut and carries the fang too. It runs
+   12px out on the other sides and along the cut line's own extension, so
+   the green rest halo and purple hover bloom show without filling the cut
+   corner. Round icon buttons and avatars keep core's circle, padding and
+   shadow. */
+html[data-theme="cyber-goth"] :is(.btn:not(.btn-icon), .toggle-btn:not(.toggle-group > *)) {
+  --_fang: 14px;
+  position: relative;
+  /* The 12px-out box minus only the cut triangle (and its 3px slab
+     shadow), reached by a zero-width slit from the top edge, so the halo
+     wraps the corner evenly instead of stopping on a diagonal. */
+  clip-path: polygon(-12px -12px, 100% -12px, 100% 0, calc(100% - var(--_fang)) 0,
+    calc(100% + 3px) calc(var(--_fang) + 3px), calc(100% + 3px) 3px, 100% 0, 100% -12px,
+    calc(100% + 12px) -12px, calc(100% + 12px) calc(100% + 12px), -12px calc(100% + 12px));
+  padding-inline-end: calc(1.5em * var(--density));
+  box-shadow: 3px 3px 0 #3a1550, var(--btn-shadow);
+}
+/* A segmented row is one control: the fang goes on its last segment only,
+   with no slab under the joined segments. */
+html[data-theme="cyber-goth"] .toggle-group:not(.is-stacked) > .toggle-btn:last-child {
+  --_fang: 10px;
+  clip-path: polygon(0 0, calc(100% - var(--_fang)) 0, 100% var(--_fang), 100% 100%, 0 100%);
   padding-inline-end: calc(1.5em * var(--density));
 }
-html[data-theme="cyber-goth"] .btn-sm {
-  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 0 100%);
+html[data-theme="cyber-goth"] .btn-sm:not(.btn-icon) { --_fang: 9px; }
+/* Neon-lit, not neon-coloured: green signals carry a soft EL-wire bloom
+   at rest (the purple hover bloom below still takes over). */
+html[data-theme="cyber-goth"] :is(.btn-primary, .btn-success):not(.btn-icon, :disabled),
+html[data-theme="cyber-goth"] .toggle-btn:not(.toggle-group > *, .is-danger):has(input:checked) {
+  box-shadow: 3px 3px 0 #3a1550, var(--_neon-halo), var(--btn-shadow);
 }
-html[data-theme="cyber-goth"] .btn:focus-visible {
-  filter: drop-shadow(0 0 0 2px var(--focus, var(--accent))) drop-shadow(0 0 8px var(--accent));
+html[data-theme="cyber-goth"] .toggle-group > .toggle-btn:not(.is-danger):has(input:checked) { box-shadow: var(--_neon-halo); z-index: 1; }
+html[data-theme="cyber-goth"] .pagination-item:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) { box-shadow: var(--_neon-halo); }
+html[data-theme="cyber-goth"] .tab:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) { text-shadow: 0 0 6px rgba(57, 255, 90, 0.6); box-shadow: 0 4px 6px -4px rgba(57, 255, 90, 0.8); }
+html[data-theme="cyber-goth"] :is(.nav-brand, .nav-item:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))), .nav-item[aria-current="page"]) { text-shadow: 0 0 8px rgba(57, 255, 90, 0.55); }
+/* Lines glow in their own series hue (desktop tiers; dropped on phones). */
+html[data-theme="cyber-goth"] :is(.sparkline, .chart-series:not(rect, .is-area)) {
+  filter: drop-shadow(0 0 3px color-mix(in srgb, currentColor 75%, transparent));
+}
+html[data-theme="cyber-goth"] .btn:not(.btn-icon):hover {
+  box-shadow: 3px 3px 0 #5a1f80, var(--btn-shadow-hover);
+}
+/* The diagonal stroke: the cut would otherwise just end the border. The
+   pseudo is clipped by the same polygon, so only the strip inside the cut
+   line paints. (is-armed and btn-brand use ::after themselves.) */
+html[data-theme="cyber-goth"] :is(.btn:not(.btn-icon, .is-armed, .btn-brand), .toggle-btn:not(.toggle-group > *), .toggle-group:not(.is-stacked) > .toggle-btn:last-child)::after {
+  content: "";
+  position: absolute;
+  inset-block-start: calc(-1 * var(--btn-border-width, 1px));
+  inset-inline-end: calc(-1 * var(--btn-border-width, 1px));
+  inline-size: var(--_fang);
+  block-size: var(--_fang);
+  background: linear-gradient(to top right, transparent calc(50% - 1.2px), var(--btn-border, var(--border)) 0);
+  pointer-events: none;
+}
+html[data-theme="cyber-goth"] .btn:not(.btn-icon):hover::after {
+  --btn-border: var(--btn-border-hover, var(--accent));
+}
+/* Toggles redraw the diagonal in their own border colour, green when on. */
+html[data-theme="cyber-goth"] .toggle-btn::after { --btn-border: var(--toggle-btn-border, var(--line)); }
+html[data-theme="cyber-goth"] .toggle-btn:is(:hover, :has(input:checked))::after { --btn-border: var(--accent); }
+html[data-theme="cyber-goth"] .toggle-btn.is-danger:has(input:checked)::after { --btn-border: var(--danger); }
+/* Borderless buttons: no lit lip or stray top edge, the fang reads as a
+   notch in the slab only. */
+html[data-theme="cyber-goth"] :is(.btn-tertiary, .btn-ghost) { --btn-shadow: none; }
+/* clip-path would cut the core focus outline; pull the ring inside the
+   polygon, dark on the green/red fills so it shows there too. */
+html[data-theme="cyber-goth"] .btn:not(.btn-icon):is(:focus-visible, [aria-pressed="true"]) { outline-offset: -4px; }
+html[data-theme="cyber-goth"] :is(.toggle-btn:not(.toggle-group > *), .toggle-group:not(.is-stacked) > .toggle-btn:last-child):has(input:focus-visible) { outline-offset: -4px; }
+html[data-theme="cyber-goth"] :is(.btn-primary, .btn-success, .btn-danger):not(.btn-icon):focus-visible {
+  outline-color: var(--bg);
 }
 
-/* Harsh, high-contrast studded look: a hard black offset shadow underneath
-   the existing neon inset highlight — riveted leather, not a soft glow
-   alone. Panels get the same hard black edge plus their bloom. */
-html[data-theme="cyber-goth"] .btn {
-  box-shadow: 3px 3px 0 #000, var(--btn-shadow);
-}
-html[data-theme="cyber-goth"] .btn:hover {
-  box-shadow: 3px 3px 0 #000, var(--btn-shadow-hover);
-}
+/* Panels sit on the same hard slab: a dark-violet offset plate edged in
+   the structural purple, readable against the near-black page. */
 html[data-theme="cyber-goth"] .panel,
 html[data-theme="cyber-goth"] .modal,
 html[data-theme="cyber-goth"] .card {
-  box-shadow: 4px 4px 0 #000, var(--panel-shadow);
+  box-shadow: 4px 4px 0 #2a0e3a, 4px 4px 0 1px #6a2d96, var(--panel-shadow);
 }
+/* Lighter surfaces ride a plain, unedged 3px slab, so they stay below the
+   panels and add no purple line of their own. */
+html[data-theme="cyber-goth"] :is(.alert, .dropdown, .context-menu, .popover, .list, .nav-rail, .toolbar:not(.is-plain)) {
+  box-shadow: 3px 3px 0 #2a0e3a;
+}
+/* The rave-flyer voice reaches the smaller titles too. */
+html[data-theme="cyber-goth"] :is(.popover > strong:first-child, .accordion-trigger, .kanban-card-title) {
+  font-family: var(--font-display);
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.9em;
+}
+/* Info is a notice, not a success: it takes the structural purple. */
+html[data-theme="cyber-goth"] .alert-info { --alert-border: var(--flare); }
+/* Desktop windows are fixed-height: a slimmer title gap leaves their
+   button row room. */
+html[data-theme="cyber-goth"] .desktop-window .modal-header { margin-bottom: calc(var(--space-s) + 9px); }
+/* A full-bleed title bar would sit on the top studs (the window icon took
+   one): titled modals and windows keep only the bottom pair. */
+html[data-theme="cyber-goth"] .modal:has(> .modal-header) { --modal-bg: var(--_studs-bottom), var(--_grain), var(--_vinyl); }
+/* A resizable window's grip owns the bottom-right corner: one stud, bottom-left. */
+html[data-theme="cyber-goth"] .modal.is-resizable:has(> .modal-header) { --modal-bg: var(--stud) 2px calc(100% - 2px) / 12px 12px no-repeat, var(--_grain), var(--_vinyl); }
 
 /* --- v5 tiers --------------------------------------------------------------
  * No rail on any tier. On phone and tablet core gives the bar's nav its own
@@ -18698,6 +19128,23 @@ html[data-theme="cyber-goth"] .card {
  * already edges the whole bar, so the nav's is dropped there. */
 @container style(--tier: mobile) or style(--tier: tablet) {
   html[data-theme="cyber-goth"] .app-bar > .nav::after { display: none; }
+  /* The brand keeps its full name; the nav wraps to its own line. */
+  html[data-theme="cyber-goth"] .app-bar > .nav-brand { flex: 0 0 auto; min-width: max-content; }
+  /* Untracked there, so the bar's nav keeps to one line. */
+  html[data-theme="cyber-goth"] .app-bar :is(.nav-item, .menubar > li > [role="menuitem"]) { letter-spacing: 0; }
+  /* The teeth's blurred glow is a per-frame filter cost on phones; they
+     stay hot purple but unblurred there. */
+  html[data-theme="cyber-goth"] :is(.app-bar, .nav, .modal-header)::after { --_teeth: var(--line); filter: none; }
+  /* Scroll paint budget: no blurred halo, grain, studs, diagonal sheen,
+     plate edge or heading bloom; one plain plate. */
+  html[data-theme="cyber-goth"] :is(.panel, .card, .modal, .modal.is-resizable:has(> .modal-header)) {
+    --_vinyl: var(--gloss), linear-gradient(180deg, #151217, #070608);
+    --panel-bg: var(--_vinyl);
+    --modal-bg: var(--_vinyl);
+    box-shadow: 4px 4px 0 #2a0e3a;
+  }
+  html[data-theme="cyber-goth"] :is(h1, h2, h3, .modal-header) { text-shadow: none; }
+  html[data-theme="cyber-goth"] :is(.sparkline, .chart-series) { filter: none; }
 }
 
 /* XL gutters (v5, PLAN.md §3): the club wall beside the console. A
@@ -18709,6 +19156,13 @@ html[data-theme="cyber-goth"] {
     linear-gradient(-45deg, #2a0e3a 6px, transparent 0) calc(100% - 7rem) 0 / 12px 12px repeat-y,
     repeating-linear-gradient(45deg, transparent 0 22px, #1c0a26 22px 24px),
     repeating-linear-gradient(-45deg, transparent 0 22px, #1c0a26 22px 24px);
+}
+
+/* Vertical slider: core's inline padding lands top/bottom in its vertical
+   writing mode, so the content box stays full width. Paint the track as a
+   centred strip instead, keeping the full-width hit area. */
+html[data-theme="cyber-goth"] .slider.is-vertical {
+  --slider-bg: linear-gradient(to right, transparent calc(50% - 0.15rem), var(--line) 0 calc(50% + 0.15rem), transparent 0);
 }
 
 }

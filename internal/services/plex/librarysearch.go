@@ -28,7 +28,6 @@ type LibraryFilterOptions struct {
 	Unwatched      bool
 	Moods          []string // music only
 	Styles         []string // music only
-	Limit          int
 }
 
 // SearchLibraryItems is GetTracksWithAdvancedFilters generalized across
@@ -73,20 +72,7 @@ func (c *Client) SearchLibraryItems(libraryID string, itemType int, opts Library
 	if len(filters) > 0 {
 		path += "&" + strings.Join(filters, "&")
 	}
-	limit := opts.Limit
-	if limit <= 0 {
-		limit = 1000
-	}
-
-	// getWithHeaders, not get(): do()'s default X-Plex-Container-Size
-	// header (50) wins over a query param of the same name, so appending
-	// it to path here used to silently cap every result set at 50
-	// regardless of the requested limit.
-	mc, err := c.getWithHeaders(path, map[string]string{"X-Plex-Container-Size": strconv.Itoa(limit)})
-	if err != nil {
-		return nil, err
-	}
-	items, err := decodeTracks(mc.MediaContainer.Metadata)
+	items, err := c.getTrackPages(path)
 	if err != nil {
 		return nil, err
 	}

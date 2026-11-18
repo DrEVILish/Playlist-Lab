@@ -109,6 +109,7 @@ func (h *SettingsHandler) page(w http.ResponseWriter, r *http.Request) {
 	textScale, _ := db.GetTextScale(h.DB, user.ID)
 	theme, _ := db.GetTheme(h.DB, user.ID)
 	themeVariant, _ := db.GetThemeVariant(h.DB, user.ID)
+	theme, themeVariant = themeSelection(theme, themeVariant)
 	themeTints, _ := db.GetThemeTints(h.DB, user.ID)
 
 	h.Tmpl.RenderPage(w, r, "settings", map[string]any{
@@ -285,32 +286,33 @@ func (h *SettingsHandler) saveAppearance(w http.ResponseWriter, r *http.Request)
 	// (the picker lists each theme's variants beneath it). Picking a variant
 	// of a theme that has a tint clears that theme's custom tint, so the
 	// preset actually shows (CONTRACT.md "Theme tint", rule 3).
-	if r.Form.Has("theme") {
+	if r.Form.Has("theme") && err == nil {
 		theme, variant, _ := strings.Cut(r.FormValue("theme"), "/")
-		if !isValidTheme(theme) {
-			theme, variant = "", ""
-		}
-		if !isValidVariant(theme, variant) {
-			variant = ""
-		}
-		err = db.SaveTheme(h.DB, user.ID, theme)
+		theme, variant = themeSelection(theme, variant)
+		t := findTheme(theme)
+		err = db.SaveThemeSelection(h.DB, user.ID, theme, variant, t != nil && t.Tint != nil && variant != "")
 		if err == nil {
-			err = db.SaveThemeVariant(h.DB, user.ID, variant)
-		}
-		if t := findTheme(theme); err == nil && variant != "" && t != nil && t.Tint != nil {
-			err = db.SaveThemeTint(h.DB, user.ID, theme, "")
+			saved := theme
+			if variant != "" {
+				saved += "/" + variant
+			}
+			w.Header().Set("X-Playlist-Lab-Theme", saved)
 		}
 	}
-	// "tint" is the current theme's custom colour (CONTRACT.md "Theme
-	// tint": persisted per theme slug). Ignored for a theme without one.
-	if r.Form.Has("tint") {
-		theme, _ := db.GetTheme(h.DB, user.ID)
+	if r.Form.Has("tint") && err == nil {
+		theme := r.FormValue("tintTheme")
+		if !r.Form.Has("tintTheme") {
+			theme, err = db.GetTheme(h.DB, user.ID)
+		}
 		if theme == "" {
 			theme = defaultTheme
 		}
 		tint := r.FormValue("tint")
-		if t := findTheme(theme); t != nil && t.Tint != nil && hexColor.MatchString(tint) {
+		if t := findTheme(theme); err == nil && t != nil && t.Tint != nil && hexColor.MatchString(tint) {
 			err = db.SaveThemeTint(h.DB, user.ID, theme, tint)
+			if err == nil {
+				w.Header().Set("X-Playlist-Lab-Tint", theme+"/"+tint)
+			}
 		}
 	}
 	h.notifySettingsSave(user.ID, "Save appearance settings", err)

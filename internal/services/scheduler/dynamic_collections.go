@@ -25,52 +25,37 @@ import (
 	"github.com/drevilish/playlist-lab/internal/services/plex"
 )
 
-// fetchFacetKeys pulls the distinct values of one library facet, the same
-// primitive Collections' own Smart rule fields already filter against
-// (scheduler.go's resolveCollectionTargets) - a Dynamic Collection set's
-// facet_type is one of the exact same field names, so generation and
-// matching agree on what each key means. "decade" has no facet endpoint of
-// its own on a real Plex server; it's derived here from GetLibraryYears.
+// Decades are derived from the Plex year facet.
 func fetchFacetKeys(client *plex.Client, dyn *db.DynamicCollection) ([]string, error) {
-	switch dyn.FacetType {
-	case "genre":
-		return client.GetLibraryGenres(dyn.LibrarySectionID), nil
-	case "mood":
-		return client.GetLibraryMoods(dyn.LibrarySectionID), nil
-	case "style":
-		return client.GetLibraryStyles(dyn.LibrarySectionID), nil
-	case "studio":
-		return client.GetLibraryStudios(dyn.LibrarySectionID), nil
+	facet := dyn.FacetType
+	switch facet {
+	case "genre", "mood", "style", "studio", "actor", "director", "writer", "year":
 	case "content_rating":
-		return client.GetLibraryContentRatings(dyn.LibrarySectionID), nil
-	case "actor":
-		return client.GetLibraryActors(dyn.LibrarySectionID), nil
-	case "director":
-		return client.GetLibraryDirectors(dyn.LibrarySectionID), nil
-	case "writer":
-		return client.GetLibraryWriters(dyn.LibrarySectionID), nil
-	case "year":
-		return client.GetLibraryYears(dyn.LibrarySectionID), nil
+		facet = "contentRating"
 	case "decade":
-		years := client.GetLibraryYears(dyn.LibrarySectionID)
-		seen := map[string]bool{}
-		var decades []string
-		for _, y := range years {
-			n, err := strconv.Atoi(y)
-			if err != nil {
-				continue
-			}
-			d := strconv.Itoa(n - (n % 10))
-			if !seen[d] {
-				seen[d] = true
-				decades = append(decades, d)
-			}
-		}
-		sort.Strings(decades)
-		return decades, nil
+		facet = "year"
 	default:
-		return nil, fmt.Errorf("unsupported dynamic collection type %q", dyn.FacetType)
+		return nil, fmt.Errorf("unsupported dynamic collection type %q", facet)
 	}
+	keys, err := client.GetLibraryFacet(dyn.LibrarySectionID, facet)
+	if err != nil || dyn.FacetType != "decade" {
+		return keys, err
+	}
+	seen := map[string]bool{}
+	var decades []string
+	for _, y := range keys {
+		n, err := strconv.Atoi(y)
+		if err != nil {
+			continue
+		}
+		d := strconv.Itoa(n - (n % 10))
+		if !seen[d] {
+			seen[d] = true
+			decades = append(decades, d)
+		}
+	}
+	sort.Strings(decades)
+	return decades, nil
 }
 
 // filterKeys applies a Dynamic Collection set's include/exclude lists

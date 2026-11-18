@@ -107,8 +107,8 @@ func fetchGenresAndMoods(client *plex.Client, libraryID string) ([]string, []str
 		var res result
 		var wg sync.WaitGroup
 		wg.Add(2)
-		go func() { defer wg.Done(); res.genres = client.GetLibraryGenres(libraryID) }()
-		go func() { defer wg.Done(); res.moods = client.GetLibraryMoods(libraryID) }()
+		go func() { defer wg.Done(); res.genres, _ = client.GetLibraryFacet(libraryID, "genre") }()
+		go func() { defer wg.Done(); res.moods, _ = client.GetLibraryFacet(libraryID, "mood") }()
 		wg.Wait()
 		ch <- res
 	}()
@@ -472,7 +472,7 @@ func (h *MixesHandler) run(userID int64, userServer *db.UserServer, mixType stri
 	if err != nil {
 		return err
 	}
-	if _, err := db.CreatePlaylistRow(h.DB, userID, playlist.RatingKey, playlistName, "mix", ""); err != nil {
+	if _, err := db.CreatePlaylistRowForServer(h.DB, userID, userServer.ServerClientID, playlist.RatingKey, playlistName, "mix", ""); err != nil {
 		slog.Error("failed to record mix playlist", "error", err)
 	}
 
@@ -530,7 +530,7 @@ func (h *MixesHandler) runAll(userID int64, userServer *db.UserServer, notificat
 			slog.Error("failed to create playlist in generate-all", "mix", m.name, "error", err)
 			continue
 		}
-		if _, err := db.CreatePlaylistRow(h.DB, userID, playlist.RatingKey, m.name, "mix", ""); err != nil {
+		if _, err := db.CreatePlaylistRowForServer(h.DB, userID, userServer.ServerClientID, playlist.RatingKey, m.name, "mix", ""); err != nil {
 			slog.Error("failed to record mix playlist", "error", err)
 		}
 		created++

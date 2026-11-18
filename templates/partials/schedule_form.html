@@ -11,7 +11,7 @@
     </div>
 
     <form {{if .Schedule}}hx-put="/schedules/{{.Schedule.ID}}"{{else}}hx-post="/schedules"{{end}} hx-swap="none"
-      hx-on::after-request="if(event.detail.successful) closeTopModal()">
+      hx-on::after:request="if(event.detail.ctx.response.status < 400) closeTopModal()">
       <div class="stack advanced-mix-content">
         {{if .CollectionID}}<input type="hidden" name="collectionId" value="{{.CollectionID}}">
         {{else}}<input type="hidden" name="playlistId" value="{{.PlaylistID}}">{{end}}
@@ -76,8 +76,8 @@
 
       <div class="modal-footer">
         {{if .Schedule}}
-        <button type="button" class="btn btn-secondary btn-sm" hx-post="/schedules/{{.Schedule.ID}}/run" hx-swap="none" onclick="closeTopModal()">Run Now</button>
-        <button type="button" class="btn btn-danger btn-sm" hx-delete="/schedules/{{.Schedule.ID}}" hx-swap="none" hx-confirm="Delete this schedule?">Delete Schedule</button>
+        <button type="button" class="btn btn-secondary btn-sm" hx-post="/schedules/{{.Schedule.ID}}/run" hx-swap="none" hx-on::after:request="if(event.detail.ctx.response.status < 400) closeTopModal()">Run Now</button>
+        <button type="button" class="btn btn-danger btn-sm" hx-delete="/schedules/{{.Schedule.ID}}" hx-swap="none" hx-confirm="Delete this schedule?" hx-on::after:request="if(event.detail.ctx.response.status < 400) closeTopModal()">Delete Schedule</button>
         {{end}}
         <button type="button" class="btn btn-secondary btn-sm" onclick="closeTopModal()">Cancel</button>
         <button type="submit" class="btn btn-primary btn-sm">{{if .Schedule}}Save Changes{{else}}Create Schedule{{end}}</button>

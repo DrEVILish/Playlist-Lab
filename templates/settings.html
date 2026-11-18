@@ -235,35 +235,27 @@
           <p class="field-hint">Applied instantly, and remembered on this account across every device.</p>
         </form>
 
-        <!-- ftl-themes picker (CONTRACT.md "Loading a theme", "Palette
-             variants", "Theme tint"): each theme's variants are listed beneath
-             it (value "slug/variant"). Changing it swaps #theme-stylesheet,
-             data-theme and data-variant together for an instant preview, and
-             the hx-post underneath persists it. "Default" stores "" and
-             renders the app's default theme. Each option carries its tint
-             token/default/label and this user's saved colour for that theme,
-             so the tint field below can follow the choice without a reload. -->
         <form class="field">
           <label class="label" for="theme-select">Theme <span id="theme-status" aria-live="polite"></span></label>
           <select id="theme-select" name="theme" class="select is-auto"
-            onchange="applyThemeChoice(this.selectedOptions[0])"
             hx-post="/settings/appearance" hx-trigger="change" hx-include="closest form" hx-target="#theme-status" hx-indicator="#theme-status" hx-swap="innerHTML">
             <option value="" data-slug="{{.DefaultTheme}}" {{if not .ThemeChoice}}selected{{end}}>Default ({{.DefaultThemeLabel}})</option>
             {{range .Themes}}
             {{$t := .}}
             <option value="{{.Slug}}" data-slug="{{.Slug}}" title="{{.Description}}"{{with .Tint}} data-tint-token="{{.Token}}" data-tint-default="{{.Default}}" data-tint-label="{{.Label}}"{{end}}{{with index $.Tints .Slug}} data-tint="{{.}}"{{end}} {{if and (eq $.ThemeChoice .Slug) (not $.VariantChoice)}}selected{{end}}>{{.Label}}</option>
             {{range .Variants}}
-            <option value="{{$t.Slug}}/{{.ID}}" data-slug="{{$t.Slug}}" data-variant="{{.ID}}"{{with $t.Tint}} data-tint-token="{{.Token}}" data-tint-default="{{.Default}}" data-tint-label="{{.Label}}"{{end}} {{if and (eq $.ThemeChoice $t.Slug) (eq $.VariantChoice .ID)}}selected{{end}}>&nbsp;&nbsp;&nbsp;{{$t.Label}}: {{.Label}}</option>
+            <option value="{{$t.Slug}}/{{.ID}}" data-slug="{{$t.Slug}}" data-variant="{{.ID}}"{{with $t.Tint}} data-tint-token="{{.Token}}" data-tint-default="{{.Default}}" data-tint-label="{{.Label}}"{{end}}{{with index $.Tints $t.Slug}} data-tint="{{.}}"{{end}} {{if and (eq $.ThemeChoice $t.Slug) (eq $.VariantChoice .ID)}}selected{{end}}>&nbsp;&nbsp;&nbsp;{{$t.Label}}: {{.Label}}</option>
             {{end}}
             {{end}}
           </select>
-          <p class="field-hint">Restyles the whole app - from <a href="https://github.com/DrEVILish/ftl-themes" target="_blank" rel="noopener">ftl-themes</a>, applied instantly and remembered on this account across every device.</p>
+          <p class="field-hint">Restyles the whole app - from <a href="https://github.com/DrEVILish/ftl-themes" target="_blank" rel="noopener">ftl-themes</a>, saved to this account and applied across devices.</p>
         </form>
 
         <!-- Theme tint: only for a theme whose manifest entry has "tint". The
              colour is saved per theme; dragging previews it live (the one
              optional script the contract allows). -->
-        <form class="field" id="theme-tint-field" style="display:none">
+        <form class="field" id="theme-tint-field" hidden>
+          <input type="hidden" id="theme-tint-slug" name="tintTheme">
           <label class="label" for="theme-tint"><span id="theme-tint-label">Colour</span> <span id="theme-tint-status" aria-live="polite"></span></label>
           <input type="color" id="theme-tint" name="tint" class="input is-auto" value="#000000"
             oninput="document.documentElement.style.setProperty(this.dataset.token, this.value)"
@@ -271,35 +263,94 @@
           <p class="field-hint">Picking a named preset above resets this to the preset's colour.</p>
         </form>
         <script>
-          function applyThemeChoice(opt) {
-            var html = document.documentElement;
-            var slug = opt.dataset.slug, variant = opt.dataset.variant || '';
-            html.setAttribute('data-theme', slug);
-            if (variant) html.setAttribute('data-variant', variant); else html.removeAttribute('data-variant');
-            document.getElementById('theme-stylesheet').href = '/static/themes/' + slug + '.css?v={{.ThemeVersion}}';
-            // Drop any previous theme's tint token, then apply this theme's
-            // saved colour - unless a preset variant was picked, which clears
-            // the custom colour (the server does the same on save).
-            var field = document.getElementById('theme-tint-field');
-            var input = document.getElementById('theme-tint');
-            if (input.dataset.token) html.style.removeProperty(input.dataset.token);
-            if (!opt.dataset.tintToken) { field.style.display = 'none'; input.dataset.token = ''; return; }
-            var custom = variant ? '' : (opt.dataset.tint || '');
-            if (variant) opt.parentElement.querySelectorAll('option[data-slug="' + slug + '"]').forEach(function (o) { delete o.dataset.tint; });
-            input.dataset.token = opt.dataset.tintToken;
-            input.value = custom || opt.dataset.tintDefault;
-            if (custom) html.style.setProperty(input.dataset.token, custom);
-            document.getElementById('theme-tint-label').textContent = opt.dataset.tintLabel;
-            field.style.display = '';
-          }
-          // Remember a just-saved custom colour on the theme's options, so
-          // switching away and back in this page restores it.
-          document.getElementById('theme-tint').addEventListener('change', function () {
-            var sel = document.getElementById('theme-select');
-            var slug = sel.selectedOptions[0].dataset.slug;
-            sel.querySelectorAll('option[data-slug="' + slug + '"]:not([data-variant])').forEach(function (o) { o.dataset.tint = this.value; }, this);
-          });
-          applyThemeChoice(document.getElementById('theme-select').selectedOptions[0]);
+          (function () {
+            const root = document.documentElement;
+            const select = document.getElementById('theme-select');
+            const field = document.getElementById('theme-tint-field');
+            const tint = document.getElementById('theme-tint');
+            const tintSlug = document.getElementById('theme-tint-slug');
+            const tintLabel = document.getElementById('theme-tint-label');
+            let stylesheet = document.getElementById('theme-stylesheet');
+            let saved = select.selectedOptions[0];
+            let revision = 0;
+
+            function setTint(option) {
+              if (tint.dataset.token) root.style.removeProperty(tint.dataset.token);
+              const token = option.dataset.tintToken;
+              field.hidden = !token;
+              tint.dataset.token = token || '';
+              tintSlug.value = token ? option.dataset.slug : '';
+              if (!token) return;
+              const custom = option.dataset.tint;
+              const preset = getComputedStyle(root).getPropertyValue(token).trim();
+              tint.value = custom || (/^#[0-9a-f]{6}$/i.test(preset) ? preset : option.dataset.tintDefault);
+              tintLabel.textContent = option.dataset.tintLabel;
+              if (custom) root.style.setProperty(token, custom);
+            }
+
+            function applyPalette(option) {
+              root.dataset.theme = option.dataset.slug;
+              if (option.dataset.variant) root.dataset.variant = option.dataset.variant;
+              else delete root.dataset.variant;
+              setTint(option);
+            }
+
+            function applyTheme(option) {
+              const change = ++revision;
+              const href = '/static/themes/' + option.dataset.slug + '.css?v={{.ThemeVersion}}';
+              if (stylesheet.getAttribute('href') === href) {
+                applyPalette(option);
+                return;
+              }
+              const incoming = document.createElement('link');
+              incoming.rel = 'stylesheet';
+              incoming.media = 'not all';
+              incoming.href = href;
+              incoming.onload = function () {
+                if (change !== revision) { incoming.remove(); return; }
+                incoming.media = 'all';
+                incoming.id = stylesheet.id;
+                stylesheet.remove();
+                stylesheet = incoming;
+                applyPalette(option);
+              };
+              incoming.onerror = function () {
+                incoming.remove();
+                if (change === revision) {
+                  document.getElementById('theme-status').textContent = 'Saved. Reload to apply this theme.';
+                }
+              };
+              stylesheet.after(incoming);
+            }
+
+            select.addEventListener('htmx:after:request', function (event) {
+              const value = event.detail.ctx.response.headers.get('X-Playlist-Lab-Theme');
+              const option = Array.from(select.options).find(option => option.value === value);
+              if (!option) { select.value = saved.value; return; }
+              if (option.dataset.variant) {
+                for (const other of select.options) {
+                  if (other.dataset.slug === option.dataset.slug) delete other.dataset.tint;
+                }
+              }
+              saved = option;
+              select.value = option.value;
+              applyTheme(option);
+            });
+            select.addEventListener('htmx:error', function () { select.value = saved.value; });
+            tint.addEventListener('htmx:after:request', function (event) {
+              const result = event.detail.ctx.response.headers.get('X-Playlist-Lab-Tint');
+              if (result) {
+                const [slug, color] = result.split('/');
+                for (const option of select.options) {
+                  if (option.dataset.slug === slug) option.dataset.tint = color;
+                }
+              }
+              if (saved.dataset.slug === root.dataset.theme) setTint(saved);
+            });
+            tint.addEventListener('htmx:error', function () { setTint(saved); });
+
+            setTint(saved);
+          })();
         </script>
       </section>
 

@@ -61,9 +61,7 @@ func GetTop250(ctx context.Context) ([]medialist.Item, error) {
 // against the collection's own library type happens by GuidKey alone.
 func scrapeItemList(ctx context.Context, label, url string) ([]medialist.Item, error) {
 	var raw string
-	err := browser.Scrape(ctx, label, browser.DefaultTimeout,
-		browser.AcceptLanguage("en-US,en;q=0.9"),
-		chromedp.Navigate(url),
+	err := browser.Scrape(ctx, label, browser.DefaultTimeout, url, []string{"imdb.com", "media-amazon.com", "awswaf.com"},
 		chromedp.Sleep(3*time.Second),
 		chromedp.Evaluate(extractJS, &raw),
 	)

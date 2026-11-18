@@ -32,8 +32,12 @@ type PlaylistTarget struct {
 // missing_tracks row is left alone so Retry/Rematch can still be used.
 func InsertMatchedTrackIntoPlaylist(sqlDB *sql.DB, client *plex.Client, target PlaylistTarget, track db.MissingTrack, plexRatingKey string) bool {
 	playlist, err := db.GetPlaylistByID(sqlDB, track.PlaylistID)
-	if err != nil || playlist == nil {
+	if err != nil || playlist == nil || playlist.UserID != track.UserID {
 		slog.Warn("[Matching] Playlist not found for missing track", "playlistId", track.PlaylistID)
+		return false
+	}
+	if playlist.ServerClientID.Valid && playlist.ServerClientID.String != target.ServerClientID {
+		slog.Warn("[Matching] Missing track belongs to a playlist on a different Plex server", "playlistId", track.PlaylistID)
 		return false
 	}
 

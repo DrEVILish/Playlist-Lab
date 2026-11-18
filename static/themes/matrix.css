@@ -446,6 +446,18 @@ a { color: var(--link, var(--accent)); }
   text-overflow: ellipsis;
 }
 .field-row > .field-hint { margin-block-start: 0; flex: none; }
+/* .field-row.is-wrap — the label is the setting's only name, so it wraps
+   instead of truncating, and a sentence-length .field-hint sits under it
+   inside the row; the control stays at the end, centred on both. */
+.field-row.is-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  row-gap: 0.15em;
+}
+.field-row.is-wrap > .label { grid-column: 1; white-space: normal; overflow: visible; }
+.field-row.is-wrap > .field-hint { grid-column: 1; }
+.field-row.is-wrap > :not(.label, .field-hint) { grid-column: 2; grid-row: 1 / span 2; }
 
 /* .input-group — an input with joined addons: a unit label, a static
    prefix, or an attached button. Children share one border; only the
@@ -500,6 +512,9 @@ a { color: var(--link, var(--accent)); }
   color: var(--check-fg, var(--text));
 }
 .check:has(:disabled) { opacity: 0.5; cursor: var(--cursor-not-allowed, not-allowed); }
+/* A hidden name (a table's select column) is positioned against its own
+   label, so it can't escape a scrolling table and widen the page. */
+.check:has(> .visually-hidden) { position: relative; }
 
 /* .radio-group — a <fieldset> of .check rows with a <legend>. */
 .radio-group {
@@ -576,7 +591,8 @@ a { color: var(--link, var(--accent)); }
    (the attribute is also what assistive tech reads). The button sizes to
    its content: the track becomes a normal flex child and an optional
    .switch-label sits beside it. */
-button.switch {
+button.switch,
+label.switch:has(> .switch-label) {
   appearance: none;
   width: auto;
   height: auto;
@@ -589,7 +605,8 @@ button.switch {
   font: inherit;
   text-align: start;
 }
-button.switch .switch-track {
+button.switch .switch-track,
+label.switch:has(> .switch-label) > .switch-track {
   position: relative;
   inset: auto;
   flex: none;
@@ -701,7 +718,7 @@ button.switch:disabled { opacity: 0.5; cursor: var(--cursor-not-allowed, not-all
   align-items: center;
   gap: 0.5rem;
   margin: calc(-1 * var(--surface-pad, 1.5rem)) calc(-1 * var(--surface-pad, 1.5rem)) var(--space-m);
-  padding: var(--modal-header-pad, var(--space-xs) var(--space-m));
+  padding: var(--modal-header-pad, var(--space-xs) var(--surface-pad, var(--space-m)));
   background: var(--modal-header-bg, transparent);
   color: var(--modal-header-fg, inherit);
   font-weight: 600;
@@ -756,6 +773,9 @@ dialog.modal:modal {
   position: fixed;
   inset: 0;
   margin: auto;
+}
+.modal[popover]:popover-open:not(:where(.is-maximized, .window-max:checked + .modal)),
+dialog.modal:modal:not(:where(.is-maximized, .window-max:checked + .modal)) {
   height: fit-content;
 }
 
@@ -950,6 +970,7 @@ dialog.modal:modal {
   color: var(--dropdown-item-fg, var(--text));
   text-align: start;
 }
+.dropdown-item.is-danger { color: var(--danger-text, var(--danger)); }
 .dropdown-item:focus-visible {
   background: var(--dropdown-item-bg-hover, var(--accent));
   color: var(--dropdown-item-fg-hover, var(--on-accent));
@@ -1094,6 +1115,7 @@ dialog.modal:modal {
  * every theme here treats it as a signature element. */
 .transport {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
   padding: var(--transport-padding, 0.6rem 0.9rem);
@@ -1503,7 +1525,7 @@ html.is-dragging-value, html.is-dragging-value * { cursor: var(--cursor-resize-y
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 0.2rem 0.35rem;
+  padding: 0.35rem 0.4rem;
   background: var(--scribble-bg, var(--surface-2));
   color: var(--scribble-fg, var(--text));
   border-top: var(--scribble-bar-width, 0.3rem) solid var(--strip-color, var(--accent));
@@ -1602,7 +1624,7 @@ html.is-dragging-value, html.is-dragging-value * { cursor: var(--cursor-resize-y
   background: var(--row-selected-bg, rgba(128, 128, 128, 0.25));
   color: var(--row-selected-fg, inherit);
 }
-.table tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) td {
+.table tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))):not(.is-selected, :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))) td {
   background: var(--row-active-bg, transparent);
 }
 /* The marker belongs to the row, so only its leading cell draws it — on
@@ -1944,7 +1966,10 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
 .status-ok { --state-fg: var(--success-text, var(--success)); color: var(--state-fg); }
 .status-warn { --state-fg: var(--warning-text, var(--warning)); color: var(--state-fg); }
 .status-error { --state-fg: var(--danger-text, var(--danger)); color: var(--state-fg); }
+/* .status-idle is neutral everywhere (offline, stopped, not running);
+   .status-ready is armed and waiting, the green of a recorder on standby. */
 .status-idle { --state-fg: var(--muted); color: var(--state-fg); }
+.status-ready { --state-fg: var(--success-text, var(--success)); color: var(--state-fg); }
 /* .status-rec: recording or on air. A bold danger label whose dot has a
    halo; the dot pulses when motion is allowed. */
 .status-rec { --state-fg: var(--danger-text, var(--danger)); color: var(--state-fg); font-weight: 700; }
@@ -2066,8 +2091,7 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
 :is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a)) {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  gap: 0.6em;
   width: 100%;
   padding: 0.45em 0.7em;
   border-radius: var(--context-menu-radius, var(--radius));
@@ -2075,6 +2099,10 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
   text-align: start;
 }
 :is(.context-menu-item, .context-menu li > :is(button, a)).is-danger { color: var(--danger-text, var(--danger)); }
+/* A leading icon stays beside its label; a trailing shortcut (<kbd>) or a
+   submenu arrow is pushed to the end. */
+:is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a)) > :is(kbd, :last-child:not(:first-child, .icon)),
+:is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a))[aria-haspopup] > :last-child:not(.icon) { margin-inline-start: auto; padding-inline-start: 0.4em; }
 :is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a)):focus-visible {
   background: var(--context-menu-item-bg-hover, var(--dropdown-item-bg-hover, var(--accent)));
   color: var(--context-menu-item-fg-hover, var(--dropdown-item-fg-hover, var(--on-accent)));
@@ -2157,6 +2185,8 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
   stroke-width: var(--icon-stroke-width, 2);
   stroke-linecap: round;
   stroke-linejoin: round;
+  /* The reset makes every svg a block; an icon sits in the line with its text. */
+  display: inline-block;
   vertical-align: -0.2em;
   flex-shrink: 0;
 }
@@ -2178,7 +2208,6 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
 /* .badge-button — a clickable badge (filter chip). */
 .badge-button {
   border: none;
-  font: inherit;
   transition: background 0.15s ease, color 0.15s ease;
 }
 .badge-button:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) {
@@ -2516,7 +2545,7 @@ html[data-motion="reduced"] .carousel { scroll-behavior: auto; }
   display: flex;
   flex-wrap: wrap;
   gap: 0.15rem 0.9rem;
-  padding-block: 0.5rem;
+  padding: 0.5rem var(--space-2xs);
   background: var(--scrollspy-nav-bg, var(--surface));
   border-block-end: 1px solid var(--scrollspy-nav-rule, var(--hairline));
 }
@@ -2634,6 +2663,8 @@ html[data-motion="reduced"] .scrollspy-body { scroll-behavior: auto; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Task buttons take the squeeze before the tray does. */
+.taskbar > .taskbar-task { flex-shrink: 1000; }
 .taskbar-task:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) {
   background: var(--taskbar-task-bg-active, var(--taskbar-task-bg, transparent));
   border-color: var(--taskbar-task-border-active, var(--taskbar-task-border, transparent));
@@ -2645,7 +2676,10 @@ html[data-motion="reduced"] .scrollspy-body { scroll-behavior: auto; }
   display: inline-flex;
   align-items: center;
   gap: 0.5em;
-  flex: none;
+  /* The tray gives way last on a narrow bar (see .taskbar > .taskbar-task):
+     its readouts then truncate rather than push the bar past its edge. */
+  flex: 0 1 auto;
+  min-inline-size: 0;
   margin-inline-start: auto;
   padding: 0.3em 0.8em;
   border: var(--taskbar-border-width, 1px) solid var(--taskbar-tray-border, transparent);
@@ -2653,6 +2687,14 @@ html[data-motion="reduced"] .scrollspy-body { scroll-behavior: auto; }
   background: var(--taskbar-tray-bg, transparent);
   color: var(--taskbar-tray-fg, inherit);
   font-variant-numeric: tabular-nums;
+}
+.taskbar-tray > * { flex: none; }
+.taskbar-tray > :is(span, time):not(.lamp) {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* .breadcrumbs */
@@ -3225,6 +3267,14 @@ pre code { padding: 0; background: none; border-radius: 0; }
   --btn-border-hover: var(--app-bar-text);
 }
 .app-bar :is(.btn-tertiary, .btn-ghost) { --btn-border: transparent; }
+/* A GO button on the bar: core's GO is an outlined accent label, which on a
+   bar painted in the accent reads at 1:1. Unless the theme styles its GO
+   (--go-fg, --go-border), it takes the bar's text colour like the other
+   unfilled buttons. A theme that fills it (--go-bg) also sets --go-fg. */
+.app-bar .btn-go {
+  --btn-fg: var(--go-fg, var(--app-bar-text));
+  --btn-border: var(--go-border, var(--app-bar-text));
+}
 
 /* Screen-reader-only content — the standard visually-hidden-but-announced
    clip-rect pattern, not display:none (which screen readers also skip). */
@@ -3305,6 +3355,9 @@ pre code { padding: 0; background: none; border-radius: 0; }
 
 /* .divide-y — hairlines between stacked children (lists, menus). */
 .divide-y > * + * { border-block-start: 1px solid var(--hairline); }
+/* Text never sits on the hairline. Zero specificity, so a child with its
+   own padding (a list item, a menu entry) keeps it. */
+:where(.divide-y > *) { padding-block: var(--divide-y-pad, var(--space-2xs)); }
 
 /* .ratio — an aspect-ratio box for video/embeds; children fill it.
    Set `--ratio` directly or use a modifier (default 16/9). */
@@ -3777,10 +3830,22 @@ html[data-pointer="touch"] { --tap-min: 44px; }
   min-block-size: var(--tap-min);
   touch-action: manipulation;
 }
-/* Short labels ("EQ", "L1") too: toggles, tabs and segments. */
-:is(.btn-icon, .btn-close, .btn-min, .btn-max, .pagination-item, .nav-toggle, .taskbar-task, .badge-button,
-    .toggle-btn, .tab, .segmented-item) {
+/* Short labels ("EQ", "L1") too: toggles, tabs, segments, scrollspy, keys. */
+:is(.btn-icon, .btn-close, .btn-min, .btn-max, .pagination-item, .nav-toggle, .taskbar-task, .taskbar-start, .badge-button,
+    .toggle-btn, .tab, .segmented-item, .scrollspy-link, .key) {
   min-inline-size: var(--tap-min);
+}
+/* Links and buttons in a toast are actions, not running text. */
+:where(.toast) :is(a, button):not(.btn, .btn-icon, .btn-close) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--tap-min);
+  min-inline-size: var(--tap-min);
+}
+/* Touch tiers: keys and reaction chips sit 8px apart (WCAG 2.5.8 spacing). */
+@media (max-width: 900px), (any-pointer: coarse) {
+  .strip-section, .message-reactions { gap: max(0.3rem, 8px); }
 }
 :is(.input, .select) { min-block-size: var(--tap-min); }
 /* Checkboxes and radios: the label is the target. */
@@ -3802,16 +3867,23 @@ html[data-pointer="touch"] { --tap-min: 44px; }
   transform: translate(-50%, -50%);
 }
 .slider { touch-action: none; }
-@media (max-width: 900px), (any-pointer: coarse) {
-  /* The range input's own box is both its track and its target. On touch
-     it grows to the target height; padding keeps the drawn track the same
-     thin line in the middle (the border can't follow it, so it hides). */
-  .slider:not(.is-range > .slider) {
-    height: var(--tap-min);
-    padding-block: calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2);
-    background-clip: content-box;
-    border-color: transparent;
-  }
+/* The range input's own box is both its track and its target. It grows to
+   --tap-min (44px on touch tiers, 24px on desktop); padding keeps the drawn
+   track the same thin line in the middle. The border can't follow it, so it
+   hides: a theme whose track is drawn by the border (a bevelled groove)
+   redraws it with --slider-bg as a background on the content box. */
+.slider:not(.is-range > .slider) {
+  height: var(--tap-min);
+  padding-block: calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2);
+  background-clip: content-box;
+  border-color: transparent;
+}
+/* The same, sideways, for a vertical slider. */
+.slider.is-vertical:not(.is-range > .slider) {
+  width: var(--tap-min);
+  height: var(--slider-length, 4.5rem);
+  /* Physical sides: under vertical-lr the logical block axis is horizontal. */
+  padding: 0 calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2);
 }
 /* Inline text links inside running text are exempt (WCAG 2.5.8); links
    that stand alone as navigation are not. */
@@ -3893,6 +3965,10 @@ input[type="color"] { min-block-size: var(--tap-min); min-inline-size: var(--tap
     margin: 0.25rem 0;
     position-area: block-end span-inline-end;
     position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+    /* Take the side with more room and scroll inside it, so the inline
+       flip can still fit when neither side holds the whole menu. */
+    position-try-order: most-block-size;
+    max-height: calc(100% - 0.5rem);
   }
 }
 /* A context menu shown at the pointer: the app sets --x/--y. */
@@ -4247,7 +4323,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .meter-pair:has(> .meter-v) { grid-auto-flow: column; justify-content: start; block-size: 100%; }
 
 /* --- .clip — a clip light that holds, with a count -------------------------
- *   <button class="clip" type="button" aria-pressed="true" aria-label="Clipped 3 times, reset">CLIP <span class="clip-count">3</span></button>
+ *   <button class="clip" type="button" aria-pressed="true" aria-label="Clip 3, press to reset">CLIP <span class="clip-count">3</span></button>
  * aria-pressed="true" (or .is-clipped) lights it; the app holds it after a
  * clip and clears it when the user presses it. */
 .clip {
@@ -4627,9 +4703,9 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: grid;
   gap: 1px;
   padding: 0.2rem;
-  background: var(--sends-bg, #0c0c12);
+  background: var(--sends-bg, var(--input-bg, var(--surface)));
   border: 1px solid var(--sends-border, var(--border));
-  color: var(--sends-fg, #ffffff);
+  color: var(--sends-fg, var(--input-fg, var(--text)));
   font-size: 0.6rem;
   line-height: 1.25;
 }
@@ -4640,7 +4716,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   content: "";
   block-size: 0.45rem;
   inline-size: calc(var(--send, 0) * 100%);
-  background: var(--sends-bar, #d8dde8);
+  background: var(--sends-bar, var(--muted));
   clip-path: polygon(0 100%, 100% 0, 100% 100%);
 }
 .sends li.is-pre::after { background: var(--sends-bar-pre, var(--accent-2)); }
@@ -4659,22 +4735,22 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   inline-size: 100%;
   aspect-ratio: 1;
   background:
-    linear-gradient(to top right, transparent calc(50% - 0.5px), var(--dyn-graph-unity, rgba(255, 255, 255, 0.25)) 0 calc(50% + 0.5px), transparent 0),
-    repeating-linear-gradient(0deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, rgba(255, 255, 255, 0.14)) 0 25%),
-    repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, rgba(255, 255, 255, 0.14)) 0 25%),
-    var(--dyn-graph-bg, linear-gradient(180deg, #3a6bd0, #1d3f96));
-  border: 1px solid var(--dyn-graph-border, var(--border));
+    linear-gradient(to top right, transparent calc(50% - 0.5px), var(--dyn-graph-unity, var(--eq-zero, var(--border))) 0 calc(50% + 0.5px), transparent 0),
+    repeating-linear-gradient(0deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, var(--eq-grid, var(--hairline))) 0 25%),
+    repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, var(--eq-grid, var(--hairline))) 0 25%),
+    var(--dyn-graph-bg, var(--eq-bg, var(--bg)));
+  border: 1px solid var(--dyn-graph-border, var(--eq-border, var(--hairline)));
   overflow: visible;
 }
 .dyn-graph-line {
   fill: none;
-  stroke: var(--dyn-graph-line, #ffffff);
+  stroke: var(--dyn-graph-line, var(--eq-line, var(--accent)));
   stroke-width: var(--dyn-graph-line-width, 2px);
   vector-effect: non-scaling-stroke;
   stroke-linejoin: round;
 }
-.dyn-graph-threshold { stroke: var(--dyn-graph-threshold, var(--accent)); stroke-width: 1px; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
-[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-line { stroke: var(--dyn-graph-line-off, rgba(255, 255, 255, 0.45)); }
+.dyn-graph-threshold { stroke: var(--dyn-graph-threshold, var(--accent-2)); stroke-width: 1px; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-line { stroke: var(--dyn-graph-line-off, var(--muted)); }
 
 /* --- .rack — an equipment rack of .rack-units ------------------------------
  *   <div class="rack" aria-label="Effects rack">
@@ -4731,7 +4807,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .rack-unit[data-finish="purple"] { --_finish: linear-gradient(180deg, #6a2f8c, #3b1150); }
 .rack-unit[data-finish="green"] { --_finish: linear-gradient(180deg, #2f8a2f, #145214); }
 .rack-unit > input[type="radio"] { position: absolute; inset: 0; margin: 0; opacity: 0; }
-.rack-unit:has(> input:checked) { outline: 2px solid var(--rack-selected, #ffe33b); outline-offset: -2px; }
+.rack-unit:has(> input:checked) { outline: 2px solid var(--rack-selected, var(--accent)); outline-offset: -2px; }
 .rack-unit:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
 .rack-unit.is-empty { --_finish: linear-gradient(180deg, #2b2b2b, #151515); justify-content: center; color: #8a8a8a; }
 .rack-unit-name {
@@ -4743,7 +4819,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .rack-unit[data-finish="silver"] .rack-unit-name { text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6); }
 .rack-unit-body { display: flex; flex: 1; flex-wrap: wrap; align-items: center; justify-content: space-around; gap: 0.3rem 0.6rem; min-inline-size: 0; }
 /* The thin "Change device / Store / Load preset" strip at the top of the rack. */
-.rack-head { display: flex; justify-content: center; gap: 0.6rem; padding: 0.4rem; background: linear-gradient(180deg, #f2f2f2, #c9c9c9); border-radius: 2px; }
+.rack-head { display: flex; justify-content: center; gap: 0.6rem; padding: 0.4rem; background: var(--rack-head-bg, var(--surface-2)); border-radius: 2px; }
 
 /* A unit's faceplate seen up close: a bigger .rack-unit inside .faceplate,
    above its .assignable panel. */
@@ -4751,8 +4827,8 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: grid;
   gap: 0.6rem;
   padding: 0.5rem;
-  background: var(--faceplate-bg, #050505);
-  border: 1px solid var(--faceplate-border, #2a2a2a);
+  background: var(--faceplate-bg, var(--surface-2));
+  border: 1px solid var(--faceplate-border, var(--border));
   border-radius: 4px;
 }
 .faceplate > .rack-unit { --_u: 2.6rem; align-items: stretch; padding-block: 0.8rem; font-size: 0.75rem; }
@@ -4770,8 +4846,8 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .faceplate-display {
   min-inline-size: 7rem;
   padding: 0.4rem 0.6rem;
-  background: var(--faceplate-display-bg, #000000);
-  color: var(--faceplate-display-fg, #e0e0e0);
+  background: var(--faceplate-display-bg, var(--input-bg, var(--surface)));
+  color: var(--faceplate-display-fg, var(--input-fg, var(--text)));
   border-radius: 4px;
   font: 800 1.2rem/1.1 var(--font);
   text-align: center;
@@ -4791,11 +4867,11 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   grid-template-columns: repeat(auto-fit, minmax(5.2rem, 1fr));
   gap: 0.4rem 0.3rem;
   padding: 0.5rem 0.6rem 0.3rem;
-  background: var(--assignable-bg, linear-gradient(180deg, #5560ab, #434d98));
-  color: var(--assignable-fg, #ffffff);
-  border: 1px solid var(--assignable-border, #2a3274);
+  background: var(--assignable-bg, var(--surface));
+  color: var(--assignable-fg, var(--text));
+  border: 1px solid var(--assignable-border, var(--border));
   border-radius: 3px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+  box-shadow: var(--assignable-shadow, none);
   font-size: 0.68rem;
   text-align: center;
 }
@@ -4805,12 +4881,12 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: block;
   inline-size: 2.6rem;
   block-size: 2.4rem;
-  background: var(--assignable-key-bg, linear-gradient(180deg, #4a54a0, #3a438b));
-  border: 2px solid var(--assignable-key-border, #6a74c0);
-  box-shadow: inset 0 0 0 2px #2b3274;
+  background: var(--assignable-key-bg, var(--key-bg, var(--surface-2)));
+  border: 2px solid var(--assignable-key-border, var(--key-border, var(--border)));
+  box-shadow: var(--assignable-key-shadow, inset 0 0 0 2px rgba(0, 0, 0, 0.25));
 }
 .assignable-key > input { position: absolute; inset: 0; margin: 0; opacity: 0; }
-.assignable-key:has(> input:checked) { background: var(--assignable-key-on, linear-gradient(180deg, #e9ecff, #b5bce8)); }
+.assignable-key:has(> input:checked) { background: var(--assignable-key-on, var(--accent)); }
 .assignable-key:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 .assignable-caption { grid-column: 1 / -1; margin: 0; font-weight: 700; opacity: 0.9; }
 
@@ -4827,9 +4903,9 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   align-items: stretch;
   gap: 2px;
   padding: 0.5rem;
-  background: var(--geq-bg, linear-gradient(180deg, #a9a9a9, #8a8a8a));
+  background: var(--geq-bg, var(--surface));
   border-radius: 3px;
-  color: var(--geq-fg, #111111);
+  color: var(--geq-fg, var(--text));
   font-size: 0.6rem;
   font-weight: 700;
 }
@@ -4840,11 +4916,11 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   gap: 1px;
   padding: 0.15rem;
   background:
-    linear-gradient(transparent calc(50% - 0.6rem), var(--geq-zero, #111111) 0 calc(50% - 0.6rem + 1px), transparent 0),
-    var(--geq-group-bg, #9a9a9a);
-  border: 1px solid var(--geq-group-border, #1f2a8a);
+    linear-gradient(transparent calc(50% - 0.6rem), var(--geq-zero, var(--border)) 0 calc(50% - 0.6rem + 1px), transparent 0),
+    var(--geq-group-bg, var(--surface-2));
+  border: 1px solid var(--geq-group-border, var(--hairline));
 }
-.geq-group:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) { --geq-group-bg: var(--geq-group-active, #e6e6e6); }
+.geq-group:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) { --geq-group-bg: var(--geq-group-active, color-mix(in srgb, var(--accent) 22%, var(--surface-2))); }
 .geq-band { display: grid; flex: 1; justify-items: center; gap: 0.15rem; min-inline-size: 0; }
 .geq-band > input[type="range"] {
   -webkit-appearance: none;
@@ -4856,7 +4932,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   min-width: 0.9rem;
   height: var(--geq-height, 7rem);
   margin: 0;
-  background: linear-gradient(90deg, transparent calc(50% - 3px), var(--geq-slot, #000000) 0 calc(50% + 3px), transparent 0);
+  background: linear-gradient(90deg, transparent calc(50% - 3px), var(--geq-slot, var(--fader-slot, var(--border))) 0 calc(50% + 3px), transparent 0);
 }
 .geq-band > input::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -4888,20 +4964,20 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: grid;
   gap: 0.4rem;
   padding: 0.5rem;
-  background: var(--patch-device-bg, linear-gradient(180deg, #4f8ad0, #2f62ae));
-  border: 1px solid var(--patch-device-border, #12285e);
+  background: var(--patch-device-bg, var(--surface));
+  border: 1px solid var(--patch-device-border, var(--border));
   border-radius: 8px;
-  color: #ffffff;
+  color: var(--patch-device-fg, var(--text));
 }
 .patch-device > header { display: flex; align-items: center; gap: 0.4rem; font-weight: 800; }
-.patch-name { flex: 1; padding: 0.15rem 0.4rem; background: #000000; border-radius: 2px; }
+.patch-name { flex: 1; padding: 0.15rem 0.4rem; background: var(--patch-name-bg, var(--input-bg, var(--surface))); color: var(--patch-name-fg, var(--input-fg, var(--text))); border-radius: 2px; }
 .patch-group-label { grid-column: 1 / -1; margin: 0.2rem 0 0; font-size: 0.75rem; font-weight: 800; text-align: center; }
 .patch-grid { display: grid; grid-template-columns: repeat(var(--patch-cols, 8), minmax(1.4rem, 1fr)); gap: 3px; }
 .patch-point {
   position: relative;
   aspect-ratio: 1;
-  background: var(--patch-free, linear-gradient(180deg, #f0f0f0, #c8c8c8));
-  border: 1px solid #333333;
+  background: var(--patch-free, var(--surface-2));
+  border: 1px solid var(--patch-point-border, var(--border));
   border-radius: 2px;
 }
 /* The jack: a small ring in the middle of each point. */
@@ -4909,12 +4985,12 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   content: "";
   position: absolute;
   inset: 28%;
-  border: 2px solid rgba(0, 0, 0, 0.45);
+  border: 2px solid var(--patch-jack, color-mix(in srgb, currentColor 45%, transparent));
   border-radius: 50%;
 }
 .patch-point > input { position: absolute; inset: 0; margin: 0; opacity: 0; }
-.patch-point:has(> input:checked) { background: var(--patch-on, linear-gradient(180deg, #8ad35a, #4e9a2a)); }
-.patch-point[data-kind="aes"]:has(> input:checked) { background: var(--patch-aes, linear-gradient(180deg, #ffe46b, #d6b21a)); }
+.patch-point:has(> input:checked) { background: var(--patch-on, var(--success)); }
+.patch-point[data-kind="aes"]:has(> input:checked) { background: var(--patch-aes, var(--warning)); }
 .patch-point:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 1px; }
 @media (forced-colors: active) {
   .patch-point:has(> input:checked), .assignable-key:has(> input:checked) { background: Highlight; }
@@ -5089,8 +5165,8 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 }
 
 /* The area under a dynamics curve, filled (console.js closes the path). */
-.dyn-graph-fill { fill: var(--dyn-graph-fill, rgba(140, 190, 255, 0.45)); stroke: none; }
-[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-fill { fill: var(--dyn-graph-fill-off, rgba(140, 190, 255, 0.18)); }
+.dyn-graph-fill { fill: var(--dyn-graph-fill, color-mix(in srgb, var(--eq-line, var(--accent)) 30%, transparent)); stroke: none; }
+[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-fill { fill: var(--dyn-graph-fill-off, color-mix(in srgb, var(--muted) 15%, transparent)); }
 
 /* --- .led-list — options chosen by a lit LED -------------------------------
  *   <ul class="led-list" role="radiogroup" aria-label="Program">
@@ -5123,6 +5199,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
  * The sixteen name-tag colours a large console offers. Each reads a
  * --tag-<name> token, so a theme can retune them. */
 .scribble[data-tag] { background: var(--_tag); color: var(--_tag-fg, #111111); border-top-color: transparent; text-align: center; }
+.scribble[data-tag] .scribble-num { color: inherit; opacity: 0.75; }
 .scribble[data-tag="black"] { --_tag: var(--tag-black, #111111); --_tag-fg: #ffffff; }
 .scribble[data-tag="dblue"] { --_tag: var(--tag-dblue, #1f3fd0); --_tag-fg: #ffffff; }
 .scribble[data-tag="dgreen"] { --_tag: var(--tag-dgreen, #1e7a2a); --_tag-fg: #ffffff; }
@@ -5157,11 +5234,11 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .assignable-nav > button {
   min-inline-size: 0;
   padding: 0;
-  background: var(--assignable-key-bg, linear-gradient(180deg, #4a54a0, #3a438b));
-  border: 1px solid var(--assignable-key-border, #6a74c0);
+  background: var(--assignable-key-bg, var(--key-bg, var(--surface-2)));
+  border: 1px solid var(--assignable-key-border, var(--key-border, var(--border)));
   border-radius: 2px;
 }
-.assignable-nav > button:active { background: var(--assignable-key-on, #b5bce8); }
+.assignable-nav > button:active { background: var(--assignable-key-on, var(--accent)); }
 .assignable-nav > :nth-child(1) { grid-area: 1 / 1 / 2 / 3; inline-size: 1.6rem; }
 .assignable-nav > :nth-child(2) { grid-area: 1 / 2 / 2 / 4; inline-size: 1.6rem; justify-self: end; }
 .assignable-nav > :nth-child(3) { grid-area: 2 / 2; }
@@ -5407,6 +5484,73 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   border-color: var(--window-pane-border, var(--input-border, var(--border)));
 }
 
+/* .window-tasks — the side pane of task groups beside a window's content
+   (XP's Explorer task pane). Each .window-task is a titled group: its
+   first child (a heading or <summary>) is the header, the rest the body. */
+.window-tasks {
+  display: grid;
+  align-content: start;
+  gap: var(--window-tasks-gap, var(--space-s, 0.75rem));
+  padding: var(--window-tasks-padding, var(--space-s, 0.75rem));
+  background: var(--window-tasks-bg, var(--surface-2));
+}
+.window-task {
+  border: 1px solid var(--window-task-border, var(--border));
+  border-radius: var(--window-task-radius, var(--radius));
+  background: var(--window-task-bg, var(--surface));
+  color: var(--window-task-fg, var(--text));
+  font-size: var(--window-task-font-size, inherit);
+  overflow: hidden;
+}
+.window-task > :first-child {
+  margin: 0;
+  padding: var(--window-task-header-pad, 0.35rem 0.6rem);
+  background: var(--window-task-header-bg, transparent);
+  color: var(--window-task-header-fg, inherit);
+  font-size: var(--window-task-header-font-size, 0.85rem);
+  font-weight: 700;
+}
+.window-task > :not(:first-child) { margin: 0; padding: var(--window-task-body-pad, 0.4rem 0.6rem); }
+/* A collapsible group is a <details> whose <summary> is the header; the
+   toggle sits at its end (a chevron by default, a theme's button image via
+   --window-task-toggle / --window-task-toggle-closed). */
+details.window-task > summary { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; cursor: var(--cursor-pointer, pointer); list-style: none; }
+details.window-task > summary::-webkit-details-marker { display: none; }
+details.window-task > summary > :is(h2, h3) { margin: 0; font: inherit; color: inherit; }
+details.window-task > summary::after {
+  content: "";
+  flex: none;
+  inline-size: var(--window-task-toggle-size, 1em);
+  block-size: var(--window-task-toggle-size, 1em);
+  background: var(--window-task-toggle, none) center / contain no-repeat;
+  background-color: var(--window-task-toggle-fg, currentColor);
+  -webkit-mask: var(--window-task-toggle-mask, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 10l4-4 4 4' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E")) center / contain no-repeat;
+  mask: var(--window-task-toggle-mask, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 10l4-4 4 4' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E")) center / contain no-repeat;
+}
+details.window-task:not([open]) > summary::after { rotate: var(--window-task-toggle-rotate, 180deg); background-image: var(--window-task-toggle-closed, var(--window-task-toggle, none)); }
+details.window-task > summary:focus-visible { outline: 2px solid var(--focus, var(--accent)); outline-offset: -2px; }
+.window-task > :not(:first-child) + :not(:first-child) { padding-block-start: 0; }
+.window-task a { color: var(--window-task-link-fg, var(--link, var(--accent))); }
+/* A .list inside a group is a plain column of task links, not a boxed list. */
+.window-task {
+  --list-bg: transparent;
+  --list-border-width: 0;
+  --list-radius: 0;
+  --list-rule: transparent;
+  --list-item-padding: var(--window-task-item-pad, 0.2em 0);
+  --list-item-fg: var(--window-task-link-fg, var(--link, var(--accent)));
+  --row-hover-bg: transparent;
+}
+@media (hover: hover) {
+  .window-task :is(a, label).list-item:hover { text-decoration: underline; color: var(--window-task-link-fg-hover, var(--window-task-link-fg, var(--link, var(--accent)))); }
+}
+/* The first, "special" group of a pane (XP: the place's own tasks). */
+.window-task.is-special > :first-child {
+  background: var(--window-task-special-header-bg, var(--window-task-header-bg, transparent));
+  color: var(--window-task-special-header-fg, var(--window-task-header-fg, inherit));
+}
+.window-task.is-special { background: var(--window-task-special-bg, var(--window-task-bg, var(--surface))); }
+
 /* Minimized and closed windows leave the screen (the inputs stay, so the
    task button and the Start menu can bring them back). */
 .desktop-window:has(> .window-minimize:checked, > .window-close:checked) > .modal { display: none; }
@@ -5425,18 +5569,28 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   outline-offset: 2px;
 }
 /* Inactive title bars: every window but the active one, which is the one
-   holding focus, else the switched-to one, else the topmost (last). */
+   holding focus, else the switched-to one, else the topmost (last). While
+   the Start menu is open it holds focus, so every window is inactive. */
 .desktop:has(.desktop-window:focus-within) .desktop-window:not(:focus-within),
 .desktop:not(:has(.desktop-window:focus-within)):has(.window-app:checked) .desktop-window:not(:has(> .window-app:checked)),
-.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) {
+.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)),
+.desktop:has(.start-menu:popover-open) .desktop-window {
   --_inactive: 1;
 }
 .desktop:has(.desktop-window:focus-within) .desktop-window:not(:focus-within) > .modal > .modal-header,
 .desktop:not(:has(.desktop-window:focus-within)):has(.window-app:checked) .desktop-window:not(:has(> .window-app:checked)) > .modal > .modal-header,
-.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) > .modal > .modal-header {
+.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) > .modal > .modal-header,
+.desktop:has(.start-menu:popover-open) .desktop-window > .modal > .modal-header {
   background: var(--window-header-bg-inactive, var(--modal-header-bg, transparent));
   color: var(--window-header-fg-inactive, var(--modal-header-fg, inherit));
   filter: var(--window-header-filter-inactive, saturate(0.45) opacity(0.85));
+}
+/* XP fades an inactive window's caption buttons into its paler title bar. */
+.desktop:has(.desktop-window:focus-within) .desktop-window:not(:focus-within) > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close),
+.desktop:not(:has(.desktop-window:focus-within)):has(.window-app:checked) .desktop-window:not(:has(> .window-app:checked)) > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close),
+.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close),
+.desktop:has(.start-menu:popover-open) .desktop-window > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close) {
+  opacity: var(--window-caption-opacity-inactive, 1);
 }
 
 /* A small monitor showing the wallpaper (Display Properties). */
@@ -5646,6 +5800,9 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   height: var(--start-menu-sub-icon-size, 1rem);
 }
 .start-menu li > :is(a, button, label) > span { display: flex; flex-direction: column; text-align: start; }
+/* "All Programs" is one line of text (its "All " is a columns-only span), not
+   a title over a subtitle. */
+.start-menu li.start-menu-all > :is(a, button) > span { display: block; white-space: nowrap; }
 .start-menu li > :is(a, button, label) > span > b { font-weight: 700; }
 .start-menu li > :is(a, button, label) small { font-size: 0.8em; opacity: 0.75; }
 .start-menu .has-submenu > :is(a, button)::after { margin-inline-start: auto; }
@@ -9839,7 +9996,7 @@ html[data-motion="reduced"] .track > .track-play::before { animation: none; }
 /* ---- Track rows ------------------------------------------------------------
  * <ol class="tracklist">
  *   <li class="track">
- *     <button class="track-play" aria-label="Play Night Drive"><span class="track-num">1</span><svg class="icon">…#icon-play</svg></button>
+ *     <button class="track-play" aria-label="Play track 1, Night Drive"><span class="track-num">1</span><svg class="icon">…#icon-play</svg></button>
  *     <img src="art.jpg" alt="">
  *     <span class="track-main"><span class="track-title">Night Drive</span><span class="track-artist">Lumen Coast</span></span>
  *     <span class="track-album">Harbour Lights</span>
@@ -10205,6 +10362,11 @@ html[data-motion="reduced"] .track > .track-play::before { animation: none; }
 
 @keyframes waveform-shimmer { to { background-position: -200% 0; } }
 .waveform:has(> input:disabled) { opacity: 0.5; }
+/* .waveform.is-static — display only: the input still paints played and
+   unplayed and the head (hide it with --waveform-head: transparent), but
+   it doesn't seek, so no hover preview and no pointer. */
+.waveform.is-static::before { content: none; }
+.waveform.is-static > input[type="range"] { pointer-events: none; }
 
 /* ---- Waveform regions, markers and hover time -------------------------------
  * <div class="waveform" data-hover-time="0:41" style="--hover: .68">
@@ -10485,7 +10647,8 @@ button.waveform-marker:focus-visible { outline: 2px solid var(--focus); outline-
  * Desktop: art and title | transport over the scrubber | extras. Tablet: the
  * scrubber takes its own row and the extras (volume, queue…) hide. Mobile and .is-mini: art, title, like and play/next only. As a
  * direct child of .app it takes the shell's status slot and sticks to the
- * bottom of the screen, clear of the home indicator. */
+ * bottom of the screen, clear of the home indicator; on a phone .app-main
+ * scrolls above it instead. */
 .now-playing {
   --_areas: "art meta like transport extras" "art meta like progress extras";
   --_cols: auto minmax(0, 1fr) auto minmax(0, 2fr) minmax(0, 1fr);
@@ -10556,6 +10719,11 @@ button.waveform-marker:focus-visible { outline: 2px solid var(--focus); outline-
     --_np-secondary: none;
     --_np-extras: none;
   }
+  /* On a phone the docked bar is a big share of the screen, so the shell
+     holds the screen height and .app-main scrolls above the bar: no row
+     ever sits under it. */
+  .app:has(> .now-playing) { block-size: 100dvh; }
+  .app:has(> .now-playing) > .app-main { overflow-y: auto; overscroll-behavior: contain; }
 }
 /* Mini player: the mobile layout at any width, as a card. */
 .now-playing.is-mini {
@@ -11744,13 +11912,18 @@ html:is([data-motion="reduced"],[data-motion="none"]) :is(:is(.is-paused,.is-pau
  * the --z-* scale from there. Docs: docs/components/navigation.md. */
 
 /* --- Closable tabs (#37) ---------------------------------------------------
- *   <div class="tabs is-scroll" role="tablist">
- *     <div class="tab is-active"><button role="tab" aria-selected="true">a.css</button>
- *       <button class="btn-close" tabindex="-1" aria-label="Close a.css"></button></div>
+ *   <div class="tabs is-scroll">
+ *     <div class="tabs" role="tablist" aria-label="Open files">
+ *       <div class="tab is-active"><button role="tab" aria-selected="true">a.css</button>
+ *         <button class="btn-close" tabindex="-1" aria-hidden="true" aria-label="Close a.css"></button></div>
+ *     </div>
  *     <button class="tab-add" aria-label="New tab"></button>
  *   </div>
  * A <button> can't hold a second button, so a closable .tab is a wrapper:
- * the first child is the tab itself, the .btn-close sits beside it. */
+ * the first child is the tab itself, the .btn-close sits beside it. A
+ * tablist may own only tabs, so the add button sits beside an inner
+ * .tabs[role=tablist] that lends its tabs to the outer strip. */
+.tabs > .tabs { display: contents; }
 .tabs.is-scroll {
   /* max-inline-size: a theme may make .tabs inline-flex (a capsule), which
      would otherwise grow with its tabs and never scroll. */
@@ -11761,7 +11934,7 @@ html:is([data-motion="reduced"],[data-motion="none"]) :is(:is(.is-paused,.is-pau
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb, var(--border)) transparent;
 }
-.tabs.is-scroll > * { flex-shrink: 0; }
+.tabs.is-scroll > *, .tabs.is-scroll > .tabs > * { flex-shrink: 0; }
 .tab:has(> .btn-close) {
   display: inline-flex;
   align-items: center;
@@ -14246,7 +14419,7 @@ pre.line-numbers > code:has(> .line-numbers-rows) { position: relative; }
   inline-size: calc(var(--_otp-n) * var(--otp-cell-size, 2.75rem) + (var(--_otp-n) - 1) * var(--_otp-gap));
   max-inline-size: 100%;
   block-size: var(--otp-height, 3.25rem);
-  overflow: hidden;
+  overflow: clip;
   direction: ltr;
 }
 .otp > span {
@@ -15477,6 +15650,10 @@ html[data-surface="signage"] { font-size: var(--signage-root, 1.5vh); overflow: 
   html[data-surface="signage"] { font-size: var(--signage-root-portrait, 1.5vw); }
 }
 html[data-surface="signage"] body { overflow: hidden; }
+/* Every pixel of a screen is content, so page-level theme art stands down:
+   the XL gutter layer here, and any corner emblem a theme fixes over the
+   page (themes hide their own under the same selector). */
+html[data-surface="signage"]::before { content: none; }
 .safe-area {
   box-sizing: border-box;
   padding:
@@ -16590,7 +16767,7 @@ html[data-pointer="touch"] { --_cell-pencil: inline-block; }
 .table tbody tr:nth-child(n):is(:hover, :focus-within):not(.table-empty, .table-more) {
   --_row-tint: var(--row-hover-bg, color-mix(in srgb, var(--accent) 8%, transparent));
 }
-.table tbody tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))):nth-child(n) { --_row-tint: var(--row-active-bg, transparent); }
+.table tbody tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))):not(.is-selected, :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))):nth-child(n) { --_row-tint: var(--row-active-bg, transparent); }
 .table tbody tr:is(.is-selected, :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))):nth-child(n) {
   --_row-tint: var(--row-selected-bg, color-mix(in srgb, var(--accent) 18%, transparent));
 }
@@ -18278,12 +18455,12 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   background: var(--app-bg, transparent);
 }
 
-/* An app that never adds the rail element at all (not even an empty one)
-   has no box for :empty to match, so a theme's --app-columns would
-   still reserve a blank gutter next to .app-main. Collapse the column
+/* An app that never adds the rail element at all (not even an empty one),
+   or marks it `hidden`, has no box for :empty to match, so a theme's
+   --app-columns would still reserve a blank gutter next to .app-main. Collapse the column
    track itself in that case. Browsers without :has() just keep the blank
    gutter — a graceful degrade, not a break. */
-.app:not(:has(> .app-rail)) {
+.app:not(:has(> .app-rail:not([hidden]))) {
   grid-template-areas: var(--app-areas-no-rail, "bar" "main" "status");
   grid-template-columns: var(--app-columns-no-rail, minmax(0, 1fr));
 }
@@ -18299,7 +18476,9 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   min-width: 0;
   padding: var(--app-bar-padding, 0.6rem 1rem);
   background: var(--app-bar-bg, var(--nav-bg, var(--surface)));
-  color: var(--app-bar-fg, inherit);
+  /* Plain text on the bar (a clock, a title) follows the bar, not the page:
+     --app-bar-fg, else --nav-item-fg, which check.py holds to 4.5:1 here. */
+  color: var(--app-bar-fg, var(--nav-item-fg, inherit));
   border-bottom: var(--app-bar-rule-width, 1px) solid var(--app-bar-rule, var(--border));
   border-radius: var(--app-bar-radius, 0);
   min-height: var(--app-bar-height, auto);
@@ -18325,6 +18504,8 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
 .app-rail:empty {
   display: var(--app-rail-empty-display, none);
 }
+/* `hidden` drops the rail in every theme, decorative or not. */
+.app-rail[hidden] { display: none !important; }
 .app-rail {
   grid-area: rail;
   display: var(--app-rail-display, none);
@@ -18477,7 +18658,7 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   .app-rail { display: none !important; }
   .app-status { position: fixed; inset-inline-start: env(viewport-segment-left 1 0); inset-block-end: 0; inline-size: env(viewport-segment-width 1 0); }
   .app-main { padding-block-end: var(--app-fold-status-space, 3rem); }
-  .app:not(:has(> .app-rail)) {
+  .app:not(:has(> .app-rail:not([hidden]))) {
     grid-template-areas: var(--app-fold-book-areas, "bar main");
     grid-template-columns: env(viewport-segment-width 0 0) env(viewport-segment-width 1 0);
   }
@@ -18493,7 +18674,7 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   .app-rail { display: none !important; }
   .app-status { position: fixed; inset-inline-start: 0; inset-block-end: 0; inline-size: 100%; }
   .app-main { padding-block-end: var(--app-fold-status-space, 3rem); }
-  .app:not(:has(> .app-rail)) {
+  .app:not(:has(> .app-rail:not([hidden]))) {
     grid-template-areas: var(--app-fold-tabletop-areas, "bar" "main");
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: env(viewport-segment-height 0 0) env(viewport-segment-height 0 1);
@@ -18529,21 +18710,28 @@ html[data-contrast="high"] { --cursor-default: default !important; --cursor-text
  * Description: Phosphor-green #00FF41 digital-rain cascade on black — matching the reference on-screen code's actual hex.
  */
 
+@font-face {
+  font-family: "Share Tech Mono";
+  src: url("../assets/fonts/ShareTechMono-Regular.woff2") format("woff2");
+  font-display: swap;
+}
+
 html[data-theme="matrix"] {
   --motion-leave: rain;
   color-scheme: dark;
   --bg: #000000;
-  --surface: #020c02;
-  --surface-2: #041a04;
-  --border: #0f5f0f;
+  --surface: #000a02;  /* black with green light only, on the 140deg phosphor axis */
+  --surface-2: #021405;
+  --border: #1a9a2a;  /* a lit phosphor rule, like the film's terminal frames */
   --hairline: #0a3a0a;
-  --text: #b6ffb6;
-  --muted: #4caf50;
+  --text: #3cf060;  /* saturated phosphor, between #00ff41 and #008f11; pale/white is kept for heads, focus and warnings */
+  --muted: #5cc860;
   --accent: #00ff41;
-  --accent-2: #22ff88;
+  --accent-text: #00ff41;  /* labels read this, so an app that sets --accent keeps them legible */
+  --accent-2: #7dff9a;  /* a brighter step of the same green, not a second hue */
   --danger: #ff3b3b;
   --success: #00ff41;
-  --warning: #d4ff00;
+  --warning: #e8ffe0;  /* white-hot phosphor: the rain's head glyph, not a yellow */
   /* Text-weight variants of the state colors, for .status, trends,
      colored badges and danger menu items: same hue, adjusted to 4.5:1 on
      this theme's surfaces. The fills above stay as-is for lamps/buttons. */
@@ -18551,19 +18739,27 @@ html[data-theme="matrix"] {
   --on-accent: #001a06;
   --on-danger: #1a0000;
   --on-success: #001a06;
-  --radius: 0.15rem;
-  --font: "Courier New", "IBM Plex Mono", Consolas, monospace;
-  --font-mono: "Courier New", Consolas, monospace;
+  --radius: 0;  /* terminal cells: square corners everywhere but radios */
+  /* A clean sans mono for running text (the film's screens are terminal
+     type, not a serif typewriter face); the operator console's squared LCD
+     face (the "Searching..." field) is Share Tech Mono, vendored, on the
+     bar, headings and panel captions. */
+  --font: "DejaVu Sans Mono", Consolas, Menlo, "Courier New", monospace;
+  --font-console: "Share Tech Mono", var(--font);
+  --app-bar-font: var(--font-console);
+  --font-mono: var(--font);
   --flare: #00ff41;
 
-  /* Base buttons are outline-only; the semantic variants keep their fills
-     (set on the element by core) so a delete still reads as destructive. */
-  --btn-bg: transparent;
-  --btn-fg: var(--accent);
+  /* Base buttons are outline-only: a green rule on black. Black, not
+     transparent, so the rain never falls through a label; the semantic
+     variants keep their fills so a delete still reads as destructive. */
+  --btn-bg: #000;
+  --btn-fg: var(--accent-text);
   --btn-shadow-hover: 0 0 10px rgba(0, 255, 65, 0.5);
   --input-bg: #000;
-  --focus-ring: 0 0 8px rgba(0, 255, 65, 0.4);
-  --panel-shadow: inset 0 0 16px rgba(0, 255, 65, 0.08);
+  /* The lit "Searching..." field: a bright rim, an outer and inner glow. */
+  --focus-ring: 0 0 0 1px var(--accent), 0 0 10px rgba(0, 255, 65, 0.45), inset 0 0 10px rgba(0, 255, 65, 0.25);
+  --panel-shadow: inset 0 0 24px rgba(0, 255, 65, 0.14);
   --table-head-fg: var(--accent);
   --table-head-rule: var(--accent);
   --row-selected-bg: rgba(0, 255, 65, 0.12);
@@ -18572,94 +18768,206 @@ html[data-theme="matrix"] {
   --label-transform: uppercase;
   --indicator-fg: var(--accent);
   --indicator-track: var(--hairline);
+
+  /* Charts: six brightness steps of the one phosphor, never new hues
+     (core maps series 1-4 to accent/success/warning/danger, and accent ==
+     success here, so the first two would otherwise be identical). */
+  --chart-series-1: #00ff41;
+  --chart-series-2: #0a7a22;
+  --chart-series-3: #c8ffd2;
+  --chart-series-4: #00b82e;
+  --chart-series-5: #7dff9a;
+  --chart-series-6: #4caf50;
+
+  /* Terminal frames are hard rectangles: no capsule pills or round
+     switches anywhere. */
+  --badge-radius: var(--radius);
+  --switch-radius: var(--radius);
+  --switch-thumb-radius: 0;
+  --slider-thumb-radius: 0;
+  --btn-icon-radius: var(--radius);
+  --avatar-radius: var(--radius);
+  /* The track is a lit rule; core grows the box to --tap-min and paints
+     this on the content box only, so the hit area is untouched. */
+  --slider-bg: var(--border);
+  /* A resolved comment pin keeps body-text green on its dark fill. */
+  --comment-pin-resolved-fg: var(--warning);
+  /* A comment's anchored text: a dark green cell, brighter when active,
+     not white mixed into black (a grey the body green fails on). */
+  --comment-anchor-bg: #0f2a14;
+  --comment-anchor-bg-active: #1d5a2a;
+  /* Highlighted text: the same dark green cell (core's warning mix lands
+     on a grey the body green fails on). */
+  --mark-bg: #0f2a14;
+  /* Dialogs echo the film's SYSTEM FAILURE box: a black gap, then a
+     bright phosphor double rule outside the panel's own border. */
+  --modal-shadow: 0 0 0 2px #000, 0 0 0 3px var(--accent), 0 0 18px rgba(0, 255, 65, 0.35);
 }
 
+/* Phone tier: monospace runs wide, so tight controls (a five-way toggle
+   group, the bar nav) trim their side padding to keep text clear of the
+   box edge. */
+@media (max-width: 480px) {
+  html[data-theme="matrix"] { --toggle-btn-padding: 0.5em 0.45em; }
+  html[data-theme="matrix"] .nav-item { padding-inline: 0.5em; }
+}
+
+/* Checkboxes and radios: a green-ruled terminal cell, not the browser's
+   grey native box. Checked fills with phosphor and a black tick. */
+html[data-theme="matrix"] :is(.checkbox, .radio) {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--accent);
+  border-radius: 0;
+  display: inline-grid;
+  place-content: center;
+}
+html[data-theme="matrix"] .radio { border-radius: 50%; }
+/* Carousel arrows and dots are square cells too (core hard-codes 999px). */
+html[data-theme="matrix"] .carousel-nav > a { border-radius: var(--radius); }
+html[data-theme="matrix"] .carousel::scroll-button(*) { border-radius: var(--radius); }
+html[data-theme="matrix"] .carousel > .carousel-slide::scroll-marker { border-radius: 0; }
+html[data-theme="matrix"] .checkbox:checked {
+  background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23001a06' stroke-width='2.2' stroke-linecap='square'/%3E%3C/svg%3E") center / 85% no-repeat;
+}
+html[data-theme="matrix"] .checkbox:indeterminate {
+  background: linear-gradient(var(--accent), var(--accent)) center / 60% 2px no-repeat;
+}
+html[data-theme="matrix"] .radio:checked { background: radial-gradient(var(--accent) 0 40%, transparent 46%); }
+html[data-theme="matrix"] :is(.checkbox, .radio):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+html[data-theme="matrix"] :is(.checkbox, .radio):disabled { opacity: 0.4; }
+/* A vertical slider runs in vertical-lr, where core's padding-inline lands
+   top and bottom, so the lit track filled the whole 24px-wide box. Pad the
+   physical sides instead: same box (the hit area), a thin rule inside. */
+html[data-theme="matrix"] .slider.is-vertical:not(.is-range > .slider) {
+  padding: 0 calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2);
+}
+
+/* Bloom first, then a black halo under it: the halo cuts a dark moat
+   around every glyph, so text standing straight on the rain (an unpanelled
+   sidebar, a page heading) never has a falling streak touching its strokes.
+   On black and the near-black panels the halo is invisible. */
 html[data-theme="matrix"] { text-shadow: 0 0 2px rgba(0, 255, 65, 0.4); }
+/* The halo only where text can stand on the rain: the content well and a
+   bare sidebar. Opaque surfaces below drop back to the bloom alone, so the
+   page doesn't rasterise three blurred layers under every panel's text. */
+html[data-theme="matrix"] :is(.app-main, aside) {
+  text-shadow: 0 0 2px rgba(0, 255, 65, 0.4);
+  /* Light text only: the halo's alpha follows the text's own lightness, so
+     dark labels on a lit fill (a key, a mark, today's date) get none and
+     keep their full contrast. A browser without relative colour keeps the
+     bloom line above. */
+  text-shadow: 0 0 2px rgba(0, 255, 65, 0.4),
+    0 0 2px oklch(from currentColor 0 0 0 / clamp(0, (l - 0.55) * 10, 1)),
+    0 0 5px oklch(from currentColor 0 0 0 / clamp(0, (l - 0.55) * 10, 1));
+}
+/* A halo can't hold back a bright streak behind small text, so a bare
+   sidebar standing on the rain gets a black backing. Zero class
+   specificity: any component (a drawer, a panel) keeps its own fill. */
+:where(html[data-theme="matrix"]) aside { background-color: rgb(0 0 0 / 0.8); }
+/* Page-level lines (breadcrumb, heading, lede, a demo's control row) get
+   the same black backing, cut to their own width like the film's text on a
+   blacked-out screen, so no streak passes between the words. */
+:where(html[data-theme="matrix"]) .app-main > :is(.breadcrumbs, h1, h2, p, .cluster) {
+  background-color: rgb(0 0 0 / 0.8);
+  inline-size: fit-content;
+  /* a 6px black margin round the text; the negative inline margin keeps
+     the words on the well's text edge */
+  padding: 0.375rem 0.4rem;
+  margin-inline: -0.4rem;
+  max-inline-size: calc(100% + 0.8rem);
+}
+/* Desktop icon names stand on the rain: they get the same black cell, so
+   no bright glyph crosses their strokes. */
+:where(html[data-theme="matrix"]) .desktop-icon span {
+  background-color: rgb(0 0 0 / 0.8);
+  padding-inline: 0.25rem;
+}
+/* Phones: the 5px halo layer is the costly one while scrolling; the 2px
+   moat plus the black backings above carry legibility there. */
+@media (max-width: 480px) {
+  html[data-theme="matrix"] :is(.app-main, aside) {
+    text-shadow: 0 0 2px rgba(0, 255, 65, 0.4),
+      0 0 2px oklch(from currentColor 0 0 0 / clamp(0, (l - 0.55) * 10, 1));
+  }
+}
+html[data-theme="matrix"] :is(.panel, .card, .table, .alert, .toast, .modal, dialog, [popover], .message) {
+  text-shadow: 0 0 2px rgba(0, 255, 65, 0.4);
+}
+/* Controls draw their own box, and a lit (filled) one would smudge its
+   dark label with the halo: they keep the bloom alone. */
+html[data-theme="matrix"] :is(button, .btn, .badge, .toggle-btn, .segmented-item, .tab, .nav-item, .pagination-item, kbd) {
+  text-shadow: 0 0 2px rgba(0, 255, 65, 0.4);
+}
+/* Core's quiet buttons reset the fill to transparent; keep them on black
+   too, so the rain stays outside every control. */
+html[data-theme="matrix"] :is(.btn-secondary, .btn-tertiary, .btn-ghost) { --btn-bg: #000; }
+/* Pagination is a strip of terminal cells on black (the items have no fill
+   of their own); the current page is a lit-ruled cell. */
+html[data-theme="matrix"] .pagination { background: #000; padding: 0.15rem; inline-size: fit-content; }
+html[data-theme="matrix"] .pagination-item:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) { border-color: var(--accent); }
 /* A loading table hides its cell text (color: transparent); the phosphor
    glow would otherwise still draw the words as a faint green ghost. */
 html[data-theme="matrix"] .table.is-loading tbody td { text-shadow: none; }
 
-/* The digital rain: this theme's one namesake image, previously absent —
-   flat black plus green text is "a dark green theme," not the Matrix.
-   Thin columns of falling glyph-streaks, animated by scrolling a tall
-   repeating pattern rather than real characters (no JS in this library).
-   Kept faint (8% opacity) so it never competes with foreground text, and
-   gated like the heading flicker: a static, unscrolled version of the
-   same columns when motion is off, never nothing. */
-html[data-theme="matrix"] {
-  background-color: #000;
-  /* Five independently-phased/-paced dash columns rather than one repeating
-     pattern: a single layer tiles into a visible grid (this is what a
-     linear-gradient does — it has no per-column variation to offer), and a
-     grid reads as "graph paper," not "falling code." Different periods
-     (37-59px, no common small factor) and offsets so the dashes never lock
-     into rows. */
-  /* Each column is two layers: a small near-white bright "head" glyph, and
-     a taller, dimmer green "tail" trailing directly below it at the same
-     period — real rain footage has a bright leading character fading into
-     dark green, which a single flat-opacity dash never expressed. */
-  background-image:
-    radial-gradient(ellipse 1.6px 3px at 50% 50%, rgba(210, 255, 225, 0.85), transparent 75%),
-    radial-gradient(ellipse 1.6px 3px at 50% 50%, rgba(210, 255, 225, 0.85), transparent 75%),
-    radial-gradient(ellipse 1.6px 3px at 50% 50%, rgba(210, 255, 225, 0.85), transparent 75%),
-    radial-gradient(ellipse 1.6px 3px at 50% 50%, rgba(210, 255, 225, 0.85), transparent 75%),
-    radial-gradient(ellipse 1.6px 3px at 50% 50%, rgba(210, 255, 225, 0.85), transparent 75%),
-    radial-gradient(ellipse 1.4px 10px at 50% 50%, rgba(0, 255, 65, 0.4), transparent 75%),
-    radial-gradient(ellipse 1.4px 10px at 50% 50%, rgba(0, 255, 65, 0.4), transparent 75%),
-    radial-gradient(ellipse 1.4px 10px at 50% 50%, rgba(0, 255, 65, 0.4), transparent 75%),
-    radial-gradient(ellipse 1.4px 10px at 50% 50%, rgba(0, 255, 65, 0.4), transparent 75%),
-    radial-gradient(ellipse 1.4px 10px at 50% 50%, rgba(0, 255, 65, 0.4), transparent 75%);
-  background-size:
-    16px 41px, 16px 37px, 16px 47px, 16px 59px, 16px 53px,
-    16px 41px, 16px 37px, 16px 47px, 16px 59px, 16px 53px;
-  background-position:
-    8px 0, 24px 14px, 40px 5px, 56px 22px, 72px 9px,
-    8px 9px, 24px 23px, 40px 14px, 56px 31px, 72px 18px;
+/* The digital rain: this theme's namesake image. Real glyph columns
+   filling the frame top to bottom, all mirrored: about two thirds
+   katakana-like stroke glyphs drawn as SVG paths (no font needed), the rest
+   digits and the film's few symbols (Z : = * " < > . + |). Each streak is a
+   green tail brightening to a white-hot head whose glow is baked in as a
+   wide translucent stroke (no SVG filter); faint residual glyphs sit
+   between streaks, and smaller, dimmer far columns fill some gaps for
+   depth. One 997x960 tile wraps seamlessly top to bottom on a single fixed
+   layer that falls by translating exactly one tile height, so the browser
+   composites it instead of repainting the page every frame. With motion
+   off the same columns stand still, never nothing. z-index -2 keeps it
+   under core's XL gutter layer (html::before, -1). */
+html[data-theme="matrix"]::after {
+  content: "";
+  position: fixed;
+  inset-inline: 0;
+  top: 0;
+  z-index: -2;
+  pointer-events: none;
+  will-change: transform;
+  contain: strict;
+}
+html[data-theme="matrix"]::after {
+  height: calc(100vh + 960px);
+  top: -960px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='997' height='960' font-family='monospace' font-size='14' text-anchor='middle' fill='%2300ff41'%3E%3Cg transform='matrix(-1 0 0 1 997 0)'%3E%3Cg fill='%2300ff41' fill-opacity='.5' stroke='none' opacity='.55'%3E%3Ctext x='197.0 197.0 197.0 197.0 197.0 197.0 197.0 197.0 197.0 197.0 232.0 232.0 232.0 232.0 232.0 232.0 232.0 232.0 232.0 232.0 232.0 232.0 232.0 252.0 252.0 252.0 252.0 252.0 252.0 252.0 252.0 272.0 272.0 272.0 272.0 272.0 272.0 385.0 385.0 385.0 385.0 385.0 385.0 418.0 418.0 418.0 418.0 418.0 418.0 418.0 418.0 418.0 418.0 418.0 504.0 504.0 504.0 504.0 504.0 504.0 504.0 504.0 504.0 504.0 504.0 504.0 504.0 504.0 522.0 522.0 522.0 522.0 522.0 522.0 522.0 522.0 522.0 522.0 522.0 522.0 522.0 683.0 683.0 683.0 683.0 683.0 683.0 683.0 683.0 683.0 683.0 683.0 683.0 701.0 701.0 701.0 701.0 701.0 701.0 701.0 701.0 701.0 701.0 701.0 701.0 701.0 746.0 746.0 746.0 746.0 746.0 746.0 746.0 746.0 746.0 746.0 746.0 866.0 866.0 866.0 866.0 866.0 866.0 866.0' y='12 84 156 180 384 552 612 660 696 912 60 264 360 372 420 432 516 552 636 684 696 768 876 312 336 372 444 528 696 744 840 336 384 648 708 828 852 120 180 696 900 924 936 132 192 456 600 672 732 756 792 804 852 900 48 96 132 156 204 216 408 432 456 492 504 624 672 780 36 60 72 168 180 204 252 552 576 612 684 744 960 36 84 96 420 456 564 588 636 672 684 780 0 240 252 276 360 384 396 444 456 624 648 792 864 888 36 60 144 156 180 360 564 612 756 792 936 420 444 600 612 624 636 888' fill-opacity='0.1' font-size='10'%3E0%26gt;%26quot;3|6.9*2775978%26gt;9+Z%26gt;%26gt;*1817%26quot;1Z56%26lt;55ZZ78*75972906.*Z04=6200::881.507%26gt;%26quot;%26quot;6%26gt;Z=7::164:39420++6.79341255*.7657877%26gt;%26lt;11|20+2=0:10%26lt;52%3C/text%3E%3Ctext x='232.0 252.0 272.0 385.0 504.0 522.0 683.0 701.0' y='120 564 432 276 792 288 792 108' fill-opacity='0.35' font-size='10'%3E3*30*%26lt;6Z%3C/text%3E%3Ctext x='197.0 197.0 232.0 232.0 252.0 252.0 272.0 272.0 385.0 385.0 385.0 385.0 385.0 418.0 522.0 683.0 683.0 683.0 701.0 746.0 866.0' y='312 732 816 132 588 576 132 120 312 300 288 468 456 348 300 840 828 816 120 456 684' fill-opacity='0.5' font-size='10'%3E+2Z*98136=46+2..79043%3C/text%3E%3Ctext x='197.0 197.0 232.0 232.0 232.0 272.0 272.0 272.0 385.0 385.0 385.0 418.0 504.0 522.0 522.0 683.0 746.0 866.0 866.0' y='336 768 828 156 144 144 468 456 348 336 516 384 840 336 324 852 480 324 732' fill-opacity='0.65' font-size='10'%3E:+Z8**=153997%26quot;%26gt;534Z%3C/text%3E%3Ctext x='197.0 232.0 232.0 252.0 272.0 385.0 385.0 504.0 522.0 683.0 683.0 701.0 746.0 866.0' y='780 840 168 624 168 540 528 852 348 912 888 168 492 756' fill-opacity='0.8' font-size='10'%3E04Z1*4542*%26gt;382%3C/text%3E%3Ctext x='197.0 232.0 232.0 385.0 385.0 418.0 504.0' y='816 852 180 396 564 420 876' fill-opacity='0.9' font-size='10'%3E8252272%3C/text%3E%3Ctext x='197.0 197.0 232.0 252.0 272.0 418.0 504.0 866.0 866.0' y='372 828 864 660 204 432 888 360 792' fill-opacity='1' font-size='10'%3E|8520%26gt;05:%3C/text%3E%3C/g%3E%3Cg fill='none' stroke='%2300ff41' stroke-linecap='square' opacity='.55'%3E%3Cpath d='M194.48,966.24l5.04,0M193.76,969.12l6.48,0M196.64,964.08l0.72,7.92M194.48,124.8l5.04,0M197,124.8l0,6.48M193.76,131.28l6.48,0M194.48,184.8l5.04,0M197,184.8l0,6.48M193.76,191.28l6.48,0M193.76,521.52l0.72,2.16M195.92,520.8l0.72,2.16M200.24,521.52l-2.16,5.04 -2.88,2.16M193.76,570.96l6.48,0M197,568.08l0,8.64M194.48,573.84l2.16,-2.16M199.52,573.84l-2.16,-2.16M193.76,582.24l6.48,0M195.56,580.08l0,4.32M198.44,580.08l0,4.32l-2.16,3.6M193.76,594.24l5.76,0l-0.72,5.76 -1.44,-0.72M196.64,592.08l-0.72,4.32 -2.16,3.6M228.76,18.24l6.48,0M233.08,16.08l0,7.92l-1.44,-0.72M233.08,18.96l-4.32,4.32M228.76,198.24l6.48,0M230.56,196.08l0,4.32M233.44,196.08l0,4.32l-2.16,3.6M229.48,318.24l5.04,0M228.76,321.12l6.48,0M231.64,316.08l0.72,7.92M232,400.08l0,1.44M228.76,403.68l0,-2.16l6.48,0l-0.72,3.6 -3.6,2.88M228.76,473.52l0.72,2.16M230.92,472.8l0.72,2.16M235.24,473.52l-2.16,5.04 -2.88,2.16M229.48,606.24l5.04,0M228.76,609.12l6.48,0M231.64,604.08l0.72,7.92M229.12,748.8l1.44,1.44M229.12,751.68l1.44,1.44M229.48,756l5.76,-4.32M228.76,773.52l0.72,2.16M230.92,772.8l0.72,2.16M235.24,773.52l-2.16,5.04 -2.88,2.16M229.48,930.24l5.04,0M228.76,933.12l6.48,0M231.64,928.08l0.72,7.92M249.12,100.8l1.44,1.44M249.12,103.68l1.44,1.44M249.48,108l5.76,-4.32M248.76,210.24l6.48,0M253.08,208.08l0,7.92l-1.44,-0.72M253.08,210.96l-4.32,4.32M250.92,232.08l-2.16,3.6M250.92,233.52l4.32,0l-1.44,3.6 -3.6,2.88M249.48,280.08l0,7.2l5.76,0M249.48,282.96l5.04,-1.44M249.48,316.8l5.04,1.44M249.48,319.68l5.04,1.44M248.76,322.56l6.48,1.44M248.76,342.24l6.48,0M253.08,340.08l0,7.92l-1.44,-0.72M253.08,342.96l-4.32,4.32M249.48,484.8l5.04,1.44M249.48,487.68l5.04,1.44M248.76,490.56l6.48,1.44M249.48,532.8l5.04,1.44M249.48,535.68l5.04,1.44M248.76,538.56l6.48,1.44M249.48,712.08l0,7.2l5.76,0M249.48,714.96l5.04,-1.44M252,784.08l0,1.44M248.76,787.68l0,-2.16l6.48,0l-0.72,3.6 -3.6,2.88M249.48,820.08l5.04,0M248.76,822.24l6.48,0l-1.44,3.6 -2.88,2.16M248.76,858.24l5.76,0l-0.72,5.76 -1.44,-0.72M251.64,856.08l-0.72,4.32 -2.16,3.6M249.48,904.8l0,3.6M253.8,904.08l0,4.32l-2.88,3.6M268.76,18.24l5.76,0l-0.72,5.76 -1.44,-0.72M271.64,16.08l-0.72,4.32 -2.16,3.6M269.48,64.8l5.04,1.44M269.48,67.68l5.04,1.44M268.76,70.56l6.48,1.44M269.48,352.8l5.04,1.44M269.48,355.68l5.04,1.44M268.76,358.56l6.48,1.44M269.48,364.8l5.04,0M272,364.8l0,6.48M268.76,371.28l6.48,0M268.76,401.52l0.72,2.16M270.92,400.8l0.72,2.16M275.24,401.52l-2.16,5.04 -2.88,2.16M269.48,508.8l5.04,1.44M269.48,511.68l5.04,1.44M268.76,514.56l6.48,1.44M269.48,520.08l5.04,0M268.76,522.24l6.48,0l-1.44,3.6 -2.88,2.16M269.48,580.8l5.04,0M272,580.8l0,6.48M268.76,587.28l6.48,0M268.76,712.8l5.76,0l0,7.2l-5.76,0M268.76,716.4l5.76,0M269.48,762.24l5.04,0M268.76,765.12l6.48,0M271.64,760.08l0.72,7.92M268.76,940.8l5.76,0l0,7.2l-5.76,0M268.76,944.4l5.76,0M381.76,78.24l6.48,0M386.08,76.08l0,7.92l-1.44,-0.72M386.08,78.96l-4.32,4.32M382.48,88.08l0,7.2l5.76,0M382.48,90.96l5.04,-1.44M385,124.08l0,1.44M381.76,127.68l0,-2.16l6.48,0l-0.72,3.6 -3.6,2.88M381.76,150.96l6.48,0M385,148.08l0,8.64M382.48,153.84l2.16,-2.16M387.52,153.84l-2.16,-2.16M383.92,185.52l-2.16,5.76M386.08,185.52l2.16,5.76M382.48,222.24l5.04,0M381.76,225.12l6.48,0M384.64,220.08l0.72,7.92M381.76,666.24l5.76,0l-0.72,5.76 -1.44,-0.72M384.64,664.08l-0.72,4.32 -2.16,3.6M381.76,700.8l6.48,0l-2.16,2.88M384.64,702.24l0,2.16l-2.16,4.32M383.92,713.52l-2.16,5.76M386.08,713.52l2.16,5.76M382.48,724.8l5.04,0M385,724.8l0,6.48M381.76,731.28l6.48,0M382.48,844.08l5.04,0M381.76,846.24l6.48,0l-1.44,3.6 -2.88,2.16M415.48,28.8l5.04,0M418,28.8l0,6.48M414.76,35.28l6.48,0M414.76,102.24l6.48,0M416.56,100.08l0,4.32M419.44,100.08l0,4.32l-2.16,3.6M420.52,220.08l-5.76,5.04M418.36,222.24l0,6.48M415.48,232.8l5.04,1.44M415.48,235.68l5.04,1.44M414.76,238.56l6.48,1.44M414.76,270.24l6.48,0M419.08,268.08l0,7.92l-1.44,-0.72M419.08,270.96l-4.32,4.32M416.92,460.08l-2.16,3.6M416.92,461.52l4.32,0l-1.44,3.6 -3.6,2.88M414.76,474.24l6.48,0M416.56,472.08l0,4.32M419.44,472.08l0,4.32l-2.16,3.6M415.48,544.8l5.04,1.44M415.48,547.68l5.04,1.44M414.76,550.56l6.48,1.44M500.76,66.96l6.48,0M504,64.08l0,8.64M501.48,69.84l2.16,-2.16M506.52,69.84l-2.16,-2.16M501.48,112.8l5.04,1.44M501.48,115.68l5.04,1.44M500.76,118.56l6.48,1.44M501.48,160.8l5.04,1.44M501.48,163.68l5.04,1.44M500.76,166.56l6.48,1.44M502.92,245.52l-2.16,5.76M505.08,245.52l2.16,5.76M500.76,269.52l0.72,2.16M502.92,268.8l0.72,2.16M507.24,269.52l-2.16,5.04 -2.88,2.16M502.92,317.52l-2.16,5.76M505.08,317.52l2.16,5.76M500.76,412.8l5.76,0l0,7.2l-5.76,0M500.76,416.4l5.76,0M506.52,676.08l-5.76,5.04M504.36,678.24l0,6.48M500.76,750.24l6.48,0M502.56,748.08l0,4.32M505.44,748.08l0,4.32l-2.16,3.6M500.76,906.96l6.48,0M504,904.08l0,8.64M501.48,909.84l2.16,-2.16M506.52,909.84l-2.16,-2.16M500.76,918.24l5.76,0l-0.72,5.76 -1.44,-0.72M503.64,916.08l-0.72,4.32 -2.16,3.6M500.76,940.8l5.76,0l0,7.2l-5.76,0M500.76,944.4l5.76,0M518.76,126.96l6.48,0M522,124.08l0,8.64M519.48,129.84l2.16,-2.16M524.52,129.84l-2.16,-2.16M518.76,148.8l5.76,0l0,7.2l-5.76,0M519.48,712.8l0,3.6M523.8,712.08l0,4.32l-2.88,3.6M519.48,796.8l5.04,0M522,796.8l0,6.48M518.76,803.28l6.48,0M518.76,808.8l6.48,0l-2.16,2.88M521.64,810.24l0,2.16l-2.16,4.32M519.48,870.24l5.04,0M518.76,873.12l6.48,0M521.64,868.08l0.72,7.92M519.48,-7.92l5.04,0M518.76,-5.76l6.48,0l-1.44,3.6 -2.88,2.16M679.76,136.8l6.48,0l-2.16,2.88M682.64,138.24l0,2.16l-2.16,4.32M680.48,184.08l5.04,0M679.76,186.24l6.48,0l-1.44,3.6 -2.88,2.16M683,244.08l0,1.44M679.76,247.68l0,-2.16l6.48,0l-0.72,3.6 -3.6,2.88M680.48,256.08l0,7.2l5.76,0M680.48,258.96l5.04,-1.44M679.76,354.24l5.76,0l-0.72,5.76 -1.44,-0.72M682.64,352.08l-0.72,4.32 -2.16,3.6M679.76,700.8l5.76,0l0,7.2l-5.76,0M679.76,704.4l5.76,0M681.92,953.52l-2.16,5.76M684.08,953.52l2.16,5.76M703.52,64.08l-5.76,5.04M701.36,66.24l0,6.48M703.52,88.08l-5.76,5.04M701.36,90.24l0,6.48M701,304.08l0,1.44M697.76,307.68l0,-2.16l6.48,0l-0.72,3.6 -3.6,2.88M698.48,472.08l0,7.2l5.76,0M698.48,474.96l5.04,-1.44M698.48,484.08l5.04,0M697.76,486.24l6.48,0l-1.44,3.6 -2.88,2.16M699.92,593.52l-2.16,5.76M702.08,593.52l2.16,5.76M703.52,604.08l-5.76,5.04M701.36,606.24l0,6.48M701,664.08l0,1.44M697.76,667.68l0,-2.16l6.48,0l-0.72,3.6 -3.6,2.88M697.76,690.96l6.48,0M701,688.08l0,8.64M698.48,693.84l2.16,-2.16M703.52,693.84l-2.16,-2.16M698.48,748.08l5.04,0M697.76,750.24l6.48,0l-1.44,3.6 -2.88,2.16M698.12,904.8l1.44,1.44M698.12,907.68l1.44,1.44M698.48,912l5.76,-4.32M699.2,928.08l-1.44,4.32M698.48,930.24l5.76,0M702.08,930.24l-0.72,3.6 -2.16,2.16M743.48,64.08l5.04,0M742.76,66.24l6.48,0l-1.44,3.6 -2.88,2.16M746,76.08l0,1.44M742.76,79.68l0,-2.16l6.48,0l-0.72,3.6 -3.6,2.88M743.48,196.8l5.04,0M746,196.8l0,6.48M742.76,203.28l6.48,0M743.48,256.08l0,7.2l5.76,0M743.48,258.96l5.04,-1.44M742.76,270.24l5.76,0l-0.72,5.76 -1.44,-0.72M745.64,268.08l-0.72,4.32 -2.16,3.6M742.76,618.96l6.48,0M746,616.08l0,8.64M743.48,621.84l2.16,-2.16M748.52,621.84l-2.16,-2.16M744.92,652.08l-2.16,3.6M744.92,653.52l4.32,0l-1.44,3.6 -3.6,2.88M743.48,664.8l5.04,0M746,664.8l0,6.48M742.76,671.28l6.48,0M743.48,760.8l5.04,0M746,760.8l0,6.48M742.76,767.28l6.48,0M742.76,772.8l6.48,0l-2.16,2.88M745.64,774.24l0,2.16l-2.16,4.32M742.76,870.24l6.48,0M744.56,868.08l0,4.32M747.44,868.08l0,4.32l-2.16,3.6M743.48,892.8l0,3.6M747.8,892.08l0,4.32l-2.88,3.6M863.48,114.24l5.04,0M862.76,117.12l6.48,0M865.64,112.08l0.72,7.92M863.48,148.8l5.04,0M866,148.8l0,6.48M862.76,155.28l6.48,0M863.48,232.8l5.04,0M866,232.8l0,6.48M862.76,239.28l6.48,0M862.76,377.52l0.72,2.16M864.92,376.8l0.72,2.16M869.24,377.52l-2.16,5.04 -2.88,2.16M862.76,473.52l0.72,2.16M864.92,472.8l0.72,2.16M869.24,473.52l-2.16,5.04 -2.88,2.16M864.92,508.08l-2.16,3.6M864.92,509.52l4.32,0l-1.44,3.6 -3.6,2.88M862.76,796.8l5.76,0l0,7.2l-5.76,0M862.76,800.4l5.76,0M866,808.08l0,1.44M862.76,811.68l0,-2.16l6.48,0l-0.72,3.6 -3.6,2.88M862.76,894.24l6.48,0M864.56,892.08l0,4.32M867.44,892.08l0,4.32l-2.16,3.6' stroke-opacity='0.1' stroke-width='1'/%3E%3Cpath d='M195.92,280.08l-2.16,3.6M195.92,281.52l4.32,0l-1.44,3.6 -3.6,2.88M194.48,700.8l5.04,0M197,700.8l0,6.48M193.76,707.28l6.48,0M272,88.08l0,1.44M268.76,91.68l0,-2.16l6.48,0l-0.72,3.6 -3.6,2.88M382.48,256.08l5.04,0M381.76,258.24l6.48,0l-1.44,3.6 -2.88,2.16M383.2,436.08l-1.44,4.32M382.48,438.24l5.76,0M386.08,438.24l-0.72,3.6 -2.16,2.16M385,424.08l0,1.44M381.76,427.68l0,-2.16l6.48,0l-0.72,3.6 -3.6,2.88M414.76,328.8l5.76,0l0,7.2l-5.76,0M679.76,798.24l6.48,0M684.08,796.08l0,7.92l-1.44,-0.72M684.08,798.96l-4.32,4.32M743.48,436.08l5.04,0M742.76,438.24l6.48,0l-1.44,3.6 -2.88,2.16' stroke-opacity='0.35' stroke-width='1'/%3E%3Cpath d='M194.48,292.8l0,3.6M198.8,292.08l0,4.32l-2.88,3.6M195.92,736.08l-2.16,3.6M195.92,737.52l4.32,0l-1.44,3.6 -3.6,2.88M193.76,714.24l6.48,0M198.08,712.08l0,7.92l-1.44,-0.72M198.08,714.96l-4.32,4.32M228.76,797.52l0.72,2.16M230.92,796.8l0.72,2.16M235.24,797.52l-2.16,5.04 -2.88,2.16M268.76,102.24l6.48,0M273.08,100.08l0,7.92l-1.44,-0.72M273.08,102.96l-4.32,4.32M381.76,474.24l6.48,0M386.08,472.08l0,7.92l-1.44,-0.72M386.08,474.96l-4.32,4.32M414.76,352.8l5.76,0l0,7.2l-5.76,0M501.48,808.8l5.04,1.44M501.48,811.68l5.04,1.44M500.76,814.56l6.48,1.44M501.48,796.8l0,3.6M505.8,796.08l0,4.32l-2.88,3.6M520.2,304.08l-1.44,4.32M519.48,306.24l5.76,0M523.08,306.24l-0.72,3.6 -2.16,2.16M697.76,124.8l5.76,0l0,7.2l-5.76,0M697.76,128.4l5.76,0M863.48,304.08l0,7.2l5.76,0M863.48,306.96l5.04,-1.44M863.48,700.8l5.04,1.44M863.48,703.68l5.04,1.44M862.76,706.56l6.48,1.44' stroke-opacity='0.5' stroke-width='1'/%3E%3Cpath d='M193.76,318.96l6.48,0M197,316.08l0,8.64M194.48,321.84l2.16,-2.16M199.52,321.84l-2.16,-2.16M249.48,592.08l0,7.2l5.76,0M249.48,594.96l5.04,-1.44M268.76,150.24l5.76,0l-0.72,5.76 -1.44,-0.72M271.64,148.08l-0.72,4.32 -2.16,3.6M383.92,317.52l-2.16,5.76M386.08,317.52l2.16,5.76M382.48,486.24l5.04,0M381.76,489.12l6.48,0M384.64,484.08l0.72,7.92M416.2,364.08l-1.44,4.32M415.48,366.24l5.76,0M419.08,366.24l-0.72,3.6 -2.16,2.16M500.76,822.24l6.48,0M502.56,820.08l0,4.32M505.44,820.08l0,4.32l-2.16,3.6M680.48,868.08l5.04,0M679.76,870.24l6.48,0l-1.44,3.6 -2.88,2.16M697.76,150.24l5.76,0l-0.72,5.76 -1.44,-0.72M700.64,148.08l-0.72,4.32 -2.16,3.6M697.76,138.96l6.48,0M701,136.08l0,8.64M698.48,141.84l2.16,-2.16M703.52,141.84l-2.16,-2.16M743.48,460.8l5.04,1.44M743.48,463.68l5.04,1.44M742.76,466.56l6.48,1.44M863.48,712.08l5.04,0M862.76,714.24l6.48,0l-1.44,3.6 -2.88,2.16' stroke-opacity='0.65' stroke-width='1'/%3E%3Cpath d='M193.76,340.8l5.76,0l0,7.2l-5.76,0M193.76,344.4l5.76,0M195.92,785.52l-2.16,5.76M198.08,785.52l2.16,5.76M249.48,628.08l5.04,0M248.76,630.24l6.48,0l-1.44,3.6 -2.88,2.16M268.76,172.8l6.48,0l-2.16,2.88M271.64,174.24l0,2.16l-2.16,4.32M270.92,472.08l-2.16,3.6M270.92,473.52l4.32,0l-1.44,3.6 -3.6,2.88M382.48,376.8l0,3.6M386.8,376.08l0,4.32l-2.88,3.6M381.76,364.8l6.48,0l-2.16,2.88M384.64,366.24l0,2.16l-2.16,4.32M381.76,544.8l6.48,0l-2.16,2.88M384.64,546.24l0,2.16l-2.16,4.32M414.76,402.24l6.48,0M416.56,400.08l0,4.32M419.44,400.08l0,4.32l-2.16,3.6M414.76,388.8l5.76,0l0,7.2l-5.76,0M414.76,392.4l5.76,0M502.92,857.52l-2.16,5.76M505.08,857.52l2.16,5.76M518.76,354.24l6.48,0M520.56,352.08l0,4.32M523.44,352.08l0,4.32l-2.16,3.6M685.52,892.08l-5.76,5.04M683.36,894.24l0,6.48M862.76,330.24l5.76,0l-0.72,5.76 -1.44,-0.72M865.64,328.08l-0.72,4.32 -2.16,3.6M864.92,736.08l-2.16,3.6M864.92,737.52l4.32,0l-1.44,3.6 -3.6,2.88' stroke-opacity='0.8' stroke-width='1'/%3E%3Cpath d='M197,352.08l0,1.44M193.76,355.68l0,-2.16l6.48,0l-0.72,3.6 -3.6,2.88M193.76,798.96l6.48,0M197,796.08l0,8.64M194.48,801.84l2.16,-2.16M199.52,801.84l-2.16,-2.16M249.48,640.08l0,7.2l5.76,0M249.48,642.96l5.04,-1.44M268.76,186.24l6.48,0M270.56,184.08l0,4.32M273.44,184.08l0,4.32l-2.16,3.6M269.48,484.08l5.04,0M268.76,486.24l6.48,0l-1.44,3.6 -2.88,2.16M381.76,400.8l5.76,0l0,7.2l-5.76,0M387.52,568.08l-5.76,5.04M385.36,570.24l0,6.48M683,916.08l0,1.44M679.76,919.68l0,-2.16l6.48,0l-0.72,3.6 -3.6,2.88M697.76,172.8l5.76,0l0,7.2l-5.76,0M742.76,496.8l6.48,0l-2.16,2.88M745.64,498.24l0,2.16l-2.16,4.32M868.52,340.08l-5.76,5.04M866.36,342.24l0,6.48M862.76,773.52l0.72,2.16M864.92,772.8l0.72,2.16M869.24,773.52l-2.16,5.04 -2.88,2.16M866,760.08l0,1.44M862.76,763.68l0,-2.16l6.48,0l-0.72,3.6 -3.6,2.88' stroke-opacity='0.9' stroke-width='1'/%3E%3Cpath d='M234.52,184.08l-5.76,5.04M232.36,186.24l0,6.48M268.76,496.8l5.76,0l0,7.2l-5.76,0M382.48,412.8l0,3.6M386.8,412.08l0,4.32l-2.88,3.6M381.76,581.52l0.72,2.16M383.92,580.8l0.72,2.16M388.24,581.52l-2.16,5.04 -2.88,2.16M518.76,376.8l5.76,0l0,7.2l-5.76,0M680.48,940.8l5.04,0M683,940.8l0,6.48M679.76,947.28l6.48,0M701,184.08l0,1.44M697.76,187.68l0,-2.16l6.48,0l-0.72,3.6 -3.6,2.88M743.48,508.08l0,7.2l5.76,0M743.48,510.96l5.04,-1.44' stroke-opacity='1' stroke-width='1'/%3E%3C/g%3E%3Ctext x='6.0 6.0 6.0 6.0 6.0 6.0 6.0 6.0 6.0 21.0 35.0 35.0 35.0 35.0 35.0 49.0 49.0 105.0 105.0 118.0 118.0 132.0 132.0 132.0 145.0 145.0 145.0 145.0 159.0 174.0 174.0 188.0 188.0 206.0 221.0 221.0 221.0 221.0 243.0 243.0 261.0 261.0 261.0 261.0 261.0 283.0 283.0 283.0 283.0 297.0 297.0 333.0 333.0 333.0 333.0 347.0 347.0 347.0 347.0 347.0 361.0 361.0 376.0 376.0 429.0 429.0 429.0 429.0 429.0 443.0 458.0 458.0 458.0 458.0 480.0 480.0 495.0 513.0 513.0 531.0 531.0 544.0 558.0 558.0 558.0 558.0 572.0 572.0 572.0 572.0 572.0 572.0 585.0 585.0 626.0 626.0 641.0 659.0 659.0 659.0 659.0 674.0 674.0 674.0 692.0 692.0 710.0 737.0 737.0 737.0 755.0 781.0 781.0 781.0 781.0 781.0 794.0 807.0 807.0 807.0 807.0 807.0 821.0 821.0 835.0 835.0 835.0 857.0 875.0 889.0 903.0 903.0 903.0 917.0 930.0 930.0 930.0 930.0 959.0 959.0 959.0 959.0 974.0 988.0 988.0 988.0' y='192 224 304 320 400 448 496 512 864 32 64 80 112 272 320 224 608 288 464 864 896 80 544 624 176 368 384 448 720 288 368 160 384 224 96 176 208 224 144 320 480 496 816 960 0 112 176 320 432 512 736 48 768 848 880 320 352 400 672 752 656 720 160 240 384 432 528 688 704 464 64 80 96 960 80 624 384 656 688 272 944 208 400 528 640 656 448 560 688 752 864 880 240 336 16 944 528 32 688 720 816 48 192 480 272 464 176 400 800 832 48 96 192 272 480 496 432 32 128 256 272 288 112 272 96 112 144 880 384 208 64 416 512 16 224 256 592 832 256 368 480 512 544 304 368 640' fill-opacity='0.1'%3E%26quot;275510%26lt;932816.*59412:97+:9%26quot;6952*390105669534+9+:%26lt;5905=48=*.2247435+8Z261105|5.1++88=*3621.0076|1922Z|%26lt;17+77%26lt;3%26lt;551Z57555.=|%26quot;1:89:7Z4|15+%26quot;33392+228%3C/text%3E%3Ctext x='21.0 21.0 21.0 21.0 49.0 49.0 76.0 76.0 76.0 105.0 105.0 118.0 118.0 132.0 132.0 145.0 159.0 174.0 174.0 188.0 188.0 206.0 221.0 261.0 261.0 283.0 297.0 297.0 311.0 333.0 333.0 347.0 361.0 361.0 376.0 376.0 394.0 443.0 480.0 480.0 544.0 585.0 612.0 612.0 612.0 612.0 692.0 723.0 723.0 737.0 737.0 768.0 768.0 781.0 807.0 821.0 821.0 835.0 835.0 857.0 857.0 875.0 875.0 889.0 903.0 903.0 903.0 917.0 917.0 945.0 974.0 988.0' y='80 432 416 752 256 240 80 64 848 864 560 576 944 672 656 544 48 0 400 512 880 848 320 32 608 768 528 912 480 96 80 784 944 208 272 656 672 176 160 144 336 544 192 176 800 784 528 144 816 448 0 208 176 576 352 320 720 288 272 640 624 512 0 912 832 640 624 64 48 96 736 400' fill-opacity='0.35'%3E902%26quot;703531Z7ZZ%26quot;95.336409182%26lt;*2982:83*6522*Z9%26gt;5%26quot;%26lt;|%26lt;393:.1=*76=213118:36%26lt;2%3C/text%3E%3Ctext x='6.0 6.0 6.0 21.0 35.0 35.0 35.0 35.0 35.0 49.0 49.0 49.0 49.0 49.0 63.0 63.0 63.0 63.0 63.0 63.0 63.0 63.0 76.0 76.0 91.0 91.0 91.0 91.0 91.0 105.0 118.0 118.0 132.0 132.0 132.0 145.0 159.0 159.0 159.0 159.0 174.0 174.0 174.0 188.0 188.0 206.0 206.0 206.0 221.0 221.0 221.0 243.0 243.0 243.0 243.0 243.0 261.0 261.0 261.0 261.0 283.0 283.0 283.0 311.0 311.0 333.0 333.0 333.0 333.0 333.0 333.0 347.0 361.0 361.0 361.0 376.0 376.0 394.0 407.0 407.0 407.0 407.0 407.0 429.0 429.0 429.0 443.0 443.0 480.0 495.0 495.0 495.0 513.0 531.0 531.0 531.0 531.0 544.0 544.0 544.0 544.0 544.0 558.0 558.0 572.0 572.0 572.0 572.0 585.0 585.0 585.0 598.0 598.0 612.0 612.0 612.0 626.0 626.0 626.0 626.0 626.0 626.0 641.0 674.0 674.0 674.0 674.0 692.0 692.0 692.0 692.0 710.0 710.0 710.0 710.0 723.0 723.0 723.0 723.0 737.0 737.0 737.0 755.0 755.0 768.0 768.0 781.0 781.0 794.0 794.0 794.0 794.0 807.0 807.0 821.0 821.0 835.0 835.0 835.0 835.0 857.0 875.0 889.0 889.0 889.0 889.0 903.0 903.0 917.0 917.0 930.0 930.0 930.0 945.0 945.0 945.0 945.0 945.0 974.0 974.0 974.0 974.0 974.0 988.0 988.0 988.0' y='944 928 592 128 464 432 816 768 752 304 288 272 0 944 176 160 144 352 336 704 688 672 96 880 272 832 816 496 448 624 48 0 304 736 720 656 832 368 352 336 448 432 672 576 544 368 336 896 768 752 384 480 432 704 688 880 352 336 112 656 528 800 784 512 64 448 416 576 560 160 144 832 32 960 256 720 704 704 0 944 928 304 608 912 864 848 560 256 192 240 16 944 864 672 624 80 48 416 400 912 864 576 832 816 944 928 176 144 640 592 896 704 688 240 848 832 720 704 144 128 96 80 80 336 304 624 592 112 816 592 544 448 432 400 848 416 192 864 848 656 48 32 464 704 896 240 624 816 512 960 0 224 448 640 384 736 400 384 352 848 208 32 320 16 944 928 864 688 96 384 336 944 912 176 160 144 432 848 848 832 800 784 400 432 416 864' fill-opacity='0.5'%3E175003612%26lt;4388=Z2879|13Z+%26quot;:6Z011|0045+59305583%26gt;89=Z0845891|58.3787|90457.940%26quot;6%26lt;%26quot;0=|+96%26gt;=2+5544=|46:35%26lt;+%26gt;99%26quot;0%26gt;%26lt;5297520%26gt;880%26gt;8.1*0950|Z772=%26gt;%26lt;:68%26lt;48+0%26lt;:06:5603+63=681:054766847|7210268Z76:+7%3C/text%3E%3Ctext x='6.0 6.0 21.0 21.0 21.0 49.0 49.0 49.0 63.0 63.0 63.0 76.0 76.0 76.0 76.0 91.0 91.0 91.0 91.0 91.0 91.0 105.0 105.0 118.0 118.0 132.0 132.0 132.0 132.0 145.0 145.0 145.0 159.0 159.0 159.0 159.0 159.0 188.0 188.0 188.0 188.0 206.0 221.0 221.0 243.0 243.0 243.0 261.0 261.0 261.0 283.0 283.0 283.0 297.0 297.0 311.0 311.0 311.0 311.0 311.0 333.0 333.0 333.0 347.0 361.0 376.0 376.0 376.0 376.0 376.0 394.0 394.0 407.0 407.0 429.0 443.0 443.0 458.0 458.0 480.0 495.0 495.0 495.0 513.0 531.0 531.0 544.0 544.0 558.0 558.0 572.0 585.0 585.0 585.0 598.0 598.0 612.0 612.0 612.0 612.0 626.0 626.0 626.0 641.0 641.0 641.0 641.0 641.0 659.0 659.0 659.0 674.0 692.0 692.0 692.0 692.0 692.0 710.0 710.0 723.0 723.0 723.0 723.0 723.0 723.0 737.0 737.0 737.0 737.0 755.0 768.0 768.0 768.0 768.0 781.0 781.0 781.0 794.0 794.0 794.0 807.0 807.0 807.0 807.0 821.0 821.0 835.0 857.0 857.0 857.0 875.0 875.0 875.0 875.0 889.0 889.0 889.0 889.0 903.0 903.0 917.0 917.0 917.0 930.0 930.0 930.0 930.0 930.0 945.0 959.0 959.0 959.0 959.0 959.0 974.0 988.0 988.0 988.0' y='32 656 160 528 832 800 368 32 224 208 192 176 144 592 576 304 960 944 912 560 512 64 48 672 112 352 336 832 816 720 688 672 864 448 416 176 160 672 656 16 960 32 784 480 512 752 912 400 160 704 560 544 848 608 48 688 672 160 144 112 592 224 176 96 368 384 368 848 832 800 768 32 64 656 208 688 672 592 560 304 288 32 592 896 128 96 0 624 912 112 256 688 944 928 752 912 272 928 896 384 752 736 176 176 816 800 768 752 288 256 240 704 160 896 864 656 624 944 928 432 224 608 0 928 896 544 528 112 80 768 32 960 0 304 640 896 864 32 288 272 496 480 720 704 464 416 416 736 320 304 640 608 144 112 448 432 416 48 896 272 224 496 480 416 400 384 960 0 448 672 656 144 128 848 896 464 944 112' fill-opacity='0.65'%3E07274=*0879%26quot;3187626087.%26lt;Z%26gt;Z:86%26lt;:520%26gt;57.4%26gt;:3|364.3+69%26lt;%26gt;2+1:9557.39%26lt;:=9532:999566%26gt;16%26gt;84:5:9615%26quot;.69121+.0*|*0=+3809.86515.Z%26lt;6%26lt;7=|%26lt;871Z*9=5495*=20|56057792.8%26gt;0*76|3.|5==%26lt;Z3|546%26quot;Z7%26lt;8|%3C/text%3E%3Ctext x='6.0 21.0 21.0 21.0 21.0 21.0 35.0 35.0 35.0 49.0 76.0 91.0 91.0 91.0 105.0 105.0 118.0 118.0 118.0 132.0 159.0 174.0 174.0 174.0 188.0 188.0 206.0 206.0 206.0 206.0 221.0 221.0 221.0 243.0 243.0 261.0 261.0 283.0 297.0 297.0 297.0 311.0 311.0 311.0 311.0 333.0 333.0 333.0 347.0 347.0 347.0 361.0 361.0 376.0 394.0 394.0 407.0 429.0 429.0 443.0 443.0 443.0 458.0 480.0 495.0 495.0 495.0 513.0 544.0 558.0 558.0 558.0 572.0 585.0 585.0 585.0 598.0 598.0 598.0 612.0 612.0 612.0 612.0 626.0 626.0 641.0 641.0 659.0 674.0 674.0 674.0 692.0 692.0 710.0 710.0 710.0 723.0 723.0 723.0 737.0 737.0 737.0 737.0 755.0 755.0 755.0 755.0 768.0 768.0 768.0 768.0 781.0 781.0 781.0 794.0 794.0 794.0 807.0 807.0 821.0 821.0 821.0 835.0 857.0 857.0 857.0 857.0 875.0 889.0 903.0 903.0 917.0 917.0 917.0 930.0 930.0 930.0 945.0 945.0 945.0 945.0 959.0 959.0 974.0 974.0 974.0 974.0 988.0 988.0 988.0 988.0' y='688 192 544 864 688 672 528 896 624 848 608 384 352 576 112 704 720 704 160 864 640 576 560 784 720 48 512 496 96 48 832 560 544 560 960 416 736 640 640 96 176 592 752 720 208 656 640 256 896 128 240 432 416 912 800 80 448 64 32 768 752 368 624 352 304 80 608 16 496 16 176 144 272 720 32 0 960 0 944 48 432 688 672 800 784 272 864 320 400 752 736 176 688 576 48 16 480 464 288 592 560 720 160 592 576 560 816 64 400 384 528 688 384 928 592 112 80 544 768 496 928 912 0 800 784 368 352 192 480 944 304 544 528 512 464 448 48 272 496 944 928 736 928 960 944 928 96 960 0 208 192' fill-opacity='0.8'%3E81:.447958536157244:79.72|038344%26quot;%26quot;123%26gt;%26gt;|490%26quot;8Z2.32%26lt;%26lt;*627337007:27189|6+467=358458%26gt;79*1%26gt;7%26quot;|0%26quot;72683*1%26lt;25=%26quot;Z069+00+67|12%26lt;57+=:84955447637|83+584=176357|2|%3C/text%3E%3Ctext x='6.0 6.0 6.0 21.0 21.0 35.0 35.0 49.0 49.0 49.0 76.0 76.0 76.0 76.0 91.0 91.0 105.0 105.0 145.0 145.0 159.0 159.0 159.0 159.0 174.0 174.0 174.0 188.0 206.0 221.0 221.0 243.0 243.0 243.0 283.0 297.0 311.0 311.0 311.0 311.0 333.0 333.0 347.0 347.0 361.0 361.0 376.0 394.0 394.0 394.0 407.0 429.0 429.0 443.0 443.0 443.0 458.0 458.0 480.0 495.0 495.0 495.0 495.0 495.0 531.0 572.0 585.0 598.0 598.0 612.0 612.0 612.0 612.0 612.0 626.0 641.0 659.0 659.0 692.0 692.0 692.0 710.0 710.0 723.0 723.0 737.0 737.0 737.0 737.0 768.0 768.0 768.0 781.0 781.0 794.0 794.0 807.0 807.0 821.0 821.0 821.0 835.0 835.0 857.0 857.0 875.0 875.0 903.0 903.0 903.0 917.0 917.0 917.0 917.0 930.0 945.0 945.0 959.0 959.0 959.0 974.0 974.0 974.0 974.0 988.0 988.0' y='144 128 720 240 720 560 0 448 432 112 240 224 672 656 416 624 176 736 832 960 960 0 240 656 176 608 832 768 528 848 624 800 848 48 608 224 784 768 240 224 672 272 912 288 496 480 0 848 832 128 752 112 96 800 384 880 688 832 448 112 96 640 720 704 176 320 800 832 816 352 336 80 64 704 304 896 464 448 960 0 736 640 80 688 64 608 768 752 192 96 432 576 432 32 624 128 576 784 528 656 960 560 32 816 512 720 704 16 960 784 320 304 288 560 496 560 960 768 960 944 48 32 512 496 544 256' fill-opacity='0.9'%3E5660+83.7867441*0+5%26lt;:22=:2|792|2%26gt;9*448%26quot;6:9964Z2667130%26lt;4*0550%26lt;=38433683%26quot;=04596332.3Z21885|+04Z519478%26lt;864.+166429*0984Z%26lt;5=3%26lt;%26lt;439%3C/text%3E%3Ctext x='49.0 63.0 91.0 132.0 145.0 174.0 174.0 188.0 243.0 283.0 361.0 394.0 407.0 429.0 443.0 443.0 544.0 558.0 641.0 710.0 821.0 930.0 974.0 974.0 988.0' y='144 512 640 960 16 208 624 800 640 720 512 176 208 144 416 896 144 80 336 672 544 528 64 192 272' fill-opacity='1'%3E1994:+%26quot;=5:%26quot;*13=8:0377%26gt;813%3C/text%3E%3Cg fill='none' stroke='%2300ff41' stroke-linecap='square'%3E%3Cpath d='M2.5,325l0,10l8,0M2.5,329l7,-2M1.5,518l8,0l0,10l-8,0M2.5,821l7,0M1.5,824l9,0l-2,5 -4,3M1.5,872l8,0l-1,8 -2,-1M5.5,869l-1,6 -3,5M24.5,37l-8,7M21.5,40l0,9M17.5,262l0,5M23.5,261l0,6l-4,5M19.5,293l-3,5M19.5,295l6,0l-2,5 -5,4M17.5,328l7,0M16.5,332l9,0M20.5,325l1,11M17.5,358l0,5M23.5,357l0,6l-4,5M16.5,921l9,0M21,917l0,12M17.5,925l3,-3M24.5,925l-3,-3M32.5,117l-2,6M31.5,120l8,0M36.5,120l-1,5 -3,3M30.5,152l9,0M33,149l0,6M37,149l0,6l-3,5M30.5,182l9,0l-3,4M34.5,184l0,3l-3,6M31,246l2,2M31,250l2,2M31.5,256l8,-6M30.5,297l9,0M35,293l0,12M31.5,301l3,-3M38.5,301l-3,-3M33.5,325l-3,5M33.5,327l6,0l-2,5 -5,4M30.5,345l9,0M35,341l0,12M31.5,349l3,-3M38.5,349l-3,-3M44.5,200l9,0M47,197l0,6M51,197l0,6l-3,5M59.5,5l7,0M58.5,8l9,0l-2,5 -4,3M59.5,21l7,0M58.5,24l9,0l-2,5 -4,3M61.5,869l-3,5M61.5,871l6,0l-2,5 -5,4M58.5,920l9,0M61,917l0,6M65,917l0,6l-3,5M79.5,325l-8,7M76.5,328l0,9M72,390l2,2M72,394l2,2M72.5,400l8,-6M71.5,408l9,0M74,405l0,6M78,405l0,6l-3,5M71.5,712l9,0M77.5,709l0,11l-2,-1M77.5,713l-6,6M72.5,741l0,10l8,0M72.5,745l7,-2M72.5,757l7,0M71.5,760l9,0l-2,5 -4,3M72.5,790l7,2M72.5,794l7,2M71.5,798l9,2M86.5,136l9,0M89,133l0,6M93,133l0,6l-3,5M91,741l0,2M86.5,746l0,-3l9,0l-1,5 -5,4M102.5,325l-2,6M101.5,328l8,0M106.5,328l-1,5 -3,3M100.5,361l9,0M105,357l0,12M101.5,365l3,-3M108.5,365l-3,-3M113.5,246l8,0l0,10l-8,0M113.5,251l8,0M113.5,326l8,0l0,10l-8,0M113.5,331l8,0M113.5,422l8,0l0,10l-8,0M113.5,438l8,0l0,10l-8,0M113.5,870l8,0l0,10l-8,0M128,198l2,2M128,202l2,2M128.5,208l8,-6M127.5,230l8,0l0,10l-8,0M127.5,235l8,0M130.5,247l-3,8M133.5,247l3,8M128.5,565l7,0M127.5,568l9,0l-2,5 -4,3M127.5,582l9,0l-3,4M131.5,584l0,3l-3,6M140.5,54l8,0l0,10l-8,0M140.5,59l8,0M145,69l0,2M140.5,74l0,-3l9,0l-1,5 -5,4M143.5,133l-3,5M143.5,135l6,0l-2,5 -5,4M141.5,293l0,10l8,0M141.5,297l7,-2M141.5,421l7,0M140.5,424l9,0l-2,5 -4,3M141.5,454l7,2M141.5,458l7,2M140.5,462l9,2M170.5,232l7,0M169.5,236l9,0M173.5,229l1,11M169.5,905l9,0M174,901l0,12M170.5,909l3,-3M177.5,909l-3,-3M185.5,165l-2,6M184.5,168l8,0M189.5,168l-1,5 -3,3M183.5,216l9,0M189.5,213l0,11l-2,-1M189.5,217l-6,6M183.5,345l9,0M188,341l0,12M184.5,349l3,-3M191.5,349l-3,-3M183.5,361l9,0M188,357l0,12M184.5,365l3,-3M191.5,365l-3,-3M184.5,406l0,5M190.5,405l0,6l-4,5M184.5,838l0,5M190.5,837l0,6l-4,5M201.5,182l8,0l0,10l-8,0M202.5,581l0,10l8,0M202.5,585l7,-2M209.5,661l-8,7M206.5,664l0,9M204.5,759l-3,8M207.5,759l3,8M217.5,102l7,2M217.5,106l7,2M216.5,110l9,2M219.5,119l-3,8M222.5,119l3,8M217,662l2,2M217,666l2,2M217.5,672l8,-6M239.5,102l7,0M243,102l0,9M238.5,111l9,0M239.5,166l0,5M245.5,165l0,6l-4,5M246.5,197l-8,7M243.5,200l0,9M238.5,230l9,0l-3,4M242.5,232l0,3l-3,6M239.5,342l0,5M245.5,341l0,6l-4,5M257,294l2,2M257,298l2,2M257.5,304l8,-6M264.5,533l-8,7M261.5,536l0,9M264.5,885l-8,7M261.5,888l0,9M256.5,918l8,0l0,10l-8,0M256.5,923l8,0M278.5,6l8,0l0,10l-8,0M278.5,57l9,0M283,53l0,12M279.5,61l3,-3M286.5,61l-3,-3M279.5,86l7,2M279.5,90l7,2M278.5,94l9,2M280.5,149l-2,6M279.5,152l8,0M284.5,152l-1,5 -3,3M279,342l2,2M279,346l2,2M279.5,352l8,-6M279.5,358l7,0M283,358l0,9M278.5,367l9,0M295.5,469l-3,5M295.5,471l6,0l-2,5 -5,4M311,309l0,2M306.5,314l0,-3l9,0l-1,5 -5,4M307,390l2,2M307,394l2,2M307.5,400l8,-6M309.5,871l-3,8M312.5,871l3,8M306.5,886l9,0l-3,4M310.5,888l0,3l-3,6M328.5,376l9,0M334.5,373l0,11l-2,-1M334.5,377l-6,6M328.5,793l9,0M333,789l0,12M329.5,797l3,-3M336.5,797l-3,-3M329.5,822l7,0M333,822l0,9M328.5,831l9,0M328.5,888l9,0M331,885l0,6M335,885l0,6l-3,5M329.5,904l7,0M328.5,908l9,0M332.5,901l1,11M342.5,374l8,0l0,10l-8,0M342.5,379l8,0M342.5,409l9,0M347,405l0,12M343.5,413l3,-3M350.5,413l-3,-3M343.5,454l7,0M347,454l0,9M342.5,463l9,0M342.5,472l9,0M348.5,469l0,11l-2,-1M348.5,473l-6,6M343.5,518l7,2M343.5,522l7,2M342.5,526l9,2M343,550l2,2M343,554l2,2M343.5,560l8,-6M345.5,613l-3,5M345.5,615l6,0l-2,5 -5,4M347,709l0,2M342.5,714l0,-3l9,0l-1,5 -5,4M356.5,680l8,0l-1,8 -2,-1M360.5,677l-1,6 -3,5M358.5,741l-2,6M357.5,744l8,0M362.5,744l-1,5 -3,3M356.5,793l9,0M361,789l0,12M357.5,797l3,-3M364.5,797l-3,-3M357.5,805l7,0M356.5,808l9,0l-2,5 -4,3M357.5,822l7,2M357.5,826l7,2M356.5,830l9,2M359.5,853l-3,5M359.5,855l6,0l-2,5 -5,4M379.5,37l-8,7M376.5,40l0,9M379.5,213l-8,7M376.5,216l0,9M373.5,245l-2,6M372.5,248l8,0M377.5,248l-1,5 -3,3M372.5,613l0,10l8,0M372.5,617l7,-2M390,406l2,2M390,410l2,2M390.5,416l8,-6M389.5,470l9,0l-3,4M393.5,472l0,3l-3,6M391.5,517l-2,6M390.5,520l8,0M395.5,520l-1,5 -3,3M405.5,549l-3,5M405.5,551l6,0l-2,5 -5,4M403.5,790l7,2M403.5,794l7,2M402.5,798l9,2M403.5,822l7,2M403.5,826l7,2M402.5,830l9,2M424.5,488l9,0M430.5,485l0,11l-2,-1M430.5,489l-6,6M424.5,504l9,0M427,501l0,6M431,501l0,6l-3,5M425.5,536l7,0M424.5,540l9,0M428.5,533l1,11M426.5,597l-2,6M425.5,600l8,0M430.5,600l-1,5 -3,3M424.5,728l8,0l-1,8 -2,-1M428.5,725l-1,6 -3,5M439.5,5l0,10l8,0M439.5,9l7,-2M440.5,85l-2,6M439.5,88l8,0M444.5,88l-1,5 -3,3M439.5,933l7,0M438.5,936l9,0l-2,5 -4,3M454.5,117l7,0M453.5,120l9,0l-2,5 -4,3M454.5,136l7,0M453.5,140l9,0M457.5,133l1,11M453.5,150l8,0l0,10l-8,0M453.5,155l8,0M453.5,870l9,0l-3,4M457.5,872l0,3l-3,6M454.5,-8l7,0M453.5,-4l9,0M457.5,-11l1,11M483.5,501l-8,7M480.5,504l0,9M480,565l0,2M475.5,570l0,-3l9,0l-1,5 -5,4M475.5,630l8,0l0,10l-8,0M475.5,635l8,0M476.5,694l7,0M480,694l0,9M475.5,703l9,0M476.5,760l7,0M475.5,764l9,0M479.5,757l1,11M491.5,184l7,0M490.5,188l9,0M494.5,181l1,11M491.5,453l7,0M490.5,456l9,0l-2,5 -4,3M491.5,790l7,0M495,790l0,9M490.5,799l9,0M493.5,839l-3,8M496.5,839l3,8M490.5,886l8,0l0,10l-8,0M509.5,230l0,5M515.5,229l0,6l-4,5M508.5,247l1,3M511.5,246l1,3M517.5,247l-3,7 -4,3M510.5,277l-2,6M509.5,280l8,0M514.5,280l-1,5 -3,3M509.5,438l7,0M513,438l0,9M508.5,447l9,0M516.5,453l-8,7M513.5,456l0,9M508.5,568l8,0l-1,8 -2,-1M512.5,565l-1,6 -3,5M509.5,758l0,5M515.5,757l0,6l-4,5M527,246l2,2M527,250l2,2M527.5,256l8,-6M527.5,293l0,10l8,0M527.5,297l7,-2M526.5,328l8,0l-1,8 -2,-1M530.5,325l-1,6 -3,5M527.5,373l0,10l8,0M527.5,377l7,-2M527.5,406l7,2M527.5,410l7,2M526.5,414l9,2M527.5,454l0,5M533.5,453l0,6l-4,5M539.5,168l8,0l-1,8 -2,-1M543.5,165l-1,6 -3,5M539.5,313l9,0M544,309l0,12M540.5,317l3,-3M547.5,317l-3,-3M554.5,229l0,10l8,0M554.5,233l7,-2M553.5,248l9,0M559.5,245l0,11l-2,-1M559.5,249l-6,6M554.5,504l7,0M553.5,508l9,0M557.5,501l1,11M553.5,534l8,0l0,10l-8,0M553.5,539l8,0M554.5,566l7,0M558,566l0,9M553.5,575l9,0M553.5,678l8,0l0,10l-8,0M568.5,357l7,0M567.5,360l9,0l-2,5 -4,3M568.5,470l7,2M568.5,474l7,2M567.5,478l9,2M568.5,501l0,10l8,0M568.5,505l7,-2M567.5,534l8,0l0,10l-8,0M567.5,539l8,0M567.5,694l8,0l0,10l-8,0M567.5,699l8,0M568.5,806l7,0M572,806l0,9M567.5,815l9,0M568.5,821l0,10l8,0M568.5,825l7,-2M582.5,197l-2,6M581.5,200l8,0M586.5,200l-1,5 -3,3M583.5,279l-3,8M586.5,279l3,8M583.5,389l-3,5M583.5,391l6,0l-2,5 -5,4M593.5,120l9,0M596,117l0,6M600,117l0,6l-3,5M593.5,183l1,3M596.5,182l1,3M602.5,183l-3,7 -4,3M593.5,264l9,0M599.5,261l0,11l-2,-1M599.5,265l-6,6M596.5,309l-3,5M596.5,311l6,0l-2,5 -5,4M594.5,422l7,0M598,422l0,9M593.5,431l9,0M598,437l0,2M593.5,442l0,-3l9,0l-1,5 -5,4M594.5,486l7,0M598,486l0,9M593.5,495l9,0M594.5,501l0,10l8,0M594.5,505l7,-2M593.5,550l8,0l0,10l-8,0M593.5,555l8,0M596.5,565l-3,5M596.5,567l6,0l-2,5 -5,4M594.5,582l7,0M598,582l0,9M593.5,591l9,0M607.5,504l9,0M610,501l0,6M614,501l0,6l-3,5M621.5,358l9,0l-3,4M625.5,360l0,3l-3,6M621.5,406l9,0l-3,4M625.5,408l0,3l-3,6M622.5,454l7,0M626,454l0,9M621.5,463l9,0M621.5,486l8,0l0,10l-8,0M621.5,491l8,0M621.5,519l1,3M624.5,518l1,3M630.5,519l-3,7 -4,3M623.5,581l-2,6M622.5,584l8,0M627.5,584l-1,5 -3,3M626,853l0,2M621.5,858l0,-3l9,0l-1,5 -5,4M637.5,390l7,2M637.5,394l7,2M636.5,398l9,2M637.5,453l7,0M636.5,456l9,0l-2,5 -4,3M637.5,486l7,0M641,486l0,9M636.5,495l9,0M637.5,502l7,0M641,502l0,9M636.5,511l9,0M655.5,662l7,2M655.5,666l7,2M654.5,670l9,2M654.5,696l8,0l-1,8 -2,-1M658.5,693l-1,6 -3,5M670.5,6l0,5M676.5,5l0,6l-4,5M672.5,69l-3,5M672.5,71l6,0l-2,5 -5,4M670.5,150l7,2M670.5,154l7,2M669.5,158l9,2M669.5,264l9,0M675.5,261l0,11l-2,-1M675.5,265l-6,6M677.5,485l-8,7M674.5,488l0,9M669.5,838l9,0l-3,4M673.5,840l0,3l-3,6M670.5,854l0,5M676.5,853l0,6l-4,5M688.5,277l7,0M687.5,280l9,0l-2,5 -4,3M687.5,296l9,0M690,293l0,6M694,293l0,6l-3,5M688.5,310l7,2M688.5,314l7,2M687.5,318l9,2M687.5,392l9,0M693.5,389l0,11l-2,-1M693.5,393l-6,6M687.5,406l9,0l-3,4M691.5,408l0,3l-3,6M687.5,424l9,0M693.5,421l0,11l-2,-1M693.5,425l-6,6M708.5,119l-3,8M711.5,119l3,8M706,198l2,2M706,202l2,2M706.5,208l8,-6M707.5,245l-2,6M706.5,248l8,0M711.5,248l-1,5 -3,3M705.5,265l9,0M710,261l0,12M706.5,269l3,-3M713.5,269l-3,-3M708.5,277l-3,5M708.5,279l6,0l-2,5 -5,4M705.5,694l9,0l-3,4M709.5,696l0,3l-3,6M706.5,741l0,10l8,0M706.5,745l7,-2M706.5,758l7,0M710,758l0,9M705.5,767l9,0M737,245l0,2M732.5,250l0,-3l9,0l-1,5 -5,4M732.5,294l8,0l0,10l-8,0M732.5,406l8,0l0,10l-8,0M732.5,411l8,0M732.5,873l9,0M737,869l0,12M733.5,877l3,-3M740.5,877l-3,-3M733.5,904l7,0M732.5,908l9,0M736.5,901l1,11M733.5,917l0,10l8,0M733.5,921l7,-2M751.5,21l0,10l8,0M751.5,25l7,-2M751.5,902l0,5M757.5,901l0,6l-4,5M766.5,149l-3,5M766.5,151l6,0l-2,5 -5,4M763.5,728l9,0M766,725l0,6M770,725l0,6l-3,5M764.5,741l7,0M763.5,744l9,0l-2,5 -4,3M776.5,168l9,0M782.5,165l0,11l-2,-1M782.5,169l-6,6M777.5,534l0,5M783.5,533l0,6l-4,5M789.5,390l9,0l-3,4M793.5,392l0,3l-3,6M790.5,709l7,0M789.5,712l9,0l-2,5 -4,3M792.5,807l-3,8M795.5,807l3,8M789.5,856l9,0M792,853l0,6M796,853l0,6l-3,5M803.5,70l7,2M803.5,74l7,2M802.5,78l9,2M803,134l2,2M803,138l2,2M803.5,144l8,-6M803.5,166l0,5M809.5,165l0,6l-4,5M803.5,917l0,10l8,0M803.5,921l7,-2M802.5,935l1,3M805.5,934l1,3M811.5,935l-3,7 -4,3M805.5,949l-3,5M805.5,951l6,0l-2,5 -5,4M803.5,-11l7,0M802.5,-8l9,0l-2,5 -4,3M817.5,54l7,2M817.5,58l7,2M816.5,62l9,2M816.5,71l1,3M819.5,70l1,3M825.5,71l-3,7 -4,3M816.5,86l8,0l0,10l-8,0M816.5,217l9,0M821,213l0,12M817.5,221l3,-3M824.5,221l-3,-3M838.5,117l-8,7M835.5,120l0,9M830.5,246l9,0l-3,4M834.5,248l0,3l-3,6M853.5,902l7,2M853.5,906l7,2M852.5,910l9,2M875,277l0,2M870.5,282l0,-3l9,0l-1,5 -5,4M872.5,309l-2,6M871.5,312l8,0M876.5,312l-1,5 -3,3M870.5,342l8,0l0,10l-8,0M870.5,347l8,0M870.5,439l1,3M873.5,438l1,3M879.5,439l-3,7 -4,3M870.5,487l1,3M873.5,486l1,3M879.5,487l-3,7 -4,3M873.5,855l-3,8M876.5,855l3,8M889,245l0,2M884.5,250l0,-3l9,0l-1,5 -5,4M884.5,566l8,0l0,10l-8,0M884.5,571l8,0M885.5,693l7,0M884.5,696l9,0l-2,5 -4,3M884.5,710l8,0l0,10l-8,0M898.5,566l8,0l0,10l-8,0M898.5,571l8,0M912.5,633l9,0M917,629l0,12M913.5,637l3,-3M920.5,637l-3,-3M912.5,710l8,0l0,10l-8,0M912.5,715l8,0M912.5,758l9,0l-3,4M916.5,760l0,3l-3,6M912.5,934l8,0l0,10l-8,0M912.5,939l8,0M926.5,565l7,0M925.5,568l9,0l-2,5 -4,3M927.5,741l-2,6M926.5,744l8,0M931.5,744l-1,5 -3,3M940.5,646l8,0l0,10l-8,0M940.5,651l8,0M941.5,773l7,0M940.5,776l9,0l-2,5 -4,3M969.5,214l8,0l0,10l-8,0M969.5,219l8,0M969.5,264l8,0l-1,8 -2,-1M973.5,261l-1,6 -3,5M969.5,310l8,0l0,10l-8,0M969.5,583l1,3M972.5,582l1,3M978.5,583l-3,7 -4,3M970.5,600l7,0M969.5,604l9,0M973.5,597l1,11M974,645l0,2M969.5,650l0,-3l9,0l-1,5 -5,4M970.5,693l0,10l8,0M970.5,697l7,-2M991.5,677l-8,7M988.5,680l0,9M983.5,710l8,0l0,10l-8,0M983.5,715l8,0M984.5,725l7,0M983.5,728l9,0l-2,5 -4,3M983.5,744l8,0l-1,8 -2,-1M987.5,741l-1,6 -3,5M983.5,774l8,0l0,10l-8,0M983.5,779l8,0' stroke-opacity='0.1' stroke-width='1.3'/%3E%3Cpath d='M2.5,902l0,5M8.5,901l0,6l-4,5M2.5,886l7,2M2.5,890l7,2M1.5,894l9,2M17.5,53l0,10l8,0M17.5,57l7,-2M30.5,408l9,0M33,405l0,6M37,405l0,6l-3,5M30.5,390l8,0l0,10l-8,0M30.5,395l8,0M30.5,726l8,0l0,10l-8,0M30.5,713l9,0M35,709l0,12M31.5,717l3,-3M38.5,717l-3,-3M44.5,678l8,0l0,10l-8,0M44.5,683l8,0M52.5,661l-8,7M49.5,664l0,9M61.5,101l-3,5M61.5,103l6,0l-2,5 -5,4M58.5,88l9,0M61,85l0,6M65,85l0,6l-3,5M58.5,648l9,0M61,645l0,6M65,645l0,6l-3,5M58.5,631l1,3M61.5,630l1,3M67.5,631l-3,7 -4,3M71.5,488l9,0M74,485l0,6M78,485l0,6l-3,5M73.5,469l-2,6M72.5,472l8,0M77.5,472l-1,5 -3,3M87.5,213l0,10l8,0M87.5,217l7,-2M86.5,200l9,0M92.5,197l0,11l-2,-1M92.5,201l-6,6M86.5,790l8,0l0,10l-8,0M86.5,795l8,0M86.5,776l9,0M89,773l0,6M93,773l0,6l-3,5M100.5,886l9,0l-3,4M104.5,888l0,3l-3,6M113.5,550l9,0l-3,4M117.5,552l0,3l-3,6M113.5,920l9,0M116,917l0,6M120,917l0,6l-3,5M145,565l0,2M140.5,570l0,-3l9,0l-1,5 -5,4M141.5,549l0,10l8,0M141.5,553l7,-2M154.5,793l9,0M159,789l0,12M155.5,797l3,-3M162.5,797l-3,-3M155.5,309l0,10l8,0M155.5,313l7,-2M154.5,294l8,0l0,10l-8,0M154.5,279l1,3M157.5,278l1,3M163.5,279l-3,7 -4,3M154.5,57l9,0M159,53l0,12M155.5,61l3,-3M162.5,61l-3,-3M171.5,949l-2,6M170.5,952l8,0M175.5,952l-1,5 -3,3M172.5,933l-3,5M172.5,935l6,0l-2,5 -5,4M169.5,376l9,0M175.5,373l0,11l-2,-1M175.5,377l-6,6M170.5,645l7,0M169.5,648l9,0l-2,5 -4,3M183.5,486l9,0l-3,4M187.5,488l0,3l-3,6M184.5,470l7,0M188,470l0,9M183.5,479l9,0M184,854l2,2M184,858l2,2M184.5,864l8,-6M204.5,311l-3,8M207.5,311l3,8M202.5,294l7,2M202.5,298l7,2M201.5,302l9,2M201.5,823l1,3M204.5,822l1,3M210.5,823l-3,7 -4,3M206,805l0,2M201.5,810l0,-3l9,0l-1,5 -5,4M217.5,712l7,0M216.5,716l9,0M220.5,709l1,11M217.5,342l7,0M221,342l0,9M216.5,351l9,0M217.5,325l0,10l8,0M217.5,329l7,-2M239.5,390l7,2M239.5,394l7,2M238.5,398l9,2M241.5,375l-3,8M244.5,375l3,8M257.5,310l7,0M261,310l0,9M256.5,319l9,0M256.5,38l8,0l0,10l-8,0M256.5,584l9,0M262.5,581l0,11l-2,-1M262.5,585l-6,6M278.5,472l8,0l-1,8 -2,-1M282.5,469l-1,6 -3,5M292.5,920l9,0M295,917l0,6M299,917l0,6l-3,5M306.5,7l1,3M309.5,6l1,3M315.5,7l-3,7 -4,3M307.5,949l7,0M306.5,952l9,0l-2,5 -4,3M306.5,-10l8,0l0,10l-8,0M306.5,-5l8,0M306.5,934l8,0l0,10l-8,0M306.5,939l8,0M333,389l0,2M328.5,394l0,-3l9,0l-1,5 -5,4M356.5,920l8,0l-1,8 -2,-1M360.5,917l-1,6 -3,5M356.5,232l9,0M362.5,229l0,11l-2,-1M362.5,233l-6,6M356.5,214l8,0l0,10l-8,0M356.5,219l8,0M376,277l0,2M371.5,282l0,-3l9,0l-1,5 -5,4M371.5,678l8,0l0,10l-8,0M379.5,661l-8,7M376.5,664l0,9M390.5,646l0,5M396.5,645l0,6l-4,5M402.5,872l8,0l-1,8 -2,-1M406.5,869l-1,6 -3,5M402.5,854l8,0l0,10l-8,0M402.5,859l8,0M402.5,232l9,0M408.5,229l0,11l-2,-1M408.5,233l-6,6M410.5,581l-8,7M407.5,584l0,9M402.5,568l8,0l-1,8 -2,-1M406.5,565l-1,6 -3,5M427.5,807l-3,8M430.5,807l3,8M425.5,790l0,5M431.5,789l0,6l-4,5M446.5,533l-8,7M443.5,536l0,9M439.5,518l7,2M439.5,522l7,2M438.5,526l9,2M438.5,505l9,0M443,501l0,12M439.5,509l3,-3M446.5,509l-3,-3M438.5,150l8,0l0,10l-8,0M456.5,437l-3,5M456.5,439l6,0l-2,5 -5,4M453.5,424l8,0l-1,8 -2,-1M457.5,421l-1,6 -3,5M454.5,181l0,10l8,0M454.5,185l7,-2M490.5,201l9,0M495,197l0,12M491.5,205l3,-3M498.5,205l-3,-3M490.5,918l8,0l0,10l-8,0M490.5,923l8,0M490.5,486l8,0l0,10l-8,0M490.5,491l8,0M491.5,472l7,0M490.5,476l9,0M494.5,469l1,11M509.5,805l7,0M508.5,808l9,0l-2,5 -4,3M527.5,565l0,10l8,0M527.5,569l7,-2M531,21l0,2M526.5,26l0,-3l9,0l-1,5 -5,4M540.5,822l0,5M546.5,821l0,6l-4,5M540.5,806l0,5M546.5,805l0,6l-4,5M542.5,789l-3,5M542.5,791l6,0l-2,5 -5,4M556.5,789l-3,5M556.5,791l6,0l-2,5 -5,4M553.5,774l8,0l0,10l-8,0M553.5,779l8,0M554.5,758l0,5M560.5,757l0,6l-4,5M567.5,904l8,0l-1,8 -2,-1M571.5,901l-1,6 -3,5M580.5,552l8,0l-1,8 -2,-1M584.5,549l-1,6 -3,5M580.5,521l9,0M585,517l0,12M581.5,525l3,-3M588.5,525l-3,-3M580.5,840l9,0M586.5,837l0,11l-2,-1M586.5,841l-6,6M593.5,630l9,0l-3,4M597.5,632l0,3l-3,6M595.5,613l-2,6M594.5,616l8,0M599.5,616l-1,5 -3,3M607.5,758l9,0l-3,4M611.5,760l0,3l-3,6M607.5,550l9,0l-3,4M611.5,552l0,3l-3,6M629.5,661l-8,7M626.5,664l0,9M622.5,56l7,0M621.5,60l9,0M625.5,53l1,11M622.5,40l7,0M621.5,44l9,0M625.5,37l1,11M621.5,24l9,0M627.5,21l0,11l-2,-1M627.5,25l-6,6M638.5,53l-2,6M637.5,56l8,0M642.5,56l-1,5 -3,3M636.5,38l8,0l0,10l-8,0M636.5,43l8,0M638.5,21l-2,6M637.5,24l8,0M642.5,24l-1,5 -3,3M636.5,648l9,0M639,645l0,6M643,645l0,6l-3,5M644.5,629l-8,7M641.5,632l0,9M637.5,614l0,5M643.5,613l0,6l-4,5M655.5,136l7,0M654.5,140l9,0M658.5,133l1,11M656.5,117l-2,6M655.5,120l8,0M660.5,120l-1,5 -3,3M670,278l2,2M670,282l2,2M670.5,288l8,-6M670,550l2,2M670,554l2,2M670.5,560l8,-6M670.5,533l0,10l8,0M670.5,537l7,-2M669.5,521l9,0M674,517l0,12M670.5,525l3,-3M677.5,525l-3,-3M695.5,789l-8,7M692.5,792l0,9M687.5,776l9,0M693.5,773l0,11l-2,-1M693.5,777l-6,6M687.5,502l9,0l-3,4M691.5,504l0,3l-3,6M706,358l2,2M706,362l2,2M706.5,368l8,-6M705.5,342l8,0l0,10l-8,0M706.5,806l7,0M710,806l0,9M705.5,815l9,0M705.5,792l8,0l-1,8 -2,-1M709.5,789l-1,6 -3,5M721.5,357l-3,5M721.5,359l6,0l-2,5 -5,4M719.5,118l0,5M725.5,117l0,6l-4,5M718.5,793l9,0M723,789l0,12M719.5,797l3,-3M726.5,797l-3,-3M719.5,773l7,0M718.5,776l9,0l-2,5 -4,3M735.5,421l-3,5M735.5,423l6,0l-2,5 -5,4M732.5,8l8,0l-1,8 -2,-1M736.5,5l-1,6 -3,5M732.5,950l8,0l0,10l-8,0M732.5,955l8,0M751.5,358l7,2M751.5,362l7,2M750.5,366l9,2M751.5,342l7,2M751.5,346l7,2M750.5,350l9,2M755,325l0,2M750.5,330l0,-3l9,0l-1,5 -5,4M750.5,679l1,3M753.5,678l1,3M759.5,679l-3,7 -4,3M764.5,870l7,0M768,870l0,9M763.5,879l9,0M764,854l2,2M764,858l2,2M764.5,864l8,-6M763.5,182l8,0l0,10l-8,0M763.5,187l8,0M777.5,278l0,5M783.5,277l0,6l-4,5M790.5,902l0,5M796.5,901l0,6l-4,5M790.5,886l0,5M796.5,885l0,6l-4,5M792.5,197l-3,5M792.5,199l6,0l-2,5 -5,4M789.5,183l1,3M792.5,182l1,3M798.5,183l-3,7 -4,3M803.5,358l7,0M807,358l0,9M802.5,367l9,0M816.5,328l9,0M822.5,325l0,11l-2,-1M822.5,329l-6,6M831,294l2,2M831,298l2,2M831.5,304l8,-6M831.5,806l7,0M835,806l0,9M830.5,815l9,0M853.5,182l7,0M857,182l0,9M852.5,191l9,0M860.5,165l-8,7M857.5,168l0,9M871.5,518l7,0M875,518l0,9M870.5,527l9,0M871.5,5l7,0M870.5,8l9,0l-2,5 -4,3M870.5,950l8,0l0,10l-8,0M870.5,955l8,0M884.5,296l9,0M890.5,293l0,11l-2,-1M890.5,297l-6,6M885.5,278l0,5M891.5,277l0,6l-4,5M887.5,261l-3,5M887.5,263l6,0l-2,5 -5,4M884.5,888l9,0M890.5,885l0,11l-2,-1M890.5,889l-6,6M898.5,183l1,3M901.5,182l1,3M907.5,183l-3,7 -4,3M926.5,262l7,0M930,262l0,9M925.5,271l9,0M925.5,856l9,0M928,853l0,6M932,853l0,6l-3,5M926.5,837l0,10l8,0M926.5,841l7,-2M945,69l0,2M940.5,74l0,-3l9,0l-1,5 -5,4M940.5,56l9,0M946.5,53l0,11l-2,-1M946.5,57l-6,6M940.5,808l9,0M946.5,805l0,11l-2,-1M946.5,809l-6,6M959,549l0,2M954.5,554l0,-3l9,0l-1,5 -5,4M955.5,533l0,10l8,0M955.5,537l7,-2M954.5,519l1,3M957.5,518l1,3M963.5,519l-3,7 -4,3M955.5,54l0,5M961.5,53l0,6l-4,5M954.5,39l1,3M957.5,38l1,3M963.5,39l-3,7 -4,3M969.5,760l8,0l-1,8 -2,-1M973.5,757l-1,6 -3,5M969.5,743l1,3M972.5,742l1,3M978.5,743l-3,7 -4,3M969.5,360l8,0l-1,8 -2,-1M973.5,357l-1,6 -3,5M983.5,374l8,0l0,10l-8,0M983.5,379l8,0M984.5,805l0,10l8,0M984.5,809l7,-2M984.5,792l7,0M983.5,796l9,0M987.5,789l1,11' stroke-opacity='0.35' stroke-width='1.3'/%3E%3Cpath d='M9.5,5l-8,7M6.5,8l0,9M2.5,949l7,0M1.5,952l9,0l-2,5 -4,3M1.5,-10l8,0l0,10l-8,0M1.5,598l8,0l0,10l-8,0M2.5,566l0,5M8.5,565l0,6l-4,5M16.5,102l8,0l0,10l-8,0M16.5,86l8,0l0,10l-8,0M24.5,469l-8,7M21.5,472l0,9M17.5,454l7,0M21,454l0,9M16.5,463l9,0M17.5,438l7,2M17.5,442l7,2M16.5,446l9,2M17.5,792l7,0M16.5,796l9,0M20.5,789l1,11M17.5,776l7,0M16.5,780l9,0M20.5,773l1,11M16.5,758l8,0l0,10l-8,0M16.5,763l8,0M30.5,439l1,3M33.5,438l1,3M39.5,439l-3,7 -4,3M31.5,790l7,0M35,790l0,9M30.5,799l9,0M30.5,776l8,0l-1,8 -2,-1M34.5,773l-1,6 -3,5M44.5,742l8,0l0,10l-8,0M44.5,747l8,0M45.5,726l7,2M45.5,730l7,2M44.5,734l9,2M45.5,709l0,10l8,0M45.5,713l7,-2M47.5,693l-3,5M47.5,695l6,0l-2,5 -5,4M45.5,309l0,10l8,0M45.5,313l7,-2M45.5,950l0,5M51.5,949l0,6l-4,5M45.5,917l7,0M44.5,920l9,0l-2,5 -4,3M59.5,120l7,0M58.5,124l9,0M62.5,117l1,11M72.5,104l7,0M71.5,108l9,0M75.5,101l1,11M72.5,536l7,0M71.5,540l9,0M75.5,533l1,11M71.5,518l8,0l0,10l-8,0M71.5,523l8,0M71.5,502l8,0l0,10l-8,0M71.5,507l8,0M72,886l2,2M72,890l2,2M72.5,896l8,-6M72.5,854l7,0M76,854l0,9M71.5,863l9,0M87,278l2,2M87,282l2,2M87.5,288l8,-6M86.5,249l9,0M91,245l0,12M87.5,253l3,-3M94.5,253l-3,-3M87.5,232l7,0M86.5,236l9,0M90.5,229l1,11M87.5,869l0,10l8,0M87.5,873l7,-2M89.5,855l-3,8M92.5,855l3,8M86.5,840l9,0M89,837l0,6M93,837l0,6l-3,5M87.5,472l7,0M86.5,476l9,0M90.5,469l1,11M91,453l0,2M86.5,458l0,-3l9,0l-1,5 -5,4M100.5,8l9,0M103,5l0,6M107,5l0,6l-3,5M101.5,950l7,0M105,950l0,9M100.5,959l9,0M103.5,-11l-3,5M103.5,-9l6,0l-2,5 -5,4M100.5,934l9,0l-3,4M104.5,936l0,3l-3,6M105,917l0,2M100.5,922l0,-3l9,0l-1,5 -5,4M100.5,903l1,3M103.5,902l1,3M109.5,903l-3,7 -4,3M100.5,601l9,0M105,597l0,12M101.5,605l3,-3M108.5,605l-3,-3M100.5,583l1,3M103.5,582l1,3M109.5,583l-3,7 -4,3M115.5,629l-2,6M114.5,632l8,0M119.5,632l-1,5 -3,3M114.5,613l7,0M113.5,616l9,0l-2,5 -4,3M118,597l0,2M113.5,602l0,-3l9,0l-1,5 -5,4M114.5,581l7,0M113.5,584l9,0l-2,5 -4,3M114.5,54l7,0M118,54l0,9M113.5,63l9,0M113.5,22l8,0l0,10l-8,0M121.5,5l-8,7M118.5,8l0,9M113.5,951l1,3M116.5,950l1,3M122.5,951l-3,7 -4,3M127.5,312l8,0l-1,8 -2,-1M131.5,309l-1,6 -3,5M129.5,277l-2,6M128.5,280l8,0M133.5,280l-1,5 -3,3M128.5,758l7,2M128.5,762l7,2M127.5,766l9,2M127.5,744l9,0M130,741l0,6M134,741l0,6l-3,5M127.5,696l8,0l-1,8 -2,-1M131.5,693l-1,6 -3,5M127.5,680l9,0M133.5,677l0,11l-2,-1M133.5,681l-6,6M140.5,630l8,0l0,10l-8,0M140.5,635l8,0M141.5,613l7,0M140.5,616l9,0l-2,5 -4,3M140.5,600l8,0l-1,8 -2,-1M144.5,597l-1,6 -3,5M141.5,582l7,2M141.5,586l7,2M140.5,590l9,2M154.5,841l9,0M159,837l0,12M155.5,845l3,-3M162.5,845l-3,-3M155.5,806l7,0M159,806l0,9M154.5,815l9,0M155.5,374l0,5M161.5,373l0,6l-4,5M154.5,118l8,0l0,10l-8,0M154.5,123l8,0M155.5,101l7,0M154.5,104l9,0l-2,5 -4,3M157.5,87l-3,8M160.5,87l3,8M154.5,70l8,0l0,10l-8,0M169.5,55l1,3M172.5,54l1,3M178.5,55l-3,7 -4,3M169.5,38l8,0l0,10l-8,0M169.5,43l8,0M172.5,21l-3,5M172.5,23l6,0l-2,5 -5,4M170.5,6l7,2M170.5,10l7,2M169.5,14l9,2M169.5,472l9,0M172,469l0,6M176,469l0,6l-3,5M169.5,457l9,0M174,453l0,12M170.5,461l3,-3M177.5,461l-3,-3M172.5,405l-3,5M172.5,407l6,0l-2,5 -5,4M170.5,694l7,2M170.5,698l7,2M169.5,702l9,2M169.5,680l8,0l-1,8 -2,-1M173.5,677l-1,6 -3,5M184.5,597l7,0M183.5,600l9,0l-2,5 -4,3M183.5,582l9,0l-3,4M187.5,584l0,3l-3,6M184.5,517l7,0M183.5,520l9,0l-2,5 -4,3M188,917l0,2M183.5,922l0,-3l9,0l-1,5 -5,4M183.5,902l8,0l0,10l-8,0M191.5,885l-8,7M188.5,888l0,9M201.5,392l9,0M204,389l0,6M208,389l0,6l-3,5M202.5,373l7,0M201.5,376l9,0l-2,5 -4,3M206,341l0,2M201.5,346l0,-3l9,0l-1,5 -5,4M201.5,918l8,0l0,10l-8,0M201.5,902l8,0l0,10l-8,0M202.5,870l7,0M206,870l0,9M201.5,879l9,0M202.5,853l7,0M201.5,856l9,0l-2,5 -4,3M217.5,726l7,0M221,726l0,9M216.5,735l9,0M216.5,438l8,0l0,10l-8,0M216.5,443l8,0M217.5,406l0,5M223.5,405l0,6l-4,5M216.5,392l8,0l-1,8 -2,-1M220.5,389l-1,6 -3,5M216.5,360l9,0M219,357l0,6M223,357l0,6l-3,5M239.5,454l7,2M239.5,458l7,2M238.5,462l9,2M238.5,408l8,0l-1,8 -2,-1M242.5,405l-1,6 -3,5M239.5,662l7,0M243,662l0,9M238.5,671l9,0M238.5,888l8,0l-1,8 -2,-1M242.5,885l-1,6 -3,5M256.5,358l9,0l-3,4M260.5,360l0,3l-3,6M256.5,89l9,0M261,85l0,12M257.5,93l3,-3M264.5,93l-3,-3M257.5,69l7,0M256.5,72l9,0l-2,5 -4,3M264.5,53l-8,7M261.5,56l0,9M257,630l2,2M257,634l2,2M257.5,640l8,-6M257.5,616l7,0M256.5,620l9,0M260.5,613l1,11M279.5,504l7,0M278.5,508l9,0M282.5,501l1,11M278.5,488l9,0M281,485l0,6M285,485l0,6l-3,5M279.5,806l7,2M279.5,810l7,2M278.5,814l9,2M293.5,566l7,0M297,566l0,9M292.5,575l9,0M292.5,550l8,0l0,10l-8,0M292.5,555l8,0M293.5,6l7,0M297,6l0,9M292.5,15l9,0M293.5,933l0,10l8,0M293.5,937l7,-2M306.5,521l9,0M311,517l0,12M307.5,525l3,-3M314.5,525l-3,-3M306.5,487l1,3M309.5,486l1,3M315.5,487l-3,7 -4,3M311,69l0,2M306.5,74l0,-3l9,0l-1,5 -5,4M309.5,37l-3,5M309.5,39l6,0l-2,5 -5,4M308.5,21l-2,6M307.5,24l8,0M312.5,24l-1,5 -3,3M329.5,424l7,0M328.5,428l9,0M332.5,421l1,11M328.5,120l9,0M331,117l0,6M335,117l0,6l-3,5M328.5,104l8,0l-1,8 -2,-1M332.5,101l-1,6 -3,5M342.5,806l8,0l0,10l-8,0M343.5,789l7,0M342.5,792l9,0l-2,5 -4,3M361,5l0,2M356.5,10l0,-3l9,0l-1,5 -5,4M356.5,-8l9,0M359,-11l0,6M363,-11l0,6l-3,5M357.5,294l7,2M357.5,298l7,2M356.5,302l9,2M356.5,279l1,3M359.5,278l1,3M365.5,279l-3,7 -4,3M356.5,264l8,0l-1,8 -2,-1M360.5,261l-1,6 -3,5M371.5,344l9,0M374,341l0,6M378,341l0,6l-3,5M371.5,328l9,0M374,325l0,6M378,325l0,6l-3,5M371.5,310l9,0l-3,4M375.5,312l0,3l-3,6M371.5,294l8,0l0,10l-8,0M376,773l0,2M371.5,778l0,-3l9,0l-1,5 -5,4M371.5,760l9,0M377.5,757l0,11l-2,-1M377.5,761l-6,6M373.5,741l-2,6M372.5,744l8,0M377.5,744l-1,5 -3,3M371.5,726l9,0l-3,4M375.5,728l0,3l-3,6M389.5,712l8,0l-1,8 -2,-1M393.5,709l-1,6 -3,5M389.5,678l8,0l0,10l-8,0M390.5,933l0,10l8,0M390.5,937l7,-2M389.5,920l9,0M395.5,917l0,11l-2,-1M395.5,921l-6,6M389.5,903l1,3M392.5,902l1,3M398.5,903l-3,7 -4,3M390,886l2,2M390,890l2,2M390.5,896l8,-6M389.5,870l8,0l0,10l-8,0M402.5,9l9,0M407,5l0,12M403.5,13l3,-3M410.5,13l-3,-3M403.5,949l0,10l8,0M403.5,953l7,-2M402.5,904l9,0M408.5,901l0,11l-2,-1M408.5,905l-6,6M407,309l0,2M402.5,314l0,-3l9,0l-1,5 -5,4M403.5,277l7,0M402.5,280l9,0l-2,5 -4,3M403.5,262l7,2M403.5,266l7,2M402.5,270l9,2M402.5,617l9,0M407,613l0,12M403.5,621l3,-3M410.5,621l-3,-3M426.5,885l-2,6M425.5,888l8,0M430.5,888l-1,5 -3,3M424.5,872l8,0l-1,8 -2,-1M428.5,869l-1,6 -3,5M429,821l0,2M424.5,826l0,-3l9,0l-1,5 -5,4M438.5,632l8,0l-1,8 -2,-1M442.5,629l-1,6 -3,5M439.5,613l0,10l8,0M439.5,617l7,-2M438.5,599l1,3M441.5,598l1,3M447.5,599l-3,7 -4,3M439.5,581l0,10l8,0M439.5,585l7,-2M443,565l0,2M438.5,570l0,-3l9,0l-1,5 -5,4M438.5,216l8,0l-1,8 -2,-1M442.5,213l-1,6 -3,5M443,197l0,2M438.5,202l0,-3l9,0l-1,5 -5,4M440.5,181l-2,6M439.5,184l8,0M444.5,184l-1,5 -3,3M454.5,518l0,5M460.5,517l0,6l-4,5M456.5,503l-3,8M459.5,503l3,8M453.5,471l1,3M456.5,470l1,3M462.5,471l-3,7 -4,3M455.5,453l-2,6M454.5,456l8,0M459.5,456l-1,5 -3,3M453.5,248l8,0l-1,8 -2,-1M457.5,245l-1,6 -3,5M453.5,231l1,3M456.5,230l1,3M462.5,231l-3,7 -4,3M456.5,215l-3,8M459.5,215l3,8M458,197l0,2M453.5,202l0,-3l9,0l-1,5 -5,4M477.5,229l-2,6M476.5,232l8,0M481.5,232l-1,5 -3,3M475.5,216l9,0M478,213l0,6M482,213l0,6l-3,5M476.5,197l7,0M475.5,200l9,0l-2,5 -4,3M490.5,248l8,0l-1,8 -2,-1M494.5,245l-1,6 -3,5M491.5,214l7,2M491.5,218l7,2M490.5,222l9,2M490.5,950l9,0l-3,4M494.5,952l0,3l-3,6M491,-10l2,2M491,-6l2,2M491.5,0l8,-6M493.5,535l-3,8M496.5,535l3,8M491.5,517l0,10l8,0M491.5,521l7,-2M491.5,502l7,2M491.5,506l7,2M490.5,510l9,2M509.5,869l7,0M508.5,872l9,0l-2,5 -4,3M509,838l2,2M509,842l2,2M509.5,848l8,-6M508.5,822l9,0l-3,4M512.5,824l0,3l-3,6M534.5,677l-8,7M531.5,680l0,9M529.5,647l-3,8M532.5,647l3,8M526.5,54l8,0l0,10l-8,0M526.5,59l8,0M541.5,373l-2,6M540.5,376l8,0M545.5,376l-1,5 -3,3M539.5,360l9,0M545.5,357l0,11l-2,-1M545.5,361l-6,6M540,886l2,2M540,890l2,2M540.5,896l8,-6M541.5,869l-2,6M540.5,872l8,0M545.5,872l-1,5 -3,3M544,837l0,2M539.5,842l0,-3l9,0l-1,5 -5,4M539.5,600l9,0M542,597l0,6M546,597l0,6l-3,5M539.5,582l8,0l0,10l-8,0M553.5,857l9,0M558,853l0,12M554.5,861l3,-3M561.5,861l-3,-3M553.5,839l1,3M556.5,838l1,3M562.5,839l-3,7 -4,3M568.5,952l7,0M567.5,956l9,0M571.5,949l1,11M567.5,-9l1,3M570.5,-10l1,3M576.5,-9l-3,7 -4,3M567.5,184l9,0M573.5,181l0,11l-2,-1M573.5,185l-6,6M568,150l2,2M568,154l2,2M568.5,160l8,-6M581.5,597l7,0M580.5,600l9,0l-2,5 -4,3M581.5,565l7,0M580.5,568l9,0l-2,5 -4,3M581.5,869l0,10l8,0M581.5,873l7,-2M580.5,856l9,0M583,853l0,6M587,853l0,6l-3,5M598,661l0,2M593.5,666l0,-3l9,0l-1,5 -5,4M595.5,645l-2,6M594.5,648l8,0M599.5,648l-1,5 -3,3M609.5,213l-2,6M608.5,216l8,0M613.5,216l-1,5 -3,3M610.5,199l-3,8M613.5,199l3,8M607.5,872l9,0M613.5,869l0,11l-2,-1M613.5,873l-6,6M607.5,856l9,0M610,853l0,6M614,853l0,6l-3,5M607.5,806l9,0l-3,4M611.5,808l0,3l-3,6M607.5,600l9,0M610,597l0,6M614,597l0,6l-3,5M607.5,583l1,3M610.5,582l1,3M616.5,583l-3,7 -4,3M607.5,569l9,0M612,565l0,12M608.5,573l3,-3M615.5,573l-3,-3M622,678l2,2M622,682l2,2M622.5,688l8,-6M622,102l2,2M622,106l2,2M622.5,112l8,-6M637.5,133l7,0M636.5,136l9,0l-2,5 -4,3M636.5,119l1,3M639.5,118l1,3M645.5,119l-3,7 -4,3M637,102l2,2M637,106l2,2M637.5,112l8,-6M637.5,85l7,0M636.5,88l9,0l-2,5 -4,3M639.5,727l-3,8M642.5,727l3,8M644.5,709l-8,7M641.5,712l0,9M636.5,696l9,0M639,693l0,6M643,693l0,6l-3,5M637,678l2,2M637,682l2,2M637.5,688l8,-6M636.5,662l9,0l-3,4M640.5,664l0,3l-3,6M654.5,214l8,0l0,10l-8,0M654.5,200l9,0M660.5,197l0,11l-2,-1M660.5,201l-6,6M662.5,181l-8,7M659.5,184l0,9M654.5,166l8,0l0,10l-8,0M654.5,171l8,0M655.5,150l7,2M655.5,154l7,2M654.5,158l9,2M669.5,313l9,0M674,309l0,12M670.5,317l3,-3M677.5,317l-3,-3M672.5,597l-3,5M672.5,599l6,0l-2,5 -5,4M671.5,565l-2,6M670.5,568l8,0M675.5,568l-1,5 -3,3M690.5,85l-3,5M690.5,87l6,0l-2,5 -5,4M687.5,72l9,0M690,69l0,6M694,69l0,6l-3,5M687.5,840l8,0l-1,8 -2,-1M691.5,837l-1,6 -3,5M688.5,821l7,0M687.5,824l9,0l-2,5 -4,3M687.5,599l1,3M690.5,598l1,3M696.5,599l-3,7 -4,3M689.5,565l-2,6M688.5,568l8,0M693.5,568l-1,5 -3,3M687.5,553l9,0M692,549l0,12M688.5,557l3,-3M695.5,557l-3,-3M708.5,455l-3,8M711.5,455l3,8M705.5,408l8,0l-1,8 -2,-1M709.5,405l-1,6 -3,5M705.5,888l9,0M708,885l0,6M712,885l0,6l-3,5M705.5,870l8,0l0,10l-8,0M706.5,854l7,2M706.5,858l7,2M705.5,862l9,2M705.5,822l8,0l0,10l-8,0M720.5,389l-2,6M719.5,392l8,0M724.5,392l-1,5 -3,3M718.5,374l8,0l0,10l-8,0M718.5,379l8,0M718.5,200l9,0M721,197l0,6M725,197l0,6l-3,5M719.5,166l0,5M725.5,165l0,6l-4,5M718.5,536l9,0M721,533l0,6M725,533l0,6l-3,5M719.5,520l7,0M718.5,524l9,0M722.5,517l1,11M718.5,822l8,0l0,10l-8,0M733.5,486l0,5M739.5,485l0,6l-4,5M732.5,470l8,0l0,10l-8,0M732.5,475l8,0M733.5,453l0,10l8,0M733.5,457l7,-2M740.5,53l-8,7M737.5,56l0,9M750.5,438l9,0l-3,4M754.5,440l0,3l-3,6M750.5,422l8,0l0,10l-8,0M751.5,405l0,10l8,0M751.5,409l7,-2M750.5,391l1,3M753.5,390l1,3M759.5,391l-3,7 -4,3M750.5,728l8,0l-1,8 -2,-1M754.5,725l-1,6 -3,5M751,710l2,2M751,714l2,2M751.5,720l8,-6M764.5,933l0,10l8,0M764.5,937l7,-2M765.5,917l-2,6M764.5,920l8,0M769.5,920l-1,5 -3,3M763.5,902l9,0l-3,4M767.5,904l0,3l-3,6M766.5,279l-3,8M769.5,279l3,8M764,262l2,2M764,266l2,2M764.5,272l8,-6M768,245l0,2M763.5,250l0,-3l9,0l-1,5 -5,4M763.5,217l9,0M768,213l0,12M764.5,221l3,-3M771.5,221l-3,-3M776.5,600l8,0l-1,8 -2,-1M780.5,597l-1,6 -3,5M778.5,581l-2,6M777.5,584l8,0M782.5,584l-1,5 -3,3M779.5,327l-3,8M782.5,327l3,8M777.5,296l7,0M776.5,300l9,0M780.5,293l1,11M776.5,790l8,0l0,10l-8,0M784.5,773l-8,7M781.5,776l0,9M776.5,760l9,0M782.5,757l0,11l-2,-1M782.5,761l-6,6M789.5,486l8,0l0,10l-8,0M789.5,491l8,0M790.5,6l0,5M796.5,5l0,6l-4,5M792.5,935l-3,8M795.5,935l3,8M797.5,917l-8,7M794.5,920l0,9M790.5,246l7,2M790.5,250l7,2M789.5,254l9,2M789.5,230l8,0l0,10l-8,0M789.5,235l8,0M803.5,421l0,10l8,0M803.5,425l7,-2M802.5,406l8,0l0,10l-8,0M805.5,389l-3,5M805.5,391l6,0l-2,5 -5,4M803,374l2,2M803,378l2,2M803.5,384l8,-6M803.5,664l7,0M802.5,668l9,0M806.5,661l1,11M805.5,647l-3,8M808.5,647l3,8M802.5,614l8,0l0,10l-8,0M802.5,619l8,0M817.5,390l0,5M823.5,389l0,6l-4,5M817.5,357l0,10l8,0M817.5,361l7,-2M816.5,342l8,0l0,10l-8,0M816.5,790l8,0l0,10l-8,0M816.5,795l8,0M817.5,776l7,0M816.5,780l9,0M820.5,773l1,11M816.5,758l8,0l0,10l-8,0M816.5,742l8,0l0,10l-8,0M816.5,747l8,0M835,357l0,2M830.5,362l0,-3l9,0l-1,5 -5,4M835,325l0,2M830.5,330l0,-3l9,0l-1,5 -5,4M838.5,309l-8,7M835.5,312l0,9M832.5,853l-2,6M831.5,856l8,0M836.5,856l-1,5 -3,3M831.5,822l7,2M831.5,826l7,2M830.5,830l9,2M853.5,694l0,5M859.5,693l0,6l-4,5M852.5,678l8,0l0,10l-8,0M852.5,683l8,0M852.5,662l8,0l0,10l-8,0M853.5,261l0,10l8,0M853.5,265l7,-2M853.5,245l0,10l8,0M853.5,249l7,-2M852.5,230l8,0l0,10l-8,0M852.5,235l8,0M852.5,214l8,0l0,10l-8,0M870.5,566l8,0l0,10l-8,0M870.5,552l9,0M873,549l0,6M877,549l0,6l-3,5M878.5,533l-8,7M875.5,536l0,9M871,86l2,2M871,90l2,2M871.5,96l8,-6M871,70l2,2M871,74l2,2M871.5,80l8,-6M871.5,53l0,10l8,0M871.5,57l7,-2M870.5,38l9,0l-3,4M874.5,40l0,3l-3,6M884.5,361l9,0M889,357l0,12M885.5,365l3,-3M892.5,365l-3,-3M887.5,343l-3,8M890.5,343l3,8M884.5,328l9,0M890.5,325l0,11l-2,-1M890.5,329l-6,6M884.5,952l9,0M890.5,949l0,11l-2,-1M890.5,953l-6,6M884.5,-7l9,0M889,-11l0,12M885.5,-3l3,-3M892.5,-3l-3,-3M899.5,869l0,10l8,0M899.5,873l7,-2M901.5,231l-3,8M904.5,231l3,8M898.5,214l8,0l0,10l-8,0M898.5,200l8,0l-1,8 -2,-1M902.5,197l-1,6 -3,5M898.5,664l9,0M901,661l0,6M905,661l0,6l-3,5M917,133l0,2M912.5,138l0,-3l9,0l-1,5 -5,4M912.5,120l9,0M918.5,117l0,11l-2,-1M918.5,121l-6,6M913.5,102l7,2M913.5,106l7,2M912.5,110l9,2M917,69l0,2M912.5,74l0,-3l9,0l-1,5 -5,4M917,405l0,2M912.5,410l0,-3l9,0l-1,5 -5,4M913.5,392l7,0M912.5,396l9,0M916.5,389l1,11M912.5,360l9,0M918.5,357l0,11l-2,-1M918.5,361l-6,6M930,341l0,2M925.5,346l0,-3l9,0l-1,5 -5,4M928.5,309l-3,5M928.5,311l6,0l-2,5 -5,4M925.5,294l9,0l-3,4M929.5,296l0,3l-3,6M925.5,918l8,0l0,10l-8,0M925.5,886l9,0l-3,4M929.5,888l0,3l-3,6M933.5,869l-8,7M930.5,872l0,9M941,182l2,2M941,186l2,2M941.5,192l8,-6M943.5,119l-3,8M946.5,119l3,8M948.5,101l-8,7M945.5,104l0,9M943.5,855l-3,8M946.5,855l3,8M940.5,822l8,0l0,10l-8,0M955.5,614l7,2M955.5,618l7,2M954.5,622l9,2M954.5,598l8,0l0,10l-8,0M954.5,603l8,0M954.5,582l9,0l-3,4M958.5,584l0,3l-3,6M956.5,565l-2,6M955.5,568l8,0M960.5,568l-1,5 -3,3M955.5,101l7,0M954.5,104l9,0l-2,5 -4,3M955.5,70l7,0M959,70l0,9M954.5,79l9,0M955,822l2,2M955,826l2,2M955.5,832l8,-6M977.5,805l-8,7M974.5,808l0,9M970.5,408l7,0M969.5,412l9,0M973.5,405l1,11M969.5,374l9,0l-3,4M973.5,376l0,3l-3,6M984,438l2,2M984,442l2,2M984.5,448l8,-6M985.5,869l-2,6M984.5,872l8,0M989.5,872l-1,5 -3,3M985.5,837l-2,6M984.5,840l8,0M989.5,840l-1,5 -3,3M984.5,821l7,0M983.5,824l9,0l-2,5 -4,3' stroke-opacity='0.5' stroke-width='1.3'/%3E%3Cpath d='M9.5,53l-8,7M6.5,56l0,9M9.5,37l-8,7M6.5,40l0,9M17.5,166l7,0M21,166l0,9M16.5,175l9,0M18.5,133l-2,6M17.5,136l8,0M22.5,136l-1,5 -3,3M18.5,501l-2,6M17.5,504l8,0M22.5,504l-1,5 -3,3M16.5,488l9,0M22.5,485l0,11l-2,-1M22.5,489l-6,6M16.5,806l9,0l-3,4M20.5,808l0,3l-3,6M16.5,646l8,0l0,10l-8,0M16.5,632l8,0l-1,8 -2,-1M20.5,629l-1,6 -3,5M16.5,614l9,0l-3,4M20.5,616l0,3l-3,6M35,501l0,2M30.5,506l0,-3l9,0l-1,5 -5,4M31.5,485l7,0M30.5,488l9,0l-2,5 -4,3M31.5,469l0,10l8,0M31.5,473l7,-2M31.5,872l7,0M30.5,876l9,0M34.5,869l1,11M33.5,855l-3,8M36.5,855l3,8M30.5,838l8,0l0,10l-8,0M32.5,821l-2,6M31.5,824l8,0M36.5,824l-1,5 -3,3M44.5,774l8,0l0,10l-8,0M45.5,758l7,0M49,758l0,9M44.5,767l9,0M45.5,342l0,5M51.5,341l0,6l-4,5M44.5,328l9,0M50.5,325l0,11l-2,-1M50.5,329l-6,6M45.5,38l7,2M45.5,42l7,2M44.5,46l9,2M44.5,7l1,3M47.5,6l1,3M53.5,7l-3,7 -4,3M58.5,408l8,0l-1,8 -2,-1M62.5,405l-1,6 -3,5M61.5,389l-3,5M61.5,391l6,0l-2,5 -5,4M58.5,376l8,0l-1,8 -2,-1M62.5,373l-1,6 -3,5M61.5,359l-3,8M64.5,359l3,8M58.5,745l9,0M63,741l0,12M59.5,749l3,-3M66.5,749l-3,-3M61.5,725l-3,5M61.5,727l6,0l-2,5 -5,4M58.5,710l9,0l-3,4M62.5,712l0,3l-3,6M72.5,150l0,5M78.5,149l0,6l-4,5M71.5,552l8,0l-1,8 -2,-1M75.5,549l-1,6 -3,5M71.5,918l9,0l-3,4M75.5,920l0,3l-3,6M71.5,904l9,0M74,901l0,6M78,901l0,6l-3,5M86.5,-10l8,0l0,10l-8,0M86.5,918l8,0l0,10l-8,0M87.5,533l0,10l8,0M87.5,537l7,-2M91,517l0,2M86.5,522l0,-3l9,0l-1,5 -5,4M100.5,89l9,0M105,85l0,12M101.5,93l3,-3M108.5,93l-3,-3M101.5,69l7,0M100.5,72l9,0l-2,5 -4,3M108.5,661l-8,7M105.5,664l0,9M103.5,645l-3,5M103.5,647l6,0l-2,5 -5,4M102.5,629l-2,6M101.5,632l8,0M106.5,632l-1,5 -3,3M113.5,680l8,0l-1,8 -2,-1M117.5,677l-1,6 -3,5M118,645l0,2M113.5,650l0,-3l9,0l-1,5 -5,4M113.5,88l9,0M116,85l0,6M120,85l0,6l-3,5M114.5,72l7,0M113.5,76l9,0M117.5,69l1,11M128,790l2,2M128,794l2,2M128.5,800l8,-6M132,773l0,2M127.5,778l0,-3l9,0l-1,5 -5,4M140.5,726l8,0l0,10l-8,0M140.5,731l8,0M140.5,694l8,0l0,10l-8,0M141,870l2,2M141,874l2,2M141.5,880l8,-6M155.5,888l7,0M154.5,892l9,0M158.5,885l1,11M154.5,871l1,3M157.5,870l1,3M163.5,871l-3,7 -4,3M154.5,456l9,0M160.5,453l0,11l-2,-1M160.5,457l-6,6M157.5,421l-3,5M157.5,423l6,0l-2,5 -5,4M155.5,389l0,10l8,0M155.5,393l7,-2M159,133l0,2M154.5,138l0,-3l9,0l-1,5 -5,4M159,581l0,2M154.5,586l0,-3l9,0l-1,5 -5,4M172.5,119l-3,8M175.5,119l3,8M170,102l2,2M170,106l2,2M170.5,112l8,-6M170.5,86l7,0M174,86l0,9M169.5,95l9,0M169.5,73l9,0M174,69l0,12M170.5,77l3,-3M177.5,77l-3,-3M170.5,518l7,2M170.5,522l7,2M169.5,526l9,2M169.5,503l1,3M172.5,502l1,3M178.5,503l-3,7 -4,3M172.5,487l-3,8M175.5,487l3,8M170.5,741l0,10l8,0M170.5,745l7,-2M170,726l2,2M170,730l2,2M170.5,736l8,-6M170.5,709l0,10l8,0M170.5,713l7,-2M185.5,629l-2,6M184.5,632l8,0M189.5,632l-1,5 -3,3M183.5,-10l9,0l-3,4M187.5,-8l0,3l-3,6M183.5,936l9,0M186,933l0,6M190,933l0,6l-3,5M202.5,453l7,0M201.5,456l9,0l-2,5 -4,3M201.5,438l9,0l-3,4M205.5,440l0,3l-3,6M206,421l0,2M201.5,426l0,-3l9,0l-1,5 -5,4M203.5,5l-2,6M202.5,8l8,0M207.5,8l-1,5 -3,3M202.5,950l7,0M206,950l0,9M201.5,959l9,0M201.5,-10l8,0l0,10l-8,0M201.5,-5l8,0M202.5,934l7,2M202.5,938l7,2M201.5,942l9,2M217.5,504l7,0M216.5,508l9,0M220.5,501l1,11M216.5,486l8,0l0,10l-8,0M216.5,491l8,0M216.5,454l8,0l0,10l-8,0M216.5,459l8,0M238.5,536l9,0M241,533l0,6M245,533l0,6l-3,5M238.5,518l9,0l-3,4M242.5,520l0,3l-3,6M239,486l2,2M239,490l2,2M239.5,496l8,-6M239.5,712l7,0M238.5,716l9,0M242.5,709l1,11M238.5,918l8,0l0,10l-8,0M256.5,166l8,0l0,10l-8,0M256.5,171l8,0M256.5,136l8,0l-1,8 -2,-1M260.5,133l-1,6 -3,5M257.5,117l7,0M256.5,120l9,0l-2,5 -4,3M256.5,678l8,0l0,10l-8,0M259.5,661l-3,5M259.5,663l6,0l-2,5 -5,4M300.5,53l-8,7M297.5,56l0,9M293.5,22l0,5M299.5,21l0,6l-4,5M309.5,549l-3,5M309.5,551l6,0l-2,5 -5,4M307.5,533l0,10l8,0M307.5,537l7,-2M306.5,697l9,0M311,693l0,12M307.5,701l3,-3M314.5,701l-3,-3M311,645l0,2M306.5,650l0,-3l9,0l-1,5 -5,4M306.5,632l8,0l-1,8 -2,-1M310.5,629l-1,6 -3,5M307.5,118l7,0M311,118l0,9M306.5,127l9,0M306.5,86l8,0l0,10l-8,0M306.5,91l8,0M333,469l0,2M328.5,474l0,-3l9,0l-1,5 -5,4M329.5,454l0,5M335.5,453l0,6l-4,5M328.5,617l9,0M333,613l0,12M329.5,621l3,-3M336.5,621l-3,-3M333,597l0,2M328.5,602l0,-3l9,0l-1,5 -5,4M328.5,199l1,3M331.5,198l1,3M337.5,199l-3,7 -4,3M329.5,182l0,5M335.5,181l0,6l-4,5M343,854l2,2M343,858l2,2M343.5,864l8,-6M342.5,841l9,0M347,837l0,12M343.5,845l3,-3M350.5,845l-3,-3M342.5,104l9,0M345,101l0,6M349,101l0,6l-3,5M344.5,197l-2,6M343.5,200l8,0M348.5,200l-1,5 -3,3M359.5,71l-3,8M362.5,71l3,8M356.5,54l8,0l0,10l-8,0M357.5,392l7,0M356.5,396l9,0M360.5,389l1,11M356.5,376l8,0l-1,8 -2,-1M360.5,373l-1,6 -3,5M356.5,344l8,0l-1,8 -2,-1M360.5,341l-1,6 -3,5M356.5,328l9,0M362.5,325l0,11l-2,-1M362.5,329l-6,6M371.5,390l8,0l0,10l-8,0M371.5,395l8,0M374.5,805l-3,5M374.5,807l6,0l-2,5 -5,4M397.5,741l-8,7M394.5,744l0,9M390.5,725l0,10l8,0M390.5,729l7,-2M389.5,57l9,0M394,53l0,12M390.5,61l3,-3M397.5,61l-3,-3M390,38l2,2M390,42l2,2M390.5,48l8,-6M389.5,8l9,0M392,5l0,6M396,5l0,6l-3,5M390.5,950l7,0M394,950l0,9M389.5,959l9,0M389.5,-10l9,0l-3,4M393.5,-8l0,3l-3,6M404.5,85l-2,6M403.5,88l8,0M408.5,88l-1,5 -3,3M403.5,69l0,10l8,0M403.5,73l7,-2M403.5,38l0,5M409.5,37l0,6l-4,5M402.5,22l8,0l0,10l-8,0M402.5,391l1,3M405.5,390l1,3M411.5,391l-3,7 -4,3M402.5,375l1,3M405.5,374l1,3M411.5,375l-3,7 -4,3M403.5,357l7,0M402.5,360l9,0l-2,5 -4,3M402.5,342l8,0l0,10l-8,0M402.5,347l8,0M405.5,677l-3,5M405.5,679l6,0l-2,5 -5,4M407,661l0,2M402.5,666l0,-3l9,0l-1,5 -5,4M426.5,5l-2,6M425.5,8l8,0M430.5,8l-1,5 -3,3M432.5,949l-8,7M429.5,952l0,9M427.5,-9l-3,8M430.5,-9l3,8M432.5,933l-8,7M429.5,936l0,9M425.5,918l7,0M429,918l0,9M424.5,927l9,0M424.5,185l9,0M429,181l0,12M425.5,189l3,-3M432.5,189l-3,-3M425.5,166l7,2M425.5,170l7,2M424.5,174l9,2M439,646l2,2M439,650l2,2M439.5,656l8,-6M438.5,312l9,0M441,309l0,6M445,309l0,6l-3,5M446.5,293l-8,7M443.5,296l0,9M438.5,280l8,0l-1,8 -2,-1M442.5,277l-1,6 -3,5M438.5,265l9,0M443,261l0,12M439.5,269l3,-3M446.5,269l-3,-3M454.5,600l7,0M453.5,604l9,0M457.5,597l1,11M458,565l0,2M453.5,570l0,-3l9,0l-1,5 -5,4M456.5,293l-3,5M456.5,295l6,0l-2,5 -5,4M458,261l0,2M453.5,266l0,-3l9,0l-1,5 -5,4M476.5,277l0,10l8,0M476.5,281l7,-2M475.5,264l9,0M481.5,261l0,11l-2,-1M481.5,265l-6,6M476.5,248l7,0M475.5,252l9,0M479.5,245l1,11M492.5,37l-2,6M491.5,40l8,0M496.5,40l-1,5 -3,3M491.5,552l7,0M490.5,556l9,0M494.5,549l1,11M516.5,917l-8,7M513.5,920l0,9M511.5,901l-3,5M511.5,903l6,0l-2,5 -5,4M508.5,104l9,0M511,101l0,6M515,101l0,6l-3,5M508.5,89l9,0M513,85l0,12M509.5,93l3,-3M516.5,93l-3,-3M508.5,71l1,3M511.5,70l1,3M517.5,71l-3,7 -4,3M526.5,758l9,0l-3,4M530.5,760l0,3l-3,6M526.5,742l8,0l0,10l-8,0M526.5,747l8,0M528.5,725l-2,6M527.5,728l8,0M532.5,728l-1,5 -3,3M527.5,712l7,0M526.5,716l9,0M530.5,709l1,11M526.5,694l8,0l0,10l-8,0M526.5,699l8,0M527.5,102l7,2M527.5,106l7,2M526.5,110l9,2M542.5,455l-3,8M545.5,455l3,8M542.5,437l-3,5M542.5,439l6,0l-2,5 -5,4M542.5,423l-3,8M545.5,423l3,8M547.5,21l-8,7M544.5,24l0,9M539.5,9l9,0M544,5l0,12M540.5,13l3,-3M547.5,13l-3,-3M542.5,951l-3,8M545.5,951l3,8M542.5,935l-3,8M545.5,935l3,8M541.5,917l-2,6M540.5,920l8,0M545.5,920l-1,5 -3,3M542.5,631l-3,8M545.5,631l3,8M558,933l0,2M553.5,938l0,-3l9,0l-1,5 -5,4M553.5,888l9,0M556,885l0,6M560,885l0,6l-3,5M554.5,870l0,5M560.5,869l0,6l-4,5M553.5,120l8,0l-1,8 -2,-1M557.5,117l-1,6 -3,5M570.5,39l-3,8M573.5,39l3,8M568.5,22l0,5M574.5,21l0,6l-4,5M575.5,5l-8,7M572.5,8l0,9M568.5,232l7,0M567.5,236l9,0M571.5,229l1,11M567.5,216l8,0l-1,8 -2,-1M571.5,213l-1,6 -3,5M567.5,198l8,0l0,10l-8,0M567.5,203l8,0M581.5,694l7,0M585,694l0,9M580.5,703l9,0M580.5,662l8,0l0,10l-8,0M580.5,667l8,0M583.5,647l-3,8M586.5,647l3,8M581.5,902l0,5M587.5,901l0,6l-4,5M594.5,758l7,0M598,758l0,9M593.5,767l9,0M593.5,727l1,3M596.5,726l1,3M602.5,727l-3,7 -4,3M593.5,711l1,3M596.5,710l1,3M602.5,711l-3,7 -4,3M593.5,920l9,0M596,917l0,6M600,917l0,6l-3,5M593.5,886l8,0l0,10l-8,0M598,869l0,2M593.5,874l0,-3l9,0l-1,5 -5,4M610.5,279l-3,8M613.5,279l3,8M608.5,246l0,5M614.5,245l0,6l-4,5M608.5,936l7,0M607.5,940l9,0M611.5,933l1,11M607.5,903l1,3M610.5,902l1,3M616.5,903l-3,7 -4,3M607.5,390l9,0l-3,4M611.5,392l0,3l-3,6M608,646l2,2M608,650l2,2M608.5,656l8,-6M607.5,632l9,0M610,629l0,6M614,629l0,6l-3,5M608.5,614l7,2M608.5,618l7,2M607.5,622l9,2M621.5,758l8,0l0,10l-8,0M621.5,184l8,0l-1,8 -2,-1M625.5,181l-1,6 -3,5M622.5,149l0,10l8,0M622.5,153l7,-2M637.5,152l7,0M636.5,156l9,0M640.5,149l1,11M636.5,774l8,0l0,10l-8,0M636.5,779l8,0M659,261l0,2M654.5,266l0,-3l9,0l-1,5 -5,4M669.5,360l9,0M672,357l0,6M676,357l0,6l-3,5M669.5,342l8,0l0,10l-8,0M670.5,678l0,5M676.5,677l0,6l-4,5M670.5,662l7,2M670.5,666l7,2M669.5,670l9,2M669.5,630l8,0l0,10l-8,0M688.5,134l0,5M694.5,133l0,6l-4,5M688.5,118l7,0M692,118l0,9M687.5,127l9,0M687.5,872l9,0M690,869l0,6M694,869l0,6l-3,5M688.5,630l7,2M688.5,634l7,2M687.5,638l9,2M705.5,535l1,3M708.5,534l1,3M714.5,535l-3,7 -4,3M705.5,520l8,0l-1,8 -2,-1M709.5,517l-1,6 -3,5M705.5,502l8,0l0,10l-8,0M705.5,507l8,0M706.5,485l0,10l8,0M706.5,489l7,-2M705.5,904l9,0M708,901l0,6M712,901l0,6l-3,5M720.5,437l-2,6M719.5,440l8,0M724.5,440l-1,5 -3,3M718.5,248l9,0M724.5,245l0,11l-2,-1M724.5,249l-6,6M718.5,230l8,0l0,10l-8,0M718.5,615l1,3M721.5,614l1,3M727.5,615l-3,7 -4,3M718.5,585l9,0M723,581l0,12M719.5,589l3,-3M726.5,589l-3,-3M719.5,552l7,0M718.5,556l9,0M722.5,549l1,11M718.5,950l8,0l0,10l-8,0M718.5,935l1,3M721.5,934l1,3M727.5,935l-3,7 -4,3M720.5,901l-2,6M719.5,904l8,0M724.5,904l-1,5 -3,3M733.5,502l0,5M739.5,501l0,6l-4,5M735.5,695l-3,8M738.5,695l3,8M733.5,677l0,10l8,0M733.5,681l7,-2M732.5,664l9,0M735,661l0,6M739,661l0,6l-3,5M750.5,519l1,3M753.5,518l1,3M759.5,519l-3,7 -4,3M751.5,501l0,10l8,0M751.5,505l7,-2M750.5,487l1,3M753.5,486l1,3M759.5,487l-3,7 -4,3M753.5,469l-3,5M753.5,471l6,0l-2,5 -5,4M750.5,774l8,0l0,10l-8,0M750.5,779l8,0M752.5,741l-2,6M751.5,744l8,0M756.5,744l-1,5 -3,3M766.5,5l-3,5M766.5,7l6,0l-2,5 -5,4M764.5,341l0,10l8,0M764.5,345l7,-2M763.5,326l9,0l-3,4M767.5,328l0,3l-3,6M768,309l0,2M763.5,314l0,-3l9,0l-1,5 -5,4M764.5,501l0,10l8,0M764.5,505l7,-2M779.5,663l-3,8M782.5,663l3,8M777.5,646l7,0M781,646l0,9M776.5,655l9,0M777.5,358l7,0M781,358l0,9M776.5,367l9,0M778.5,341l-2,6M777.5,344l8,0M782.5,344l-1,5 -3,3M777.5,870l0,5M783.5,869l0,6l-4,5M777.5,837l7,0M776.5,840l9,0l-2,5 -4,3M777.5,822l7,2M777.5,826l7,2M776.5,830l9,2M797.5,549l-8,7M794.5,552l0,9M792.5,533l-3,5M792.5,535l6,0l-2,5 -5,4M789.5,520l9,0M795.5,517l0,11l-2,-1M795.5,521l-6,6M790,54l2,2M790,58l2,2M790.5,64l8,-6M789.5,38l9,0l-3,4M793.5,40l0,3l-3,6M789.5,294l8,0l0,10l-8,0M789.5,299l8,0M802.5,456l8,0l-1,8 -2,-1M806.5,453l-1,6 -3,5M803.5,680l7,0M802.5,684l9,0M806.5,677l1,11M817.5,437l0,10l8,0M817.5,441l7,-2M816.5,422l8,0l0,10l-8,0M816.5,427l8,0M816.5,584l9,0M819,581l0,6M823,581l0,6l-3,5M818.5,565l-2,6M817.5,568l8,0M822.5,568l-1,5 -3,3M816.5,854l9,0l-3,4M820.5,856l0,3l-3,6M817.5,838l0,5M823.5,837l0,6l-4,5M817.5,822l7,2M817.5,826l7,2M816.5,830l9,2M833.5,455l-3,8M836.5,455l3,8M831.5,438l7,2M831.5,442l7,2M830.5,446l9,2M830.5,423l1,3M833.5,422l1,3M839.5,423l-3,7 -4,3M833.5,901l-3,5M833.5,903l6,0l-2,5 -5,4M830.5,886l8,0l0,10l-8,0M835,869l0,2M830.5,874l0,-3l9,0l-1,5 -5,4M853.5,742l7,0M857,742l0,9M852.5,751l9,0M852.5,712l8,0l-1,8 -2,-1M856.5,709l-1,6 -3,5M852.5,279l1,3M855.5,278l1,3M861.5,279l-3,7 -4,3M854.5,453l-2,6M853.5,456l8,0M858.5,456l-1,5 -3,3M860.5,437l-8,7M857.5,440l0,9M870.5,648l8,0l-1,8 -2,-1M874.5,645l-1,6 -3,5M871.5,613l7,0M870.5,616l9,0l-2,5 -4,3M873.5,117l-3,5M873.5,119l6,0l-2,5 -5,4M885,390l2,2M885,394l2,2M885.5,400l8,-6M885.5,374l7,2M885.5,378l7,2M884.5,382l9,2M885,70l2,2M885,74l2,2M885.5,80l8,-6M892.5,53l-8,7M889.5,56l0,9M884.5,22l8,0l0,10l-8,0M884.5,27l8,0M898.5,904l8,0l-1,8 -2,-1M902.5,901l-1,6 -3,5M900.5,245l-2,6M899.5,248l8,0M904.5,248l-1,5 -3,3M906.5,725l-8,7M903.5,728l0,9M898.5,712l9,0M904.5,709l0,11l-2,-1M904.5,713l-6,6M906.5,693l-8,7M903.5,696l0,9M912.5,200l8,0l-1,8 -2,-1M916.5,197l-1,6 -3,5M920.5,181l-8,7M917.5,184l0,9M915.5,167l-3,8M918.5,167l3,8M917,149l0,2M912.5,154l0,-3l9,0l-1,5 -5,4M913.5,453l0,10l8,0M913.5,457l7,-2M912.5,438l9,0l-3,4M916.5,440l0,3l-3,6M913.5,422l7,2M913.5,426l7,2M912.5,430l9,2M925.5,422l8,0l0,10l-8,0M925.5,427l8,0M925.5,25l9,0M930,21l0,12M926.5,29l3,-3M933.5,29l-3,-3M925.5,8l9,0M928,5l0,6M932,5l0,6l-3,5M942.5,245l-2,6M941.5,248l8,0M946.5,248l-1,5 -3,3M942.5,229l-2,6M941.5,232l8,0M946.5,232l-1,5 -3,3M945,213l0,2M940.5,218l0,-3l9,0l-1,5 -5,4M940.5,198l8,0l0,10l-8,0M940.5,203l8,0M941.5,469l7,0M940.5,472l9,0l-2,5 -4,3M941.5,453l0,10l8,0M941.5,457l7,-2M948.5,901l-8,7M945.5,904l0,9M941.5,886l7,2M941.5,890l7,2M940.5,894l9,2M940.5,872l9,0M943,869l0,6M947,869l0,6l-3,5M954.5,694l8,0l0,10l-8,0M954.5,679l1,3M957.5,678l1,3M963.5,679l-3,7 -4,3M955.5,632l7,0M954.5,636l9,0M958.5,629l1,11M954.5,152l9,0M960.5,149l0,11l-2,-1M960.5,153l-6,6M954.5,870l9,0l-3,4M958.5,872l0,3l-3,6M969.5,904l8,0l-1,8 -2,-1M973.5,901l-1,6 -3,5M969.5,870l8,0l0,10l-8,0M970.5,853l7,0M969.5,856l9,0l-2,5 -4,3M969.5,424l9,0M972,421l0,6M976,421l0,6l-3,5M983.5,488l9,0M989.5,485l0,11l-2,-1M989.5,489l-6,6M983.5,473l9,0M988,469l0,12M984.5,477l3,-3M991.5,477l-3,-3M983.5,919l1,3M986.5,918l1,3M992.5,919l-3,7 -4,3M985.5,901l-2,6M984.5,904l8,0M989.5,904l-1,5 -3,3M986.5,885l-3,5M986.5,887l6,0l-2,5 -5,4M991.5,133l-8,7M988.5,136l0,9M984.5,117l7,0M983.5,120l9,0l-2,5 -4,3M983.5,86l8,0l0,10l-8,0' stroke-opacity='0.65' stroke-width='1.3'/%3E%3Cpath d='M2.5,101l0,10l8,0M2.5,105l7,-2M1.5,88l9,0M4,85l0,6M8,85l0,6l-3,5M1.5,70l8,0l0,10l-8,0M1.5,75l8,0M4.5,661l-3,5M4.5,663l6,0l-2,5 -5,4M17.5,198l7,0M21,198l0,9M16.5,207l9,0M17.5,550l7,2M17.5,554l7,2M16.5,558l9,2M16.5,840l8,0l-1,8 -2,-1M20.5,837l-1,6 -3,5M30.5,537l9,0M35,533l0,12M31.5,541l3,-3M38.5,541l-3,-3M30.5,918l8,0l0,10l-8,0M30.5,923l8,0M31.5,902l0,5M37.5,901l0,6l-4,5M30.5,598l8,0l0,10l-8,0M30.5,603l8,0M45.5,821l7,0M44.5,824l9,0l-2,5 -4,3M44.5,406l9,0l-3,4M48.5,408l0,3l-3,6M44.5,374l9,0l-3,4M48.5,376l0,3l-3,6M44.5,88l9,0M50.5,85l0,11l-2,-1M50.5,89l-6,6M44.5,73l9,0M49,69l0,12M45.5,77l3,-3M52.5,77l-3,-3M44.5,55l1,3M47.5,54l1,3M53.5,55l-3,7 -4,3M58.5,262l9,0l-3,4M62.5,264l0,3l-3,6M61.5,245l-3,5M61.5,247l6,0l-2,5 -5,4M59.5,230l7,0M63,230l0,9M58.5,239l9,0M58.5,456l8,0l-1,8 -2,-1M62.5,453l-1,6 -3,5M58.5,440l9,0M61,437l0,6M65,437l0,6l-3,5M58.5,425l9,0M63,421l0,12M59.5,429l3,-3M66.5,429l-3,-3M63,789l0,2M58.5,794l0,-3l9,0l-1,5 -5,4M59.5,773l0,10l8,0M59.5,777l7,-2M63,757l0,2M58.5,762l0,-3l9,0l-1,5 -5,4M72.5,197l7,0M71.5,200l9,0l-2,5 -4,3M72,182l2,2M72,186l2,2M72.5,192l8,-6M71.5,631l1,3M74.5,630l1,3M80.5,631l-3,7 -4,3M72.5,614l0,5M78.5,613l0,6l-4,5M71.5,950l8,0l0,10l-8,0M71.5,955l8,0M71.5,-10l8,0l0,10l-8,0M71.5,934l8,0l0,10l-8,0M86.5,358l8,0l0,10l-8,0M87.5,37l7,0M86.5,40l9,0l-2,5 -4,3M87.5,21l0,10l8,0M87.5,25l7,-2M86.5,7l1,3M89.5,6l1,3M95.5,7l-3,7 -4,3M86.5,583l1,3M89.5,582l1,3M95.5,583l-3,7 -4,3M101.5,150l7,2M101.5,154l7,2M100.5,158l9,2M100.5,136l9,0M106.5,133l0,11l-2,-1M106.5,137l-6,6M105,117l0,2M100.5,122l0,-3l9,0l-1,5 -5,4M103.5,677l-3,5M103.5,679l6,0l-2,5 -5,4M114.5,728l7,0M113.5,732l9,0M117.5,725l1,11M114.5,134l0,5M120.5,133l0,6l-4,5M114,118l2,2M114,122l2,2M114.5,128l8,-6M128.5,373l0,10l8,0M128.5,377l7,-2M132,357l0,2M127.5,362l0,-3l9,0l-1,5 -5,4M128.5,886l7,0M132,886l0,9M127.5,895l9,0M127.5,871l1,3M130.5,870l1,3M136.5,871l-3,7 -4,3M127.5,840l8,0l-1,8 -2,-1M131.5,837l-1,6 -3,5M143.5,773l-3,5M143.5,775l6,0l-2,5 -5,4M141,758l2,2M141,762l2,2M141.5,768l8,-6M140.5,744l8,0l-1,8 -2,-1M144.5,741l-1,6 -3,5M140.5,920l8,0l-1,8 -2,-1M144.5,917l-1,6 -3,5M140.5,904l9,0M143,901l0,6M147,901l0,6l-3,5M148.5,885l-8,7M145.5,888l0,9M154.5,919l1,3M157.5,918l1,3M163.5,919l-3,7 -4,3M154.5,904l9,0M160.5,901l0,11l-2,-1M160.5,905l-6,6M155.5,501l7,0M154.5,504l9,0l-2,5 -4,3M157.5,487l-3,8M160.5,487l3,8M156.5,197l-2,6M155.5,200l8,0M160.5,200l-1,5 -3,3M154.5,182l8,0l0,10l-8,0M157.5,613l-3,5M157.5,615l6,0l-2,5 -5,4M154.5,598l8,0l0,10l-8,0M154.5,603l8,0M170.5,150l7,2M170.5,154l7,2M169.5,158l9,2M169.5,137l9,0M174,133l0,12M170.5,141l3,-3M177.5,141l-3,-3M170.5,533l7,0M169.5,536l9,0l-2,5 -4,3M177.5,789l-8,7M174.5,792l0,9M169.5,759l1,3M172.5,758l1,3M178.5,759l-3,7 -4,3M183.5,726l9,0l-3,4M187.5,728l0,3l-3,6M184.5,693l0,10l8,0M184.5,697l7,-2M183.5,678l9,0l-3,4M187.5,680l0,3l-3,6M185.5,53l-2,6M184.5,56l8,0M189.5,56l-1,5 -3,3M183.5,25l9,0M188,21l0,12M184.5,29l3,-3M191.5,29l-3,-3M202.5,470l7,0M206,470l0,9M201.5,479l9,0M203.5,69l-2,6M202.5,72l8,0M207.5,72l-1,5 -3,3M202.5,54l0,5M208.5,53l0,6l-4,5M217.5,806l7,2M217.5,810l7,2M216.5,814l9,2M217.5,566l7,2M217.5,570l7,2M216.5,574l9,2M241.5,581l-3,5M241.5,583l6,0l-2,5 -5,4M238.5,566l8,0l0,10l-8,0M239.5,773l7,0M238.5,776l9,0l-2,5 -4,3M238.5,758l8,0l0,10l-8,0M238.5,25l9,0M243,21l0,12M239.5,29l3,-3M246.5,29l-3,-3M239,6l2,2M239,10l2,2M239.5,16l8,-6M238.5,-10l8,0l0,10l-8,0M256.5,425l9,0M261,421l0,12M257.5,429l3,-3M264.5,429l-3,-3M256.5,199l1,3M259.5,198l1,3M265.5,199l-3,7 -4,3M257.5,181l0,10l8,0M257.5,185l7,-2M257.5,744l7,0M256.5,748l9,0M260.5,741l1,11M257,710l2,2M257,714l2,2M257.5,720l8,-6M278.5,662l8,0l0,10l-8,0M278.5,667l8,0M279.5,648l7,0M278.5,652l9,0M282.5,645l1,11M278.5,872l8,0l-1,8 -2,-1M282.5,869l-1,6 -3,5M286.5,853l-8,7M283.5,856l0,9M292.5,70l8,0l0,10l-8,0M293.5,181l7,0M292.5,184l9,0l-2,5 -4,3M293.5,150l7,2M293.5,154l7,2M292.5,158l9,2M306.5,568l9,0M312.5,565l0,11l-2,-1M312.5,569l-6,6M307.5,728l7,0M306.5,732l9,0M310.5,725l1,11M309.5,181l-3,5M309.5,183l6,0l-2,5 -5,4M306.5,168l9,0M309,165l0,6M313,165l0,6l-3,5M329.5,502l7,2M329.5,506l7,2M328.5,510l9,2M333,485l0,2M328.5,490l0,-3l9,0l-1,5 -5,4M329.5,229l7,0M328.5,232l9,0l-2,5 -4,3M342.5,870l8,0l0,10l-8,0M342.5,875l8,0M342.5,953l9,0M347,949l0,12M343.5,957l3,-3M350.5,957l-3,-3M342.5,-8l9,0M348.5,-11l0,11l-2,-1M348.5,-7l-6,6M345.5,135l-3,8M348.5,135l3,8M347,245l0,2M342.5,250l0,-3l9,0l-1,5 -5,4M357.5,102l0,5M363.5,101l0,6l-4,5M356.5,88l9,0M362.5,85l0,11l-2,-1M362.5,89l-6,6M357.5,438l0,5M363.5,437l0,6l-4,5M372.5,438l0,5M378.5,437l0,6l-4,5M374.5,423l-3,8M377.5,423l3,8M372.5,405l7,0M371.5,408l9,0l-2,5 -4,3M371.5,886l8,0l0,10l-8,0M372.5,870l7,0M376,870l0,9M371.5,879l9,0M392.5,807l-3,8M395.5,807l3,8M390.5,773l7,0M389.5,776l9,0l-2,5 -4,3M389.5,104l8,0l-1,8 -2,-1M393.5,101l-1,6 -3,5M392.5,85l-3,5M392.5,87l6,0l-2,5 -5,4M402.5,134l8,0l0,10l-8,0M402.5,139l8,0M402.5,120l9,0M408.5,117l0,11l-2,-1M408.5,121l-6,6M410.5,101l-8,7M407.5,104l0,9M402.5,457l9,0M407,453l0,12M403.5,461l3,-3M410.5,461l-3,-3M403.5,422l7,0M407,422l0,9M402.5,431l9,0M403.5,405l7,0M402.5,408l9,0l-2,5 -4,3M402.5,710l8,0l0,10l-8,0M402.5,697l9,0M407,693l0,12M403.5,701l3,-3M410.5,701l-3,-3M424.5,73l9,0M429,69l0,12M425.5,77l3,-3M432.5,77l-3,-3M425.5,37l7,0M424.5,40l9,0l-2,5 -4,3M425.5,261l0,10l8,0M425.5,265l7,-2M427.5,247l-3,8M430.5,247l3,8M424.5,233l9,0M429,229l0,12M425.5,237l3,-3M432.5,237l-3,-3M425.5,214l7,2M425.5,218l7,2M424.5,222l9,2M441.5,725l-3,5M441.5,727l6,0l-2,5 -5,4M438.5,710l8,0l0,10l-8,0M438.5,715l8,0M438.5,342l9,0l-3,4M442.5,344l0,3l-3,6M441.5,327l-3,8M444.5,327l3,8M461.5,661l-8,7M458.5,664l0,9M454.5,646l7,2M454.5,650l7,2M453.5,654l9,2M453.5,632l8,0l-1,8 -2,-1M457.5,629l-1,6 -3,5M453.5,344l9,0M456,341l0,6M460,341l0,6l-3,5M454.5,326l0,5M460.5,325l0,6l-4,5M453.5,310l8,0l0,10l-8,0M453.5,776l9,0M459.5,773l0,11l-2,-1M459.5,777l-6,6M477.5,325l-2,6M476.5,328l8,0M481.5,328l-1,5 -3,3M483.5,309l-8,7M480.5,312l0,9M491.5,312l7,0M490.5,316l9,0M494.5,309l1,11M490.5,57l9,0M495,53l0,12M491.5,61l3,-3M498.5,61l-3,-3M491,614l2,2M491,618l2,2M491.5,624l8,-6M508.5,952l9,0M514.5,949l0,11l-2,-1M514.5,953l-6,6M511.5,-9l-3,8M514.5,-9l3,8M509.5,933l7,0M508.5,936l9,0l-2,5 -4,3M509.5,149l7,0M508.5,152l9,0l-2,5 -4,3M510.5,133l-2,6M509.5,136l8,0M514.5,136l-1,5 -3,3M511.5,119l-3,8M514.5,119l3,8M526.5,808l8,0l-1,8 -2,-1M530.5,805l-1,6 -3,5M527.5,790l7,0M531,790l0,9M526.5,799l9,0M526.5,776l8,0l-1,8 -2,-1M530.5,773l-1,6 -3,5M526.5,134l8,0l0,10l-8,0M539.5,502l8,0l0,10l-8,0M539.5,472l9,0M545.5,469l0,11l-2,-1M545.5,473l-6,6M539.5,73l9,0M544,69l0,12M540.5,77l3,-3M547.5,77l-3,-3M547.5,53l-8,7M544.5,56l0,9M544,37l0,2M539.5,42l0,-3l9,0l-1,5 -5,4M539.5,662l8,0l0,10l-8,0M539.5,667l8,0M547.5,645l-8,7M544.5,648l0,9M553.5,24l9,0M559.5,21l0,11l-2,-1M559.5,25l-6,6M558,949l0,2M553.5,954l0,-3l9,0l-1,5 -5,4M553.5,-8l9,0M556,-11l0,6M560,-11l0,6l-3,5M567.5,70l9,0l-3,4M571.5,72l0,3l-3,6M567.5,278l8,0l0,10l-8,0M581.5,757l7,0M580.5,760l9,0l-2,5 -4,3M580.5,744l9,0M583,741l0,6M587,741l0,6l-3,5M581.5,725l0,10l8,0M581.5,729l7,-2M588.5,5l-8,7M585.5,8l0,9M580.5,953l9,0M585,949l0,12M581.5,957l3,-3M588.5,957l-3,-3M581.5,101l0,10l8,0M581.5,105l7,-2M581.5,85l0,10l8,0M581.5,89l7,-2M594.5,789l7,0M593.5,792l9,0l-2,5 -4,3M594.5,773l7,0M593.5,776l9,0l-2,5 -4,3M607.5,311l1,3M610.5,310l1,3M616.5,311l-3,7 -4,3M609.5,293l-2,6M608.5,296l8,0M613.5,296l-1,5 -3,3M610.5,21l-3,5M610.5,23l6,0l-2,5 -5,4M607.5,7l1,3M610.5,6l1,3M616.5,7l-3,7 -4,3M607.5,951l1,3M610.5,950l1,3M616.5,951l-3,7 -4,3M608,-10l2,2M608,-6l2,2M608.5,0l8,-6M608.5,438l7,2M608.5,442l7,2M607.5,446l9,2M622.5,262l0,5M628.5,261l0,6l-4,5M622.5,248l7,0M621.5,252l9,0M625.5,245l1,11M622.5,232l7,0M621.5,236l9,0M625.5,229l1,11M644.5,245l-8,7M641.5,248l0,9M636.5,230l8,0l0,10l-8,0M636.5,840l9,0M639,837l0,6M643,837l0,6l-3,5M641,821l0,2M636.5,826l0,-3l9,0l-1,5 -5,4M655.5,325l0,10l8,0M655.5,329l7,-2M654.5,296l9,0M660.5,293l0,11l-2,-1M660.5,297l-6,6M662.5,421l-8,7M659.5,424l0,9M654.5,409l9,0M659,405l0,12M655.5,413l3,-3M662.5,413l-3,-3M654.5,502l8,0l0,10l-8,0M654.5,507l8,0M669.5,712l8,0l-1,8 -2,-1M673.5,709l-1,6 -3,5M687.5,184l8,0l-1,8 -2,-1M691.5,181l-1,6 -3,5M689.5,917l-2,6M688.5,920l8,0M693.5,920l-1,5 -3,3M688.5,901l0,10l8,0M688.5,905l7,-2M687.5,694l8,0l0,10l-8,0M687.5,662l8,0l0,10l-8,0M687.5,667l8,0M705.5,601l9,0M710,597l0,12M706.5,605l3,-3M713.5,605l-3,-3M705.5,24l9,0M711.5,21l0,11l-2,-1M711.5,25l-6,6M726.5,293l-8,7M723.5,296l0,9M723,261l0,2M718.5,266l0,-3l9,0l-1,5 -5,4M719.5,664l7,0M718.5,668l9,0M722.5,661l1,11M719.5,632l7,0M718.5,636l9,0M722.5,629l1,11M719.5,38l0,5M725.5,37l0,6l-4,5M719.5,22l7,0M723,22l0,9M718.5,31l9,0M721.5,5l-3,5M721.5,7l6,0l-2,5 -5,4M733.5,566l7,0M737,566l0,9M732.5,575l9,0M737,725l0,2M732.5,730l0,-3l9,0l-1,5 -5,4M732.5,136l9,0M738.5,133l0,11l-2,-1M738.5,137l-6,6M733.5,118l7,2M733.5,122l7,2M732.5,126l9,2M750.5,535l1,3M753.5,534l1,3M759.5,535l-3,7 -4,3M755,821l0,2M750.5,826l0,-3l9,0l-1,5 -5,4M750.5,790l8,0l0,10l-8,0M750.5,795l8,0M764.5,70l7,2M764.5,74l7,2M763.5,78l9,2M771.5,37l-8,7M768.5,40l0,9M764.5,405l7,0M763.5,408l9,0l-2,5 -4,3M766.5,357l-3,5M766.5,359l6,0l-2,5 -5,4M766.5,549l-3,5M766.5,551l6,0l-2,5 -5,4M763.5,536l9,0M769.5,533l0,11l-2,-1M769.5,537l-6,6M776.5,697l9,0M781,693l0,12M777.5,701l3,-3M784.5,701l-3,-3M776.5,392l9,0M779,389l0,6M783,389l0,6l-3,5M779.5,933l-3,5M779.5,935l6,0l-2,5 -5,4M776.5,904l9,0M782.5,901l0,11l-2,-1M782.5,905l-6,6M790.5,566l0,5M796.5,565l0,6l-4,5M790.5,86l0,5M796.5,85l0,6l-4,5M789.5,326l9,0l-3,4M793.5,328l0,3l-3,6M789.5,312l9,0M792,309l0,6M796,309l0,6l-3,5M807,517l0,2M802.5,522l0,-3l9,0l-1,5 -5,4M803.5,501l7,0M802.5,504l9,0l-2,5 -4,3M803,742l2,2M803,746l2,2M803.5,752l8,-6M803.5,726l7,0M807,726l0,9M802.5,735l9,0M802.5,825l9,0M807,821l0,12M803.5,829l3,-3M810.5,829l-3,-3M818.5,469l-2,6M817.5,472l8,0M822.5,472l-1,5 -3,3M819.5,631l-3,8M822.5,631l3,8M816.5,616l9,0M822.5,613l0,11l-2,-1M822.5,617l-6,6M816.5,598l9,0l-3,4M820.5,600l0,3l-3,6M817.5,886l7,2M817.5,890l7,2M816.5,894l9,2M816.5,872l8,0l-1,8 -2,-1M820.5,869l-1,6 -3,5M830.5,504l9,0M836.5,501l0,11l-2,-1M836.5,505l-6,6M838.5,485l-8,7M835.5,488l0,9M831.5,469l7,0M830.5,472l9,0l-2,5 -4,3M830.5,950l9,0l-3,4M834.5,952l0,3l-3,6M831.5,933l0,10l8,0M831.5,937l7,-2M832.5,917l-2,6M831.5,920l8,0M836.5,920l-1,5 -3,3M831.5,630l0,5M837.5,629l0,6l-4,5M831.5,614l7,2M831.5,618l7,2M830.5,622l9,2M852.5,760l9,0M855,757l0,6M859,757l0,6l-3,5M860.5,325l-8,7M857.5,328l0,9M852.5,486l9,0l-3,4M856.5,488l0,3l-3,6M852.5,473l9,0M857,469l0,12M853.5,477l3,-3M860.5,477l-3,-3M870.5,678l8,0l0,10l-8,0M870.5,683l8,0M871,662l2,2M871,666l2,2M871.5,672l8,-6M870.5,166l8,0l0,10l-8,0M870.5,152l9,0M876.5,149l0,11l-2,-1M876.5,153l-6,6M886.5,485l-2,6M885.5,488l8,0M890.5,488l-1,5 -3,3M884.5,456l9,0M890.5,453l0,11l-2,-1M890.5,457l-6,6M887.5,101l-3,5M887.5,103l6,0l-2,5 -5,4M884.5,88l8,0l-1,8 -2,-1M888.5,85l-1,6 -3,5M899.5,918l7,2M899.5,922l7,2M898.5,926l9,2M901.5,277l-3,5M901.5,279l6,0l-2,5 -5,4M898.5,758l8,0l0,10l-8,0M898.5,763l8,0M901.5,741l-3,5M901.5,743l6,0l-2,5 -5,4M912.5,262l9,0l-3,4M916.5,264l0,3l-3,6M912.5,249l9,0M917,245l0,12M913.5,253l3,-3M920.5,253l-3,-3M915.5,229l-3,5M915.5,231l6,0l-2,5 -5,4M925.5,472l9,0M928,469l0,6M932,469l0,6l-3,5M926.5,69l0,10l8,0M926.5,73l7,-2M926.5,54l0,5M932.5,53l0,6l-4,5M940.5,310l8,0l0,10l-8,0M940.5,315l8,0M940.5,278l8,0l0,10l-8,0M940.5,283l8,0M941.5,518l7,0M945,518l0,9M940.5,527l9,0M941.5,504l7,0M940.5,508l9,0M944.5,501l1,11M955.5,742l7,2M955.5,746l7,2M954.5,750l9,2M954.5,712l9,0M960.5,709l0,11l-2,-1M960.5,713l-6,6M955.5,182l7,2M955.5,186l7,2M954.5,190l9,2M954.5,166l8,0l0,10l-8,0M954.5,888l9,0M957,885l0,6M961,885l0,6l-3,5M970.5,6l7,0M974,6l0,9M969.5,15l9,0M970.5,-11l7,0M969.5,-8l9,0l-2,5 -4,3M970.5,469l0,10l8,0M970.5,473l7,-2M970.5,454l7,2M970.5,458l7,2M969.5,462l9,2M970.5,101l0,10l8,0M970.5,105l7,-2M991.5,517l-8,7M988.5,520l0,9M983.5,502l8,0l0,10l-8,0M983.5,507l8,0M988,165l0,2M983.5,170l0,-3l9,0l-1,5 -5,4M983.5,151l1,3M986.5,150l1,3M992.5,151l-3,7 -4,3' stroke-opacity='0.8' stroke-width='1.3'/%3E%3Cpath d='M2,694l2,2M2,698l2,2M2.5,704l8,-6M2.5,742l7,0M6,742l0,9M1.5,751l9,0M16.5,217l9,0M21,213l0,12M17.5,221l3,-3M24.5,221l-3,-3M18.5,581l-2,6M17.5,584l8,0M22.5,584l-1,5 -3,3M17.5,565l0,10l8,0M17.5,569l7,-2M16.5,889l9,0M21,885l0,12M17.5,893l3,-3M24.5,893l-3,-3M24.5,869l-8,7M21.5,872l0,9M21,693l0,2M16.5,698l0,-3l9,0l-1,5 -5,4M31.5,566l7,2M31.5,570l7,2M30.5,574l9,2M30.5,953l9,0M35,949l0,12M31.5,957l3,-3M38.5,957l-3,-3M38.5,933l-8,7M35.5,936l0,9M31.5,661l0,10l8,0M31.5,665l7,-2M33.5,647l-3,8M36.5,647l3,8M31.5,629l7,0M30.5,632l9,0l-2,5 -4,3M52.5,869l-8,7M49.5,872l0,9M44.5,854l8,0l0,10l-8,0M44.5,859l8,0M59.5,293l7,0M58.5,296l9,0l-2,5 -4,3M59.5,278l7,2M59.5,282l7,2M58.5,286l9,2M58.5,488l8,0l-1,8 -2,-1M62.5,485l-1,6 -3,5M58.5,472l8,0l-1,8 -2,-1M62.5,469l-1,6 -3,5M58.5,822l8,0l0,10l-8,0M58.5,827l8,0M59.5,806l7,2M59.5,810l7,2M58.5,814l9,2M72.5,6l0,5M78.5,5l0,6l-4,5M87.5,390l7,0M91,390l0,9M86.5,399l9,0M87.5,88l7,0M86.5,92l9,0M90.5,85l1,11M87.5,69l7,0M86.5,72l9,0l-2,5 -4,3M94.5,53l-8,7M91.5,56l0,9M86.5,599l1,3M89.5,598l1,3M95.5,599l-3,7 -4,3M89.5,661l-3,5M89.5,663l6,0l-2,5 -5,4M100.5,199l1,3M103.5,198l1,3M109.5,199l-3,7 -4,3M100.5,710l8,0l0,10l-8,0M114.5,760l7,0M113.5,764l9,0M117.5,757l1,11M116.5,743l-3,8M119.5,743l3,8M113.5,185l9,0M118,181l0,12M114.5,189l3,-3M121.5,189l-3,-3M113.5,166l8,0l0,10l-8,0M113.5,171l8,0M128,390l2,2M128,394l2,2M128.5,400l8,-6M130.5,933l-3,5M130.5,935l6,0l-2,5 -5,4M128.5,917l7,0M127.5,920l9,0l-2,5 -4,3M129.5,901l-2,6M128.5,904l8,0M133.5,904l-1,5 -3,3M140.5,806l9,0l-3,4M144.5,808l0,3l-3,6M142.5,789l-2,6M141.5,792l8,0M146.5,792l-1,5 -3,3M141,-10l2,2M141,-6l2,2M141.5,0l8,-6M142.5,933l-2,6M141.5,936l8,0M146.5,936l-1,5 -3,3M154.5,935l1,3M157.5,934l1,3M163.5,935l-3,7 -4,3M154.5,534l9,0l-3,4M158.5,536l0,3l-3,6M154.5,518l9,0l-3,4M158.5,520l0,3l-3,6M155.5,248l7,0M154.5,252l9,0M158.5,245l1,11M155,662l2,2M155,666l2,2M155.5,672l8,-6M169.5,184l9,0M172,181l0,6M176,181l0,6l-3,5M172.5,583l-3,8M175.5,583l3,8M172.5,807l-3,8M175.5,807l3,8M183.5,777l9,0M188,773l0,12M184.5,781l3,-3M191.5,781l-3,-3M183.5,745l9,0M188,741l0,12M184.5,749l3,-3M191.5,749l-3,-3M185.5,85l-2,6M184.5,88l8,0M189.5,88l-1,5 -3,3M183.5,71l1,3M186.5,70l1,3M192.5,71l-3,7 -4,3M201.5,536l9,0M204,533l0,6M208,533l0,6l-3,5M201.5,118l8,0l0,10l-8,0M201.5,123l8,0M201.5,102l9,0l-3,4M205.5,104l0,3l-3,6M216.5,598l8,0l0,10l-8,0M216.5,603l8,0M238.5,614l9,0l-3,4M242.5,616l0,3l-3,6M240.5,805l-2,6M239.5,808l8,0M244.5,808l-1,5 -3,3M257.5,438l7,0M261,438l0,9M256.5,447l9,0M256.5,230l8,0l0,10l-8,0M256.5,217l9,0M261,213l0,12M257.5,221l3,-3M264.5,221l-3,-3M264.5,773l-8,7M261.5,776l0,9M256.5,760l8,0l-1,8 -2,-1M260.5,757l-1,6 -3,5M279.5,694l7,2M279.5,698l7,2M278.5,702l9,2M278.5,678l8,0l0,10l-8,0M278.5,683l8,0M294.5,645l-2,6M293.5,648l8,0M298.5,648l-1,5 -3,3M293.5,118l7,2M293.5,122l7,2M292.5,126l9,2M295.5,101l-3,5M295.5,103l6,0l-2,5 -5,4M292.5,232l8,0l-1,8 -2,-1M296.5,229l-1,6 -3,5M294.5,197l-2,6M293.5,200l8,0M298.5,200l-1,5 -3,3M314.5,597l-8,7M311.5,600l0,9M314.5,789l-8,7M311.5,792l0,9M328.5,520l9,0M334.5,517l0,11l-2,-1M334.5,521l-6,6M328.5,680l8,0l-1,8 -2,-1M332.5,677l-1,6 -3,5M331.5,279l-3,8M334.5,279l3,8M342.5,920l9,0M345,917l0,6M349,917l0,6l-3,5M343.5,37l0,10l8,0M343.5,41l7,-2M343.5,22l0,5M349.5,21l0,6l-4,5M342.5,8l9,0M345,5l0,6M349,5l0,6l-3,5M343.5,166l0,5M349.5,165l0,6l-4,5M342.5,150l9,0l-3,4M346.5,152l0,3l-3,6M342.5,262l8,0l0,10l-8,0M357,134l2,2M357,138l2,2M357.5,144l8,-6M358.5,117l-2,6M357.5,120l8,0M362.5,120l-1,5 -3,3M356.5,457l9,0M361,453l0,12M357.5,461l3,-3M364.5,461l-3,-3M356.5,550l9,0l-3,4M360.5,552l0,3l-3,6M356.5,537l9,0M361,533l0,12M357.5,541l3,-3M364.5,541l-3,-3M372.5,454l7,2M372.5,458l7,2M371.5,462l9,2M371.5,950l9,0l-3,4M375.5,952l0,3l-3,6M372.5,933l7,0M371.5,936l9,0l-2,5 -4,3M374.5,917l-3,5M374.5,919l6,0l-2,5 -5,4M371.5,502l8,0l0,10l-8,0M389.5,150l8,0l0,10l-8,0M390,134l2,2M390,138l2,2M390.5,144l8,-6M403,182l2,2M403,186l2,2M403.5,192l8,-6M402.5,152l9,0M408.5,149l0,11l-2,-1M408.5,153l-6,6M402.5,502l8,0l0,10l-8,0M402.5,488l9,0M408.5,485l0,11l-2,-1M408.5,489l-6,6M402.5,472l8,0l-1,8 -2,-1M406.5,469l-1,6 -3,5M410.5,725l-8,7M407.5,728l0,9M426.5,117l-2,6M425.5,120l8,0M430.5,120l-1,5 -3,3M429,277l0,2M424.5,282l0,-3l9,0l-1,5 -5,4M441.5,805l-3,5M441.5,807l6,0l-2,5 -5,4M446.5,773l-8,7M443.5,776l0,9M443,389l0,2M438.5,394l0,-3l9,0l-1,5 -5,4M439.5,853l0,10l8,0M439.5,857l7,-2M456.5,693l-3,5M456.5,695l6,0l-2,5 -5,4M454.5,374l7,2M454.5,378l7,2M453.5,382l9,2M454.5,358l0,5M460.5,357l0,6l-4,5M454.5,838l7,0M458,838l0,9M453.5,847l9,0M476.5,376l7,0M475.5,380l9,0M479.5,373l1,11M475.5,358l8,0l0,10l-8,0M475.5,363l8,0M476.5,422l0,5M482.5,421l0,6l-4,5M491.5,342l0,5M497.5,341l0,6l-4,5M490.5,328l8,0l-1,8 -2,-1M494.5,325l-1,6 -3,5M491.5,646l0,5M497.5,645l0,6l-4,5M510.5,37l-2,6M509.5,40l8,0M514.5,40l-1,5 -3,3M513,21l0,2M508.5,26l0,-3l9,0l-1,5 -5,4M508.5,169l9,0M513,165l0,12M509.5,173l3,-3M516.5,173l-3,-3M529.5,853l-3,5M529.5,855l6,0l-2,5 -5,4M534.5,837l-8,7M531.5,840l0,9M527.5,822l7,2M527.5,826l7,2M526.5,830l9,2M526.5,184l9,0M532.5,181l0,11l-2,-1M532.5,185l-6,6M539.5,536l8,0l-1,8 -2,-1M543.5,533l-1,6 -3,5M540.5,517l0,10l8,0M540.5,521l7,-2M539.5,121l9,0M544,117l0,12M540.5,125l3,-3M547.5,125l-3,-3M539.5,102l8,0l0,10l-8,0M540,86l2,2M540,90l2,2M540.5,96l8,-6M540.5,678l7,0M544,678l0,9M539.5,687l9,0M554.5,54l0,5M560.5,53l0,6l-4,5M556.5,37l-3,5M556.5,39l6,0l-2,5 -5,4M553.5,200l9,0M559.5,197l0,11l-2,-1M559.5,201l-6,6M554,182l2,2M554,186l2,2M554.5,192l8,-6M568,102l2,2M568,106l2,2M568.5,112l8,-6M568.5,86l7,2M568.5,90l7,2M567.5,94l9,2M568.5,294l7,2M568.5,298l7,2M567.5,302l9,2M580.5,57l9,0M585,53l0,12M581.5,61l3,-3M588.5,61l-3,-3M580.5,135l1,3M583.5,134l1,3M589.5,135l-3,7 -4,3M581.5,118l7,2M581.5,122l7,2M580.5,126l9,2M593.5,24l9,0M596,21l0,6M600,21l0,6l-3,5M593.5,6l8,0l0,10l-8,0M612,469l0,2M607.5,474l0,-3l9,0l-1,5 -5,4M609.5,453l-2,6M608.5,456l8,0M613.5,456l-1,5 -3,3M607.5,710l8,0l0,10l-8,0M607.5,715l8,0M621.5,825l9,0M626,821l0,12M622.5,829l3,-3M629.5,829l-3,-3M621.5,808l8,0l-1,8 -2,-1M625.5,805l-1,6 -3,5M621.5,312l9,0M624,309l0,6M628,309l0,6l-3,5M621.5,281l9,0M626,277l0,12M622.5,285l3,-3M629.5,285l-3,-3M636.5,311l1,3M639.5,310l1,3M645.5,311l-3,7 -4,3M637.5,294l7,2M637.5,298l7,2M636.5,302l9,2M636.5,281l9,0M641,277l0,12M637.5,285l3,-3M644.5,285l-3,-3M636.5,904l9,0M642.5,901l0,11l-2,-1M642.5,905l-6,6M636.5,872l9,0M642.5,869l0,11l-2,-1M642.5,873l-6,6M654.5,358l8,0l0,10l-8,0M655.5,342l7,2M655.5,346l7,2M654.5,350l9,2M655,534l2,2M655,538l2,2M655.5,544l8,-6M655.5,518l7,2M655.5,522l7,2M654.5,526l9,2M669.5,424l8,0l-1,8 -2,-1M673.5,421l-1,6 -3,5M669.5,409l9,0M674,405l0,12M670.5,413l3,-3M677.5,413l-3,-3M669.5,774l9,0l-3,4M673.5,776l0,3l-3,6M672.5,759l-3,8M675.5,759l3,8M688.5,214l7,2M688.5,218l7,2M687.5,222l9,2M695.5,197l-8,7M692.5,200l0,9M690.5,935l-3,8M693.5,935l3,8M687.5,713l9,0M692,709l0,12M688.5,717l3,-3M695.5,717l-3,-3M705.5,616l9,0M711.5,613l0,11l-2,-1M711.5,617l-6,6M706.5,54l7,2M706.5,58l7,2M705.5,62l9,2M721.5,487l-3,8M724.5,487l3,8M718.5,327l1,3M721.5,326l1,3M727.5,327l-3,7 -4,3M718.5,312l9,0M724.5,309l0,11l-2,-1M724.5,313l-6,6M719.5,710l7,0M723,710l0,9M718.5,719l9,0M719.5,694l0,5M725.5,693l0,6l-4,5M732.5,616l8,0l-1,8 -2,-1M736.5,613l-1,6 -3,5M732.5,166l8,0l0,10l-8,0M732.5,171l8,0M755,629l0,2M750.5,634l0,-3l9,0l-1,5 -5,4M751.5,614l0,5M757.5,613l0,6l-4,5M750.5,600l8,0l-1,8 -2,-1M754.5,597l-1,6 -3,5M753.5,837l-3,5M753.5,839l6,0l-2,5 -5,4M768,101l0,2M763.5,106l0,-3l9,0l-1,5 -5,4M764.5,440l7,0M763.5,444l9,0M767.5,437l1,11M766.5,599l-3,8M769.5,599l3,8M764.5,582l7,2M764.5,586l7,2M763.5,590l9,2M777.5,726l0,5M783.5,725l0,6l-4,5M779.5,709l-3,5M779.5,711l6,0l-2,5 -5,4M777.5,408l7,0M776.5,412l9,0M780.5,405l1,11M777,6l2,2M777,10l2,2M777.5,16l8,-6M789.5,601l9,0M794,597l0,12M790.5,605l3,-3M797.5,605l-3,-3M789.5,134l9,0l-3,4M793.5,136l0,3l-3,6M792.5,359l-3,8M795.5,359l3,8M791.5,341l-2,6M790.5,344l8,0M795.5,344l-1,5 -3,3M803.5,550l7,2M803.5,554l7,2M802.5,558l9,2M803,790l2,2M803,794l2,2M803.5,800l8,-6M804.5,853l-2,6M803.5,856l8,0M808.5,856l-1,5 -3,3M803.5,837l7,0M802.5,840l9,0l-2,5 -4,3M817,502l2,2M817,506l2,2M817.5,512l8,-6M816.5,662l9,0l-3,4M820.5,664l0,3l-3,6M821,-11l0,2M816.5,-6l0,-3l9,0l-1,5 -5,4M817.5,934l0,5M823.5,933l0,6l-4,5M833.5,567l-3,8M836.5,567l3,8M832.5,533l-2,6M831.5,536l8,0M836.5,536l-1,5 -3,3M830.5,8l9,0M833,5l0,6M837,5l0,6l-3,5M833.5,677l-3,5M833.5,679l6,0l-2,5 -5,4M830.5,662l9,0l-3,4M834.5,664l0,3l-3,6M852.5,824l9,0M855,821l0,6M859,821l0,6l-3,5M853.5,390l7,2M853.5,394l7,2M852.5,398l9,2M852.5,375l1,3M855.5,374l1,3M861.5,375l-3,7 -4,3M855.5,519l-3,8M858.5,519l3,8M871.5,216l7,0M870.5,220l9,0M874.5,213l1,11M871.5,198l0,5M877.5,197l0,6l-4,5M884.5,519l1,3M887.5,518l1,3M893.5,519l-3,7 -4,3M887.5,501l-3,5M887.5,503l6,0l-2,5 -5,4M884.5,134l8,0l0,10l-8,0M884.5,139l8,0M884.5,120l9,0M890.5,117l0,11l-2,-1M890.5,121l-6,6M898.5,-9l1,3M901.5,-10l1,3M907.5,-9l-3,7 -4,3M899.5,309l0,10l8,0M899.5,313l7,-2M899.5,789l0,10l8,0M899.5,793l7,-2M917,581l0,2M912.5,586l0,-3l9,0l-1,5 -5,4M913.5,566l0,5M919.5,565l0,6l-4,5M927.5,501l-2,6M926.5,504l8,0M931.5,504l-1,5 -3,3M928.5,103l-3,8M931.5,103l3,8M925.5,88l8,0l-1,8 -2,-1M929.5,85l-1,6 -3,5M940.5,358l8,0l0,10l-8,0M941.5,342l7,2M941.5,346l7,2M940.5,350l9,2M940.5,536l9,0M946.5,533l0,11l-2,-1M946.5,537l-6,6M941.5,5l7,0M940.5,8l9,0l-2,5 -4,3M940.5,-10l8,0l0,10l-8,0M940.5,-5l8,0M956.5,773l-2,6M955.5,776l8,0M960.5,776l-1,5 -3,3M955.5,213l7,0M954.5,216l9,0l-2,5 -4,3M957.5,197l-3,5M957.5,199l6,0l-2,5 -5,4M955.5,-8l7,0M954.5,-4l9,0M958.5,-11l1,11M969.5,168l9,0M975.5,165l0,11l-2,-1M975.5,169l-6,6M970.5,149l7,0M969.5,152l9,0l-2,5 -4,3M986.5,551l-3,8M989.5,551l3,8M983.5,41l9,0M988,37l0,12M984.5,45l3,-3M991.5,45l-3,-3M986.5,23l-3,8M989.5,23l3,8M983.5,231l1,3M986.5,230l1,3M992.5,231l-3,7 -4,3M983.5,214l9,0l-3,4M987.5,216l0,3l-3,6' stroke-opacity='0.9' stroke-width='1.3'/%3E%3Cpath d='M2.5,757l0,10l8,0M2.5,761l7,-2M30.5,8l8,0l-1,8 -2,-1M34.5,5l-1,6 -3,5M31.5,680l7,0M30.5,684l9,0M34.5,677l1,11M45.5,886l7,2M45.5,890l7,2M44.5,894l9,2M87.5,102l7,2M87.5,106l7,2M86.5,110l9,2M86.5,680l9,0M89,677l0,6M93,677l0,6l-3,5M100.5,214l9,0l-3,4M104.5,216l0,3l-3,6M114.5,197l7,0M113.5,200l9,0l-2,5 -4,3M132,-11l0,2M127.5,-6l0,-3l9,0l-1,5 -5,4M141.5,837l0,10l8,0M141.5,841l7,-2M154.5,551l1,3M157.5,550l1,3M163.5,551l-3,7 -4,3M157.5,679l-3,8M160.5,679l3,8M201.5,550l8,0l0,10l-8,0M201.5,136l9,0M204,133l0,6M208,133l0,6l-3,5M216.5,631l1,3M219.5,630l1,3M225.5,631l-3,7 -4,3M259.5,245l-3,5M259.5,247l6,0l-2,5 -5,4M292.5,249l9,0M297,245l0,12M293.5,253l3,-3M300.5,253l-3,-3M306.5,809l9,0M311,805l0,12M307.5,813l3,-3M314.5,813l-3,-3M306.5,249l9,0M311,245l0,12M307.5,253l3,-3M314.5,253l-3,-3M333,293l0,2M328.5,298l0,-3l9,0l-1,5 -5,4M343.5,53l7,0M342.5,56l9,0l-2,5 -4,3M356.5,582l8,0l0,10l-8,0M371.5,8l9,0M374,5l0,6M378,5l0,6l-3,5M402.5,518l8,0l0,10l-8,0M402.5,523l8,0M425.5,309l0,10l8,0M425.5,313l7,-2M438.5,824l9,0M441,821l0,6M445,821l0,6l-3,5M461.5,725l-8,7M458.5,728l0,9M491.5,726l0,5M497.5,725l0,6l-4,5M529.5,871l-3,8M532.5,871l3,8M527.5,214l7,0M531,214l0,9M526.5,223l9,0M567.5,326l8,0l0,10l-8,0M567.5,331l8,0M593.5,841l9,0M598,837l0,12M594.5,845l3,-3M601.5,845l-3,-3M594,38l2,2M594,42l2,2M594.5,48l8,-6M608.5,86l0,5M614.5,85l0,6l-4,5M622.5,325l0,10l8,0M622.5,329l7,-2M637.5,917l0,10l8,0M637.5,921l7,-2M654.5,375l1,3M657.5,374l1,3M663.5,375l-3,7 -4,3M654.5,472l8,0l-1,8 -2,-1M658.5,469l-1,6 -3,5M669.5,790l9,0l-3,4M673.5,792l0,3l-3,6M690.5,741l-3,5M690.5,743l6,0l-2,5 -5,4M707.5,85l-2,6M706.5,88l8,0M711.5,88l-1,5 -3,3M719.5,725l0,10l8,0M719.5,729l7,-2M719.5,85l7,0M718.5,88l9,0l-2,5 -4,3M750.5,646l8,0l0,10l-8,0M763.5,456l9,0M769.5,453l0,11l-2,-1M769.5,457l-6,6M763.5,615l1,3M766.5,614l1,3M772.5,615l-3,7 -4,3M784.5,37l-8,7M781.5,40l0,9M810.5,581l-8,7M807.5,584l0,9M819.5,677l-3,5M819.5,679l6,0l-2,5 -5,4M816.5,8l9,0M819,5l0,6M823,5l0,6l-3,5M831.5,582l7,2M831.5,586l7,2M830.5,590l9,2M831.5,696l7,0M830.5,700l9,0M834.5,693l1,11M852.5,409l9,0M857,405l0,12M853.5,413l3,-3M860.5,413l-3,-3M875,725l0,2M870.5,730l0,-3l9,0l-1,5 -5,4M872.5,229l-2,6M871.5,232l8,0M876.5,232l-1,5 -3,3M885.5,533l0,10l8,0M885.5,537l7,-2M884.5,152l9,0M887,149l0,6M891,149l0,6l-3,5M899.5,357l7,0M898.5,360l9,0l-2,5 -4,3M913.5,326l0,5M919.5,325l0,6l-4,5M915.5,599l-3,8M918.5,599l3,8M933.5,117l-8,7M930.5,120l0,9M940.5,376l9,0M946.5,373l0,11l-2,-1M946.5,377l-6,6M955.5,792l7,0M954.5,796l9,0M958.5,789l1,11M986.5,53l-3,5M986.5,55l6,0l-2,5 -5,4' stroke-opacity='1' stroke-width='1.3'/%3E%3C/g%3E%3Ctext x='35.0 35.0 35.0 91.0 91.0 105.0 132.0 159.0 159.0 174.0 221.0 221.0 243.0 261.0 261.0 283.0 297.0 311.0 311.0 311.0 333.0 361.0 394.0 407.0 429.0 443.0 495.0 513.0 544.0 572.0 585.0 598.0 612.0 641.0 641.0 659.0 674.0 710.0 737.0 737.0 755.0 768.0 768.0 781.0 807.0 821.0 821.0 857.0 857.0 889.0 903.0 945.0 974.0 974.0 988.0' y='592 32 704 432 704 752 16 272 704 640 656 896 80 464 272 912 672 624 832 272 320 608 864 224 160 912 672 64 704 352 832 864 112 352 944 496 816 112 640 208 880 128 480 752 880 560 704 432 544 560 32 576 80 208 288' fill='%2300ff41' stroke='%2300ff41' stroke-width='5' stroke-opacity='.22' stroke-linejoin='round'%3E6+51837995391=0|7*%26quot;*777|8*263075|4+84*6197=89%26quot;:7749360:%3C/text%3E%3Ctext x='35.0 35.0 35.0 91.0 91.0 105.0 132.0 159.0 159.0 174.0 221.0 221.0 243.0 261.0 261.0 283.0 297.0 311.0 311.0 311.0 333.0 361.0 394.0 407.0 429.0 443.0 495.0 513.0 544.0 572.0 585.0 598.0 612.0 641.0 641.0 659.0 674.0 710.0 737.0 737.0 755.0 768.0 768.0 781.0 807.0 821.0 821.0 857.0 857.0 889.0 903.0 945.0 974.0 974.0 988.0' y='592 32 704 432 704 752 16 272 704 640 656 896 80 464 272 912 672 624 832 272 320 608 864 224 160 912 672 64 704 352 832 864 112 352 944 496 816 112 640 208 880 128 480 752 880 560 704 432 544 560 32 576 80 208 288' fill='%23b8ffc8' stroke='%23b8ffc8' stroke-width='2.5' stroke-opacity='.45' stroke-linejoin='round'%3E6+51837995391=0|7*%26quot;*777|8*263075|4+84*6197=89%26quot;:7749360:%3C/text%3E%3Ctext x='35.0 35.0 35.0 91.0 91.0 105.0 132.0 159.0 159.0 174.0 221.0 221.0 243.0 261.0 261.0 283.0 297.0 311.0 311.0 311.0 333.0 361.0 394.0 407.0 429.0 443.0 495.0 513.0 544.0 572.0 585.0 598.0 612.0 641.0 641.0 659.0 674.0 710.0 737.0 737.0 755.0 768.0 768.0 781.0 807.0 821.0 821.0 857.0 857.0 889.0 903.0 945.0 974.0 974.0 988.0' y='592 32 704 432 704 752 16 272 704 640 656 896 80 464 272 912 672 624 832 272 320 608 864 224 160 912 672 64 704 352 832 864 112 352 944 496 816 112 640 208 880 128 480 752 880 560 704 432 544 560 32 576 80 208 288' fill='%23f0fff0'%3E6+51837995391=0|7*%26quot;*777|8*263075|4+84*6197=89%26quot;:7749360:%3C/text%3E%3Cpath d='M1.5,152l9,0M4,149l0,6M8,149l0,6l-3,5M1.5,729l9,0M6,725l0,12M2.5,733l3,-3M9.5,733l-3,-3M1.5,774l9,0l-3,4M5.5,776l0,3l-3,6M16.5,246l8,0l0,10l-8,0M19.5,599l-3,8M22.5,599l3,8M16.5,726l8,0l0,10l-8,0M45.5,901l7,0M44.5,904l9,0l-2,5 -4,3M45.5,454l7,2M45.5,458l7,2M44.5,462l9,2M58.5,312l9,0M61,309l0,6M65,309l0,6l-3,5M66.5,517l-8,7M63.5,520l0,9M58.5,841l9,0M63,837l0,12M59.5,845l3,-3M66.5,845l-3,-3M72.5,246l0,5M78.5,245l0,6l-4,5M71.5,262l9,0l-3,4M75.5,264l0,3l-3,6M74.5,21l-3,5M74.5,23l6,0l-2,5 -5,4M71.5,696l8,0l-1,8 -2,-1M75.5,693l-1,6 -3,5M86.5,120l8,0l-1,8 -2,-1M90.5,117l-1,6 -3,5M94.5,645l-8,7M91.5,648l0,9M100.5,230l9,0l-3,4M104.5,232l0,3l-3,6M113.5,776l9,0M116,773l0,6M120,773l0,6l-3,5M114.5,216l7,0M113.5,220l9,0M117.5,213l1,11M127.5,408l9,0M133.5,405l0,11l-2,-1M133.5,409l-6,6M140.5,856l9,0M146.5,853l0,11l-2,-1M146.5,857l-6,6M140.5,22l9,0l-3,4M144.5,24l0,3l-3,6M155.5,6l7,2M155.5,10l7,2M154.5,14l9,2M155.5,566l7,2M155.5,570l7,2M154.5,574l9,2M171.5,213l-2,6M170.5,216l8,0M175.5,216l-1,5 -3,3M183.5,806l8,0l0,10l-8,0M202.5,566l0,5M208.5,565l0,6l-4,5M202.5,150l7,2M202.5,154l7,2M201.5,158l9,2M217,870l2,2M217,874l2,2M217.5,880l8,-6M238.5,646l9,0l-3,4M242.5,648l0,3l-3,6M238.5,822l8,0l0,10l-8,0M238.5,827l8,0M238.5,855l1,3M241.5,854l1,3M247.5,855l-3,7 -4,3M256.5,793l9,0M261,789l0,12M257.5,797l3,-3M264.5,797l-3,-3M279.5,614l7,0M283,614l0,9M278.5,623l9,0M279.5,728l7,0M278.5,732l9,0M282.5,725l1,11M292.5,136l9,0M298.5,133l0,11l-2,-1M298.5,137l-6,6M294.5,261l-2,6M293.5,264l8,0M298.5,264l-1,5 -3,3M331.5,535l-3,8M334.5,535l3,8M329.5,694l7,2M329.5,698l7,2M328.5,702l9,2M343.5,933l0,10l8,0M343.5,937l7,-2M342.5,182l8,0l0,10l-8,0M342.5,297l9,0M347,293l0,12M343.5,301l3,-3M350.5,301l-3,-3M364.5,149l-8,7M361.5,152l0,9M357.5,518l0,5M363.5,517l0,6l-4,5M356.5,566l9,0l-3,4M360.5,568l0,3l-3,6M379.5,485l-8,7M376.5,488l0,9M372.5,22l7,2M372.5,26l7,2M371.5,30l9,2M372.5,520l7,0M371.5,524l9,0M375.5,517l1,11M389.5,182l9,0l-3,4M393.5,184l0,3l-3,6M403.5,536l7,0M402.5,540l9,0M406.5,533l1,11M403,758l2,2M403,762l2,2M403.5,768l8,-6M424.5,329l9,0M429,325l0,12M425.5,333l3,-3M432.5,333l-3,-3M439.5,838l0,5M445.5,837l0,6l-4,5M438.5,424l8,0l-1,8 -2,-1M442.5,421l-1,6 -3,5M454.5,742l7,0M458,742l0,9M453.5,751l9,0M458,389l0,2M453.5,394l0,-3l9,0l-1,5 -5,4M454.5,856l7,0M453.5,860l9,0M457.5,853l1,11M476,406l2,2M476,410l2,2M476.5,416l8,-6M490.5,358l8,0l0,10l-8,0M491.5,120l7,0M490.5,124l9,0M494.5,117l1,11M490.5,742l8,0l0,10l-8,0M490.5,747l8,0M509.5,214l7,2M509.5,218l7,2M508.5,222l9,2M526.5,886l9,0l-3,4M530.5,888l0,3l-3,6M526.5,904l8,0l-1,8 -2,-1M530.5,901l-1,6 -3,5M526.5,200l9,0M532.5,197l0,11l-2,-1M532.5,201l-6,6M527.5,230l7,2M527.5,234l7,2M526.5,238l9,2M539.5,550l9,0l-3,4M543.5,552l0,3l-3,6M540.5,150l7,2M540.5,154l7,2M539.5,158l9,2M554.5,86l0,5M560.5,85l0,6l-4,5M553.5,214l9,0l-3,4M557.5,216l0,3l-3,6M568.5,120l7,0M567.5,124l9,0M571.5,117l1,11M581.5,69l7,0M580.5,72l9,0l-2,5 -4,3M581.5,168l7,0M580.5,172l9,0M584.5,165l1,11M593.5,56l8,0l-1,8 -2,-1M597.5,53l-1,6 -3,5M607.5,360l9,0M613.5,357l0,11l-2,-1M613.5,361l-6,6M612,485l0,2M607.5,490l0,-3l9,0l-1,5 -5,4M608.5,725l0,10l8,0M608.5,729l7,-2M622.5,838l0,5M628.5,837l0,6l-4,5M622.5,341l7,0M621.5,344l9,0l-2,5 -4,3M654.5,390l8,0l0,10l-8,0M654.5,395l8,0M654.5,552l9,0M657,549l0,6M661,549l0,6l-3,5M670.5,438l0,5M676.5,437l0,6l-4,5M687.5,232l8,0l-1,8 -2,-1M691.5,229l-1,6 -3,5M688.5,6l7,0M692,6l0,9M687.5,15l9,0M688.5,758l0,5M694.5,757l0,6l-4,5M705.5,678l8,0l0,10l-8,0M718.5,504l9,0M721,501l0,6M725,501l0,6l-3,5M719.5,342l7,2M719.5,346l7,2M718.5,350l9,2M718.5,742l9,0l-3,4M722.5,744l0,3l-3,6M720.5,101l-2,6M719.5,104l8,0M724.5,104l-1,5 -3,3M733.5,773l0,10l8,0M733.5,777l7,-2M751.5,662l7,2M751.5,666l7,2M750.5,670l9,2M764.5,629l0,10l8,0M764.5,633l7,-2M776.5,438l9,0l-3,4M780.5,440l0,3l-3,6M776.5,56l9,0M782.5,53l0,11l-2,-1M782.5,57l-6,6M790.5,630l7,2M790.5,634l7,2M789.5,638l9,2M789.5,150l9,0l-3,4M793.5,152l0,3l-3,6M790.5,374l0,5M796.5,373l0,6l-4,5M803.5,806l7,0M807,806l0,9M802.5,815l9,0M816.5,23l1,3M819.5,22l1,3M825.5,23l-3,7 -4,3M831.5,600l7,0M830.5,604l9,0M834.5,597l1,11M830.5,38l8,0l0,10l-8,0M830.5,43l8,0M855.5,839l-3,8M858.5,839l3,8M870.5,742l8,0l0,10l-8,0M870.5,747l8,0M871.5,246l0,5M877.5,245l0,6l-4,5M899.5,344l7,0M898.5,348l9,0M902.5,341l1,11M899.5,374l7,0M903,374l0,9M898.5,383l9,0M906.5,805l-8,7M903.5,808l0,9M912.5,342l9,0l-3,4M916.5,344l0,3l-3,6M912.5,614l9,0l-3,4M916.5,616l0,3l-3,6M926.5,534l7,0M930,534l0,9M925.5,543l9,0M925.5,134l8,0l0,10l-8,0M925.5,139l8,0M942.5,389l-2,6M941.5,392l8,0M946.5,392l-1,5 -3,3M941.5,22l7,0M945,22l0,9M940.5,31l9,0M955.5,805l0,10l8,0M955.5,809l7,-2M955,230l2,2M955,234l2,2M955.5,240l8,-6M957.5,5l-3,5M957.5,7l6,0l-2,5 -5,4M970.5,517l0,10l8,0M970.5,521l7,-2M983.5,566l8,0l0,10l-8,0M983.5,71l1,3M986.5,70l1,3M992.5,71l-3,7 -4,3' fill='none' stroke='%2300ff41' stroke-width='5' stroke-opacity='.22' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M1.5,152l9,0M4,149l0,6M8,149l0,6l-3,5M1.5,729l9,0M6,725l0,12M2.5,733l3,-3M9.5,733l-3,-3M1.5,774l9,0l-3,4M5.5,776l0,3l-3,6M16.5,246l8,0l0,10l-8,0M19.5,599l-3,8M22.5,599l3,8M16.5,726l8,0l0,10l-8,0M45.5,901l7,0M44.5,904l9,0l-2,5 -4,3M45.5,454l7,2M45.5,458l7,2M44.5,462l9,2M58.5,312l9,0M61,309l0,6M65,309l0,6l-3,5M66.5,517l-8,7M63.5,520l0,9M58.5,841l9,0M63,837l0,12M59.5,845l3,-3M66.5,845l-3,-3M72.5,246l0,5M78.5,245l0,6l-4,5M71.5,262l9,0l-3,4M75.5,264l0,3l-3,6M74.5,21l-3,5M74.5,23l6,0l-2,5 -5,4M71.5,696l8,0l-1,8 -2,-1M75.5,693l-1,6 -3,5M86.5,120l8,0l-1,8 -2,-1M90.5,117l-1,6 -3,5M94.5,645l-8,7M91.5,648l0,9M100.5,230l9,0l-3,4M104.5,232l0,3l-3,6M113.5,776l9,0M116,773l0,6M120,773l0,6l-3,5M114.5,216l7,0M113.5,220l9,0M117.5,213l1,11M127.5,408l9,0M133.5,405l0,11l-2,-1M133.5,409l-6,6M140.5,856l9,0M146.5,853l0,11l-2,-1M146.5,857l-6,6M140.5,22l9,0l-3,4M144.5,24l0,3l-3,6M155.5,6l7,2M155.5,10l7,2M154.5,14l9,2M155.5,566l7,2M155.5,570l7,2M154.5,574l9,2M171.5,213l-2,6M170.5,216l8,0M175.5,216l-1,5 -3,3M183.5,806l8,0l0,10l-8,0M202.5,566l0,5M208.5,565l0,6l-4,5M202.5,150l7,2M202.5,154l7,2M201.5,158l9,2M217,870l2,2M217,874l2,2M217.5,880l8,-6M238.5,646l9,0l-3,4M242.5,648l0,3l-3,6M238.5,822l8,0l0,10l-8,0M238.5,827l8,0M238.5,855l1,3M241.5,854l1,3M247.5,855l-3,7 -4,3M256.5,793l9,0M261,789l0,12M257.5,797l3,-3M264.5,797l-3,-3M279.5,614l7,0M283,614l0,9M278.5,623l9,0M279.5,728l7,0M278.5,732l9,0M282.5,725l1,11M292.5,136l9,0M298.5,133l0,11l-2,-1M298.5,137l-6,6M294.5,261l-2,6M293.5,264l8,0M298.5,264l-1,5 -3,3M331.5,535l-3,8M334.5,535l3,8M329.5,694l7,2M329.5,698l7,2M328.5,702l9,2M343.5,933l0,10l8,0M343.5,937l7,-2M342.5,182l8,0l0,10l-8,0M342.5,297l9,0M347,293l0,12M343.5,301l3,-3M350.5,301l-3,-3M364.5,149l-8,7M361.5,152l0,9M357.5,518l0,5M363.5,517l0,6l-4,5M356.5,566l9,0l-3,4M360.5,568l0,3l-3,6M379.5,485l-8,7M376.5,488l0,9M372.5,22l7,2M372.5,26l7,2M371.5,30l9,2M372.5,520l7,0M371.5,524l9,0M375.5,517l1,11M389.5,182l9,0l-3,4M393.5,184l0,3l-3,6M403.5,536l7,0M402.5,540l9,0M406.5,533l1,11M403,758l2,2M403,762l2,2M403.5,768l8,-6M424.5,329l9,0M429,325l0,12M425.5,333l3,-3M432.5,333l-3,-3M439.5,838l0,5M445.5,837l0,6l-4,5M438.5,424l8,0l-1,8 -2,-1M442.5,421l-1,6 -3,5M454.5,742l7,0M458,742l0,9M453.5,751l9,0M458,389l0,2M453.5,394l0,-3l9,0l-1,5 -5,4M454.5,856l7,0M453.5,860l9,0M457.5,853l1,11M476,406l2,2M476,410l2,2M476.5,416l8,-6M490.5,358l8,0l0,10l-8,0M491.5,120l7,0M490.5,124l9,0M494.5,117l1,11M490.5,742l8,0l0,10l-8,0M490.5,747l8,0M509.5,214l7,2M509.5,218l7,2M508.5,222l9,2M526.5,886l9,0l-3,4M530.5,888l0,3l-3,6M526.5,904l8,0l-1,8 -2,-1M530.5,901l-1,6 -3,5M526.5,200l9,0M532.5,197l0,11l-2,-1M532.5,201l-6,6M527.5,230l7,2M527.5,234l7,2M526.5,238l9,2M539.5,550l9,0l-3,4M543.5,552l0,3l-3,6M540.5,150l7,2M540.5,154l7,2M539.5,158l9,2M554.5,86l0,5M560.5,85l0,6l-4,5M553.5,214l9,0l-3,4M557.5,216l0,3l-3,6M568.5,120l7,0M567.5,124l9,0M571.5,117l1,11M581.5,69l7,0M580.5,72l9,0l-2,5 -4,3M581.5,168l7,0M580.5,172l9,0M584.5,165l1,11M593.5,56l8,0l-1,8 -2,-1M597.5,53l-1,6 -3,5M607.5,360l9,0M613.5,357l0,11l-2,-1M613.5,361l-6,6M612,485l0,2M607.5,490l0,-3l9,0l-1,5 -5,4M608.5,725l0,10l8,0M608.5,729l7,-2M622.5,838l0,5M628.5,837l0,6l-4,5M622.5,341l7,0M621.5,344l9,0l-2,5 -4,3M654.5,390l8,0l0,10l-8,0M654.5,395l8,0M654.5,552l9,0M657,549l0,6M661,549l0,6l-3,5M670.5,438l0,5M676.5,437l0,6l-4,5M687.5,232l8,0l-1,8 -2,-1M691.5,229l-1,6 -3,5M688.5,6l7,0M692,6l0,9M687.5,15l9,0M688.5,758l0,5M694.5,757l0,6l-4,5M705.5,678l8,0l0,10l-8,0M718.5,504l9,0M721,501l0,6M725,501l0,6l-3,5M719.5,342l7,2M719.5,346l7,2M718.5,350l9,2M718.5,742l9,0l-3,4M722.5,744l0,3l-3,6M720.5,101l-2,6M719.5,104l8,0M724.5,104l-1,5 -3,3M733.5,773l0,10l8,0M733.5,777l7,-2M751.5,662l7,2M751.5,666l7,2M750.5,670l9,2M764.5,629l0,10l8,0M764.5,633l7,-2M776.5,438l9,0l-3,4M780.5,440l0,3l-3,6M776.5,56l9,0M782.5,53l0,11l-2,-1M782.5,57l-6,6M790.5,630l7,2M790.5,634l7,2M789.5,638l9,2M789.5,150l9,0l-3,4M793.5,152l0,3l-3,6M790.5,374l0,5M796.5,373l0,6l-4,5M803.5,806l7,0M807,806l0,9M802.5,815l9,0M816.5,23l1,3M819.5,22l1,3M825.5,23l-3,7 -4,3M831.5,600l7,0M830.5,604l9,0M834.5,597l1,11M830.5,38l8,0l0,10l-8,0M830.5,43l8,0M855.5,839l-3,8M858.5,839l3,8M870.5,742l8,0l0,10l-8,0M870.5,747l8,0M871.5,246l0,5M877.5,245l0,6l-4,5M899.5,344l7,0M898.5,348l9,0M902.5,341l1,11M899.5,374l7,0M903,374l0,9M898.5,383l9,0M906.5,805l-8,7M903.5,808l0,9M912.5,342l9,0l-3,4M916.5,344l0,3l-3,6M912.5,614l9,0l-3,4M916.5,616l0,3l-3,6M926.5,534l7,0M930,534l0,9M925.5,543l9,0M925.5,134l8,0l0,10l-8,0M925.5,139l8,0M942.5,389l-2,6M941.5,392l8,0M946.5,392l-1,5 -3,3M941.5,22l7,0M945,22l0,9M940.5,31l9,0M955.5,805l0,10l8,0M955.5,809l7,-2M955,230l2,2M955,234l2,2M955.5,240l8,-6M957.5,5l-3,5M957.5,7l6,0l-2,5 -5,4M970.5,517l0,10l8,0M970.5,521l7,-2M983.5,566l8,0l0,10l-8,0M983.5,71l1,3M986.5,70l1,3M992.5,71l-3,7 -4,3' fill='none' stroke='%23b8ffc8' stroke-width='2.5' stroke-opacity='.45' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M1.5,152l9,0M4,149l0,6M8,149l0,6l-3,5M1.5,729l9,0M6,725l0,12M2.5,733l3,-3M9.5,733l-3,-3M1.5,774l9,0l-3,4M5.5,776l0,3l-3,6M16.5,246l8,0l0,10l-8,0M19.5,599l-3,8M22.5,599l3,8M16.5,726l8,0l0,10l-8,0M45.5,901l7,0M44.5,904l9,0l-2,5 -4,3M45.5,454l7,2M45.5,458l7,2M44.5,462l9,2M58.5,312l9,0M61,309l0,6M65,309l0,6l-3,5M66.5,517l-8,7M63.5,520l0,9M58.5,841l9,0M63,837l0,12M59.5,845l3,-3M66.5,845l-3,-3M72.5,246l0,5M78.5,245l0,6l-4,5M71.5,262l9,0l-3,4M75.5,264l0,3l-3,6M74.5,21l-3,5M74.5,23l6,0l-2,5 -5,4M71.5,696l8,0l-1,8 -2,-1M75.5,693l-1,6 -3,5M86.5,120l8,0l-1,8 -2,-1M90.5,117l-1,6 -3,5M94.5,645l-8,7M91.5,648l0,9M100.5,230l9,0l-3,4M104.5,232l0,3l-3,6M113.5,776l9,0M116,773l0,6M120,773l0,6l-3,5M114.5,216l7,0M113.5,220l9,0M117.5,213l1,11M127.5,408l9,0M133.5,405l0,11l-2,-1M133.5,409l-6,6M140.5,856l9,0M146.5,853l0,11l-2,-1M146.5,857l-6,6M140.5,22l9,0l-3,4M144.5,24l0,3l-3,6M155.5,6l7,2M155.5,10l7,2M154.5,14l9,2M155.5,566l7,2M155.5,570l7,2M154.5,574l9,2M171.5,213l-2,6M170.5,216l8,0M175.5,216l-1,5 -3,3M183.5,806l8,0l0,10l-8,0M202.5,566l0,5M208.5,565l0,6l-4,5M202.5,150l7,2M202.5,154l7,2M201.5,158l9,2M217,870l2,2M217,874l2,2M217.5,880l8,-6M238.5,646l9,0l-3,4M242.5,648l0,3l-3,6M238.5,822l8,0l0,10l-8,0M238.5,827l8,0M238.5,855l1,3M241.5,854l1,3M247.5,855l-3,7 -4,3M256.5,793l9,0M261,789l0,12M257.5,797l3,-3M264.5,797l-3,-3M279.5,614l7,0M283,614l0,9M278.5,623l9,0M279.5,728l7,0M278.5,732l9,0M282.5,725l1,11M292.5,136l9,0M298.5,133l0,11l-2,-1M298.5,137l-6,6M294.5,261l-2,6M293.5,264l8,0M298.5,264l-1,5 -3,3M331.5,535l-3,8M334.5,535l3,8M329.5,694l7,2M329.5,698l7,2M328.5,702l9,2M343.5,933l0,10l8,0M343.5,937l7,-2M342.5,182l8,0l0,10l-8,0M342.5,297l9,0M347,293l0,12M343.5,301l3,-3M350.5,301l-3,-3M364.5,149l-8,7M361.5,152l0,9M357.5,518l0,5M363.5,517l0,6l-4,5M356.5,566l9,0l-3,4M360.5,568l0,3l-3,6M379.5,485l-8,7M376.5,488l0,9M372.5,22l7,2M372.5,26l7,2M371.5,30l9,2M372.5,520l7,0M371.5,524l9,0M375.5,517l1,11M389.5,182l9,0l-3,4M393.5,184l0,3l-3,6M403.5,536l7,0M402.5,540l9,0M406.5,533l1,11M403,758l2,2M403,762l2,2M403.5,768l8,-6M424.5,329l9,0M429,325l0,12M425.5,333l3,-3M432.5,333l-3,-3M439.5,838l0,5M445.5,837l0,6l-4,5M438.5,424l8,0l-1,8 -2,-1M442.5,421l-1,6 -3,5M454.5,742l7,0M458,742l0,9M453.5,751l9,0M458,389l0,2M453.5,394l0,-3l9,0l-1,5 -5,4M454.5,856l7,0M453.5,860l9,0M457.5,853l1,11M476,406l2,2M476,410l2,2M476.5,416l8,-6M490.5,358l8,0l0,10l-8,0M491.5,120l7,0M490.5,124l9,0M494.5,117l1,11M490.5,742l8,0l0,10l-8,0M490.5,747l8,0M509.5,214l7,2M509.5,218l7,2M508.5,222l9,2M526.5,886l9,0l-3,4M530.5,888l0,3l-3,6M526.5,904l8,0l-1,8 -2,-1M530.5,901l-1,6 -3,5M526.5,200l9,0M532.5,197l0,11l-2,-1M532.5,201l-6,6M527.5,230l7,2M527.5,234l7,2M526.5,238l9,2M539.5,550l9,0l-3,4M543.5,552l0,3l-3,6M540.5,150l7,2M540.5,154l7,2M539.5,158l9,2M554.5,86l0,5M560.5,85l0,6l-4,5M553.5,214l9,0l-3,4M557.5,216l0,3l-3,6M568.5,120l7,0M567.5,124l9,0M571.5,117l1,11M581.5,69l7,0M580.5,72l9,0l-2,5 -4,3M581.5,168l7,0M580.5,172l9,0M584.5,165l1,11M593.5,56l8,0l-1,8 -2,-1M597.5,53l-1,6 -3,5M607.5,360l9,0M613.5,357l0,11l-2,-1M613.5,361l-6,6M612,485l0,2M607.5,490l0,-3l9,0l-1,5 -5,4M608.5,725l0,10l8,0M608.5,729l7,-2M622.5,838l0,5M628.5,837l0,6l-4,5M622.5,341l7,0M621.5,344l9,0l-2,5 -4,3M654.5,390l8,0l0,10l-8,0M654.5,395l8,0M654.5,552l9,0M657,549l0,6M661,549l0,6l-3,5M670.5,438l0,5M676.5,437l0,6l-4,5M687.5,232l8,0l-1,8 -2,-1M691.5,229l-1,6 -3,5M688.5,6l7,0M692,6l0,9M687.5,15l9,0M688.5,758l0,5M694.5,757l0,6l-4,5M705.5,678l8,0l0,10l-8,0M718.5,504l9,0M721,501l0,6M725,501l0,6l-3,5M719.5,342l7,2M719.5,346l7,2M718.5,350l9,2M718.5,742l9,0l-3,4M722.5,744l0,3l-3,6M720.5,101l-2,6M719.5,104l8,0M724.5,104l-1,5 -3,3M733.5,773l0,10l8,0M733.5,777l7,-2M751.5,662l7,2M751.5,666l7,2M750.5,670l9,2M764.5,629l0,10l8,0M764.5,633l7,-2M776.5,438l9,0l-3,4M780.5,440l0,3l-3,6M776.5,56l9,0M782.5,53l0,11l-2,-1M782.5,57l-6,6M790.5,630l7,2M790.5,634l7,2M789.5,638l9,2M789.5,150l9,0l-3,4M793.5,152l0,3l-3,6M790.5,374l0,5M796.5,373l0,6l-4,5M803.5,806l7,0M807,806l0,9M802.5,815l9,0M816.5,23l1,3M819.5,22l1,3M825.5,23l-3,7 -4,3M831.5,600l7,0M830.5,604l9,0M834.5,597l1,11M830.5,38l8,0l0,10l-8,0M830.5,43l8,0M855.5,839l-3,8M858.5,839l3,8M870.5,742l8,0l0,10l-8,0M870.5,747l8,0M871.5,246l0,5M877.5,245l0,6l-4,5M899.5,344l7,0M898.5,348l9,0M902.5,341l1,11M899.5,374l7,0M903,374l0,9M898.5,383l9,0M906.5,805l-8,7M903.5,808l0,9M912.5,342l9,0l-3,4M916.5,344l0,3l-3,6M912.5,614l9,0l-3,4M916.5,616l0,3l-3,6M926.5,534l7,0M930,534l0,9M925.5,543l9,0M925.5,134l8,0l0,10l-8,0M925.5,139l8,0M942.5,389l-2,6M941.5,392l8,0M946.5,392l-1,5 -3,3M941.5,22l7,0M945,22l0,9M940.5,31l9,0M955.5,805l0,10l8,0M955.5,809l7,-2M955,230l2,2M955,234l2,2M955.5,240l8,-6M957.5,5l-3,5M957.5,7l6,0l-2,5 -5,4M970.5,517l0,10l8,0M970.5,521l7,-2M983.5,566l8,0l0,10l-8,0M983.5,71l1,3M986.5,70l1,3M992.5,71l-3,7 -4,3' fill='none' stroke='%23f0fff0' stroke-width='1.5' stroke-linecap='square'/%3E%3C/g%3E%3C/svg%3E") 0 0 / 997px 960px;
+  opacity: 1;
 }
 @media (prefers-reduced-motion: no-preference) {
-  html[data-theme="matrix"] {
-    animation: matrix-rain 11s linear infinite;
-  }
+  html[data-theme="matrix"]::after { animation: matrix-rain-near 13s linear infinite; }
 }
 
-  html[data-motion="always"][data-theme="matrix"] {
-    animation: matrix-rain 11s linear infinite;
-  }
+  html[data-motion="always"][data-theme="matrix"]::after { animation: matrix-rain-near 13s linear infinite; }
 
-@keyframes matrix-rain {
-  from {
-    background-position:
-      8px 0, 24px 14px, 40px 5px, 56px 22px, 72px 9px,
-      8px 9px, 24px 23px, 40px 14px, 56px 31px, 72px 18px;
-  }
-  to {
-    background-position:
-      8px 984px, 24px 888px, 40px 1128px, 56px 1416px, 72px 1272px,
-      8px 993px, 24px 897px, 40px 1137px, 56px 1425px, 72px 1281px;
-  }
-}
+@keyframes matrix-rain-near { to { transform: translateY(960px); } }
 
 /* v3.4.0 components: terminal-green glow extended to the newer primitives. */
 html[data-theme="matrix"] {
-  --toast-bg: #020c02;
+  --toast-bg: #000a02;
   --toast-border: var(--accent);
-  --toast-shadow: 0 0 12px rgba(0, 255, 65, 0.35);
-  --alert-bg: #020c02;
+  /* The SYSTEM FAILURE box again: black gap, then a lit phosphor rule. */
+  --toast-shadow: 0 0 0 2px #000, 0 0 0 3px var(--accent), 0 0 12px rgba(0, 255, 65, 0.35);
+  --alert-bg: #000a02;
   --alert-fg: var(--text);
-  --card-shadow: inset 0 0 16px rgba(0, 255, 65, 0.08);
-  --context-menu-bg: #020c02;
+  --card-shadow: inset 0 0 24px rgba(0, 255, 65, 0.14);
+  --context-menu-bg: #000a02;
   --context-menu-border: var(--accent);
   --dropzone-border: var(--accent);
   --dropzone-bg-active: rgba(0, 255, 65, 0.08);
   --dropzone-fg-active: var(--accent);
   --avatar-bg: var(--hairline);
   --avatar-fg: var(--accent);
-  --pagination-item-bg-active: rgba(0, 255, 65, 0.15);
+  --pagination-item-bg-active: var(--surface-2);
   --pagination-item-fg-active: var(--accent);
   --breadcrumb-current-fg: var(--accent);
   --tooltip-bg: #000;
   --tooltip-border: var(--accent);
-  --popover-bg: #020c02;
+  --popover-bg: #000a02;
   --popover-border: var(--accent);
   --skeleton-bg: var(--hairline);
 }
@@ -18667,12 +18975,27 @@ html[data-theme="matrix"] {
 html[data-theme="matrix"] h1,
 html[data-theme="matrix"] h2,
 html[data-theme="matrix"] h3 {
+  font-family: var(--font-console);
   color: var(--accent);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
-html[data-theme="matrix"] .btn-primary { --btn-bg: rgba(0, 255, 65, 0.12); --btn-fg: var(--accent); }
+/* The SYSTEM FAILURE wall's squared digits carry into the data's big
+   numerals; running text and table cells stay on the clean mono. */
+html[data-theme="matrix"] :is(.stat-value, .timecode, .price) { font-family: var(--font-console); }
+/* Console captions (panel and window titles, table heads, stat labels) are
+   the thin console face too; it has no bold, so never synthesize one. */
+html[data-theme="matrix"] :is(.panel-header, .modal-header, .table th, .stat-label) {
+  font-family: var(--font-console);
+  font-weight: 400;
+  font-synthesis: none;
+}
+/* The narrower console face no longer props table columns open with the
+   head's text, so a field in a cell keeps a full tap width of its own. */
+:where(html[data-theme="matrix"]) td > :is(.input, .select) { min-inline-size: var(--tap-min); }
+
+html[data-theme="matrix"] .btn-primary { --btn-bg: rgba(0, 255, 65, 0.12); --btn-fg: var(--accent-text); }
 
 /* Opt-in only: a heading flicker, never on an interactive control, and
    never the sole carrier of any state. */
@@ -18697,22 +19020,19 @@ html[data-theme="matrix"] {
      above), and .app is behind .app-main — this token
      used to paint solid black over the rain and hide it entirely. */
   --app-bg: transparent;
-  --app-bar-bg: #000;
+  /* The operator console's toolbar plate: dark green, faint 3px scanlines,
+     bevelled below (see .app-bar). */
+  --app-bar-bg: repeating-linear-gradient(180deg, rgba(0, 255, 65, 0.06) 0 1px, transparent 1px 3px), linear-gradient(#0b3d1c, #062a12);
+  --panel-header-bg: repeating-linear-gradient(180deg, rgba(0, 255, 65, 0.07) 0 1px, transparent 1px 3px), #031203;
+  --panel-header-fg: var(--accent-text);
   --app-bar-rule: var(--border);
   --app-bar-height: 2.4rem;
   --app-main-padding: 1rem;
-  /* Near-opaque, not transparent: .app-main is where dense, unpanelled
-     text actually lives (a support-desk ticket list, a plain table body
-     dropped straight into the content well) and it inherited the fully
-     transparent fallback, so the rain's 10 head+tail layers rendered
-     directly behind that text with nothing occluding them. A translucent
-     wash over the rain still fails the same way a low-alpha panel would —
-     it has to be opaque enough that the glyph streaks read as a faint
-     backdrop glow, not a pattern competing with foreground glyphs for
-     contrast. 92% black keeps a hint of the rain visible (so the well
-     doesn't just look like a flat black panel) while fully occluding it
-     for reading. */
-  --app-main-bg: rgba(0, 4, 0, 0.92);
+  /* A 30% black wash, not transparent: unpanelled text in the content well
+     (a ticket list, a bare table) sits on the rain, so the wash knocks the
+     streaks back and the text's black halo cuts a moat around each glyph.
+     Panels and tables stay opaque; the rest of the wall shows through. */
+  --app-main-bg: rgba(0, 4, 0, 0.3);
   --app-status-bg: #000;
   --app-status-fg: var(--muted);
 }
@@ -18729,6 +19049,39 @@ html[data-theme="matrix"] .table {
 html[data-theme="matrix"] .table th {
   background: var(--surface-2);
 }
+/* Alerts get the dialog's SYSTEM FAILURE rule: a black gap, then a second
+   lit rule in the alert's own state colour. */
+html[data-theme="matrix"] .alert {
+  box-shadow: 0 0 0 2px #000, 0 0 0 3px var(--alert-border, var(--border));
+}
+/* A warning's rules are the bright green step; only its text is white-hot,
+   so whiteness stays as rare as the rain's heads. */
+html[data-theme="matrix"] .alert-warning { --alert-border: var(--accent-2); }
+html[data-theme="matrix"] .badge.badge-solid.badge-warning { --badge-bg: var(--accent-2); }
+/* The soft warning chip: a dark green cell under a bright-step rule, not
+   core's grey white-into-black mix. */
+html[data-theme="matrix"] .badge-warning:not(.badge-solid, .badge-outline) { --badge-bg: #0f2a14; --badge-border: var(--accent-2); }
+/* The toolbar plate's bevel: a lit top edge, a dark bottom one. Window and
+   dialog title bars are the same console plate. */
+html[data-theme="matrix"] {
+  --modal-header-bg: var(--app-bar-bg);
+  --modal-header-fg: var(--accent-text);
+  --window-header-bg-inactive: var(--panel-header-bg);
+}
+html[data-theme="matrix"] .modal-header { box-shadow: inset 0 2px 0 #1f6a3a, inset 0 -2px 0 #021a0a; }
+/* A window's tab strip keeps mixed case and tighter cells, so four tabs
+   fit on one row and the dialog's buttons stay inside the window. */
+html[data-theme="matrix"] .window-body .tab { --label-transform: none; padding-inline: 0.6em; }
+html[data-theme="matrix"] .app-bar { box-shadow: inset 0 2px 0 #1f6a3a, inset 0 -2px 0 #021a0a; }
+/* Panel and toolbar icon buttons are the console's raised plate cells. */
+html[data-theme="matrix"] :is(.panel-header, .toolbar) .btn-icon {
+  --btn-bg: linear-gradient(#0b3d1c, #062a12);
+  --btn-border: #1a9a2a;
+  box-shadow: inset 0 1px 0 #1f6a3a, inset 0 -1px 0 #021a0a;
+}
+/* Inputs in focus light up as the "Searching..." field: a green-black fill
+   inside the bright rim (--focus-ring). */
+html[data-theme="matrix"] :is(.input, .textarea):focus-visible { --input-bg: #06200d; }
 
 /* Thin phosphor-line icon strokes, consistent with the rain's hairline glyphs. */
 html[data-theme="matrix"] { --icon-stroke-width: 1.5; }
@@ -18751,7 +19104,7 @@ html[data-theme="matrix"] {
   --message-own-border: var(--accent);
   --message-meta-fg: var(--accent-2);
   --bar-chart-bar: linear-gradient(0deg, #004d14, #00ff41);
-  --bar-chart-bar-alt: linear-gradient(0deg, #0b5a3a, #22ff88);
+  --bar-chart-bar-alt: #7dff9a;  /* the highlight: a brighter solid step of the one green */
   --bar-chart-radius: 0;
   --bar-chart-shadow: 0 0 0.5rem rgba(0, 255, 65, 0.35);
 }
@@ -18771,20 +19124,19 @@ html[data-theme="matrix"] {
 }
 
 @media print {
-  html[data-theme="matrix"] {
-    background: none !important;
-  }
+  html[data-theme="matrix"]::after { display: none !important; }
 }
 
-/* Alert level (data-alert): the main view glitches, colour fringes
-   jumping every few seconds at red. */
+/* Alert level (data-alert): the main view glitches like a CRT losing
+   sync: green-only ghost offsets and a brightness jolt every few seconds
+   at red. Red stays for the alert text itself. */
 html[data-theme="matrix"][data-alert] .app-main {
-  text-shadow: -1px 0 rgb(255 0 60 / 0.6), 1px 0 rgb(0 200 255 / 0.5);
+  text-shadow: -1px 0 rgb(0 255 65 / 0.5), 1px 0 rgb(125 255 154 / 0.4);
 }
 @keyframes matrix-glitch {
-  0%, 90%, 100% { text-shadow: -1px 0 rgb(255 0 60 / 0.6), 1px 0 rgb(0 200 255 / 0.5); }
-  92% { text-shadow: -4px 1px rgb(255 0 60 / 0.8), 3px -1px rgb(0 200 255 / 0.7); }
-  95% { text-shadow: 3px 0 rgb(255 0 60 / 0.8), -5px 1px rgb(0 200 255 / 0.7); }
+  0%, 90%, 100% { text-shadow: -1px 0 rgb(0 255 65 / 0.5), 1px 0 rgb(125 255 154 / 0.4); filter: none; }
+  92% { text-shadow: -4px 1px rgb(0 255 65 / 0.7), 3px -1px rgb(125 255 154 / 0.6); filter: brightness(1.4); }
+  95% { text-shadow: 3px 0 rgb(0 255 65 / 0.7), -5px 1px rgb(125 255 154 / 0.6); filter: brightness(0.8); }
 }
 @media (prefers-reduced-motion: no-preference) {
   html[data-theme="matrix"][data-alert="red"] .app-main { animation: matrix-glitch 3s steps(1) infinite; }
@@ -18795,7 +19147,7 @@ html[data-theme="matrix"][data-alert] .app-main {
 
 /* Easter egg (data-easter-eggs + assets/js/eggs.js): after a minute idle,
    digital rain falls over the page until the next key or pointer move. */
-@keyframes matrix-rain { to { background-position: 0 100vh, 9px 140vh, 17px 120vh; } }
+@keyframes matrix-egg-rain { to { background-position: 0 100vh, 9px 140vh, 17px 120vh; } }
 @media (prefers-reduced-motion: no-preference) {
   html[data-theme="matrix"][data-easter-eggs][data-egg-idle] body::after {
     content: "";
@@ -18808,7 +19160,7 @@ html[data-theme="matrix"][data-alert] .app-main {
       linear-gradient(transparent 70%, #00ff41cc) 9px 20vh / 31px 70vh,
       linear-gradient(transparent 75%, #00ff4199) 17px 40vh / 41px 60vh;
     mask-image: repeating-linear-gradient(90deg, #000 0 3px, transparent 3px 8px);
-    animation: matrix-rain 4s linear infinite;
+    animation: matrix-egg-rain 4s linear infinite;
   }
 }
 
@@ -18823,8 +19175,15 @@ html[data-theme="matrix"][data-alert] .app-main {
       linear-gradient(transparent 70%, #00ff41cc) 9px 20vh / 31px 70vh,
       linear-gradient(transparent 75%, #00ff4199) 17px 40vh / 41px 60vh;
     mask-image: repeating-linear-gradient(90deg, #000 0 3px, transparent 3px 8px);
-    animation: matrix-rain 4s linear infinite;
+    animation: matrix-egg-rain 4s linear infinite;
   }
 
+
+/* Firefox paints the filled part of the track: lit to the value, like the
+   output meters. (Chromium has no such part, so it keeps the plain rule.) */
+html[data-theme="matrix"] .slider::-moz-range-progress {
+  height: var(--slider-height, 0.35rem);
+  background: var(--accent);
+}
 
 }

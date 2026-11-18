@@ -84,9 +84,7 @@ func GetListItems(ctx context.Context, listURL string, limit int) ([]medialist.I
 			pageURL = "https://letterboxd.com/" + path + "/page/" + strconv.Itoa(page) + "/"
 		}
 		var slugsJSON string
-		err := browser.Scrape(ctx, "Letterboxd list", browser.DefaultTimeout,
-			browser.AcceptLanguage("en-US,en;q=0.9"),
-			chromedp.Navigate(pageURL),
+		err := browser.Scrape(ctx, "Letterboxd list", browser.DefaultTimeout, pageURL, []string{"letterboxd.com", "ltrbxd.com", "letterboxdusercontent.com"},
 			chromedp.Sleep(2*time.Second),
 			chromedp.Evaluate(listSlugsJS, &slugsJSON),
 		)
@@ -112,8 +110,7 @@ func GetListItems(ctx context.Context, listURL string, limit int) ([]medialist.I
 	out := make([]medialist.Item, 0, len(slugs))
 	for _, slug := range slugs {
 		var href string
-		err := browser.Scrape(ctx, "Letterboxd film", browser.DefaultTimeout,
-			chromedp.Navigate("https://letterboxd.com/film/"+slug+"/"),
+		err := browser.Scrape(ctx, "Letterboxd film", browser.DefaultTimeout, "https://letterboxd.com/film/"+slug+"/", []string{"letterboxd.com", "ltrbxd.com", "letterboxdusercontent.com"},
 			chromedp.Sleep(1*time.Second),
 			chromedp.Evaluate(filmTMDbLinkJS, &href),
 		)

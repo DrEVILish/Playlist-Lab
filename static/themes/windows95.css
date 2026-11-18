@@ -446,6 +446,18 @@ a { color: var(--link, var(--accent)); }
   text-overflow: ellipsis;
 }
 .field-row > .field-hint { margin-block-start: 0; flex: none; }
+/* .field-row.is-wrap — the label is the setting's only name, so it wraps
+   instead of truncating, and a sentence-length .field-hint sits under it
+   inside the row; the control stays at the end, centred on both. */
+.field-row.is-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  row-gap: 0.15em;
+}
+.field-row.is-wrap > .label { grid-column: 1; white-space: normal; overflow: visible; }
+.field-row.is-wrap > .field-hint { grid-column: 1; }
+.field-row.is-wrap > :not(.label, .field-hint) { grid-column: 2; grid-row: 1 / span 2; }
 
 /* .input-group — an input with joined addons: a unit label, a static
    prefix, or an attached button. Children share one border; only the
@@ -500,6 +512,9 @@ a { color: var(--link, var(--accent)); }
   color: var(--check-fg, var(--text));
 }
 .check:has(:disabled) { opacity: 0.5; cursor: var(--cursor-not-allowed, not-allowed); }
+/* A hidden name (a table's select column) is positioned against its own
+   label, so it can't escape a scrolling table and widen the page. */
+.check:has(> .visually-hidden) { position: relative; }
 
 /* .radio-group — a <fieldset> of .check rows with a <legend>. */
 .radio-group {
@@ -576,7 +591,8 @@ a { color: var(--link, var(--accent)); }
    (the attribute is also what assistive tech reads). The button sizes to
    its content: the track becomes a normal flex child and an optional
    .switch-label sits beside it. */
-button.switch {
+button.switch,
+label.switch:has(> .switch-label) {
   appearance: none;
   width: auto;
   height: auto;
@@ -589,7 +605,8 @@ button.switch {
   font: inherit;
   text-align: start;
 }
-button.switch .switch-track {
+button.switch .switch-track,
+label.switch:has(> .switch-label) > .switch-track {
   position: relative;
   inset: auto;
   flex: none;
@@ -701,7 +718,7 @@ button.switch:disabled { opacity: 0.5; cursor: var(--cursor-not-allowed, not-all
   align-items: center;
   gap: 0.5rem;
   margin: calc(-1 * var(--surface-pad, 1.5rem)) calc(-1 * var(--surface-pad, 1.5rem)) var(--space-m);
-  padding: var(--modal-header-pad, var(--space-xs) var(--space-m));
+  padding: var(--modal-header-pad, var(--space-xs) var(--surface-pad, var(--space-m)));
   background: var(--modal-header-bg, transparent);
   color: var(--modal-header-fg, inherit);
   font-weight: 600;
@@ -756,6 +773,9 @@ dialog.modal:modal {
   position: fixed;
   inset: 0;
   margin: auto;
+}
+.modal[popover]:popover-open:not(:where(.is-maximized, .window-max:checked + .modal)),
+dialog.modal:modal:not(:where(.is-maximized, .window-max:checked + .modal)) {
   height: fit-content;
 }
 
@@ -950,6 +970,7 @@ dialog.modal:modal {
   color: var(--dropdown-item-fg, var(--text));
   text-align: start;
 }
+.dropdown-item.is-danger { color: var(--danger-text, var(--danger)); }
 .dropdown-item:focus-visible {
   background: var(--dropdown-item-bg-hover, var(--accent));
   color: var(--dropdown-item-fg-hover, var(--on-accent));
@@ -1094,6 +1115,7 @@ dialog.modal:modal {
  * every theme here treats it as a signature element. */
 .transport {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
   padding: var(--transport-padding, 0.6rem 0.9rem);
@@ -1503,7 +1525,7 @@ html.is-dragging-value, html.is-dragging-value * { cursor: var(--cursor-resize-y
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 0.2rem 0.35rem;
+  padding: 0.35rem 0.4rem;
   background: var(--scribble-bg, var(--surface-2));
   color: var(--scribble-fg, var(--text));
   border-top: var(--scribble-bar-width, 0.3rem) solid var(--strip-color, var(--accent));
@@ -1602,7 +1624,7 @@ html.is-dragging-value, html.is-dragging-value * { cursor: var(--cursor-resize-y
   background: var(--row-selected-bg, rgba(128, 128, 128, 0.25));
   color: var(--row-selected-fg, inherit);
 }
-.table tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) td {
+.table tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))):not(.is-selected, :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))) td {
   background: var(--row-active-bg, transparent);
 }
 /* The marker belongs to the row, so only its leading cell draws it — on
@@ -1944,7 +1966,10 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
 .status-ok { --state-fg: var(--success-text, var(--success)); color: var(--state-fg); }
 .status-warn { --state-fg: var(--warning-text, var(--warning)); color: var(--state-fg); }
 .status-error { --state-fg: var(--danger-text, var(--danger)); color: var(--state-fg); }
+/* .status-idle is neutral everywhere (offline, stopped, not running);
+   .status-ready is armed and waiting, the green of a recorder on standby. */
 .status-idle { --state-fg: var(--muted); color: var(--state-fg); }
+.status-ready { --state-fg: var(--success-text, var(--success)); color: var(--state-fg); }
 /* .status-rec: recording or on air. A bold danger label whose dot has a
    halo; the dot pulses when motion is allowed. */
 .status-rec { --state-fg: var(--danger-text, var(--danger)); color: var(--state-fg); font-weight: 700; }
@@ -2066,8 +2091,7 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
 :is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a)) {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  gap: 0.6em;
   width: 100%;
   padding: 0.45em 0.7em;
   border-radius: var(--context-menu-radius, var(--radius));
@@ -2075,6 +2099,10 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
   text-align: start;
 }
 :is(.context-menu-item, .context-menu li > :is(button, a)).is-danger { color: var(--danger-text, var(--danger)); }
+/* A leading icon stays beside its label; a trailing shortcut (<kbd>) or a
+   submenu arrow is pushed to the end. */
+:is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a)) > :is(kbd, :last-child:not(:first-child, .icon)),
+:is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a))[aria-haspopup] > :last-child:not(.icon) { margin-inline-start: auto; padding-inline-start: 0.4em; }
 :is(.context-menu-item, .context-menu li > :is(button, a), .menubar li li > :is(button, a)):focus-visible {
   background: var(--context-menu-item-bg-hover, var(--dropdown-item-bg-hover, var(--accent)));
   color: var(--context-menu-item-fg-hover, var(--dropdown-item-fg-hover, var(--on-accent)));
@@ -2157,6 +2185,8 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
   stroke-width: var(--icon-stroke-width, 2);
   stroke-linecap: round;
   stroke-linejoin: round;
+  /* The reset makes every svg a block; an icon sits in the line with its text. */
+  display: inline-block;
   vertical-align: -0.2em;
   flex-shrink: 0;
 }
@@ -2178,7 +2208,6 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--meter
 /* .badge-button — a clickable badge (filter chip). */
 .badge-button {
   border: none;
-  font: inherit;
   transition: background 0.15s ease, color 0.15s ease;
 }
 .badge-button:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) {
@@ -2516,7 +2545,7 @@ html[data-motion="reduced"] .carousel { scroll-behavior: auto; }
   display: flex;
   flex-wrap: wrap;
   gap: 0.15rem 0.9rem;
-  padding-block: 0.5rem;
+  padding: 0.5rem var(--space-2xs);
   background: var(--scrollspy-nav-bg, var(--surface));
   border-block-end: 1px solid var(--scrollspy-nav-rule, var(--hairline));
 }
@@ -2634,6 +2663,8 @@ html[data-motion="reduced"] .scrollspy-body { scroll-behavior: auto; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Task buttons take the squeeze before the tray does. */
+.taskbar > .taskbar-task { flex-shrink: 1000; }
 .taskbar-task:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) {
   background: var(--taskbar-task-bg-active, var(--taskbar-task-bg, transparent));
   border-color: var(--taskbar-task-border-active, var(--taskbar-task-border, transparent));
@@ -2645,7 +2676,10 @@ html[data-motion="reduced"] .scrollspy-body { scroll-behavior: auto; }
   display: inline-flex;
   align-items: center;
   gap: 0.5em;
-  flex: none;
+  /* The tray gives way last on a narrow bar (see .taskbar > .taskbar-task):
+     its readouts then truncate rather than push the bar past its edge. */
+  flex: 0 1 auto;
+  min-inline-size: 0;
   margin-inline-start: auto;
   padding: 0.3em 0.8em;
   border: var(--taskbar-border-width, 1px) solid var(--taskbar-tray-border, transparent);
@@ -2653,6 +2687,14 @@ html[data-motion="reduced"] .scrollspy-body { scroll-behavior: auto; }
   background: var(--taskbar-tray-bg, transparent);
   color: var(--taskbar-tray-fg, inherit);
   font-variant-numeric: tabular-nums;
+}
+.taskbar-tray > * { flex: none; }
+.taskbar-tray > :is(span, time):not(.lamp) {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* .breadcrumbs */
@@ -3225,6 +3267,14 @@ pre code { padding: 0; background: none; border-radius: 0; }
   --btn-border-hover: var(--app-bar-text);
 }
 .app-bar :is(.btn-tertiary, .btn-ghost) { --btn-border: transparent; }
+/* A GO button on the bar: core's GO is an outlined accent label, which on a
+   bar painted in the accent reads at 1:1. Unless the theme styles its GO
+   (--go-fg, --go-border), it takes the bar's text colour like the other
+   unfilled buttons. A theme that fills it (--go-bg) also sets --go-fg. */
+.app-bar .btn-go {
+  --btn-fg: var(--go-fg, var(--app-bar-text));
+  --btn-border: var(--go-border, var(--app-bar-text));
+}
 
 /* Screen-reader-only content — the standard visually-hidden-but-announced
    clip-rect pattern, not display:none (which screen readers also skip). */
@@ -3305,6 +3355,9 @@ pre code { padding: 0; background: none; border-radius: 0; }
 
 /* .divide-y — hairlines between stacked children (lists, menus). */
 .divide-y > * + * { border-block-start: 1px solid var(--hairline); }
+/* Text never sits on the hairline. Zero specificity, so a child with its
+   own padding (a list item, a menu entry) keeps it. */
+:where(.divide-y > *) { padding-block: var(--divide-y-pad, var(--space-2xs)); }
 
 /* .ratio — an aspect-ratio box for video/embeds; children fill it.
    Set `--ratio` directly or use a modifier (default 16/9). */
@@ -3777,10 +3830,22 @@ html[data-pointer="touch"] { --tap-min: 44px; }
   min-block-size: var(--tap-min);
   touch-action: manipulation;
 }
-/* Short labels ("EQ", "L1") too: toggles, tabs and segments. */
-:is(.btn-icon, .btn-close, .btn-min, .btn-max, .pagination-item, .nav-toggle, .taskbar-task, .badge-button,
-    .toggle-btn, .tab, .segmented-item) {
+/* Short labels ("EQ", "L1") too: toggles, tabs, segments, scrollspy, keys. */
+:is(.btn-icon, .btn-close, .btn-min, .btn-max, .pagination-item, .nav-toggle, .taskbar-task, .taskbar-start, .badge-button,
+    .toggle-btn, .tab, .segmented-item, .scrollspy-link, .key) {
   min-inline-size: var(--tap-min);
+}
+/* Links and buttons in a toast are actions, not running text. */
+:where(.toast) :is(a, button):not(.btn, .btn-icon, .btn-close) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--tap-min);
+  min-inline-size: var(--tap-min);
+}
+/* Touch tiers: keys and reaction chips sit 8px apart (WCAG 2.5.8 spacing). */
+@media (max-width: 900px), (any-pointer: coarse) {
+  .strip-section, .message-reactions { gap: max(0.3rem, 8px); }
 }
 :is(.input, .select) { min-block-size: var(--tap-min); }
 /* Checkboxes and radios: the label is the target. */
@@ -3802,16 +3867,23 @@ html[data-pointer="touch"] { --tap-min: 44px; }
   transform: translate(-50%, -50%);
 }
 .slider { touch-action: none; }
-@media (max-width: 900px), (any-pointer: coarse) {
-  /* The range input's own box is both its track and its target. On touch
-     it grows to the target height; padding keeps the drawn track the same
-     thin line in the middle (the border can't follow it, so it hides). */
-  .slider:not(.is-range > .slider) {
-    height: var(--tap-min);
-    padding-block: calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2);
-    background-clip: content-box;
-    border-color: transparent;
-  }
+/* The range input's own box is both its track and its target. It grows to
+   --tap-min (44px on touch tiers, 24px on desktop); padding keeps the drawn
+   track the same thin line in the middle. The border can't follow it, so it
+   hides: a theme whose track is drawn by the border (a bevelled groove)
+   redraws it with --slider-bg as a background on the content box. */
+.slider:not(.is-range > .slider) {
+  height: var(--tap-min);
+  padding-block: calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2);
+  background-clip: content-box;
+  border-color: transparent;
+}
+/* The same, sideways, for a vertical slider. */
+.slider.is-vertical:not(.is-range > .slider) {
+  width: var(--tap-min);
+  height: var(--slider-length, 4.5rem);
+  /* Physical sides: under vertical-lr the logical block axis is horizontal. */
+  padding: 0 calc((var(--tap-min) - var(--slider-height, 0.35rem)) / 2);
 }
 /* Inline text links inside running text are exempt (WCAG 2.5.8); links
    that stand alone as navigation are not. */
@@ -3893,6 +3965,10 @@ input[type="color"] { min-block-size: var(--tap-min); min-inline-size: var(--tap
     margin: 0.25rem 0;
     position-area: block-end span-inline-end;
     position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+    /* Take the side with more room and scroll inside it, so the inline
+       flip can still fit when neither side holds the whole menu. */
+    position-try-order: most-block-size;
+    max-height: calc(100% - 0.5rem);
   }
 }
 /* A context menu shown at the pointer: the app sets --x/--y. */
@@ -4247,7 +4323,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .meter-pair:has(> .meter-v) { grid-auto-flow: column; justify-content: start; block-size: 100%; }
 
 /* --- .clip — a clip light that holds, with a count -------------------------
- *   <button class="clip" type="button" aria-pressed="true" aria-label="Clipped 3 times, reset">CLIP <span class="clip-count">3</span></button>
+ *   <button class="clip" type="button" aria-pressed="true" aria-label="Clip 3, press to reset">CLIP <span class="clip-count">3</span></button>
  * aria-pressed="true" (or .is-clipped) lights it; the app holds it after a
  * clip and clears it when the user presses it. */
 .clip {
@@ -4627,9 +4703,9 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: grid;
   gap: 1px;
   padding: 0.2rem;
-  background: var(--sends-bg, #0c0c12);
+  background: var(--sends-bg, var(--input-bg, var(--surface)));
   border: 1px solid var(--sends-border, var(--border));
-  color: var(--sends-fg, #ffffff);
+  color: var(--sends-fg, var(--input-fg, var(--text)));
   font-size: 0.6rem;
   line-height: 1.25;
 }
@@ -4640,7 +4716,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   content: "";
   block-size: 0.45rem;
   inline-size: calc(var(--send, 0) * 100%);
-  background: var(--sends-bar, #d8dde8);
+  background: var(--sends-bar, var(--muted));
   clip-path: polygon(0 100%, 100% 0, 100% 100%);
 }
 .sends li.is-pre::after { background: var(--sends-bar-pre, var(--accent-2)); }
@@ -4659,22 +4735,22 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   inline-size: 100%;
   aspect-ratio: 1;
   background:
-    linear-gradient(to top right, transparent calc(50% - 0.5px), var(--dyn-graph-unity, rgba(255, 255, 255, 0.25)) 0 calc(50% + 0.5px), transparent 0),
-    repeating-linear-gradient(0deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, rgba(255, 255, 255, 0.14)) 0 25%),
-    repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, rgba(255, 255, 255, 0.14)) 0 25%),
-    var(--dyn-graph-bg, linear-gradient(180deg, #3a6bd0, #1d3f96));
-  border: 1px solid var(--dyn-graph-border, var(--border));
+    linear-gradient(to top right, transparent calc(50% - 0.5px), var(--dyn-graph-unity, var(--eq-zero, var(--border))) 0 calc(50% + 0.5px), transparent 0),
+    repeating-linear-gradient(0deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, var(--eq-grid, var(--hairline))) 0 25%),
+    repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), var(--dyn-graph-grid, var(--eq-grid, var(--hairline))) 0 25%),
+    var(--dyn-graph-bg, var(--eq-bg, var(--bg)));
+  border: 1px solid var(--dyn-graph-border, var(--eq-border, var(--hairline)));
   overflow: visible;
 }
 .dyn-graph-line {
   fill: none;
-  stroke: var(--dyn-graph-line, #ffffff);
+  stroke: var(--dyn-graph-line, var(--eq-line, var(--accent)));
   stroke-width: var(--dyn-graph-line-width, 2px);
   vector-effect: non-scaling-stroke;
   stroke-linejoin: round;
 }
-.dyn-graph-threshold { stroke: var(--dyn-graph-threshold, var(--accent)); stroke-width: 1px; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
-[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-line { stroke: var(--dyn-graph-line-off, rgba(255, 255, 255, 0.45)); }
+.dyn-graph-threshold { stroke: var(--dyn-graph-threshold, var(--accent-2)); stroke-width: 1px; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-line { stroke: var(--dyn-graph-line-off, var(--muted)); }
 
 /* --- .rack — an equipment rack of .rack-units ------------------------------
  *   <div class="rack" aria-label="Effects rack">
@@ -4731,7 +4807,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .rack-unit[data-finish="purple"] { --_finish: linear-gradient(180deg, #6a2f8c, #3b1150); }
 .rack-unit[data-finish="green"] { --_finish: linear-gradient(180deg, #2f8a2f, #145214); }
 .rack-unit > input[type="radio"] { position: absolute; inset: 0; margin: 0; opacity: 0; }
-.rack-unit:has(> input:checked) { outline: 2px solid var(--rack-selected, #ffe33b); outline-offset: -2px; }
+.rack-unit:has(> input:checked) { outline: 2px solid var(--rack-selected, var(--accent)); outline-offset: -2px; }
 .rack-unit:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
 .rack-unit.is-empty { --_finish: linear-gradient(180deg, #2b2b2b, #151515); justify-content: center; color: #8a8a8a; }
 .rack-unit-name {
@@ -4743,7 +4819,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .rack-unit[data-finish="silver"] .rack-unit-name { text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6); }
 .rack-unit-body { display: flex; flex: 1; flex-wrap: wrap; align-items: center; justify-content: space-around; gap: 0.3rem 0.6rem; min-inline-size: 0; }
 /* The thin "Change device / Store / Load preset" strip at the top of the rack. */
-.rack-head { display: flex; justify-content: center; gap: 0.6rem; padding: 0.4rem; background: linear-gradient(180deg, #f2f2f2, #c9c9c9); border-radius: 2px; }
+.rack-head { display: flex; justify-content: center; gap: 0.6rem; padding: 0.4rem; background: var(--rack-head-bg, var(--surface-2)); border-radius: 2px; }
 
 /* A unit's faceplate seen up close: a bigger .rack-unit inside .faceplate,
    above its .assignable panel. */
@@ -4751,8 +4827,8 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: grid;
   gap: 0.6rem;
   padding: 0.5rem;
-  background: var(--faceplate-bg, #050505);
-  border: 1px solid var(--faceplate-border, #2a2a2a);
+  background: var(--faceplate-bg, var(--surface-2));
+  border: 1px solid var(--faceplate-border, var(--border));
   border-radius: 4px;
 }
 .faceplate > .rack-unit { --_u: 2.6rem; align-items: stretch; padding-block: 0.8rem; font-size: 0.75rem; }
@@ -4770,8 +4846,8 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .faceplate-display {
   min-inline-size: 7rem;
   padding: 0.4rem 0.6rem;
-  background: var(--faceplate-display-bg, #000000);
-  color: var(--faceplate-display-fg, #e0e0e0);
+  background: var(--faceplate-display-bg, var(--input-bg, var(--surface)));
+  color: var(--faceplate-display-fg, var(--input-fg, var(--text)));
   border-radius: 4px;
   font: 800 1.2rem/1.1 var(--font);
   text-align: center;
@@ -4791,11 +4867,11 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   grid-template-columns: repeat(auto-fit, minmax(5.2rem, 1fr));
   gap: 0.4rem 0.3rem;
   padding: 0.5rem 0.6rem 0.3rem;
-  background: var(--assignable-bg, linear-gradient(180deg, #5560ab, #434d98));
-  color: var(--assignable-fg, #ffffff);
-  border: 1px solid var(--assignable-border, #2a3274);
+  background: var(--assignable-bg, var(--surface));
+  color: var(--assignable-fg, var(--text));
+  border: 1px solid var(--assignable-border, var(--border));
   border-radius: 3px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+  box-shadow: var(--assignable-shadow, none);
   font-size: 0.68rem;
   text-align: center;
 }
@@ -4805,12 +4881,12 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: block;
   inline-size: 2.6rem;
   block-size: 2.4rem;
-  background: var(--assignable-key-bg, linear-gradient(180deg, #4a54a0, #3a438b));
-  border: 2px solid var(--assignable-key-border, #6a74c0);
-  box-shadow: inset 0 0 0 2px #2b3274;
+  background: var(--assignable-key-bg, var(--key-bg, var(--surface-2)));
+  border: 2px solid var(--assignable-key-border, var(--key-border, var(--border)));
+  box-shadow: var(--assignable-key-shadow, inset 0 0 0 2px rgba(0, 0, 0, 0.25));
 }
 .assignable-key > input { position: absolute; inset: 0; margin: 0; opacity: 0; }
-.assignable-key:has(> input:checked) { background: var(--assignable-key-on, linear-gradient(180deg, #e9ecff, #b5bce8)); }
+.assignable-key:has(> input:checked) { background: var(--assignable-key-on, var(--accent)); }
 .assignable-key:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 .assignable-caption { grid-column: 1 / -1; margin: 0; font-weight: 700; opacity: 0.9; }
 
@@ -4827,9 +4903,9 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   align-items: stretch;
   gap: 2px;
   padding: 0.5rem;
-  background: var(--geq-bg, linear-gradient(180deg, #a9a9a9, #8a8a8a));
+  background: var(--geq-bg, var(--surface));
   border-radius: 3px;
-  color: var(--geq-fg, #111111);
+  color: var(--geq-fg, var(--text));
   font-size: 0.6rem;
   font-weight: 700;
 }
@@ -4840,11 +4916,11 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   gap: 1px;
   padding: 0.15rem;
   background:
-    linear-gradient(transparent calc(50% - 0.6rem), var(--geq-zero, #111111) 0 calc(50% - 0.6rem + 1px), transparent 0),
-    var(--geq-group-bg, #9a9a9a);
-  border: 1px solid var(--geq-group-border, #1f2a8a);
+    linear-gradient(transparent calc(50% - 0.6rem), var(--geq-zero, var(--border)) 0 calc(50% - 0.6rem + 1px), transparent 0),
+    var(--geq-group-bg, var(--surface-2));
+  border: 1px solid var(--geq-group-border, var(--hairline));
 }
-.geq-group:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) { --geq-group-bg: var(--geq-group-active, #e6e6e6); }
+.geq-group:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) { --geq-group-bg: var(--geq-group-active, color-mix(in srgb, var(--accent) 22%, var(--surface-2))); }
 .geq-band { display: grid; flex: 1; justify-items: center; gap: 0.15rem; min-inline-size: 0; }
 .geq-band > input[type="range"] {
   -webkit-appearance: none;
@@ -4856,7 +4932,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   min-width: 0.9rem;
   height: var(--geq-height, 7rem);
   margin: 0;
-  background: linear-gradient(90deg, transparent calc(50% - 3px), var(--geq-slot, #000000) 0 calc(50% + 3px), transparent 0);
+  background: linear-gradient(90deg, transparent calc(50% - 3px), var(--geq-slot, var(--fader-slot, var(--border))) 0 calc(50% + 3px), transparent 0);
 }
 .geq-band > input::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -4888,20 +4964,20 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   display: grid;
   gap: 0.4rem;
   padding: 0.5rem;
-  background: var(--patch-device-bg, linear-gradient(180deg, #4f8ad0, #2f62ae));
-  border: 1px solid var(--patch-device-border, #12285e);
+  background: var(--patch-device-bg, var(--surface));
+  border: 1px solid var(--patch-device-border, var(--border));
   border-radius: 8px;
-  color: #ffffff;
+  color: var(--patch-device-fg, var(--text));
 }
 .patch-device > header { display: flex; align-items: center; gap: 0.4rem; font-weight: 800; }
-.patch-name { flex: 1; padding: 0.15rem 0.4rem; background: #000000; border-radius: 2px; }
+.patch-name { flex: 1; padding: 0.15rem 0.4rem; background: var(--patch-name-bg, var(--input-bg, var(--surface))); color: var(--patch-name-fg, var(--input-fg, var(--text))); border-radius: 2px; }
 .patch-group-label { grid-column: 1 / -1; margin: 0.2rem 0 0; font-size: 0.75rem; font-weight: 800; text-align: center; }
 .patch-grid { display: grid; grid-template-columns: repeat(var(--patch-cols, 8), minmax(1.4rem, 1fr)); gap: 3px; }
 .patch-point {
   position: relative;
   aspect-ratio: 1;
-  background: var(--patch-free, linear-gradient(180deg, #f0f0f0, #c8c8c8));
-  border: 1px solid #333333;
+  background: var(--patch-free, var(--surface-2));
+  border: 1px solid var(--patch-point-border, var(--border));
   border-radius: 2px;
 }
 /* The jack: a small ring in the middle of each point. */
@@ -4909,12 +4985,12 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   content: "";
   position: absolute;
   inset: 28%;
-  border: 2px solid rgba(0, 0, 0, 0.45);
+  border: 2px solid var(--patch-jack, color-mix(in srgb, currentColor 45%, transparent));
   border-radius: 50%;
 }
 .patch-point > input { position: absolute; inset: 0; margin: 0; opacity: 0; }
-.patch-point:has(> input:checked) { background: var(--patch-on, linear-gradient(180deg, #8ad35a, #4e9a2a)); }
-.patch-point[data-kind="aes"]:has(> input:checked) { background: var(--patch-aes, linear-gradient(180deg, #ffe46b, #d6b21a)); }
+.patch-point:has(> input:checked) { background: var(--patch-on, var(--success)); }
+.patch-point[data-kind="aes"]:has(> input:checked) { background: var(--patch-aes, var(--warning)); }
 .patch-point:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 1px; }
 @media (forced-colors: active) {
   .patch-point:has(> input:checked), .assignable-key:has(> input:checked) { background: Highlight; }
@@ -5089,8 +5165,8 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 }
 
 /* The area under a dynamics curve, filled (console.js closes the path). */
-.dyn-graph-fill { fill: var(--dyn-graph-fill, rgba(140, 190, 255, 0.45)); stroke: none; }
-[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-fill { fill: var(--dyn-graph-fill-off, rgba(140, 190, 255, 0.18)); }
+.dyn-graph-fill { fill: var(--dyn-graph-fill, color-mix(in srgb, var(--eq-line, var(--accent)) 30%, transparent)); stroke: none; }
+[data-dyn]:has(.dyn-bypass:not(:checked)) .dyn-graph-fill { fill: var(--dyn-graph-fill-off, color-mix(in srgb, var(--muted) 15%, transparent)); }
 
 /* --- .led-list — options chosen by a lit LED -------------------------------
  *   <ul class="led-list" role="radiogroup" aria-label="Program">
@@ -5123,6 +5199,7 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
  * The sixteen name-tag colours a large console offers. Each reads a
  * --tag-<name> token, so a theme can retune them. */
 .scribble[data-tag] { background: var(--_tag); color: var(--_tag-fg, #111111); border-top-color: transparent; text-align: center; }
+.scribble[data-tag] .scribble-num { color: inherit; opacity: 0.75; }
 .scribble[data-tag="black"] { --_tag: var(--tag-black, #111111); --_tag-fg: #ffffff; }
 .scribble[data-tag="dblue"] { --_tag: var(--tag-dblue, #1f3fd0); --_tag-fg: #ffffff; }
 .scribble[data-tag="dgreen"] { --_tag: var(--tag-dgreen, #1e7a2a); --_tag-fg: #ffffff; }
@@ -5157,11 +5234,11 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
 .assignable-nav > button {
   min-inline-size: 0;
   padding: 0;
-  background: var(--assignable-key-bg, linear-gradient(180deg, #4a54a0, #3a438b));
-  border: 1px solid var(--assignable-key-border, #6a74c0);
+  background: var(--assignable-key-bg, var(--key-bg, var(--surface-2)));
+  border: 1px solid var(--assignable-key-border, var(--key-border, var(--border)));
   border-radius: 2px;
 }
-.assignable-nav > button:active { background: var(--assignable-key-on, #b5bce8); }
+.assignable-nav > button:active { background: var(--assignable-key-on, var(--accent)); }
 .assignable-nav > :nth-child(1) { grid-area: 1 / 1 / 2 / 3; inline-size: 1.6rem; }
 .assignable-nav > :nth-child(2) { grid-area: 1 / 2 / 2 / 4; inline-size: 1.6rem; justify-self: end; }
 .assignable-nav > :nth-child(3) { grid-area: 2 / 2; }
@@ -5407,6 +5484,73 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   border-color: var(--window-pane-border, var(--input-border, var(--border)));
 }
 
+/* .window-tasks — the side pane of task groups beside a window's content
+   (XP's Explorer task pane). Each .window-task is a titled group: its
+   first child (a heading or <summary>) is the header, the rest the body. */
+.window-tasks {
+  display: grid;
+  align-content: start;
+  gap: var(--window-tasks-gap, var(--space-s, 0.75rem));
+  padding: var(--window-tasks-padding, var(--space-s, 0.75rem));
+  background: var(--window-tasks-bg, var(--surface-2));
+}
+.window-task {
+  border: 1px solid var(--window-task-border, var(--border));
+  border-radius: var(--window-task-radius, var(--radius));
+  background: var(--window-task-bg, var(--surface));
+  color: var(--window-task-fg, var(--text));
+  font-size: var(--window-task-font-size, inherit);
+  overflow: hidden;
+}
+.window-task > :first-child {
+  margin: 0;
+  padding: var(--window-task-header-pad, 0.35rem 0.6rem);
+  background: var(--window-task-header-bg, transparent);
+  color: var(--window-task-header-fg, inherit);
+  font-size: var(--window-task-header-font-size, 0.85rem);
+  font-weight: 700;
+}
+.window-task > :not(:first-child) { margin: 0; padding: var(--window-task-body-pad, 0.4rem 0.6rem); }
+/* A collapsible group is a <details> whose <summary> is the header; the
+   toggle sits at its end (a chevron by default, a theme's button image via
+   --window-task-toggle / --window-task-toggle-closed). */
+details.window-task > summary { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; cursor: var(--cursor-pointer, pointer); list-style: none; }
+details.window-task > summary::-webkit-details-marker { display: none; }
+details.window-task > summary > :is(h2, h3) { margin: 0; font: inherit; color: inherit; }
+details.window-task > summary::after {
+  content: "";
+  flex: none;
+  inline-size: var(--window-task-toggle-size, 1em);
+  block-size: var(--window-task-toggle-size, 1em);
+  background: var(--window-task-toggle, none) center / contain no-repeat;
+  background-color: var(--window-task-toggle-fg, currentColor);
+  -webkit-mask: var(--window-task-toggle-mask, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 10l4-4 4 4' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E")) center / contain no-repeat;
+  mask: var(--window-task-toggle-mask, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 10l4-4 4 4' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E")) center / contain no-repeat;
+}
+details.window-task:not([open]) > summary::after { rotate: var(--window-task-toggle-rotate, 180deg); background-image: var(--window-task-toggle-closed, var(--window-task-toggle, none)); }
+details.window-task > summary:focus-visible { outline: 2px solid var(--focus, var(--accent)); outline-offset: -2px; }
+.window-task > :not(:first-child) + :not(:first-child) { padding-block-start: 0; }
+.window-task a { color: var(--window-task-link-fg, var(--link, var(--accent))); }
+/* A .list inside a group is a plain column of task links, not a boxed list. */
+.window-task {
+  --list-bg: transparent;
+  --list-border-width: 0;
+  --list-radius: 0;
+  --list-rule: transparent;
+  --list-item-padding: var(--window-task-item-pad, 0.2em 0);
+  --list-item-fg: var(--window-task-link-fg, var(--link, var(--accent)));
+  --row-hover-bg: transparent;
+}
+@media (hover: hover) {
+  .window-task :is(a, label).list-item:hover { text-decoration: underline; color: var(--window-task-link-fg-hover, var(--window-task-link-fg, var(--link, var(--accent)))); }
+}
+/* The first, "special" group of a pane (XP: the place's own tasks). */
+.window-task.is-special > :first-child {
+  background: var(--window-task-special-header-bg, var(--window-task-header-bg, transparent));
+  color: var(--window-task-special-header-fg, var(--window-task-header-fg, inherit));
+}
+.window-task.is-special { background: var(--window-task-special-bg, var(--window-task-bg, var(--surface))); }
+
 /* Minimized and closed windows leave the screen (the inputs stay, so the
    task button and the Start menu can bring them back). */
 .desktop-window:has(> .window-minimize:checked, > .window-close:checked) > .modal { display: none; }
@@ -5425,18 +5569,28 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   outline-offset: 2px;
 }
 /* Inactive title bars: every window but the active one, which is the one
-   holding focus, else the switched-to one, else the topmost (last). */
+   holding focus, else the switched-to one, else the topmost (last). While
+   the Start menu is open it holds focus, so every window is inactive. */
 .desktop:has(.desktop-window:focus-within) .desktop-window:not(:focus-within),
 .desktop:not(:has(.desktop-window:focus-within)):has(.window-app:checked) .desktop-window:not(:has(> .window-app:checked)),
-.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) {
+.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)),
+.desktop:has(.start-menu:popover-open) .desktop-window {
   --_inactive: 1;
 }
 .desktop:has(.desktop-window:focus-within) .desktop-window:not(:focus-within) > .modal > .modal-header,
 .desktop:not(:has(.desktop-window:focus-within)):has(.window-app:checked) .desktop-window:not(:has(> .window-app:checked)) > .modal > .modal-header,
-.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) > .modal > .modal-header {
+.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) > .modal > .modal-header,
+.desktop:has(.start-menu:popover-open) .desktop-window > .modal > .modal-header {
   background: var(--window-header-bg-inactive, var(--modal-header-bg, transparent));
   color: var(--window-header-fg-inactive, var(--modal-header-fg, inherit));
   filter: var(--window-header-filter-inactive, saturate(0.45) opacity(0.85));
+}
+/* XP fades an inactive window's caption buttons into its paler title bar. */
+.desktop:has(.desktop-window:focus-within) .desktop-window:not(:focus-within) > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close),
+.desktop:not(:has(.desktop-window:focus-within)):has(.window-app:checked) .desktop-window:not(:has(> .window-app:checked)) > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close),
+.desktop:not(:has(.desktop-window:focus-within, .window-app:checked)) .desktop-window:not(:nth-last-child(1 of .desktop-window)) > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close),
+.desktop:has(.start-menu:popover-open) .desktop-window > .modal > .modal-header > :is(.btn-min, .btn-max, .btn-close) {
+  opacity: var(--window-caption-opacity-inactive, 1);
 }
 
 /* A small monitor showing the wallpaper (Display Properties). */
@@ -5646,6 +5800,9 @@ progress.progress:indeterminate::-moz-progress-bar { background: transparent; }
   height: var(--start-menu-sub-icon-size, 1rem);
 }
 .start-menu li > :is(a, button, label) > span { display: flex; flex-direction: column; text-align: start; }
+/* "All Programs" is one line of text (its "All " is a columns-only span), not
+   a title over a subtitle. */
+.start-menu li.start-menu-all > :is(a, button) > span { display: block; white-space: nowrap; }
 .start-menu li > :is(a, button, label) > span > b { font-weight: 700; }
 .start-menu li > :is(a, button, label) small { font-size: 0.8em; opacity: 0.75; }
 .start-menu .has-submenu > :is(a, button)::after { margin-inline-start: auto; }
@@ -9839,7 +9996,7 @@ html[data-motion="reduced"] .track > .track-play::before { animation: none; }
 /* ---- Track rows ------------------------------------------------------------
  * <ol class="tracklist">
  *   <li class="track">
- *     <button class="track-play" aria-label="Play Night Drive"><span class="track-num">1</span><svg class="icon">…#icon-play</svg></button>
+ *     <button class="track-play" aria-label="Play track 1, Night Drive"><span class="track-num">1</span><svg class="icon">…#icon-play</svg></button>
  *     <img src="art.jpg" alt="">
  *     <span class="track-main"><span class="track-title">Night Drive</span><span class="track-artist">Lumen Coast</span></span>
  *     <span class="track-album">Harbour Lights</span>
@@ -10205,6 +10362,11 @@ html[data-motion="reduced"] .track > .track-play::before { animation: none; }
 
 @keyframes waveform-shimmer { to { background-position: -200% 0; } }
 .waveform:has(> input:disabled) { opacity: 0.5; }
+/* .waveform.is-static — display only: the input still paints played and
+   unplayed and the head (hide it with --waveform-head: transparent), but
+   it doesn't seek, so no hover preview and no pointer. */
+.waveform.is-static::before { content: none; }
+.waveform.is-static > input[type="range"] { pointer-events: none; }
 
 /* ---- Waveform regions, markers and hover time -------------------------------
  * <div class="waveform" data-hover-time="0:41" style="--hover: .68">
@@ -10485,7 +10647,8 @@ button.waveform-marker:focus-visible { outline: 2px solid var(--focus); outline-
  * Desktop: art and title | transport over the scrubber | extras. Tablet: the
  * scrubber takes its own row and the extras (volume, queue…) hide. Mobile and .is-mini: art, title, like and play/next only. As a
  * direct child of .app it takes the shell's status slot and sticks to the
- * bottom of the screen, clear of the home indicator. */
+ * bottom of the screen, clear of the home indicator; on a phone .app-main
+ * scrolls above it instead. */
 .now-playing {
   --_areas: "art meta like transport extras" "art meta like progress extras";
   --_cols: auto minmax(0, 1fr) auto minmax(0, 2fr) minmax(0, 1fr);
@@ -10556,6 +10719,11 @@ button.waveform-marker:focus-visible { outline: 2px solid var(--focus); outline-
     --_np-secondary: none;
     --_np-extras: none;
   }
+  /* On a phone the docked bar is a big share of the screen, so the shell
+     holds the screen height and .app-main scrolls above the bar: no row
+     ever sits under it. */
+  .app:has(> .now-playing) { block-size: 100dvh; }
+  .app:has(> .now-playing) > .app-main { overflow-y: auto; overscroll-behavior: contain; }
 }
 /* Mini player: the mobile layout at any width, as a card. */
 .now-playing.is-mini {
@@ -11744,13 +11912,18 @@ html:is([data-motion="reduced"],[data-motion="none"]) :is(:is(.is-paused,.is-pau
  * the --z-* scale from there. Docs: docs/components/navigation.md. */
 
 /* --- Closable tabs (#37) ---------------------------------------------------
- *   <div class="tabs is-scroll" role="tablist">
- *     <div class="tab is-active"><button role="tab" aria-selected="true">a.css</button>
- *       <button class="btn-close" tabindex="-1" aria-label="Close a.css"></button></div>
+ *   <div class="tabs is-scroll">
+ *     <div class="tabs" role="tablist" aria-label="Open files">
+ *       <div class="tab is-active"><button role="tab" aria-selected="true">a.css</button>
+ *         <button class="btn-close" tabindex="-1" aria-hidden="true" aria-label="Close a.css"></button></div>
+ *     </div>
  *     <button class="tab-add" aria-label="New tab"></button>
  *   </div>
  * A <button> can't hold a second button, so a closable .tab is a wrapper:
- * the first child is the tab itself, the .btn-close sits beside it. */
+ * the first child is the tab itself, the .btn-close sits beside it. A
+ * tablist may own only tabs, so the add button sits beside an inner
+ * .tabs[role=tablist] that lends its tabs to the outer strip. */
+.tabs > .tabs { display: contents; }
 .tabs.is-scroll {
   /* max-inline-size: a theme may make .tabs inline-flex (a capsule), which
      would otherwise grow with its tabs and never scroll. */
@@ -11761,7 +11934,7 @@ html:is([data-motion="reduced"],[data-motion="none"]) :is(:is(.is-paused,.is-pau
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb, var(--border)) transparent;
 }
-.tabs.is-scroll > * { flex-shrink: 0; }
+.tabs.is-scroll > *, .tabs.is-scroll > .tabs > * { flex-shrink: 0; }
 .tab:has(> .btn-close) {
   display: inline-flex;
   align-items: center;
@@ -14246,7 +14419,7 @@ pre.line-numbers > code:has(> .line-numbers-rows) { position: relative; }
   inline-size: calc(var(--_otp-n) * var(--otp-cell-size, 2.75rem) + (var(--_otp-n) - 1) * var(--_otp-gap));
   max-inline-size: 100%;
   block-size: var(--otp-height, 3.25rem);
-  overflow: hidden;
+  overflow: clip;
   direction: ltr;
 }
 .otp > span {
@@ -15477,6 +15650,10 @@ html[data-surface="signage"] { font-size: var(--signage-root, 1.5vh); overflow: 
   html[data-surface="signage"] { font-size: var(--signage-root-portrait, 1.5vw); }
 }
 html[data-surface="signage"] body { overflow: hidden; }
+/* Every pixel of a screen is content, so page-level theme art stands down:
+   the XL gutter layer here, and any corner emblem a theme fixes over the
+   page (themes hide their own under the same selector). */
+html[data-surface="signage"]::before { content: none; }
 .safe-area {
   box-sizing: border-box;
   padding:
@@ -16590,7 +16767,7 @@ html[data-pointer="touch"] { --_cell-pencil: inline-block; }
 .table tbody tr:nth-child(n):is(:hover, :focus-within):not(.table-empty, .table-more) {
   --_row-tint: var(--row-hover-bg, color-mix(in srgb, var(--accent) 8%, transparent));
 }
-.table tbody tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))):nth-child(n) { --_row-tint: var(--row-active-bg, transparent); }
+.table tbody tr:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))):not(.is-selected, :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))):nth-child(n) { --_row-tint: var(--row-active-bg, transparent); }
 .table tbody tr:is(.is-selected, :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))):nth-child(n) {
   --_row-tint: var(--row-selected-bg, color-mix(in srgb, var(--accent) 18%, transparent));
 }
@@ -18278,12 +18455,12 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   background: var(--app-bg, transparent);
 }
 
-/* An app that never adds the rail element at all (not even an empty one)
-   has no box for :empty to match, so a theme's --app-columns would
-   still reserve a blank gutter next to .app-main. Collapse the column
+/* An app that never adds the rail element at all (not even an empty one),
+   or marks it `hidden`, has no box for :empty to match, so a theme's
+   --app-columns would still reserve a blank gutter next to .app-main. Collapse the column
    track itself in that case. Browsers without :has() just keep the blank
    gutter — a graceful degrade, not a break. */
-.app:not(:has(> .app-rail)) {
+.app:not(:has(> .app-rail:not([hidden]))) {
   grid-template-areas: var(--app-areas-no-rail, "bar" "main" "status");
   grid-template-columns: var(--app-columns-no-rail, minmax(0, 1fr));
 }
@@ -18299,7 +18476,9 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   min-width: 0;
   padding: var(--app-bar-padding, 0.6rem 1rem);
   background: var(--app-bar-bg, var(--nav-bg, var(--surface)));
-  color: var(--app-bar-fg, inherit);
+  /* Plain text on the bar (a clock, a title) follows the bar, not the page:
+     --app-bar-fg, else --nav-item-fg, which check.py holds to 4.5:1 here. */
+  color: var(--app-bar-fg, var(--nav-item-fg, inherit));
   border-bottom: var(--app-bar-rule-width, 1px) solid var(--app-bar-rule, var(--border));
   border-radius: var(--app-bar-radius, 0);
   min-height: var(--app-bar-height, auto);
@@ -18325,6 +18504,8 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
 .app-rail:empty {
   display: var(--app-rail-empty-display, none);
 }
+/* `hidden` drops the rail in every theme, decorative or not. */
+.app-rail[hidden] { display: none !important; }
 .app-rail {
   grid-area: rail;
   display: var(--app-rail-display, none);
@@ -18477,7 +18658,7 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   .app-rail { display: none !important; }
   .app-status { position: fixed; inset-inline-start: env(viewport-segment-left 1 0); inset-block-end: 0; inline-size: env(viewport-segment-width 1 0); }
   .app-main { padding-block-end: var(--app-fold-status-space, 3rem); }
-  .app:not(:has(> .app-rail)) {
+  .app:not(:has(> .app-rail:not([hidden]))) {
     grid-template-areas: var(--app-fold-book-areas, "bar main");
     grid-template-columns: env(viewport-segment-width 0 0) env(viewport-segment-width 1 0);
   }
@@ -18493,7 +18674,7 @@ html[data-motion="reduced"] :is(.table-wrap > .table, .table.is-frozen-1, .table
   .app-rail { display: none !important; }
   .app-status { position: fixed; inset-inline-start: 0; inset-block-end: 0; inline-size: 100%; }
   .app-main { padding-block-end: var(--app-fold-status-space, 3rem); }
-  .app:not(:has(> .app-rail)) {
+  .app:not(:has(> .app-rail:not([hidden]))) {
     grid-template-areas: var(--app-fold-tabletop-areas, "bar" "main");
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: env(viewport-segment-height 0 0) env(viewport-segment-height 0 1);
@@ -18530,10 +18711,27 @@ html[data-contrast="high"] { --cursor-default: default !important; --cursor-text
  * Description: Classic beveled 3D gray dialog chrome on the #008080-ish teal desktop, bevels inverting light-to-dark on press.
  *
  * Note on fonts: the authentic face is MS Sans Serif, which isn't a web
- * font and isn't present on modern systems; the stack below falls back to
- * Tahoma, its closest ubiquitous relative. Vendor a pixel font here if an
- * exact match matters.
+ * font browsers render; the stack below starts with its TrueType cut,
+ * "Microsoft Sans Serif", then (with a mouse) the vendored OFL pixel cut
+ * W95FA, then Arial and its clones, then Tahoma.
  */
+
+/* W95FA (OFL, assets/fonts/NOTICE.md): an outline cut of the 95 bitmap
+   dialog face for machines without MS Sans Serif. One font pixel is 80
+   units, so size-adjust puts it on whole pixels at the 13px mouse root. */
+@font-face {
+  font-family: "W95FA";
+  src: url("../assets/fonts/W95FA.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+  size-adjust: 96.15%;
+  /* Arial's line box (0.905 / 0.212), so "normal" line-height and every
+     box sized by it match the Arial-metric fallbacks; W95FA's own is a
+     cramped 0.94em. */
+  ascent-override: 90.5%;
+  descent-override: 21.2%;
+  line-gap-override: 0%;
+}
 
 html[data-theme="windows95"] {
   --motion-leave: bsod;
@@ -18545,7 +18743,9 @@ html[data-theme="windows95"] {
      contrast is unaffected: panels use --surface, not this token. */
   --bg: #008282;
   --surface: #c0c0c0;
-  --surface-2: #dfdfdf;
+  /* 95's "3D light" was the face itself: #dfdfdf is 98's in-between grey,
+     kept to the taskbar and Start menu bevels below. */
+  --surface-2: #c0c0c0;
   --border: #808080;
   --hairline: #808080;
   --text: #000000;
@@ -18567,13 +18767,22 @@ html[data-theme="windows95"] {
   --on-danger: #ffffff;
   --on-success: #ffffff;
   --radius: 0;
-  --font: Tahoma, "MS Sans Serif", "Segoe UI", sans-serif;
+  /* Arial before the generic: where neither 95 face exists, a narrow
+     neutral sans is closer than a wide humanist default. */
+  /* "Microsoft Sans Serif" is the TrueType cut of the 95 dialog face and
+     ships with every Windows since; Tahoma is its nearest relative. */
+  /* MS Sans Serif was 95's face; Microsoft Sans Serif is its Arial-metric
+     outline cut, so Arial and its clones are the nearest fallback. Tahoma
+     (a wider 98/2000 face, often aliased off Windows) comes after them. */
+  --font: "Microsoft Sans Serif", "MS Sans Serif", Arial, "Liberation Sans", Arimo, Tahoma, sans-serif;
   --font-mono: "Courier New", Consolas, monospace;
   /* Panels are child windows: each gets the active navy caption bar. */
   --panel-header-bg: #000080;
   --panel-header-fg: #ffffff;
   /* Tabs: raised, the selected one taller and joined to its page. */
-  --tab-radius: 3px 3px 0 0;
+  --tab-radius: 0;
+  /* The property sheet sits 8px inside its frame (rule below). */
+  --tab-panel-pad: 8px;
   --tab-bg: var(--surface);
   --tab-fg: var(--text);
   --tab-bg-active: var(--surface);
@@ -18591,7 +18800,7 @@ html[data-theme="windows95"] {
   --key-bg: var(--surface);
   --key-fg: var(--text);
   --key-radius: 0;
-  --key-shadow: inset -1px -1px 0 #808080, inset 1px 1px 0 #dfdfdf;
+  --key-shadow: inset -1px -1px 0 #808080;
   --key-glow: inset 1px 1px 0 #000000;
   --key-solo: #ffff00;
   --key-sel: #000080;
@@ -18618,14 +18827,22 @@ html[data-theme="windows95"] {
 
   --btn-bg: var(--surface);
   --btn-fg: var(--text);
-  --btn-border-width: 2px;
-  --btn-shadow: inset -1px -1px 0 #808080, inset 1px 1px 0 #dfdfdf;
+  /* The 95 push button, measured on references/windows95/dialog-font.png
+     (Cancel, column x=340): 1px #ffffff top/left then the face; 1px
+     #808080 then 1px #000000 bottom/right. 95's "3D light" was the face
+     colour itself, so there is no #dfdfdf inner line (that is 98). */
+  --btn-border-width: 1px;
+  --btn-shadow: inset -1px -1px 0 #808080;
   --input-bg: #ffffff;
-  --input-border-width: 2px;
-  --input-shadow: inset 1px 1px 0 #000000;
+  /* Sunken field, same capture (Font name box, x=80 / y=55): #808080
+     then #000000 top/left, #c0c0c0 then #ffffff bottom/right. */
+  --input-border-width: 1px;
+  --input-shadow: inset 1px 1px 0 #000000, inset -1px -1px 0 #c0c0c0;
   --panel-bg: var(--surface);
-  --panel-border-width: 2px;
-  --panel-shadow: inset -1px -1px 0 #808080, inset 1px 1px 0 #dfdfdf;
+  /* Window frame, same capture: a 2px edge (white, then face on the top
+     and left; #808080 then #000000 on the bottom and right). */
+  --panel-border-width: 1px;
+  --panel-shadow: inset -1px -1px 0 #808080;
   --modal-header-bg: var(--accent);
   --modal-header-fg: #ffffff;
   --dropdown-bg: var(--surface);
@@ -18655,6 +18872,75 @@ html[data-theme="windows95"] {
   --switch-thumb-radius: 0;
   --slider-radius: 0;
   --slider-thumb-radius: 0;
+  /* The 95 trackbar: a 4px sunken groove (#808080, #000000, face,
+     #ffffff) painted on the content box core keeps for the drawn track,
+     and an 11x21 raised grey pointer. */
+  --slider-height: 4px;
+  --slider-bg: linear-gradient(#808080 0 1px, #000000 0 2px, #c0c0c0 0 calc(100% - 1px), #ffffff 0);
+  --slider-border-width: 0;
+  --slider-thumb-bg: #c0c0c0;
+  /* Switches (95 had none) drawn in its own vocabulary: a sunken white
+     well holding a raised grey block; on, the well fills navy. */
+  --switch-bg: #ffffff;
+  --switch-bg-on: #000080;
+  --switch-thumb-bg: #c0c0c0;
+  --switch-thumb-bg-on: #c0c0c0;
+  /* The 50% #c0c0c0/#ffffff dither of pressed toggles and scrollbar
+     tracks, as one 2x2 bitmap: a 2px repeating-conic-gradient re-rasterised
+     on every scroll frame (render-cost WARN on the phone dashboard). */
+  --w95-dither: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAMAAABFaP0WAAAABlBMVEXAwMD///8raYe0AAAADklEQVR42mNgZGBgYAQAAAwAAx4J0QoAAAAASUVORK5CYII=") 0 0 / 2px 2px;
+  /* Flat toolbar buttons (.btn-clear): no tint ever. Hover raises a thin
+     bevel (rule below); pressed sinks onto the same dither as toggles. */
+  --btn-clear-bg-hover: transparent;
+  --btn-clear-bg-active: var(--w95-dither);
+  /* The FAB is an ordinary square push button, not a Material disc. */
+  --fab-radius: 0;
+  --fab-shadow: inset -1px -1px 0 #808080;
+  --fab-size: 2rem;
+  /* Count badges: a square red plate with a 1px black frame. */
+  --has-badge-ring: #000000;
+  --has-badge-ring-width: 1px;
+  /* 95 fields had no pink wash: the #800000 message and ring carry it. */
+  --input-error-bg: #ffffff;
+  /* An input-group addon is a static label on the face ("Find what:"),
+     not a tinted block. */
+  --input-addon-fg: #000000;
+  /* Setting rows are etched group frames (rule below); the log console is
+     a sunken white edit well. */
+  --field-row-border: #808080;
+  --field-row-border-hover: #808080;
+  --log-bg: #ffffff;
+  /* Explorer details view: a white list well under raised column headers. */
+  --table-bg: #ffffff;
+  /* Filter chips are toolbar toggle buttons: raised grey, and pressed
+     (sunken, with the 50% white dither) when on, never navy-filled. */
+  --badge-bg-active: var(--w95-dither);
+  --badge-fg-active: #000000;
+  --toggle-btn-bg-on: var(--w95-dither);
+  --toggle-btn-fg-on: #000000;
+  /* 95 list views had no zebra bands; #dfdfdf is 98's 3D light. */
+  --row-alt-bg: #ffffff;
+  --segmented-bg: var(--surface);
+  --segmented-padding: 0;
+  --segmented-border-width: 0;
+  --segmented-item-fg: #000000;
+  --segmented-item-bg-active: var(--w95-dither);
+  --segmented-item-fg-active: #000000;
+  /* State fills stay on the 16-colour set: no blended tints. Selection
+     bars are the plain face, cell states keep only their marker bar,
+     glyph or ring, and chart areas drop the alpha wash. */
+  --bulk-bar-bg: var(--surface);
+  --bulk-bar-fg: var(--text);
+  --cell-dirty-bg: transparent;
+  --cell-saved-bg: transparent;
+  --cell-saved-flash: transparent;
+  --cell-error-bg: transparent;
+  --row-editing-bg: transparent;
+  --chart-area-opacity: 0;
+  --sparkline-area-opacity: 0;
+  --input-readonly-bg: var(--surface);
+  /* Dialog scale: 95 packed its dialogs ~8px from the frame. */
+  --panel-pad: 8px;
   --overlay-bg: rgba(0, 0, 0, 0.35);
   /* Era-accurate focus is a dotted marching-ants rectangle. It replaces
      the outline's color/style but never its presence. */
@@ -18667,17 +18953,17 @@ html[data-theme="windows95"] {
 html[data-theme="windows95"] {
   --toast-bg: var(--surface);
   --toast-border: #808080;
-  --toast-shadow: inset -1px -1px 0 #808080, inset 1px 1px 0 #dfdfdf;
+  --toast-shadow: inset -1px -1px 0 #808080;
   --alert-bg: var(--surface);
   --alert-fg: var(--text);
   --alert-radius: 0;
   --card-radius: 0;
-  --card-shadow: inset -1px -1px 0 #808080, inset 1px 1px 0 #dfdfdf;
+  --card-shadow: inset -1px -1px 0 #808080;
   /* .card's own border-width token, so the 2px chunky bevel comes from
      the token architecture (matching --btn-border-width /
      --panel-border-width above) instead of depending only on the
-     hardcoded `border: 2px solid` override below. */
-  --card-border-width: 2px;
+     hardcoded `border: 1px solid` override below. */
+  --card-border-width: 1px;
   --context-menu-bg: var(--surface);
   --context-menu-radius: 0;
   --dropzone-border: #808080;
@@ -18685,6 +18971,8 @@ html[data-theme="windows95"] {
   --avatar-bg: #ffffff;
   --avatar-fg: var(--text);
   --avatar-radius: 0;
+  /* Dialog labels ("Font:", "Color:") were black; --muted is for hints. */
+  --label-fg: var(--text);
   --pagination-item-radius: 0;
   --pagination-item-bg-active: var(--accent);
   --pagination-item-fg-active: #ffffff;
@@ -18694,7 +18982,7 @@ html[data-theme="windows95"] {
   --tooltip-radius: 0;
   --popover-bg: var(--surface);
   --popover-radius: 0;
-  --skeleton-bg: #dfdfdf;
+  --skeleton-bg: var(--surface);
   /* Tighter dialog-scale buttons: real 95 buttons are compact (~23px),
      not the roomy core default. */
   --btn-padding: 0.35em 1em;
@@ -18726,7 +19014,7 @@ html[data-theme="windows95"] .alert,
 html[data-theme="windows95"] .card,
 html[data-theme="windows95"] .context-menu,
 html[data-theme="windows95"] .popover {
-  border: 2px solid;
+  border: 1px solid;
   border-color: #ffffff #000000 #000000 #ffffff;
 }
 
@@ -18734,25 +19022,28 @@ html[data-theme="windows95"] .popover {
 html[data-theme="windows95"] .btn { border-color: #ffffff #000000 #000000 #ffffff; }
 html[data-theme="windows95"] .btn:active {
   border-color: #000000 #ffffff #ffffff #000000;
-  /* Full double concentric bevel, inverted — matches the resting state's
-     two-layer inset (outer 2px border + inner 1px highlight/shadow line)
-     instead of collapsing to a single flat inset on press. */
-  box-shadow: inset 1px 1px 0 #000000, inset -1px -1px 0 #dfdfdf;
+  /* The resting 2px edge mirrored (derived, not measured: no pressed
+     capture): black then #808080 on the top and left. */
+  box-shadow: inset 1px 1px 0 #808080;
   transform: none;
 }
 html[data-theme="windows95"] .btn-primary { font-weight: 700; }
 /* The default push button gets 95's extra 1px black frame — the tell that
    separates "the dialog's default" from an ordinary button. */
 html[data-theme="windows95"] .btn-primary {
-  box-shadow: 0 0 0 1px #000000, inset -1px -1px 0 #808080, inset 1px 1px 0 #dfdfdf;
+  box-shadow: 0 0 0 1px #000000, inset -1px -1px 0 #808080;
 }
 html[data-theme="windows95"] .btn-primary:active {
-  box-shadow: 0 0 0 1px #000000, inset 1px 1px 0 #000000, inset -1px -1px 0 #dfdfdf;
+  box-shadow: 0 0 0 1px #000000, inset 1px 1px 0 #808080;
 }
 
 html[data-theme="windows95"] .input,
 html[data-theme="windows95"] .select,
 html[data-theme="windows95"] .textarea { border-color: #808080 #ffffff #ffffff #808080; }
+/* Invalid: the outer bevel line turns #800000 all round (the field stays
+   white; the message and this ring carry the error). */
+html[data-theme="windows95"] :is(.input, .select, .textarea):is(.is-invalid, [aria-invalid="true"]),
+html[data-theme="windows95"] .is-validated :is(.input, .select, .textarea):user-invalid { border-color: var(--danger); }
 
 html[data-theme="windows95"] .panel,
 html[data-theme="windows95"] .modal,
@@ -18766,10 +19057,11 @@ html[data-theme="windows95"] .dropdown { border-color: #ffffff #000000 #000000 #
    this theme. */
 html[data-theme="windows95"] .panel-header {
   /* Pulled out by the panel's own --surface-pad (v5: it steps per tier),
-     less the 1px inner bevel, so the caption bar always meets the frame. */
+     less 1px of face, so the caption sits 2px inside the frame as on
+     dialog-font.png (navy starts at y=3 after #c0c0c0, #ffffff, #c0c0c0). */
   margin: calc(1px - var(--surface-pad, 1rem)) calc(1px - var(--surface-pad, 1rem)) calc(0.8rem * var(--density));
   /* 4px round the caption text: the v5 audit's text-to-edge floor. */
-  padding: 0.25rem 0.35rem;
+  padding: max(4px, 0.25rem) max(4px, 0.35rem);
   border-bottom: 0;
   font-weight: 700;
   font-size: 0.8rem;
@@ -18796,8 +19088,10 @@ html[data-theme="windows95"] .panel-header :is(.input-group, .input, .select, .d
 /* A caption bar holding controls grows to fit them instead of squeezing
    them into the 11px-text strip. */
 html[data-theme="windows95"] .panel-header:has(.input, .select, .btn) {
-  padding-block: 0.2rem;
+  padding-block: max(4px, 0.25rem);
 }
+/* A badge in a caption stands clear of the caption text. */
+html[data-theme="windows95"] .panel-header .badge { margin-inline-start: 0.5em; }
 /* Nested surfaces step down (PLAN.md §6): only the outermost surface is
    a window with a navy caption. A panel inside a panel, card, dialog or
    drawer is a group box: an etched frame line under a plain bold label
@@ -18817,7 +19111,7 @@ html[data-theme="windows95"] :is(.panel, .card, .modal, .drawer) .panel > .panel
    glyphs, as on every 95 window (core's default follows the bar's text
    colour for close only, and leaves min/max in --muted: invisible on
    navy). */
-html[data-theme="windows95"] .modal-header > :is(.btn-close, .btn-min, .btn-max) {
+html[data-theme="windows95"] .modal-header :is(.btn-close, .btn-min, .btn-max) {
   --btn-close-bg: var(--surface);
   --btn-close-bg-hover: var(--surface);
   --btn-close-fg: #000000;
@@ -18834,35 +19128,71 @@ html[data-theme="windows95"] .modal-header > :is(.btn-close, .btn-min, .btn-max)
 }
 /* Minimize and maximize touch; close stands 2px apart. */
 html[data-theme="windows95"] .modal-header > .btn-min { margin-inline-start: auto; }
-html[data-theme="windows95"] .modal-header > .btn-min + .btn-max { margin-inline-start: -0.5rem; }
-html[data-theme="windows95"] .modal-header > :is(.btn-min, .btn-max) + .btn-close { margin-inline-start: calc(2px - 0.5rem); }
-html[data-theme="windows95"] .modal-header > :is(.btn-close, .btn-min, .btn-max):active {
+html[data-theme="windows95"] .modal-header .btn-min + .btn-max { margin-inline-start: -0.5rem; }
+html[data-theme="windows95"] .modal-header :is(.btn-min, .btn-max) + .btn-close { margin-inline-start: calc(2px - 0.5rem); }
+/* Wrapped in their own group (a flex span with its own gap), the group
+   takes the header's 0.5rem gap so the margins above still close it up. */
+html[data-theme="windows95"] .modal-header :has(> .btn-min + .btn-max) { gap: 0.5rem !important; }
+/* Desktop windows' headers use core's 0.35rem gap; match the 0.5rem the
+   margins above cancel, or min and max sit apart. */
+html[data-theme="windows95"] .desktop-window > .modal > .modal-header { gap: 0.5rem; }
+html[data-theme="windows95"] .modal-header :is(.btn-close, .btn-min, .btn-max):active {
   border-color: #000000 #ffffff #ffffff #000000;
   box-shadow: inset 1px 1px 0 #808080;
+}
+/* One #c0c0c0 row and column between the frame and the caption, as on
+   the panel caption above (dialog-font.png). */
+/* Flat toolbar buttons rest borderless (the .btn bevel above would
+   otherwise reach them); hover gives a thin raised edge, no fill. */
+html[data-theme="windows95"] :is(.btn-clear, .btn-icon.is-clear, .btn-ghost) { border-color: transparent; }
+@media (hover: hover) {
+  html[data-theme="windows95"] :is(.btn-clear, .btn-icon.is-clear, .btn-ghost):hover:not(:active, [aria-pressed="true"], [aria-expanded="true"], :disabled) { border-color: #ffffff #808080 #808080 #ffffff; }
+}
+html[data-theme="windows95"] :is(.btn-clear, .btn-icon.is-clear, .btn-ghost):is(:active, [aria-pressed="true"], [aria-expanded="true"]) { border-color: #808080 #ffffff #ffffff #808080; }
+html[data-theme="windows95"] .has-badge::after { border-radius: 0; }
+html[data-theme="windows95"] .modal-header {
+  margin-block-start: calc(1px - var(--surface-pad, 1.5rem));
+  margin-inline: calc(1px - var(--surface-pad, 1.5rem));
 }
 html[data-theme="windows95"] .stat-value { font-family: var(--font); }
 
 /* Tabs: raised with light top-left, dark right; the selected one lifts
    2px and sits on the page, hiding the line under it. */
-html[data-theme="windows95"] .tabs { gap: 0; align-items: flex-end; border-bottom: 1px solid #ffffff; box-shadow: 0 1px 0 #dfdfdf; }
+html[data-theme="windows95"] .tabs { gap: 0; align-items: flex-end; border-bottom: 1px solid #ffffff; }
 html[data-theme="windows95"] .tab {
-  border: 2px solid;
+  border: 1px solid;
   border-color: #ffffff #000000 transparent #ffffff;
   border-bottom: 0;
-  box-shadow: inset -1px 0 0 #808080, inset 1px 1px 0 #dfdfdf;
+  box-shadow: inset -1px 0 0 #808080;
+  /* 95's tab corners are cut one pixel on the diagonal. */
+  clip-path: polygon(2px 0, calc(100% - 2px) 0, 100% 2px, 100% 100%, 0 100%, 0 2px);
   /* Text clears the bevel by 4px+ (it sat on the white edge at 0.15em). */
   display: inline-flex;
   align-items: center;
   padding: 0.35em 0.8em;
-  margin-right: -2px;
+  margin-right: -1px;
 }
-html[data-theme="windows95"] .tab:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))) { position: relative; bottom: -1px; padding-top: 0.5em; padding-bottom: calc(0.35em + 1px); z-index: 1; }
+/* The selected tab stands 2px taller and covers the sheet's white top
+   edge, so the page runs on into it with no line underneath. */
+html[data-theme="windows95"] .tab:is(:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))), :has(> input:checked), :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))) {
+  position: relative;
+  z-index: 1;
+  margin-block-end: -1px;
+  margin-inline: -2px -3px;
+  padding-top: calc(0.35em + 2px);
+  padding-bottom: calc(0.35em + 1px);
+  padding-inline: calc(0.8em + 2px);
+}
+html[data-theme="windows95"] .tab:is(:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))), :has(> input:checked), :is([aria-selected="true"], :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))):first-child { margin-inline-start: 0; }
+/* The clip would cut an outside ring; 95 drew the dotted focus box
+   round the label inside the tab anyway. */
+html[data-theme="windows95"] .tabs > .tab:focus-visible { outline-offset: -4px; }
 
 /* Status bar: sunken fields, one per item. */
 html[data-theme="windows95"] .app-status > * {
   border: 1px solid;
   border-color: #808080 #ffffff #ffffff #808080;
-  padding: 0.25rem 0.4rem;
+  padding: max(4px, 0.25rem) max(4px, 0.4rem);
 }
 
 /* Console primitives: sunken bay, raised strips, keys that sink and light
@@ -18870,7 +19200,7 @@ html[data-theme="windows95"] .app-status > * {
 html[data-theme="windows95"] .mixer { border: 2px solid; border-color: #808080 #ffffff #ffffff #808080; }
 html[data-theme="windows95"] .strip { border: 2px solid; border-color: #ffffff #000000 #000000 #ffffff; }
 html[data-theme="windows95"] .strip.is-selected { border-color: #000080; box-shadow: 0 0 0 1px #000080; }
-html[data-theme="windows95"] .key { border: 2px solid; border-color: #ffffff #000000 #000000 #ffffff; }
+html[data-theme="windows95"] .key { border: 1px solid; border-color: #ffffff #000000 #000000 #ffffff; }
 html[data-theme="windows95"] :is(.key:has(input:checked), .key[aria-pressed="true"]) { border-color: #000000 #ffffff #ffffff #000000; }
 html[data-theme="windows95"] :is(.scribble, .eq-curve) { border: 2px solid; border-color: #808080 #ffffff #ffffff #808080; }
 html[data-theme="windows95"] .scribble { border-top-width: 0.35rem; border-top-color: var(--strip-color); }
@@ -18881,22 +19211,180 @@ html[data-theme="windows95"] :focus-visible {
   outline-offset: 1px;
 }
 
-html[data-theme="windows95"] .table th,
-html[data-theme="windows95"] .table td { border: 1px solid #808080; }
-html[data-theme="windows95"] .table th { font-weight: 700; }
+/* Explorer's details view: raised button-like column headers (white
+   top/left, #808080 then #000000 bottom/right) over a white well with
+   only horizontal rules, no vertical body grid. */
+html[data-theme="windows95"] .table td { border: 0; border-bottom: 1px solid #c0c0c0; }
+html[data-theme="windows95"] .table th {
+  font-weight: 400;
+  border: 1px solid;
+  border-color: #ffffff #000000 #000000 #ffffff;
+  box-shadow: inset -1px -1px 0 #808080;
+}
 /* Opaque table canvas: cells are transparent by design, so any backdrop
-   showing through the rows (a desktop gradient, a tinted strip) lands
-   directly under badge fills and erases their contrast. A real Win95
-   ListView was a flat gray box anyway — one background on the table keeps
-   state/hover/striped cell fills painting over it untouched. */
-html[data-theme="windows95"] .table { background-color: var(--surface); }
+   showing through the rows (the teal desktop, a tinted strip) would land
+   under badge fills. The white well keeps state/hover/striped cell fills
+   painting over it untouched. */
+html[data-theme="windows95"] .table { background-color: var(--table-bg); }
+/* Regular-weight headers let auto columns pack tighter: a field in a
+   cell still spans the whole touch target. */
+html[data-theme="windows95"] .table td > :is(.input, .select) { min-inline-size: var(--tap-min); }
+
+/* 95 drew its UI in 8pt MS Sans Serif (11px). With a mouse a 13px root
+   (81.25%, so user font settings and data-text-size still scale it) brings
+   every rem-sized part to dialog scale; touch keeps the browser size so
+   targets stay large. */
+@media (pointer: fine) {
+  html[data-theme="windows95"] {
+    /* The pixel face only at dialog scale: on touch's 16px root it would
+       be blown up past one screen pixel per font pixel. */
+    --font: "Microsoft Sans Serif", "MS Sans Serif", "W95FA", Arial, "Liberation Sans", Arimo, Tahoma, sans-serif;
+    --root-font-size: 81.25%;
+    font-size: 81.25%;
+    /* The small rem steps keep their 16px-root sizes, so text never
+       closes to under 4px from its box edge (the v5 floor). */
+    --space-2xs: 4px;
+    --cell-pad-y: max(4px, calc(0.5em * var(--density)));
+    /* Title bars closer to 95's 18px caption (touch keeps the roomier
+       default). */
+    --modal-header-pad: 4px 2px 4px 4px;
+  }
+  /* The caption buttons eat 2px of that block padding, so a captioned
+     bar is 28px and caption text alone still clears the 4px edge floor. */
+  html[data-theme="windows95"] .modal-header :is(.btn-close, .btn-min, .btn-max) { margin-block: -2px; }
+  /* 95's floor was 8pt (11px): headers, badges and hints don't shrink
+     below it under the 13px root. */
+  html[data-theme="windows95"] :is(.table th, .badge, .field-hint) { font-size: max(11px, 0.78em); }
+  /* A one-glyph button (‹ ›) still spans the 24px target. */
+  html[data-theme="windows95"] .btn { min-inline-size: var(--tap-min); }
+}
+
+/* The groove gradient is sized to the content box core clips to. */
+html[data-theme="windows95"] .slider { background-origin: content-box; }
+/* Trackbar pointer: raised grey, 11x21 (core's 2px --bg ring would be
+   teal here). The groove itself is --slider-bg above. */
+html[data-theme="windows95"] .slider::-webkit-slider-thumb {
+  width: 11px;
+  height: 21px;
+  border: 1px solid;
+  border-color: #ffffff #000000 #000000 #ffffff;
+  box-shadow: inset -1px -1px 0 #808080;
+}
+html[data-theme="windows95"] .slider::-moz-range-thumb {
+  width: 11px;
+  height: 21px;
+  border: 1px solid;
+  border-color: #ffffff #000000 #000000 #ffffff;
+  box-shadow: inset -1px -1px 0 #808080;
+}
+/* Upright, the groove runs top to bottom and the pointer lies on its side.
+   The padding goes on the block axis (left/right under vertical-lr), so
+   the groove stays a thin centred line inside the full-width target. */
+html[data-theme="windows95"] .slider.is-vertical {
+  --slider-bg: linear-gradient(90deg, #808080 0 1px, #000000 0 2px, #c0c0c0 0 calc(100% - 1px), #ffffff 0);
+}
+html[data-theme="windows95"] .slider.is-vertical:not(.is-range > .slider) {
+  padding-inline: 0;
+  padding-block: calc((var(--tap-min) - var(--slider-height)) / 2);
+}
+html[data-theme="windows95"] .slider.is-vertical::-webkit-slider-thumb { width: 21px; height: 11px; }
+html[data-theme="windows95"] .slider.is-vertical::-moz-range-thumb { width: 21px; height: 11px; }
+
+/* Checkboxes and radios: the sunken white well (dialog-font.png,
+   Strikeout/Underline) with a black tick or dot, not the browser's own. */
+html[data-theme="windows95"] :is(.checkbox, .radio) {
+  appearance: none;
+  border: 1px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  border-radius: 0;
+  box-shadow: inset 1px 1px 0 #000000, inset -1px -1px 0 #c0c0c0;
+  background: #ffffff no-repeat center / 100% 100%;
+}
+html[data-theme="windows95"] .checkbox:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 13'%3E%3Cpath d='M3 5h1v1h1v1h1V6h1V5h1V4h1V3h1v3H9v1H8v1H7v1H6v1H5V9H4V8H3z' fill='%23000'/%3E%3C/svg%3E");
+}
+html[data-theme="windows95"] .checkbox:indeterminate {
+  background-image: linear-gradient(#000000, #000000);
+  background-size: 50% 50%;
+}
+html[data-theme="windows95"] .radio { border-radius: 50%; }
+html[data-theme="windows95"] .radio:checked {
+  background-image: radial-gradient(circle, #000000 0 22%, transparent 24%);
+}
+html[data-theme="windows95"] :is(.checkbox, .radio):disabled { background-color: #c0c0c0; }
+
+/* Switch: sunken well, raised block; 95 repainted instantly. */
+html[data-theme="windows95"] .switch-track {
+  border-color: #808080 #ffffff #ffffff #808080;
+  box-shadow: inset 1px 1px 0 #000000, inset -1px -1px 0 #c0c0c0;
+  transition: none;
+}
+html[data-theme="windows95"] .switch input:checked ~ .switch-track,
+html[data-theme="windows95"] .switch[aria-checked="true"] .switch-track { border-color: #808080 #ffffff #ffffff #808080; }
+html[data-theme="windows95"] .switch-thumb {
+  /* Fills the well inside its black inner line. */
+  box-sizing: border-box;
+  top: 1px;
+  inset-inline-start: 1px;
+  width: calc(1.4em * var(--density) - 4px);
+  height: calc(1.4em * var(--density) - 4px);
+  border: 1px solid;
+  border-color: #ffffff #000000 #000000 #ffffff;
+  box-shadow: inset -1px -1px 0 #808080;
+  transition: none;
+}
+
+/* Filter chips, toggle buttons and segmented items: raised push buttons
+   that stay pressed (sunken, dithered) while on. */
+html[data-theme="windows95"] :is(.badge-button, .toggle-btn, .segmented-item) {
+  border: 1px solid;
+  border-color: #ffffff #000000 #000000 #ffffff;
+  border-radius: 0;
+  box-shadow: inset -1px -1px 0 #808080;
+  transition: none;
+}
+html[data-theme="windows95"] :is(.badge-button:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked))), .toggle-btn:has(input:checked), .segmented-item:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))) {
+  border-color: #000000 #ffffff #ffffff #000000;
+  box-shadow: inset 1px 1px 0 #808080;
+}
+html[data-theme="windows95"] .segmented { gap: 0; }
+/* A pressed danger toggle sinks onto the dither like any other; the
+   #800000 label carries the state, never a maroon slab. */
+html[data-theme="windows95"] .toggle-btn.is-danger {
+  --toggle-btn-bg-on: var(--w95-dither);
+  --toggle-btn-fg-on: #800000;
+  --toggle-btn-border-on: #000000 #ffffff #ffffff #000000;
+}
+html[data-theme="windows95"] .badge-button { --badge-bg: var(--surface); --badge-fg: var(--text); }
+/* No hover in 95: a chip only changes when pressed. */
+@media (hover: hover) {
+  html[data-theme="windows95"] .badge-button:not(:is(.is-active, :where(:has(> input:is([type="radio"], [type="checkbox"]):checked, > td:first-child input[type="checkbox"]:checked)))):hover { background: var(--badge-bg); color: var(--badge-fg); }
+}
+
+/* Selection bar: the plain face in a raised frame. */
+html[data-theme="windows95"] .bulk-bar {
+  border-color: #ffffff #000000 #000000 #ffffff;
+  box-shadow: inset -1px -1px 0 #808080;
+}
+/* Loading placeholders: a dotted grey outline on the face, not a 98 fill. */
+html[data-theme="windows95"] .skeleton {
+  border-radius: 0;
+  outline: 1px dotted #808080;
+  outline-offset: -1px;
+}
+/* Dialog footers: 95's 75px-wide OK/Cancel buttons. */
+html[data-theme="windows95"] .modal-footer > .btn { min-inline-size: 75px; }
 
 /* --- Layout ------------------------------------------------------------ *
  * A desktop window: the teal backdrop shows around a beveled inset content
  * area, and the bar reads as a title bar with the classic gradient. */
 html[data-theme="windows95"] {
-  --app-padding: 0.25rem;
-  --app-gap: 0.25rem;
+  /* The shell is one window: a grey frame holds caption, client well and
+     status bar with no desktop between them. --app-padding is the 1px of
+     face inside the frame bevel; the teal shows only round the window. */
+  --app-bg: var(--surface);
+  --app-padding: 2px;
+  --app-gap: 2px;
   --app-bar-bg: #000080;
   --app-bar-fg: #ffffff;
   --app-bar-rule-width: 0;
@@ -18907,12 +19395,25 @@ html[data-theme="windows95"] {
   --app-status-bg: var(--surface);
   --app-status-rule: #ffffff;
 }
+/* Window frame, measured on dialog-font.png: #c0c0c0 then #ffffff top and
+   left, #000000 then #808080 bottom and right. */
+html[data-theme="windows95"] .app {
+  margin: 0.25rem;
+  min-height: calc(100dvh - 0.5rem);
+  border: 1px solid;
+  border-color: #c0c0c0 #000000 #000000 #c0c0c0;
+  box-shadow: inset 1px 1px 0 #ffffff, inset -1px -1px 0 #808080;
+}
+@media (min-width: 1801px) {
+  html[data-theme="windows95"] .app { margin-inline: auto; }
+}
 /* Sunken content well, raised status bar — the 3D language applied to the
    shell itself, not just to controls. */
 html[data-theme="windows95"] .app-main {
-  border: 2px solid;
+  /* The sunken client edge, as the field bevel measured above. */
+  border: 1px solid;
   border-color: #808080 #ffffff #ffffff #808080;
-  box-shadow: inset 1px 1px 0 #000000;
+  box-shadow: inset 1px 1px 0 #000000, inset -1px -1px 0 #c0c0c0;
 }
 html[data-theme="windows95"] .app-status {
   border: 2px solid;
@@ -18929,8 +19430,11 @@ html[data-theme="windows95"] .app-bar {
   --nav-item-bg-active: #c0c0c0;
   --nav-item-fg-active: #000000;
   --nav-item-radius: 0;
+  /* The end padding reserves the caption buttons; the menu strip below
+     reaches back across it. */
+  --w95-bar-pe: calc(52px + 0.8rem);
   position: relative;
-  padding-right: calc(52px + 0.8rem);
+  padding-right: var(--w95-bar-pe);
 
   /* Chunky, blocky icon strokes — the pixel-art look of the real 95 icon set. */
   --icon-stroke-width: 2.6;
@@ -18942,10 +19446,24 @@ html[data-theme="windows95"] .app-bar {
 html[data-theme="windows95"] h1 { font-size: 1.05rem; font-weight: 700; }
 html[data-theme="windows95"] h2 { font-size: 0.95rem; font-weight: 700; }
 html[data-theme="windows95"] h3 { font-size: 0.85rem; font-weight: 700; }
+/* The marketing page is the Welcome screen, not a dialog: its large
+   wordmark-style heading (dialog-welcome.png) gives the page a top. */
+html[data-theme="windows95"] .hero h1 { font-size: 2rem; }
+html[data-theme="windows95"] :is(.hero, .band) h2 { font-size: 1.4rem; }
+html[data-theme="windows95"] .band h3 { font-size: 1.05rem; }
+html[data-theme="windows95"] .hero .badge + h1 { margin-block-start: 0.75rem; }
+/* 95 labels were sentence case at normal tracking. */
+html[data-theme="windows95"] .stat-label { text-transform: none; letter-spacing: 0; }
+/* A white well is always sunken in a 95 dialog. */
+html[data-theme="windows95"] .avatar {
+  border: 1px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  box-shadow: var(--input-shadow);
+}
 
 html[data-theme="windows95"] .app-bar .nav { padding: 0; }
 html[data-theme="windows95"] .app-bar .nav-brand { font-weight: 700; }
-html[data-theme="windows95"] .app-bar .nav-item { padding: 0.1em 0.6em; }
+html[data-theme="windows95"] .app-bar .nav-item { padding: max(4px, 0.25em) 0.6em; }
 html[data-theme="windows95"] .app-bar::after {
   content: "";
   position: absolute;
@@ -18958,6 +19476,15 @@ html[data-theme="windows95"] .app-bar::after {
   pointer-events: none;
 }
 html[data-theme="windows95"] :is(.app-bar, .panel-header) .btn-ghost { color: #ffffff; }
+/* Icon buttons left on a caption are grey raised push buttons, like the
+   window's own caption buttons. */
+html[data-theme="windows95"] .panel-header > .btn-icon.btn:is(*, :hover) {
+  --btn-bg: var(--surface);
+  --btn-bg-hover: var(--surface);
+  color: var(--text);
+  border-color: #ffffff #000000 #000000 #ffffff;
+}
+html[data-theme="windows95"] .panel-header > .btn-icon:active { border-color: #000000 #ffffff #ffffff #000000; }
 
 /* Touch tiers (v5): the bar wraps to two lines (brand + actions, then the
    nav), so the caption buttons pin to the first line's right end instead
@@ -18969,7 +19496,7 @@ html[data-theme="windows95"] :is(.app-bar, .panel-header) .btn-ghost { color: #f
   }
 }
 @media (max-width: 480px) {
-  html[data-theme="windows95"] .app-bar { padding-right: 0.4rem; }
+  html[data-theme="windows95"] .app-bar { --w95-bar-pe: 0.4rem; }
   html[data-theme="windows95"] .app-bar::after { content: none; }
 }
 
@@ -18985,13 +19512,14 @@ html[data-theme="windows95"] {
 }
 
 /* --- Conversation, file chips, bar chart (v4.1) --------------------------- *
- * sunken white fields for messages (tooltip yellow for yours) and navy progress blocks stood on end. */
+ * sunken white fields for messages (the grey read-only well for yours) and navy progress blocks stood on end. */
 html[data-theme="windows95"] {
   --message-bg: #ffffff;
   --message-border: transparent;
   --message-radius: 0;
   --message-shadow: inset 1px 1px #808080, inset -1px -1px #ffffff, inset 2px 2px #000000, inset -2px -2px #dfdfdf;
-  --message-own-bg: #ffffe1;
+  /* Yours read as the grey read-only field; tooltip yellow stays tooltips'. */
+  --message-own-bg: var(--surface);
   --attachment-bg: #ffffff;
   --attachment-radius: 0;
   --bar-chart-bar: repeating-linear-gradient(0deg, transparent 0 2px, #000080 2px 10px);
@@ -19041,6 +19569,11 @@ html[data-theme="windows95"] {
   --desktop-icon-label-bg-selected: #000080;
   --desktop-icon-label-fg-selected: #ffffff;
   --desktop-icon-font-size: 0.75rem;
+  /* Wide enough that "Neighborhood" wraps whole, at word boundaries only. */
+  --desktop-icon-cell: 6.5rem;
+  /* Phone home grid: the label steps down to 95's own 8pt (~11px) so
+     "Neighborhood" fits its column whole. */
+  --home-label-size: 0.7rem;
   --window-icon-glyph: #000080;
   --window-pad: 2px;
   --window-header-pad: 0.1rem 0.15rem 0.1rem 0.25rem;
@@ -19055,7 +19588,7 @@ html[data-theme="windows95"] {
   --taskbar-gap: 3px;
   --taskbar-task-max: 10rem;
   --taskbar-task-weight-active: 700;
-  --taskbar-task-bg-active: repeating-conic-gradient(#c0c0c0 0 25%, #ffffff 0 50%) 0 0 / 2px 2px;
+  --taskbar-task-bg-active: var(--w95-dither);
   --taskbar-start-bg-open: var(--surface);
   --taskbar-start-border-open: #000000 #ffffff #ffffff #000000;
   --taskbar-start-shadow-open: inset 1px 1px 0 #000000, inset -1px -1px 0 #dfdfdf;
@@ -19077,6 +19610,13 @@ html[data-theme="windows95"]:has(.desktop-screen) {
   --app-main-padding: 0;
 }
 html[data-theme="windows95"] .desktop-screen { border: 0; box-shadow: none; }
+html[data-theme="windows95"]:has(.desktop-screen) .app { margin: 0; min-height: 100dvh; border: 0; box-shadow: none; }
+/* Phone home grid: 95's labels hugged their text (1px round the
+   selection plate), which is what lets "Neighborhood" wrap whole. */
+@media (max-width: 480px) {
+  html[data-theme="windows95"] .desktop-screen > .desktop-icons .desktop-icon > label:first-child { padding-inline: 0; }
+  html[data-theme="windows95"] .desktop-screen > .desktop-icons .desktop-icon > label > span { padding-inline: 1px; }
+}
 /* The taskbar: one raised strip, its parts drawn by the --taskbar tokens
    rather than the status bar's sunken fields. */
 html[data-theme="windows95"] .desktop-bar {
@@ -19146,6 +19686,212 @@ html[data-theme="windows95"][data-alert="red"] :is(.panel, .card) {
   font-family: var(--font-mono);
 }
 
+/* --- Polish round 2 -------------------------------------------------------- */
+
+/* Push buttons are all the grey face (dialog-font.png, dialog-run.jpg):
+   the default button keeps its black frame and bold label, danger and
+   success are grey buttons with coloured text, and disabled text is
+   embossed #808080 over a 1px white offset instead of an opacity wash. */
+html[data-theme="windows95"] .btn-primary { --btn-bg: var(--surface); --btn-fg: #000000; --btn-border: #000000; }
+html[data-theme="windows95"] .btn-danger { --btn-bg: var(--surface); --btn-fg: #800000; --btn-border: #000000; }
+html[data-theme="windows95"] .btn-success { --btn-bg: var(--surface); --btn-fg: #004d00; --btn-border: #000000; }
+html[data-theme="windows95"] :is(.btn:disabled, .btn[aria-disabled="true"]) {
+  --btn-bg: var(--surface);
+  --btn-fg: #808080;
+  opacity: 1;
+  text-shadow: 1px 1px 0 #ffffff;
+}
+
+/* Message-box glyphs: 95 marked a message's kind with an icon (i, !, X),
+   so each state gets its own 16px glyph, not just a colour. */
+html[data-theme="windows95"] {
+  --w95-icon-info: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7.5' fill='%23fff' stroke='%23000'/%3E%3Cpath d='M7 3h2v2H7zM6 6h3v6h1v1H6v-1h1V7H6z' fill='%23000080' shape-rendering='crispEdges'/%3E%3C/svg%3E");
+  --w95-icon-success: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7.5' fill='%23008000' stroke='%23000'/%3E%3Cpath d='M4.5 8l2.5 2.5L11.5 5.5' fill='none' stroke='%23fff' stroke-width='2'/%3E%3C/svg%3E");
+  --w95-icon-warning: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 .8L15.4 15.5H.6z' fill='%23ff0' stroke='%23000'/%3E%3Cpath d='M7 5h2v6H7zM7 12h2v2H7z' fill='%23000' shape-rendering='crispEdges'/%3E%3C/svg%3E");
+  --w95-icon-danger: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7.5' fill='%23f00' stroke='%23800000'/%3E%3Cpath d='M5 5l6 6M11 5l-6 6' stroke='%23fff' stroke-width='2'/%3E%3C/svg%3E");
+}
+html[data-theme="windows95"] :is(.alert-info, .alert-success, .alert-warning, .alert-danger, .toast-success, .toast-warning, .toast-danger):not(:has(> .icon))::before {
+  content: "";
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-block-start: 0.05em;
+  background: var(--w95-state-icon) no-repeat center / 16px 16px;
+}
+html[data-theme="windows95"] :is(.alert-info) { --w95-state-icon: var(--w95-icon-info); }
+html[data-theme="windows95"] :is(.alert-success, .toast-success) { --w95-state-icon: var(--w95-icon-success); }
+html[data-theme="windows95"] :is(.alert-warning, .toast-warning) { --w95-state-icon: var(--w95-icon-warning); }
+html[data-theme="windows95"] :is(.alert-danger, .toast-danger) { --w95-state-icon: var(--w95-icon-danger); }
+
+/* The 95 scrollbar: 16px, raised square thumb and arrow buttons on a
+   50% white dither. Chromium only honours ::-webkit-scrollbar while
+   scrollbar-color/-width stay auto; Firefox keeps its native bar. */
+html[data-theme="windows95"] {
+  --scrollbar-width: auto;
+  --scrollbar-size: 16px;
+  --scrollbar-radius: 0;
+  --scrollbar-thumb: #c0c0c0;
+  --scrollbar-thumb-hover: #c0c0c0;
+  --scrollbar-track: var(--w95-dither);
+  scrollbar-color: auto;
+  scrollbar-width: auto;
+}
+html[data-theme="windows95"] :is(.scroll, .table-wrap) { scrollbar-color: auto; scrollbar-width: auto; }
+html[data-theme="windows95"]::-webkit-scrollbar,
+html[data-theme="windows95"] ::-webkit-scrollbar { width: 16px; height: 16px; }
+html[data-theme="windows95"]::-webkit-scrollbar-track,
+html[data-theme="windows95"] ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+html[data-theme="windows95"]::-webkit-scrollbar-thumb,
+html[data-theme="windows95"] ::-webkit-scrollbar-thumb,
+html[data-theme="windows95"]::-webkit-scrollbar-button,
+html[data-theme="windows95"] ::-webkit-scrollbar-button {
+  background-color: #c0c0c0;
+  border: 1px solid;
+  border-color: #ffffff #000000 #000000 #ffffff;
+  border-radius: 0;
+  box-shadow: inset -1px -1px 0 #808080;
+  background-clip: border-box;
+}
+html[data-theme="windows95"]::-webkit-scrollbar-button,
+html[data-theme="windows95"] ::-webkit-scrollbar-button { display: block; width: 16px; height: 16px; background-repeat: no-repeat; background-position: center; }
+html[data-theme="windows95"]::-webkit-scrollbar-button:active,
+html[data-theme="windows95"] ::-webkit-scrollbar-button:active { border-color: #808080; box-shadow: none; }
+html[data-theme="windows95"]::-webkit-scrollbar-button:vertical:decrement,
+html[data-theme="windows95"] ::-webkit-scrollbar-button:vertical:decrement { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='4'%3E%3Cpath d='M3 0h1v1h1v1h1v1h1v1H0V3h1V2h1V1h1z'/%3E%3C/svg%3E"); }
+html[data-theme="windows95"]::-webkit-scrollbar-button:vertical:increment,
+html[data-theme="windows95"] ::-webkit-scrollbar-button:vertical:increment { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='4'%3E%3Cpath d='M0 0h7v1H6v1H5v1H4v1H3V3H2V2H1V1H0z'/%3E%3C/svg%3E"); }
+html[data-theme="windows95"]::-webkit-scrollbar-button:horizontal:decrement,
+html[data-theme="windows95"] ::-webkit-scrollbar-button:horizontal:decrement { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='7'%3E%3Cpath d='M0 3h1V2h1V1h1V0h1v7H3V6H2V5H1V4H0z'/%3E%3C/svg%3E"); }
+html[data-theme="windows95"]::-webkit-scrollbar-button:horizontal:increment,
+html[data-theme="windows95"] ::-webkit-scrollbar-button:horizontal:increment { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='7'%3E%3Cpath d='M0 0h1v1h1v1h1v1h1v1H3v1H2v1H1v1H0z'/%3E%3C/svg%3E"); }
+/* One button at each end, as 95 drew them (not the doubled pair). */
+html[data-theme="windows95"]::-webkit-scrollbar-button:start:increment,
+html[data-theme="windows95"] ::-webkit-scrollbar-button:start:increment,
+html[data-theme="windows95"]::-webkit-scrollbar-button:end:decrement,
+html[data-theme="windows95"] ::-webkit-scrollbar-button:end:decrement { display: none; }
+html[data-theme="windows95"]::-webkit-scrollbar-corner,
+html[data-theme="windows95"] ::-webkit-scrollbar-corner { background: #c0c0c0; }
+
+/* The combo box: a raised 16px grey drop button flush inside the sunken
+   field's right edge (dialog-font.png Color/Script), the 7x4 arrow on it.
+   Nested blocks draw the bevel: black, white, #808080, then the face. */
+html[data-theme="windows95"] .select {
+  padding-inline-end: 22px;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='7' height='4'%3E%3Cpath d='M0 0h7v1H6v1H5v1H4v1H3V3H2V2H1V1H0z'/%3E%3C/svg%3E"),
+    linear-gradient(#c0c0c0, #c0c0c0),
+    linear-gradient(#808080, #808080),
+    linear-gradient(#ffffff, #ffffff),
+    linear-gradient(#000000, #000000);
+  background-position:
+    right 6px center,
+    right 3px top 2px,
+    right 2px top 2px,
+    right 2px top 1px,
+    right 1px top 1px;
+  background-size:
+    7px 4px,
+    13px calc(100% - 5px),
+    14px calc(100% - 4px),
+    15px calc(100% - 3px),
+    16px calc(100% - 2px);
+  background-repeat: no-repeat;
+}
+html[data-theme="windows95"] .select:dir(rtl) {
+  background-position: left 6px center, left 2px top 2px, left 2px top 2px, left 1px top 1px, left 1px top 1px;
+}
+
+/* Nested panels are group boxes (dialog-font.png, Effects / Sample): an
+   etched #808080 + #ffffff frame, the caption on the face breaking its
+   top line. Measured in RESEARCH.md; the outer window keeps its bevel. */
+html[data-theme="windows95"] :is(.panel, .card, .modal, .drawer) .panel {
+  border-color: #808080;
+  box-shadow: inset 1px 1px 0 #ffffff, 1px 1px 0 #ffffff;
+  margin-block-start: 0.9em;
+}
+html[data-theme="windows95"] :is(.panel, .card, .modal, .drawer) .panel > .panel-header {
+  width: fit-content;
+  max-width: calc(100% - 12px);
+  /* The caption is an opaque plate on the frame line, its text 4px clear
+     of the plate's edge (the v5 floor) and centred on the line. */
+  margin: calc(-0.6em - 4px - var(--surface-pad, 1rem)) 0 calc(0.4rem * var(--density) - 4px) calc(4px - var(--surface-pad, 1rem));
+  padding: 4px;
+  background: linear-gradient(var(--panel-bg, var(--surface)), var(--panel-bg, var(--surface)));
+  border-bottom: 0;
+  box-shadow: none;
+  font-weight: 400;
+  font-size: inherit;
+}
+
+/* Etched separators: #808080 with #ffffff under it, as every 95 rule. */
+html[data-theme="windows95"] :is(hr, .divider) {
+  border: 0;
+  border-top: 1px solid #808080;
+  box-shadow: 0 1px 0 #ffffff;
+}
+html[data-theme="windows95"] .divider-v {
+  border-inline-start-color: #808080;
+  box-shadow: 1px 0 0 #ffffff;
+}
+/* Drawn by the bottom border alone (no shadow), so the row stays a
+   one-sided rule, not a box round the trigger text. */
+html[data-theme="windows95"] .accordion-item {
+  border-bottom: 2px solid #808080;
+  border-image: linear-gradient(to top, #ffffff 1px, #808080 1px) 0 0 2 0 / 0 0 2px 0;
+}
+
+/* List views and table scrollers are white sunken wells with no row
+   rules, as Explorer's file list (dialog-save-as.png). */
+html[data-theme="windows95"] {
+  --list-bg: #ffffff;
+  --list-rule: transparent;
+}
+html[data-theme="windows95"] .list:not(.list-cards) {
+  border-color: #808080 #ffffff #ffffff #808080;
+  box-shadow: inset 1px 1px 0 #000000;
+}
+
+/* Carousel: square dots, raised square prev/next buttons. */
+html[data-theme="windows95"] .carousel-nav > a { border-radius: 0; }
+html[data-theme="windows95"] .carousel-nav > :is(.carousel-prev, .carousel-next) {
+  --carousel-arrow-bg: var(--surface);
+  border: 1px solid;
+  border-color: #ffffff #000000 #000000 #ffffff;
+  box-shadow: inset -1px -1px 0 #808080;
+}
+
+@supports selector(::scroll-marker) and selector(::scroll-button(*)) {
+  html[data-theme="windows95"] .carousel > .carousel-slide::scroll-marker { border-radius: 0; }
+  html[data-theme="windows95"] .carousel::scroll-button(*) {
+    border: 1px solid;
+    border-color: #ffffff #000000 #000000 #ffffff;
+    border-radius: 0;
+    box-shadow: inset -1px -1px 0 #808080;
+    background: var(--surface);
+  }
+  html[data-theme="windows95"] .carousel::scroll-button(*):disabled { opacity: 1; color: #808080; text-shadow: 1px 1px 0 #ffffff; }
+}
+
+/* Display Properties monitor: the square grey case, raised. */
+html[data-theme="windows95"] {
+  --desktop-monitor-radius: 0;
+  --desktop-monitor-bg: var(--surface);
+  --input-mirror-bg: var(--surface);
+  --field-row-bg: var(--surface);
+}
+html[data-theme="windows95"] .desktop-monitor { border-color: #ffffff #000000 #000000 #ffffff; }
+
+/* State list cards (an answered question): the plain face with a 4px
+   marker bar in the state colour, not a blended tint. */
+html[data-theme="windows95"] { --list-tone-tint: 0%; }
+html[data-theme="windows95"] .list-cards > .list-item:is(.is-success, .is-warning, .is-danger, .is-info) {
+  box-shadow: inset 4px 0 0 var(--_list-tone), inset -1px -1px 0 #808080;
+}
+html[data-theme="windows95"] .ranked-item.is-answered {
+  background: var(--ranked-item-bg, var(--surface));
+  box-shadow: inset 4px 0 0 #008000;
+}
+
 /* Easter egg (data-easter-eggs + assets/js/eggs.js): start a textarea
    with "Dear" and the Office assistant offers to help with the letter. */
 html[data-theme="windows95"][data-easter-eggs]:has(textarea[data-egg-letter]) body::after {
@@ -19162,5 +19908,127 @@ html[data-theme="windows95"][data-easter-eggs]:has(textarea[data-egg-letter]) bo
   box-shadow: 2px 2px 0 #000;
   pointer-events: none;
 }
+
+/* --- Polish round 3: menu bar, property sheets, wells ------------------ */
+
+/* The menu bar: every 95 window puts File / Edit / View on its own grey
+   strip under the caption (Windows-95-desktop.png, Notepad), black text,
+   the open item navy. A bar's nav drops to a full-width second row on the
+   face; brand, actions and caption buttons stay on the navy caption. */
+html[data-theme="windows95"] .app-bar:has(> :is(nav:not(.breadcrumbs), .nav, .nav-item)) {
+  row-gap: 0.2rem;
+  padding-block-end: 0;
+}
+html[data-theme="windows95"] .app-bar:has(> :is(nav:not(.breadcrumbs), .nav, .nav-item))::after {
+  top: calc(0.2rem + var(--tap-min) / 2);
+}
+html[data-theme="windows95"] .app-bar > :is(nav:not(.breadcrumbs), .nav) {
+  --nav-item-fg: #000000;
+  --nav-item-bg-active: #000080;
+  --nav-item-fg-active: #ffffff;
+  order: 10;
+  flex: 1 0 100%;
+  margin-inline: -0.4rem calc(-1 * var(--w95-bar-pe));
+  background: var(--surface);
+  color: #000000;
+}
+html[data-theme="windows95"] .app-bar .menubar {
+  --menubar-fg: #000000;
+  --menubar-item-bg-active: #000080;
+  --menubar-item-fg-active: #ffffff;
+  --menubar-item-radius: 0;
+  --menubar-pad: 0;
+  --menubar-font-size: 1em;
+}
+/* Loose nav items (no nav wrapper): a zero-height break pushes them to
+   the second row and the bar's own fill turns grey under them. */
+html[data-theme="windows95"] .app-bar:has(> .nav-item) {
+  --app-bar-bg: linear-gradient(#000080, #000080) top / 100% calc(100% - var(--tap-min)) no-repeat, #c0c0c0;
+  row-gap: 0.1rem;
+}
+html[data-theme="windows95"] .app-bar:has(> .nav-item)::before { content: ""; order: 9; flex-basis: 100%; }
+html[data-theme="windows95"] .app-bar > .nav-item {
+  --nav-item-fg: #000000;
+  --nav-item-bg-active: #000080;
+  --nav-item-fg-active: #ffffff;
+  order: 10;
+  display: inline-flex;
+  align-items: center;
+  block-size: var(--tap-min);
+}
+html[data-theme="windows95"] .app-bar > .nav-item + .nav-item { margin-inline-start: -1rem; }
+
+/* Every control on the caption is a grey caption-style button: the
+   account tile and icon buttons get the raised push-button bevel. */
+html[data-theme="windows95"] .app-bar .avatar {
+  --avatar-bg: var(--surface);
+  --avatar-fg: #000000;
+  border: 1px solid;
+  border-color: #ffffff #000000 #000000 #ffffff;
+  box-shadow: inset -1px -1px 0 #808080;
+}
+html[data-theme="windows95"] .app-bar .btn-icon:not(.is-clear) {
+  --btn-bg: var(--surface);
+  --btn-bg-hover: var(--surface);
+  --btn-fg: #000000;
+  border-color: #ffffff #000000 #000000 #ffffff;
+  box-shadow: inset -1px -1px 0 #808080;
+  color: #000000;
+}
+
+/* Phone: brand, bell and account share the caption line (the brand whole),
+   the theme select and search take the line under it, the menu strip
+   last. The actions group dissolves so its items wrap one by one. */
+@media (max-width: 480px) {
+  html[data-theme="windows95"] .app-bar > .cluster { display: contents; }
+  html[data-theme="windows95"] .app-bar > .nav-brand { flex: 1 0 auto; max-width: 100%; }
+  html[data-theme="windows95"] .app-bar > .cluster > :is(.select, .btn:not(.btn-icon)) { order: 5; }
+  html[data-theme="windows95"] .app-bar > .cluster > .select,
+  html[data-theme="windows95"] .app-bar > .select.select { flex: 1 1 9rem; min-width: 0; }
+}
+
+/* Property sheet: the selected tab's page is a raised frame (white left,
+   #808080 + black right and bottom) that the tab row's white top edge
+   runs into. Phones keep the full width for the page itself. */
+@media (min-width: 481px) {
+  html[data-theme="windows95"] .tabset > .tab-panel {
+    border: 1px solid;
+    border-top: 0;
+    border-color: #ffffff #000000 #000000 #ffffff;
+    box-shadow: inset -1px -1px 0 #808080;
+    padding-inline: 8px;
+    padding-block-end: 8px;
+  }
+}
+
+/* Setting rows are etched group frames like hr and nested panels, not a
+   flat grey outline. */
+html[data-theme="windows95"] .field-row { box-shadow: inset 1px 1px 0 #ffffff, 1px 1px 0 #ffffff; }
+/* The log console is a sunken white edit well (the measured field). */
+html[data-theme="windows95"] .log {
+  border-color: #808080 #ffffff #ffffff #808080;
+  box-shadow: inset 1px 1px 0 #000000, inset -1px -1px 0 #c0c0c0;
+}
+/* An input-group addon is a static label on the face, no box. */
+html[data-theme="windows95"] .input-addon { border-color: transparent; }
+/* A message's body is a document: a white sunken well under the toolbar,
+   as Exchange's reading pane. */
+html[data-theme="windows95"] .master-detail-pane > .prose {
+  padding: 8px;
+  background: #ffffff;
+  border: 1px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  box-shadow: inset 1px 1px 0 #000000, inset -1px -1px 0 #c0c0c0;
+}
+/* A linked brand on the caption keeps the 24px target now the menu strip
+   sits right under it. */
+html[data-theme="windows95"] .app-bar > a.nav-brand {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--tap-min);
+}
+/* A bare select on the caption sizes to its text and stays on the caption
+   line (core's full-width field wrapped it to a line of its own). */
+html[data-theme="windows95"] .app-bar > .select { inline-size: auto; flex: 0 1 auto; }
 
 }

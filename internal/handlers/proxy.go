@@ -26,7 +26,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -56,7 +55,6 @@ var transparentPixel, _ = base64.StdEncoding.DecodeString(
 
 func (h *ProxyHandler) servePixel(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "image/png")
-	w.Header().Set("Cache-Control", "no-store")
 	w.Write(transparentPixel)
 }
 
@@ -64,7 +62,7 @@ func (h *ProxyHandler) servePixel(w http.ResponseWriter) {
 // Plex-relative media path. Empty in, empty out, so callers can keep using
 // `{{if .CoverURL}}` to decide whether to emit the tag at all.
 func ImageProxyURL(path string) string {
-	if path == "" {
+	if !plex.IsImagePath(path) {
 		return ""
 	}
 	return "/proxy/image?path=" + url.QueryEscape(path)
@@ -73,28 +71,23 @@ func ImageProxyURL(path string) string {
 func (h *ProxyHandler) image(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
 	path := r.URL.Query().Get("path")
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
 
-	// Only a path on the user's own Plex server. "//host" would otherwise be
-	// read as scheme-relative by the URL parser and point somewhere else
-	// entirely, so it is rejected alongside anything not rooted at "/".
-	if !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") {
-		http.Error(w, "path must be a server-relative Plex media path", http.StatusBadRequest)
+	if !plex.IsImagePath(path) {
+		http.Error(w, "path must identify Plex artwork", http.StatusBadRequest)
 		return
 	}
 
-	dbUser, err := db.GetUserByID(h.DB, user.ID)
-	if err != nil {
-		http.Error(w, "user not found", http.StatusNotFound)
-		return
-	}
 	userServer, err := db.GetUserMusicServer(h.DB, user.ID)
 	if err != nil || userServer == nil {
 		h.servePixel(w)
 		return
 	}
 
-	client := plex.NewClient(userServer.ServerURL, plex.ResolveToken(dbUser.PlexToken, userServer.AccessToken.String), h.PlexAuth.ClientID, "Playlist Lab")
-	body, contentType, err := client.FetchMedia(path)
+	client := plex.NewClient(userServer.ServerURL, plex.ResolveToken(user.PlexToken, userServer.AccessToken.String), h.PlexAuth.ClientID, "Playlist Lab")
+	body, _, err := client.FetchMedia(path)
 	if err != nil {
 		// Debug, not error: one of these fires per thumb on a page render, and
 		// at a louder level a library with missing composites would bury real
@@ -106,13 +99,17 @@ func (h *ProxyHandler) image(w http.ResponseWriter, r *http.Request) {
 	}
 	defer body.Close()
 
-	if contentType == "" {
-		contentType = "image/jpeg"
+	var prefix [512]byte
+	n, err := io.ReadFull(body, prefix[:])
+	contentType := plex.RasterContentType(prefix[:n])
+	if contentType == "" || (err != nil && err != io.ErrUnexpectedEOF) {
+		h.servePixel(w)
+		return
 	}
 	w.Header().Set("Content-Type", contentType)
-	// Matches proxy.ts: thumbs are effectively immutable for a given path,
-	// and without this every navigation refetches every cover from Plex.
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	if _, err := w.Write(prefix[:n]); err != nil {
+		return
+	}
 	if _, err := io.Copy(w, body); err != nil {
 		slog.Debug("image proxy: copy failed", "error", err, "userId", user.ID)
 	}

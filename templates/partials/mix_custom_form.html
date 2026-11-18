@@ -19,7 +19,7 @@
       <button type="button" class="btn-close" onclick="closeTopModal()" aria-label="Close"></button>
     </div>
 
-    <form hx-post="/mixes/generate" hx-target="#notifications" hx-swap="innerHTML" hx-on::after:request="closeTopModal()">
+    <form hx-post="/mixes/generate" hx-target="#notifications" hx-swap="innerHTML" hx-on::after:request="if(event.detail.ctx.response.status < 400) closeTopModal()">
       <input type="hidden" name="mixType" value="custom">
       <div class="stack">
         <div class="field">

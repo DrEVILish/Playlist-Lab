@@ -249,6 +249,9 @@ func matchPlaylistImpl(tracks []Track, client *plex.Client, libraryID string, se
 				if _, ok := err.(*plex.AuthError); ok {
 					return nil, err
 				}
+				if effectiveSettings.StrictSearch {
+					return nil, fmt.Errorf("Plex search failed for %q: %w", track.Title, err)
+				}
 				matched[j] = MatchedTrack{Title: track.Title, Artist: track.Artist, Album: track.Album}
 				continue
 			}
@@ -268,7 +271,7 @@ func matchOneTrack(track Track, client *plex.Client, libraryID string, settings 
 		if ratingKey, ok := remembered[RememberedMatchKey(track.Title, track.Artist, track.Album)]; ok {
 			details, err := client.GetTrackDetails(ratingKey)
 			if err != nil {
-				if _, ok := err.(*plex.AuthError); ok {
+				if _, ok := err.(*plex.AuthError); ok || settings.StrictSearch {
 					return MatchedTrack{}, err
 				}
 				// Any other error (rating key vanished from Plex, a

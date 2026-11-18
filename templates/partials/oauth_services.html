@@ -14,7 +14,7 @@
            confirm dialog, DESIGN.md §8.11/§11.4). -->
       <button type="button" class="btn btn-danger btn-sm" hx-delete="/cross-import/oauth/{{.ID}}" hx-target="closest .settings-services-list" hx-swap="outerHTML"
         hx-confirm="Disconnect {{.Name}}? You'll need to re-authenticate to use {{.Name}} in Cross Import again."
-        hx-on::after:request="if(event.detail.xhr.status<400) window.location.reload()">Disconnect</button>
+        hx-on::after:request="if(event.detail.ctx.response.status < 400) window.location.reload()">Disconnect</button>
       {{else}}
       <a class="btn btn-primary btn-sm" href="/cross-import/oauth/{{.ID}}">Connect</a>
       {{end}}
