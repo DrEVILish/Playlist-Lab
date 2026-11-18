@@ -319,12 +319,18 @@
     // hash, so a reload/bookmark/Back lands on the same tab.
     (function () {
       function show(bar, slug) {
-        var panel = document.querySelector('[data-tab-panel="' + slug + '"]');
+        var tabs = Array.from(bar.querySelectorAll('[data-tab]'));
+        var tab = tabs.find(function (t) { return t.dataset.tab === slug; });
+        if (!tab) return false;
+        var panelID = tab.getAttribute('aria-controls');
+        var panel = panelID ? document.getElementById(panelID)
+          : document.querySelector('[data-tab-panel="' + tab.dataset.tab + '"]');
         if (!panel) return false;
-        bar.querySelectorAll('[data-tab]').forEach(function (t) {
-          var on = t.dataset.tab === slug;
+        tabs.forEach(function (t) {
+          var on = t === tab;
           t.classList.toggle('is-active', on);
           t.setAttribute('aria-selected', on);
+          t.tabIndex = on ? 0 : -1;
         });
         // tabshown lets a panel's lazy content load on first show
         // (hx-trigger="tabshown from:closest [data-tab-panel]").
@@ -337,20 +343,52 @@
         });
         return true;
       }
-      function fromHash() {
-        var bar = document.querySelector('[data-tabs="hash"]');
-        if (!bar) return;
-        var initial = bar.querySelector('.tab.is-active') || bar.querySelector('[data-tab]');
-        if (!show(bar, location.hash.slice(1))) show(bar, initial.dataset.tab);
+      var hashBar = document.querySelector('[data-tabs="hash"]');
+      if (hashBar) {
+        var initial = hashBar.querySelector('.tab.is-active').dataset.tab;
+        var fromHash = function () {
+          if (!show(hashBar, location.hash.slice(1))) show(hashBar, initial);
+        };
+        fromHash();
+        window.addEventListener('popstate', fromHash);
+        window.addEventListener('hashchange', fromHash);
       }
-      fromHash();
-      window.addEventListener('popstate', fromHash);
       document.addEventListener('click', function (e) {
         var t = e.target.closest('[data-tabs] [data-tab]');
         if (!t) return;
         var bar = t.closest('[data-tabs]');
-        show(bar, t.dataset.tab);
-        if (bar.dataset.tabs === 'hash') history.pushState(null, '', '#' + t.dataset.tab);
+        if (!show(bar, t.dataset.tab)) return;
+        var hash = '#' + t.dataset.tab;
+        if (bar.dataset.tabs === 'hash' && location.hash !== hash) history.pushState(null, '', hash);
+      });
+      // Arrow keys move focus. Enter or Space uses the button's click to activate
+      // the panel, so passing over lazy tabs does not start their requests.
+      document.addEventListener('keydown', function (e) {
+        var t = e.target.closest('[data-tabs] [data-tab]');
+        if (!t || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        var bar = t.closest('[data-tabs]');
+        var tabs = Array.from(bar.querySelectorAll('[data-tab]'));
+        var vertical = bar.getAttribute('aria-orientation') === 'vertical';
+        var index = tabs.indexOf(t);
+        if (e.key === 'Home') index = 0;
+        else if (e.key === 'End') index = tabs.length - 1;
+        else if (e.key === (vertical ? 'ArrowDown' : 'ArrowRight')) index++;
+        else if (e.key === (vertical ? 'ArrowUp' : 'ArrowLeft')) index--;
+        else return;
+        e.preventDefault();
+        var next = tabs[(index + tabs.length) % tabs.length];
+        t.tabIndex = -1;
+        next.tabIndex = 0;
+        next.focus();
+      });
+      document.addEventListener('focusout', function (e) {
+        var t = e.target.closest('[data-tabs] [data-tab]');
+        if (!t) return;
+        var bar = t.closest('[data-tabs]');
+        if (bar.contains(e.relatedTarget)) return;
+        t.tabIndex = -1;
+        var active = bar.querySelector('.tab.is-active');
+        if (active) active.tabIndex = 0;
       });
     })();
   </script>

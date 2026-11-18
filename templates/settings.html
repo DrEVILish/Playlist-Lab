@@ -6,44 +6,44 @@
        generic [data-tabs] script, which also keeps the slug in the URL hash
        (#matching, #admin-users, ...) so a tab can be bookmarked. -->
   <div class="columns" style="--columns: 14rem minmax(0, 1fr)">
-    <div class="tabs" aria-orientation="vertical" role="tablist" data-tabs="hash">
-      <button type="button" class="tab" role="tab" data-tab="servers">Plex Servers</button>
-      <button type="button" class="tab is-active" role="tab" data-tab="matching">Matching</button>
-      <button type="button" class="tab" role="tab" data-tab="mixes">Mixes</button>
-      <button type="button" class="tab" role="tab" data-tab="ai">AI Features</button>
-      <button type="button" class="tab" role="tab" data-tab="services">Connected Services</button>
+    <div class="tabs" aria-orientation="vertical" role="tablist" aria-label="Settings sections" data-tabs="hash">
+      <button type="button" class="tab" role="tab" data-tab="servers" id="settings-tab-servers" aria-controls="settings-pane-servers" aria-selected="false" tabindex="-1">Plex Servers</button>
+      <button type="button" class="tab is-active" role="tab" data-tab="matching" id="settings-tab-matching" aria-controls="settings-pane-matching" aria-selected="true" tabindex="0">Matching</button>
+      <button type="button" class="tab" role="tab" data-tab="mixes" id="settings-tab-mixes" aria-controls="settings-pane-mixes" aria-selected="false" tabindex="-1">Mixes</button>
+      <button type="button" class="tab" role="tab" data-tab="ai" id="settings-tab-ai" aria-controls="settings-pane-ai" aria-selected="false" tabindex="-1">AI Features</button>
+      <button type="button" class="tab" role="tab" data-tab="services" id="settings-tab-services" aria-controls="settings-pane-services" aria-selected="false" tabindex="-1">Connected Services</button>
       {{if .HasServer}}
-      <button type="button" class="tab" role="tab" data-tab="scan">Library Scan</button>
+      <button type="button" class="tab" role="tab" data-tab="scan" id="settings-tab-scan" aria-controls="settings-pane-scan" aria-selected="false" tabindex="-1">Library Scan</button>
       {{end}}
-      <button type="button" class="tab" role="tab" data-tab="appearance">Appearance</button>
-      <button type="button" class="tab" role="tab" data-tab="sessions">Sessions</button>
-      <button type="button" class="tab" role="tab" data-tab="info">Server Info</button>
+      <button type="button" class="tab" role="tab" data-tab="appearance" id="settings-tab-appearance" aria-controls="settings-pane-appearance" aria-selected="false" tabindex="-1">Appearance</button>
+      <button type="button" class="tab" role="tab" data-tab="sessions" id="settings-tab-sessions" aria-controls="settings-pane-sessions" aria-selected="false" tabindex="-1">Sessions</button>
+      <button type="button" class="tab" role="tab" data-tab="info" id="settings-tab-info" aria-controls="settings-pane-info" aria-selected="false" tabindex="-1">Server Info</button>
       {{if .IsAdmin}}
       <span class="field-group-title">Administration</span>
-      <button type="button" class="tab" role="tab" data-tab="admin-stats">Statistics</button>
-      <button type="button" class="tab" role="tab" data-tab="admin-users">Users</button>
-      <button type="button" class="tab" role="tab" data-tab="admin-missing">Missing Tracks</button>
-      <button type="button" class="tab" role="tab" data-tab="admin-jobs">Schedules</button>
-      <button type="button" class="tab" role="tab" data-tab="admin-deemix">Deemix</button>
-      <button type="button" class="tab" role="tab" data-tab="admin-lidarr">Lidarr</button>
-      <button type="button" class="tab" role="tab" data-tab="admin-youtube">YouTube</button>
-      <button type="button" class="tab" role="tab" data-tab="admin-tmdb">TMDb</button>
-      <button type="button" class="tab" role="tab" data-tab="admin-tvdb">TVDb</button>
-      <button type="button" class="tab" role="tab" data-tab="admin-trakt">Trakt</button>
-      <button type="button" class="tab" role="tab" data-tab="admin-logs">Logs</button>
-      <button type="button" class="tab" role="tab" data-tab="admin-proxy">Reverse Proxy</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-stats" id="settings-tab-admin-stats" aria-controls="settings-pane-admin-stats" aria-selected="false" tabindex="-1">Statistics</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-users" id="settings-tab-admin-users" aria-controls="settings-pane-admin-users" aria-selected="false" tabindex="-1">Users</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-missing" id="settings-tab-admin-missing" aria-controls="settings-pane-admin-missing" aria-selected="false" tabindex="-1">Missing Tracks</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-jobs" id="settings-tab-admin-jobs" aria-controls="settings-pane-admin-jobs" aria-selected="false" tabindex="-1">Schedules</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-deemix" id="settings-tab-admin-deemix" aria-controls="settings-pane-admin-deemix" aria-selected="false" tabindex="-1">Deemix</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-lidarr" id="settings-tab-admin-lidarr" aria-controls="settings-pane-admin-lidarr" aria-selected="false" tabindex="-1">Lidarr</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-youtube" id="settings-tab-admin-youtube" aria-controls="settings-pane-admin-youtube" aria-selected="false" tabindex="-1">YouTube</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-tmdb" id="settings-tab-admin-tmdb" aria-controls="settings-pane-admin-tmdb" aria-selected="false" tabindex="-1">TMDb</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-tvdb" id="settings-tab-admin-tvdb" aria-controls="settings-pane-admin-tvdb" aria-selected="false" tabindex="-1">TVDb</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-trakt" id="settings-tab-admin-trakt" aria-controls="settings-pane-admin-trakt" aria-selected="false" tabindex="-1">Trakt</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-logs" id="settings-tab-admin-logs" aria-controls="settings-pane-admin-logs" aria-selected="false" tabindex="-1">Logs</button>
+      <button type="button" class="tab" role="tab" data-tab="admin-proxy" id="settings-tab-admin-proxy" aria-controls="settings-pane-admin-proxy" aria-selected="false" tabindex="-1">Reverse Proxy</button>
       {{end}}
     </div>
 
     <div>
 
-      <section class="panel stack" data-tab-panel="servers" hidden>
+      <section class="panel stack" data-tab-panel="servers" id="settings-pane-servers" role="tabpanel" aria-labelledby="settings-tab-servers" tabindex="0" hidden>
         <div class="panel-header">Plex Servers</div>
         <p class="text-muted">Every Plex Media Server linked to your account (DESIGN.md §11.11). Playlists/Mixes/Import use your default automatically; Collections can target any of them.</p>
         <div id="settings-panel-servers" hx-get="/settings/servers" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="outerHTML"></div>
       </section>
 
-      <section class="panel stack" data-tab-panel="matching">
+      <section class="panel stack" data-tab-panel="matching" id="settings-pane-matching" role="tabpanel" aria-labelledby="settings-tab-matching" tabindex="0">
         <div class="panel-header">Matching</div>
         <p class="text-muted">Control how Playlist Lab matches tracks when importing from external sources. Changes save automatically.</p>
         <form class="stack">
@@ -94,7 +94,7 @@
         <div id="matching-result"></div>
       </section>
 
-      <section class="panel stack" data-tab-panel="mixes" hidden>
+      <section class="panel stack" data-tab-panel="mixes" id="settings-pane-mixes" role="tabpanel" aria-labelledby="settings-tab-mixes" tabindex="0" hidden>
         <div class="panel-header">Mixes</div>
         <p class="text-muted">Tune how each mix type is generated. Changes save automatically.</p>
         <form>
@@ -142,7 +142,7 @@
         <div id="mixes-result"></div>
       </section>
 
-      <section class="panel stack" data-tab-panel="ai" hidden>
+      <section class="panel stack" data-tab-panel="ai" id="settings-pane-ai" role="tabpanel" aria-labelledby="settings-tab-ai" tabindex="0" hidden>
         <div class="panel-header">AI Features</div>
         <p class="text-muted">Playlist Lab can use Google Gemini or xAI Grok to power AI-assisted playlist imports. Changes save automatically.</p>
         <form class="stack">
@@ -185,7 +185,7 @@
         <div id="ai-result"></div>
       </section>
 
-      <section class="panel stack" data-tab-panel="services" hidden>
+      <section class="panel stack" data-tab-panel="services" id="settings-pane-services" role="tabpanel" aria-labelledby="settings-tab-services" tabindex="0" hidden>
         <div class="panel-header">Connected Services</div>
         <p class="text-muted">Manage OAuth connections for external streaming services. Connect services here to use them in Cross Import without re-authenticating.</p>
         <div id="oauth-services" hx-get="/cross-import/oauth/services" hx-trigger="load" hx-swap="innerHTML">
@@ -194,7 +194,7 @@
       </section>
 
       {{if .HasServer}}
-      <section class="panel stack" data-tab-panel="scan" hidden>
+      <section class="panel stack" data-tab-panel="scan" id="settings-pane-scan" role="tabpanel" aria-labelledby="settings-tab-scan" tabindex="0" hidden>
         <div class="panel-header">Library Scan</div>
         <p class="text-muted">Trigger Plex to scan for new or changed files in your library.</p>
         <div class="stack">
@@ -216,7 +216,7 @@
       </section>
       {{end}}
 
-      <section class="panel stack" data-tab-panel="appearance" hidden>
+      <section class="panel stack" data-tab-panel="appearance" id="settings-pane-appearance" role="tabpanel" aria-labelledby="settings-tab-appearance" tabindex="0" hidden>
         <div class="panel-header">Appearance</div>
         <p class="text-muted">Personalise text size and theme across the app (DESIGN.md §2/§14).</p>
         <!-- Text size is the root font-size (layout.html); applied live here,
@@ -354,13 +354,13 @@
         </script>
       </section>
 
-      <section class="panel stack" data-tab-panel="sessions" hidden>
+      <section class="panel stack" data-tab-panel="sessions" id="settings-pane-sessions" role="tabpanel" aria-labelledby="settings-tab-sessions" tabindex="0" hidden>
         <div class="panel-header">Sessions</div>
         <p class="text-muted">Devices currently signed in to your account (DESIGN.md §11.4). Revoking one signs it out immediately.</p>
         <div id="settings-panel-sessions" hx-get="/settings/sessions" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="outerHTML"></div>
       </section>
 
-      <section class="panel stack" data-tab-panel="info" hidden>
+      <section class="panel stack" data-tab-panel="info" id="settings-pane-info" role="tabpanel" aria-labelledby="settings-tab-info" tabindex="0" hidden>
         <div class="panel-header">Server Info</div>
         <p class="text-muted">Version information.</p>
         <div class="stack stack-sm">
@@ -381,7 +381,7 @@
       </section>
 
       {{if .IsAdmin}}
-      <section class="panel stack" data-tab-panel="admin-stats" hidden>
+      <section class="panel stack" data-tab-panel="admin-stats" id="settings-pane-admin-stats" role="tabpanel" aria-labelledby="settings-tab-admin-stats" tabindex="0" hidden>
         <div class="panel-header">Statistics</div>
         <p class="text-muted">Usage across every user of this Playlist Lab instance.</p>
         <div id="settings-panel-admin-stats" hx-get="/admin/stats" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="innerHTML">
@@ -389,7 +389,7 @@
         </div>
       </section>
 
-      <section class="panel stack" data-tab-panel="admin-users" hidden>
+      <section class="panel stack" data-tab-panel="admin-users" id="settings-pane-admin-users" role="tabpanel" aria-labelledby="settings-tab-admin-users" tabindex="0" hidden>
         <div class="panel-header">User Management</div>
         <p class="text-muted">Plex Home members are auto-approved. Other users need manual approval.</p>
         <div id="settings-panel-admin-users" hx-get="/admin/users-list" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="innerHTML">
@@ -397,7 +397,7 @@
         </div>
       </section>
 
-      <section class="panel stack" data-tab-panel="admin-missing" hidden>
+      <section class="panel stack" data-tab-panel="admin-missing" id="settings-pane-admin-missing" role="tabpanel" aria-labelledby="settings-tab-admin-missing" tabindex="0" hidden>
         <div class="panel-header">Most Common Missing Tracks</div>
         <p class="text-muted">Tracks that multiple users are missing from their libraries.</p>
         <div id="settings-panel-admin-missing" hx-get="/admin/missing-list" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="innerHTML">
@@ -405,14 +405,14 @@
         </div>
       </section>
 
-      <section class="panel stack" data-tab-panel="admin-jobs" hidden>
+      <section class="panel stack" data-tab-panel="admin-jobs" id="settings-pane-admin-jobs" role="tabpanel" aria-labelledby="settings-tab-admin-jobs" tabindex="0" hidden>
         <div class="panel-header">Schedules</div>
         <div id="admin-schedules" hx-get="/admin/schedules" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="outerHTML">
           <p class="text-muted">Loading schedules...</p>
         </div>
       </section>
 
-      <section class="panel stack" data-tab-panel="admin-deemix" hidden>
+      <section class="panel stack" data-tab-panel="admin-deemix" id="settings-pane-admin-deemix" role="tabpanel" aria-labelledby="settings-tab-admin-deemix" tabindex="0" hidden>
         <div class="panel-header">Deemix</div>
         <p class="text-muted">The Deezer ARL token the local deemix-server logs in with to queue downloads for missing tracks. Get it from a browser logged into deezer.com: DevTools &rarr; Application/Storage &rarr; Cookies &rarr; <code>arl</code>.</p>
         <div id="settings-panel-admin-deemix" hx-get="/admin/deemix" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="innerHTML">
@@ -420,7 +420,7 @@
         </div>
       </section>
 
-      <section class="panel stack" data-tab-panel="admin-lidarr" hidden>
+      <section class="panel stack" data-tab-panel="admin-lidarr" id="settings-pane-admin-lidarr" role="tabpanel" aria-labelledby="settings-tab-admin-lidarr" tabindex="0" hidden>
         <div class="panel-header">Lidarr</div>
         <p class="text-muted">A second missing-track acquisition path alongside Deemix. Finds (or adds and monitors) a track's artist in Lidarr and triggers a search across Lidarr's own configured indexers - Lidarr's indexers and download client still need to be set up in Lidarr itself.</p>
         <div id="settings-panel-admin-lidarr" hx-get="/admin/lidarr" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="innerHTML">
@@ -428,7 +428,7 @@
         </div>
       </section>
 
-      <section class="panel stack" data-tab-panel="admin-youtube" hidden>
+      <section class="panel stack" data-tab-panel="admin-youtube" id="settings-pane-admin-youtube" role="tabpanel" aria-labelledby="settings-tab-admin-youtube" tabindex="0" hidden>
         <div class="panel-header">YouTube</div>
         <p class="text-muted">Google OAuth credentials used for the "YouTube" cross-import target (playlists created on a user's YouTube account) and for matching against YouTube-hosted tracks. Create an OAuth client under APIs &amp; Services &rarr; Credentials in <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a>, enabling the YouTube Data API v3, and add the redirect URI below to it as an authorized redirect URI.</p>
         <div id="settings-panel-admin-youtube" hx-get="/admin/youtube" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="innerHTML">
@@ -436,7 +436,7 @@
         </div>
       </section>
 
-      <section class="panel stack" data-tab-panel="admin-tmdb" hidden>
+      <section class="panel stack" data-tab-panel="admin-tmdb" id="settings-pane-admin-tmdb" role="tabpanel" aria-labelledby="settings-tab-admin-tmdb" tabindex="0" hidden>
         <div class="panel-header">TMDb</div>
         <p class="text-muted">Powers Collections' external list/chart builder (DESIGN.md §11.11) - pulls a public TMDb list's items, or a Popular/Top Rated chart, and matches them into a Plex collection. Get a free API key from <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">themoviedb.org/settings/api</a>.</p>
         <div id="settings-panel-admin-tmdb" hx-get="/admin/tmdb" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="innerHTML">
@@ -444,7 +444,7 @@
         </div>
       </section>
 
-      <section class="panel stack" data-tab-panel="admin-tvdb" hidden>
+      <section class="panel stack" data-tab-panel="admin-tvdb" id="settings-pane-admin-tvdb" role="tabpanel" aria-labelledby="settings-tab-admin-tvdb" tabindex="0" hidden>
         <div class="panel-header">TVDb</div>
         <p class="text-muted">Powers Collections' external list/chart builder (DESIGN.md §11.11) for TheTVDB-sourced lists - mostly useful for TV show libraries. Get a free API key from <a href="https://www.thetvdb.com/api-information" target="_blank" rel="noopener">thetvdb.com/api-information</a>.</p>
         <div id="settings-panel-admin-tvdb" hx-get="/admin/tvdb" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="innerHTML">
@@ -452,7 +452,7 @@
         </div>
       </section>
 
-      <section class="panel stack" data-tab-panel="admin-trakt" hidden>
+      <section class="panel stack" data-tab-panel="admin-trakt" id="settings-pane-admin-trakt" role="tabpanel" aria-labelledby="settings-tab-admin-trakt" tabindex="0" hidden>
         <div class="panel-header">Trakt</div>
         <p class="text-muted">Powers Collections' external list/chart builder (DESIGN.md §11.11) for Trakt-sourced public lists - the single richest source of ready-made collection ideas in Kometa's own community configs (awards-by-year, curated genre/franchise lists, ...). Register a free API app at <a href="https://trakt.tv/oauth/applications" target="_blank" rel="noopener">trakt.tv/oauth/applications</a> and paste its Client ID below - no OAuth login needed, just the id, since a public list needs no user authorization to read.</p>
         <div id="settings-panel-admin-trakt" hx-get="/admin/trakt" hx-trigger="revealed, tabshown from:closest [data-tab-panel]" hx-swap="innerHTML">
@@ -460,7 +460,7 @@
         </div>
       </section>
 
-      <section class="panel stack" data-tab-panel="admin-logs" hidden>
+      <section class="panel stack" data-tab-panel="admin-logs" id="settings-pane-admin-logs" role="tabpanel" aria-labelledby="settings-tab-admin-logs" tabindex="0" hidden>
         <div class="panel-header">Logs</div>
         <!-- Loaded on first reveal rather than with the page: reading and
              parsing up to 1000 log lines is real work, and Logs is not the
@@ -474,7 +474,7 @@
            (user feedback: this is server-deployment config - editing a
            .env file and restarting the systemd service - not something a
            regular, non-admin user can act on or has a reason to see). -->
-      <section class="panel stack" data-tab-panel="admin-proxy" hidden>
+      <section class="panel stack" data-tab-panel="admin-proxy" id="settings-pane-admin-proxy" role="tabpanel" aria-labelledby="settings-tab-admin-proxy" tabindex="0" hidden>
         <div class="panel-header">Reverse Proxy</div>
         <p class="text-muted">Configuration for running Playlist Lab behind a reverse proxy.</p>
         <div class="stack stack-sm">

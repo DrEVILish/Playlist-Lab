@@ -125,3 +125,34 @@ func TestAddTracks_AddsCheckedTracksAndRedirectsToEditor(t *testing.T) {
 		t.Errorf("added track URI = %q, want it to reference both t1 and t2", addedURI)
 	}
 }
+
+func TestEditorShowsTrackMetadataWithoutUnavailableControls(t *testing.T) {
+	sqlDB := newTestDB(t)
+	user := newTestUser(t, sqlDB)
+	srv := newFakePlexServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/playlists":
+			w.Write([]byte(`{"MediaContainer":{"Metadata":[{"ratingKey":"rk-1","title":"Test playlist","playlistType":"audio"}]}}`))
+		case "/playlists/rk-1/items":
+			w.Write([]byte(`{"MediaContainer":{"Metadata":[{"ratingKey":"track-1","playlistItemID":12,"title":"Test track","originalTitle":"Test artist"}]}}`))
+		default:
+			w.Write([]byte(`{"MediaContainer":{}}`))
+		}
+	})
+	seedUserServer(t, sqlDB, user.ID, srv.URL)
+	h := newPlaylistsHandler(sqlDB)
+	router := testRouter(sqlDB, http.MethodGet, "/playlists/{plexId}", h.editor)
+	rec := authedRequest(t, sqlDB, router, user, http.MethodGet, "/playlists/rk-1", "", "")
+	body := rec.Body.String()
+	for _, want := range []string{"Test track", "Test artist", "Move up", "Remove from playlist"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("editor is missing %q (status %d)", want, rec.Code)
+		}
+	}
+	for _, unwanted := range []string{"Preview playback (not yet available)", "Click to edit", "editor-cell-editable"} {
+		if strings.Contains(body, unwanted) {
+			t.Errorf("editor still offers %q", unwanted)
+		}
+	}
+}

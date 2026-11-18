@@ -190,3 +190,24 @@ func TestEmbeddedThemeCatalogue(t *testing.T) {
 		}
 	}
 }
+
+func TestSettingsTabsExposeSelectedTabAndPanel(t *testing.T) {
+	sqlDB := newTestDB(t)
+	h := &SettingsHandler{DB: sqlDB, Tmpl: nopTemplates(), Notifications: notifications.NewStore()}
+	router, user := newSettingsRouter(t, sqlDB, h)
+	rec := authedRequest(t, sqlDB, router, user, http.MethodGet, "/settings", "", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /settings status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, markup := range []string{
+		`data-tab="matching" id="settings-tab-matching" aria-controls="settings-pane-matching" aria-selected="true" tabindex="0"`,
+		`data-tab="appearance" id="settings-tab-appearance" aria-controls="settings-pane-appearance" aria-selected="false" tabindex="-1"`,
+		`data-tab-panel="matching" id="settings-pane-matching" role="tabpanel" aria-labelledby="settings-tab-matching" tabindex="0"`,
+		`data-tab-panel="appearance" id="settings-pane-appearance" role="tabpanel" aria-labelledby="settings-tab-appearance" tabindex="0" hidden`,
+	} {
+		if !strings.Contains(body, markup) {
+			t.Errorf("settings markup is missing %s", markup)
+		}
+	}
+}

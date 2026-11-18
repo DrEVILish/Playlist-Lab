@@ -42,16 +42,6 @@ func RegisterPlaylists(r chi.Router, mw *auth.Middleware, h *PlaylistsHandler) {
 		r.Get("/playlists/{plexId}", h.editor)
 		r.Put("/playlists/{plexId}/tracks/{trackId}/move", h.moveTrack)
 		r.Delete("/playlists/{plexId}/tracks/{trackId}", h.removeTrack)
-		// Both stubs: the Editor page (§11.2) wants the UI affordance for
-		// per-row preview playback and inline metadata editing now, but
-		// actually implementing either needs real backend work this page's
-		// scope doesn't cover - streaming-service preview-audio integration
-		// (DESIGN.md §17) and Plex library metadata write-back respectively.
-		// Returning a clear "not yet available" toast beats doing nothing
-		// (silently swallowed click) or faking success (edit reverts, so a
-		// save the user didn't get would be worse than no save button).
-		r.Post("/playlists/{plexId}/tracks/{trackId}/preview", notYetAvailable("Track preview playback isn't available yet - it needs per-service preview-audio integration."))
-		r.Put("/playlists/{plexId}/tracks/{trackId}/metadata", notYetAvailable("Editing track metadata isn't available yet - it needs write-back integration with your media library."))
 		r.Delete("/playlists/{plexId}", h.deletePlaylist)
 		r.Post("/playlists/bulk-delete", h.bulkDelete)
 		r.Put("/editor/columns", h.saveEditorColumns)
@@ -820,20 +810,6 @@ func toTrackRows(tracks []plex.Track) []trackRow {
 		}
 	}
 	return rows
-}
-
-// notYetAvailable stubs an Editor-page control whose real behavior needs
-// backend work out of this page's scope (see the route comments above).
-// It responds success (so htmx doesn't render the request as a failed
-// action) but with an HX-Trigger the page's own small toast listener
-// (editor.html) shows, so the click visibly does *something* truthful
-// instead of nothing.
-func notYetAvailable(msg string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		payload, _ := json.Marshal(map[string]string{"editor-toast": msg})
-		w.Header().Set("HX-Trigger", string(payload))
-		w.WriteHeader(http.StatusOK)
-	}
 }
 
 func (h *PlaylistsHandler) moveTrack(w http.ResponseWriter, r *http.Request) {

@@ -250,8 +250,9 @@ variants (Bondi/Blueberry/Grape/Tangerine), and `dist/imac-g3.css` does ship
 has no `variants` array, though, so a manifest-driven picker never offers
 them.
 
-**Suggested fix:** have `build_manifest.py` pick up imac-g3's variants (the
-README table format may differ from the other themes').
+**Suggested fix:** add `Variants: blueberry=Blueberry, grape=Grape, tangerine=Tangerine`
+to the upstream theme's CSS header. The manifest generator reads that field
+when it builds the catalog.
 
 ---
 

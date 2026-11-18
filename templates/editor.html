@@ -148,7 +148,6 @@
           <th aria-label="Reorder"></th>
           <th aria-label="Move"></th>
           <th aria-label="Select"></th>
-          <th aria-label="Preview"></th>
           <th data-col="title">Title</th>
           <th data-col="artist">Artist</th>
           <th data-col="album">Album</th>
@@ -173,19 +172,8 @@
             </button>
           </span></td>
           <td><input type="checkbox" class="checkbox" name="trackId" value="{{.RatingKey}}" aria-label="Select {{.Title}} for split"></td>
-          <td>
-            <!-- Stub: DESIGN.md §17 calls out real preview-audio playback
-                 as backend-scoped (per-service streaming integration). This
-                 wires the affordance to a handler that's clearly a stub
-                 (notYetAvailable in playlists.go) rather than doing nothing
-                 or faking playback. -->
-            <button type="button" class="btn btn-ghost btn-icon btn-sm" title="Preview playback (not yet available)" aria-label="Preview {{.Title}}"
-              hx-post="/playlists/{{$plexId}}/tracks/{{.PlaylistItemID}}/preview" hx-swap="none">
-              <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><use href="#icon-play"></use></svg>
-            </button>
-          </td>
-          <td data-col="title" class="editor-cell-editable" tabindex="0" role="button" data-field="title" data-value="{{.Title}}" title="Click to edit">{{.Title}}</td>
-          <td data-col="artist" class="editor-cell-editable" tabindex="0" role="button" data-field="artist" data-value="{{.Artist}}" title="Click to edit">{{.Artist}}</td>
+          <td data-col="title">{{.Title}}</td>
+          <td data-col="artist">{{.Artist}}</td>
           <td data-col="album">{{.Album}}</td>
           <td data-col="duration" class="mono">{{formatTrackDuration .Duration}}</td>
           <td data-col="codec" class="mono">{{.Codec}}</td>
@@ -199,7 +187,6 @@
         </tr>
         {{else}}
         <tr>
-          <td></td>
           <td></td>
           <td></td>
           <td></td>
@@ -227,7 +214,6 @@
   <symbol id="icon-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5"></circle><circle cx="9" cy="12" r="1.5"></circle><circle cx="9" cy="18" r="1.5"></circle><circle cx="15" cy="6" r="1.5"></circle><circle cx="15" cy="12" r="1.5"></circle><circle cx="15" cy="18" r="1.5"></circle></symbol>
   <symbol id="icon-chevron-up" viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"></polyline></symbol>
   <symbol id="icon-chevron-down" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></symbol>
-  <symbol id="icon-play" viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4"></polygon></symbol>
   <symbol id="icon-trash" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></symbol>
 </svg>
 
@@ -237,12 +223,6 @@
   const plexId = {{.PlexID}};
   const table = document.getElementById('tracks');
   const tbody = table.querySelector('tbody');
-
-  // --- Toast: the preview-play and inline-edit stubs respond with
-  // HX-Trigger: {"editor-toast": "..."}; shown via layout.html's global
-  // toast layer. ---
-  function showToast(msg) { window.showToast('success', msg); }
-  document.body.addEventListener('editor-toast', (e) => showToast(e.detail.value));
 
   // --- Generic drag-to-reorder: dragstart/dragover/drop on a container of
   // sibling elements, used below for both track rows and the column menu.
@@ -305,52 +285,6 @@
     else tbody.insertBefore(row, sibling.nextElementSibling);
     persistMove(row);
     btn.focus(); // stays on the same logical button so repeated Enter/Space keeps moving the row
-  });
-
-  // --- Inline metadata editing: click a Title/Artist cell (or focus +
-  // Enter/Space, for keyboard users) to turn it into a text input, save on
-  // blur/Enter via htmx. There's no backend write-back to the media
-  // library yet (see playlists.go's notYetAvailable), so every save
-  // reverts the cell to its original value and surfaces the "not yet
-  // available" toast instead of pretending the edit stuck. ---
-  function startEdit(cell) {
-    if (cell.querySelector('input')) return;
-    const row = cell.closest('tr');
-    const field = cell.dataset.field;
-    const original = cell.dataset.value;
-    cell.textContent = '';
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'editor-cell-input';
-    input.value = original;
-    cell.appendChild(input);
-    input.focus();
-    input.select();
-
-    let cancelled = false;
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
-      else if (e.key === 'Escape') { e.preventDefault(); cancelled = true; input.blur(); }
-    });
-    input.addEventListener('blur', () => {
-      cell.textContent = original;
-      if (!cancelled) {
-        htmx.ajax('PUT', `/playlists/${plexId}/tracks/${row.dataset.itemId}/metadata`, {
-          values: { field, value: input.value }, swap: 'none',
-        });
-      }
-    });
-  }
-  tbody.addEventListener('click', (e) => {
-    const cell = e.target.closest('.editor-cell-editable');
-    if (cell) startEdit(cell);
-  });
-  tbody.addEventListener('keydown', (e) => {
-    const cell = e.target.closest('.editor-cell-editable');
-    if (cell && cell === e.target && (e.key === 'Enter' || e.key === ' ')) {
-      e.preventDefault();
-      startEdit(cell);
-    }
   });
 
   // --- Column show/hide + drag-reorder, persisted server-side (DESIGN.md
