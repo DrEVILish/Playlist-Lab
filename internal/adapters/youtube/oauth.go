@@ -25,6 +25,10 @@ var (
 	revokeURL = "https://oauth2.googleapis.com/revoke"
 )
 
+type invalidGrantError string
+
+func (e invalidGrantError) Error() string { return string(e) }
+
 type OAuthConfig struct {
 	ClientID     string
 	ClientSecret string
@@ -78,9 +82,16 @@ func (c OAuthConfig) requestToken(form url.Values) (*GoogleTokens, error) {
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		var errBody struct {
+			Code             string `json:"error"`
 			ErrorDescription string `json:"error_description"`
 		}
 		_ = json.NewDecoder(resp.Body).Decode(&errBody)
+		if resp.StatusCode == http.StatusBadRequest && errBody.Code == "invalid_grant" {
+			if errBody.ErrorDescription == "" {
+				return nil, invalidGrantError("Google rejected the authorization grant")
+			}
+			return nil, invalidGrantError(errBody.ErrorDescription)
+		}
 		if errBody.ErrorDescription != "" {
 			return nil, fmt.Errorf("%s", errBody.ErrorDescription)
 		}

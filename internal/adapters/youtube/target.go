@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -95,9 +96,13 @@ func GetValidAccessToken(sqlDB *sql.DB, secret string, oauth OAuthConfig, userID
 		return "", fmt.Errorf("YouTube session expired. Please reconnect your YouTube account")
 	}
 	tokens, err := oauth.RefreshToken(refreshTok)
-	if err != nil {
+	var invalidGrant invalidGrantError
+	if errors.As(err, &invalidGrant) {
 		_ = db.DeleteOAuthConnection(sqlDB, userID, ServiceName)
 		return "", fmt.Errorf("YouTube session expired. Please reconnect your YouTube account")
+	}
+	if err != nil {
+		return "", fmt.Errorf("could not refresh YouTube authorization: %w", err)
 	}
 	if err := StoreTokens(sqlDB, secret, userID, tokens); err != nil {
 		return "", err
@@ -459,7 +464,13 @@ func (t *Target) CreatePlaylist(ctx context.Context, name string, matches []adap
 				retryAfter = 30 * time.Second
 			}
 			slog.Warn("youtube playlist add rate-limited, retrying once", "videoId", m.TargetTrackID, "playlistId", created.ID, "retryAfter", retryAfter)
-			time.Sleep(retryAfter)
+			timer := time.NewTimer(retryAfter)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return created.ID, name, addedCount, ctx.Err()
+			case <-timer.C:
+			}
 			status, _, err = addPlaylistItem(itemBody)
 		}
 
